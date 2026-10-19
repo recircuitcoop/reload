@@ -1,15 +1,48 @@
 ---
 type: plan
 title: Rename InnyTypes to Reload
-status: PROPOSED
+status: APPROVED
 created: 2026-10-19
 updated: 2026-10-19
 ---
 
 # 0028 — Rename InnyTypes to Reload
 
-Status: PROPOSED 2026-10-19. Requested by the owner: "rename the project, folder and whole
-library from InnyTypes to reload". Not approved for building; D1–D8 below need answers first.
+Status: APPROVED 2026-10-19. Requested by the owner: "rename the project, folder and whole
+library from InnyTypes to reload".
+
+## Owner answers (2026-10-19)
+
+Given against the seven steps of "What changes, in order":
+
+1. "I do not care about the keychain" — **no keychain bridge.** The Node-RED credential secret
+   is not carried over; credentials stored inside 0.3.0 flows are lost and must be entered
+   again. The app must start cleanly when the old secret cannot be read (a new secret, a plain
+   notice), never crash or loop. The userData move stays: it is what keeps flows and settings.
+2. "go do this as a 0.4.0 version, you can squash whatever you need" — **one release, 0.4.0,
+   built as one work item** (WI-0028-01) instead of seven; compatibility with 0.3.0 names may be
+   broken wherever the plan does not say otherwise. The D1–D8 recommendations are taken as
+   given.
+3. "OK" — the package contract switches with no dual reading (D3).
+4. "OK" — SDK and token names per D4.
+5. "OK" — words, with the census gate.
+6. "Prepare this carefully" — the outside-the-repo steps are **prepared, not run**: a
+   checklist (§Outside the repo, the runbook) and a dry-run-first script, executed by the
+   owner after 0.4.0 is merged.
+7. "I dont understand" — explained in conversation; the step itself stands as written.
+
+**Official package names.** The owner's convention: official Reload packages are named
+`reload_*` after what they do. innyrize becomes **`reload_summarize`**, monty becomes
+**`reload_mount`**. The two bundled packages follow it: `anytype` → **`reload_anytype`**,
+`folder` → **`reload_folder`**. The manifest's `package` pattern (`^[a-z][a-z0-9_]{1,39}$`)
+already admits these. Flows saved by 0.3.0 that use the bundled packages' node types are
+rewritten to the new package names in the same first-start move, so the owner's flows still
+open.
+
+**Secret files.** The Anytype key and the MCP token move from the old app's owner-only
+location (`~/.config/innytypes/` and its per-OS equivalents) to Reload's own, in the same
+first-start move, keeping 0600 / 0700. After the move nothing reads the old location; the AI
+client configs that read the token file are re-pointed in the runbook.
 
 ## Why this is more than a find-and-replace
 
@@ -92,19 +125,22 @@ Each has a recommendation; none is built until answered.
 
 ## What changes, in order
 
-Each step is one work item, gated as usual, and starts only after the previous one has merged.
+Per the owner's answer 2, steps 1–5 and 7's in-repo part are one work item, WI-0028-01, on one
+branch, merged once. They are kept apart below as the order the work is done and reviewed in.
 
-1. **Migrate the data first, rename later (WI-0028-01).** Before any name changes, add to the
-   0.3.x code:
-   - a userData move: on first start, if `…/Reload` is missing and `…/InnyTypes` exists and no
-     other instance holds the old single-instance lock, rename the directory (same volume, so
-     atomic), and write the move into the import report. If it fails, start on the old directory
-     and say so; never start empty while old data exists.
-   - a keychain bridge for `node-red-credential-secret`: read it while the app is still called
-     InnyTypes and copy it to the owner-only secret file store (0600, the same store the Anytype
-     key already uses), so the secret no longer depends on the app's name. After this the
-     rename cannot change which keychain item is read. Test: an install with credentialed flows
-     survives a `productName` change in the e2e gate with every credential still decrypting.
+1. **The first-start move.** On first start of 0.4.0:
+   - if `…/Reload` userData is missing and `…/InnyTypes` exists and no running 0.3.0 holds its
+     single-instance lock, rename the directory (same volume, so atomic) and write the move into
+     the import report. If it fails, say so and do not start on an empty directory while old
+     data exists;
+   - move the owner-only secret files (Anytype key, MCP token) to Reload's location, keeping
+     0600 / 0700;
+   - rewrite node types of the bundled packages in stored flows to `reload_anytype` /
+     `reload_folder`;
+   - no keychain bridge (owner answer 1): an unreadable Node-RED credential secret gives a new
+     secret and a notice that stored credentials must be entered again.
+   Test: an e2e start over a fixture 0.3.0 userData (temporary HOME, never the real one) opens
+   with its flows, settings and Anytype pairing intact.
 2. **Identifiers and packaging (WI-0028-02).** `productName`, `appId` (D2),
    `executableName`, `APP_USER_MODEL_ID`, `DESKTOP_FILENAME`, the `.app` name, DMG / AppImage
    names, icon file names, `INNYTYPES_*` → `RELOAD_*` environment variables (the e2e harness
