@@ -168,13 +168,20 @@ Types MUST NOT declare an output port named after a Node-RED internal (`_msgid`,
 Everything Reload-specific about one property of a `config` schema lives in ONE field of that
 property, `reload`, whose value is an object. It is an annotation: it never changes which
 values validate, and the stored value stays what the property's own schema says (a string, for
-both keys below). Two keys are defined now; both declare options the editor and Setup offer for
-a `type: "string"` property, resolved by Reload, never by the node:
+both keys below). Two keys declare options the editor and Setup offer for a `type: "string"`
+property, resolved by Reload, never by the node:
 
 | Key | Value | The options are |
 |---|---|---|
 | `spaces` | `true` | the spaces of the paired Anytype |
 | `types` | `{"of": "<property>"}` | the types of the space chosen in the sibling property that `of` names |
+
+A third key, `advanced` (`true`), says where a property is shown, not what it offers: the
+first-run Setup never shows it, and the editor draws it under an **Advanced** disclosure, closed
+when the form opens. It suits a property the person rarely changes, such as where the node reads
+a value from or which address it calls. The property is still saved with its value (its default,
+when the person never changed it). `advanced` is the one key that may stand alone, on a property
+of any type.
 
 ```json
 "properties": {
@@ -183,14 +190,15 @@ a `type: "string"` property, resolved by Reload, never by the node:
 }
 ```
 
-1. A property carrying `reload` MUST be `"type": "string"`, and its `reload` MUST declare
-   exactly one of `spaces` and `types`: an empty object, or both keys, is refused. This holds
-   at every depth the form draws: top-level properties, the properties of a nested object, and
-   those of an array's `items`. The declaration schema (2.6) refuses each case.
+1. A `reload` MUST declare at least one of `spaces`, `types` and `advanced`, and never both
+   `spaces` and `types`: an empty object, or both, is refused. A property whose `reload`
+   declares `spaces` or `types` MUST be `"type": "string"`. This holds at every depth the form
+   draws: top-level properties, the properties of a nested object, and those of an array's
+   `items`. The declaration schema (2.6) refuses each case.
 2. `types.of` SHOULD name a sibling property that itself declares `reload.spaces`.
 3. Later keys join the same object when a revision defines them. Today they MAY appear beside
-   `spaces` or `types`, and a receiver ignores a key it does not know; a later revision that
-   lets a new key stand alone relaxes rule 1 for it.
+   `spaces`, `types` or `advanced`, and a receiver ignores a key it does not know; a later
+   revision that lets a new key stand alone relaxes rule 1 for it, as `advanced` did.
 4. Reload-specific schema keys are never spelled as separate `x-` prefixed keywords; only
    `x-secret` (2.5), which predates this rule, remains.
 
@@ -272,7 +280,10 @@ a `type: "string"` property, resolved by Reload, never by the node:
         "properties": { "type": "object", "additionalProperties": { "$ref": "#/$defs/configProperty" } },
         "items": { "$ref": "#/$defs/configProperty" }
       },
-      "if": { "required": ["reload"] },
+      "if": {
+        "required": ["reload"],
+        "properties": { "reload": { "anyOf": [{ "required": ["spaces"] }, { "required": ["types"] }] } }
+      },
       "then": { "properties": { "type": { "const": "string" } }, "required": ["type"] }
     },
     "reload": {
@@ -283,9 +294,10 @@ a `type: "string"` property, resolved by Reload, never by the node:
           "type": "object",
           "required": ["of"],
           "properties": { "of": { "type": "string", "minLength": 1 } }
-        }
+        },
+        "advanced": { "const": true }
       },
-      "anyOf": [{ "required": ["spaces"] }, { "required": ["types"] }],
+      "anyOf": [{ "required": ["spaces"] }, { "required": ["types"] }, { "required": ["advanced"] }],
       "not": { "required": ["spaces", "types"] }
     },
     "eventName": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_]*)+\\.v[1-9][0-9]*$" },

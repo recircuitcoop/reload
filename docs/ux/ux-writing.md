@@ -247,7 +247,9 @@ a run is found again, read, and re-run (owner, 2026-10-02).
   template]
 - A step's form, placed on the canvas: its choices of space and type are read from Anytype as the
   form opens: "Reading your spaces…", then the list. Not paired: "Pair with Anytype in
-  Configuration › General to choose a space."
+  Configuration › General to choose a space." The fields a package marks advanced (where a step
+  reads a value from, the address it calls) sit under a closed **Advanced** disclosure; Setup
+  never shows them.
 
 ## Configuration › General
 

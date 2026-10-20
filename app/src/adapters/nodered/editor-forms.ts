@@ -14,6 +14,9 @@
 // its sibling space and reads again when that changes; with no space it is empty and disabled.
 // Not paired, the sentence shows in place of the options, and the stored value stays.
 //
+// A property marked `reload.advanced` (spec 2.4.1) is drawn as any other, but in a closed
+// "Advanced" disclosure after the others; it is read back from there the same way.
+//
 // Secrets are not drawn here: they are Node-RED credential inputs in the type's own template,
 // which Node-RED fills and saves itself, and never hands back to the editor (spec 2.5.2).
 //
@@ -25,6 +28,7 @@ import { Ajv2020, type ValidateFunction } from "ajv/dist/2020.js";
 import { coerceObject } from "../../domain/forms/coerce";
 import { RELOAD_ANNOTATION } from "../../domain/forms/reload-keyword";
 import {
+  ADVANCED_LABEL,
   addRow,
   dynamicSelect,
   formModel,
@@ -186,8 +190,13 @@ function scalar(field: Field, path: string, value: unknown): HTMLElement {
   }
 }
 
-/** The controls of `fields`, holding `values`, under `container`. */
+/** The controls of `fields`, holding `values`, under `container`; the advanced ones folded. */
 function draw(container: HTMLElement, fields: readonly Field[], values: Values, prefix: string) {
+  const advanced = element("details", {
+    "data-reload-advanced": "",
+    "data-testid": `reload-advanced${prefix === "" ? "" : `-${prefix}`}`,
+  });
+  advanced.append(element("summary", {}, ADVANCED_LABEL));
   for (const field of fields) {
     if (field.control === "password") {
       continue;
@@ -217,7 +226,10 @@ function draw(container: HTMLElement, fields: readonly Field[], values: Values, 
     if (field.help !== null) {
       row.append(element("div", { class: "form-tips" }, field.help));
     }
-    container.append(row);
+    (field.advanced === true ? advanced : container).append(row);
+  }
+  if (advanced.children.length > 1) {
+    container.append(advanced);
   }
   wireOptions(container, fields);
 }
@@ -255,9 +267,9 @@ async function fetchOptions(query: OptionsQuery): Promise<OptionsAnswer> {
   }
 }
 
-/** The control of `key`'s row directly under `container`, when it has one. */
+/** The control of `key`'s row under `container`, when it has one. */
 function controlOf(container: Element, key: string): Element | null {
-  return own(container, "data-reload-key", key)?.children[1] ?? null;
+  return rowOf(container, key)?.children[1] ?? null;
 }
 
 /**
@@ -366,11 +378,22 @@ function own(parent: Element, attribute: string, value: string): Element | null 
   return [...parent.children].find((child) => child.getAttribute(attribute) === value) ?? null;
 }
 
+/** `key`'s row directly under `container`, or in its own Advanced disclosure; never deeper. */
+function rowOf(container: Element, key: string): Element | null {
+  const advanced = [...container.children].find((child) =>
+    child.hasAttribute("data-reload-advanced"),
+  );
+  return (
+    own(container, "data-reload-key", key) ??
+    (advanced === undefined ? null : own(advanced, "data-reload-key", key))
+  );
+}
+
 /** The values of `fields` as drawn under `container`: text as text, as Node-RED keeps it. */
 function read(container: Element, fields: readonly Field[]): Values {
   const values: Values = {};
   for (const field of fields) {
-    const row = own(container, "data-reload-key", field.key);
+    const row = rowOf(container, field.key);
     if (row === null) {
       continue;
     }

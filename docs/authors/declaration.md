@@ -87,3 +87,13 @@ still the plain string; the annotation never changes what validates.
 "space": { "type": "string", "title": "Space", "reload": { "spaces": true } },
 "type": { "type": "string", "title": "Type", "reload": { "types": { "of": "space" } } }
 ```
+
+A property the person rarely needs to change (where your step reads a value from, an address it
+calls) can say so with `{"advanced": true}`, on a property of any type. The first-run Setup then
+never shows it, and the canvas draws it under a closed **Advanced** disclosure. Its value, or its
+default, is saved as ever. Give such a property a default that works, since most people never
+open it.
+
+```json
+"name_field": { "type": "string", "title": "Name from", "default": "/name", "reload": { "advanced": true } }
+```

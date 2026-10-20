@@ -1,10 +1,11 @@
 // The `reload` annotation of a config schema property (spec 2.4.1, plan 0022 §B, decision D9):
 // where a property's options come from, as the form layer needs to know it.
 //
-// Everything Reload-specific about a property lives in its one `reload` object. Two keys
-// are defined: `{"spaces": true}` (the paired Anytype's spaces) and `{"types": {"of": "<p>"}}`
-// (the types of the space chosen in sibling property `p`). This only reads the declaration;
-// resolving the options against Anytype is the options route's job (WI-0022-09), not this.
+// Everything Reload-specific about a property lives in its one `reload` object. Three keys
+// are defined: `{"spaces": true}` (the paired Anytype's spaces), `{"types": {"of": "<p>"}}`
+// (the types of the space chosen in sibling property `p`) and `{"advanced": true}` (never shown
+// in Setup, and under Advanced in the editor). This only reads the declaration; resolving the
+// options against Anytype is the options route's job (WI-0022-09), not this.
 //
 // Pure: no I/O, no library.
 
@@ -46,4 +47,10 @@ export function reloadOptions(property: JsonSchema): ReloadOptions | null {
     return null;
   }
   return spaces ? { source: "spaces" } : { source: "types", of };
+}
+
+/** Whether a property declares `reload.advanced`: hidden in Setup, under Advanced in the editor. */
+export function isAdvanced(property: JsonSchema): boolean {
+  const annotation = property[RELOAD_KEYWORD];
+  return isRecord(annotation) && annotation["advanced"] === true;
 }

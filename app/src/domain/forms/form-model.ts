@@ -10,7 +10,7 @@
 // Pure: no I/O, no DOM, no library.
 
 import type { JsonSchema } from "../packages/declaration";
-import { reloadOptions, type ReloadOptions } from "./reload-keyword";
+import { isAdvanced, reloadOptions, type ReloadOptions } from "./reload-keyword";
 import {
   READING_SPACES,
   READING_TYPES,
@@ -50,9 +50,14 @@ export interface Field {
    * (spec 2.4.1); resolving them is the options route's job. The value stays a plain string.
    */
   readonly reload?: ReloadOptions;
+  /** `reload.advanced` (spec 2.4.1): drawn under Advanced, closed as the form opens. */
+  readonly advanced?: true;
   /** A group's fields, or a table's columns. */
   readonly fields?: readonly Field[];
 }
+
+/** docs/ux/ux-writing.md, "A step's form": the disclosure that holds the advanced fields. */
+export const ADVANCED_LABEL = "Advanced";
 
 export interface FormModel {
   /** The fields, in the order the schema declares its properties. */
@@ -142,6 +147,9 @@ function fieldOf(key: string, property: JsonSchema, required: boolean): Field {
   const reload = control === "text" ? reloadOptions(property) : null;
   if (reload !== null) {
     field.reload = reload;
+  }
+  if (isAdvanced(property)) {
+    field.advanced = true;
   }
   if (control === "group") {
     field.fields = formModel(property).fields;

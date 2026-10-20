@@ -317,6 +317,7 @@ export const STRINGS = {
   "history.refused.notReached": "This run never reached that step.",
   "form.readingSpaces": "Reading your spaces…",
   "form.readingTypes": "Reading the space's types…",
+  "form.advanced": "Advanced",
   "form.notPaired": "Pair with Anytype in Configuration › General to choose a space.",
   "form.unreachable": "Open Anytype, then come back.",
   "form.unavailable": "Couldn't read from Anytype. Open this step's form again.",

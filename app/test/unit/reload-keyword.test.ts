@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { AjvSchemaValidator } from "../../src/adapters/schema/ajv-validator";
 import {
+  isAdvanced,
   RELOAD_ANNOTATION,
   RELOAD_KEYWORD,
   reloadOptions,
@@ -62,6 +63,19 @@ describe("reloadOptions", () => {
     }
   });
 
+  it("reads advanced on its own or beside options, and offers no options for it", () => {
+    expect(isAdvanced({ type: "string", reload: { advanced: true } })).toBe(true);
+    expect(isAdvanced({ type: "integer", reload: { advanced: true } })).toBe(true);
+    expect(isAdvanced({ ...SPACE, reload: { spaces: true, advanced: true } })).toBe(true);
+    expect(reloadOptions({ type: "string", reload: { spaces: true, advanced: true } })).toEqual({
+      source: "spaces",
+    });
+    expect(reloadOptions({ type: "string", reload: { advanced: true } })).toBeNull();
+    for (const property of [SPACE, { type: "string" }, { reload: { advanced: "yes" } }]) {
+      expect(isAdvanced(property)).toBe(false);
+    }
+  });
+
   it("names the one keyword the annotation spends", () => {
     expect(RELOAD_KEYWORD).toBe("reload");
     expect(RELOAD_ANNOTATION).toEqual({ keyword: "reload" });
@@ -80,6 +94,20 @@ describe("the form model", () => {
     expect(formModel({ properties: { plain: { type: "string" } } }).fields[0]).not.toHaveProperty(
       "reload",
     );
+  });
+
+  it("marks an advanced field, and only that one", () => {
+    const fields = formModel({
+      properties: {
+        space: SPACE,
+        from: { type: "string", default: "/name", reload: { advanced: true } },
+      },
+    }).fields;
+    expect(fields.map((field) => [field.key, field.advanced])).toEqual([
+      ["space", undefined],
+      ["from", true],
+    ]);
+    expect(fields[1]).not.toHaveProperty("reload");
   });
 });
 
@@ -118,6 +146,21 @@ describe("the declaration schema", () => {
   it("accepts spaces and types-of on string properties", () => {
     expect(validator.declaration(declaration(CONFIG))).toEqual([]);
     expect(validator.declaration(declaration({ type: "object" }))).toEqual([]);
+  });
+
+  it("accepts advanced alone, on a property of any type, and beside spaces or types", () => {
+    const config = {
+      properties: {
+        from: { type: "string", reload: { advanced: true } },
+        limit: { type: "integer", reload: { advanced: true } },
+        space: { ...SPACE, reload: { spaces: true, advanced: true } },
+      },
+    };
+    expect(validator.declaration(declaration(config))).toEqual([]);
+    const refused = { properties: { p: { type: "string", reload: { advanced: false } } } };
+    expect(validator.declaration(declaration(refused)).map((problem) => problem.path)).toContain(
+      "/types/0/config/properties/p/reload/advanced",
+    );
   });
 
   it("leaves room for keys a later revision defines, beside the one it requires", () => {
