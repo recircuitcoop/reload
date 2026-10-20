@@ -165,7 +165,7 @@ export function wheel(name: string, version: string): { file: string; bytes: Uin
     [`${name}/__init__.py`]: `NAME = ${JSON.stringify(name)}\nVERSION = ${JSON.stringify(version)}\n`,
     [`${distInfo}/METADATA`]: `Metadata-Version: 2.1\nName: ${name}\nVersion: ${version}\n`,
     [`${distInfo}/WHEEL`]:
-      "Wheel-Version: 1.0\nGenerator: innytypes-test\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+      "Wheel-Version: 1.0\nGenerator: reload-test\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
   };
   const record = Object.entries(files)
     .map(([file, text]) => {

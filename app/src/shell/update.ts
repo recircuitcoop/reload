@@ -49,9 +49,9 @@ export interface UpdateSource {
 }
 
 /**
- * The update source: what the build was released with (package.json's "innytypes"). The
- * INNYTYPES_UPDATE_REPO and INNYTYPES_UPDATE_KEY variables, and the e2e gate's
- * INNYTYPES_TEST_UPDATE_RELEASES (with INNYTYPES_E2E_HOOKS), point it elsewhere for development
+ * The update source: what the build was released with (package.json's "reload"). The
+ * RELOAD_UPDATE_REPO and RELOAD_UPDATE_KEY variables, and the e2e gate's
+ * RELOAD_TEST_UPDATE_RELEASES (with RELOAD_E2E_HOOKS), point it elsewhere for development
  * and the e2e gate only: an installed build (`packaged`) ignores them all, so nothing in its
  * environment can change the key it trusts or where it fetches from (plan 0003 D10).
  */
@@ -69,13 +69,13 @@ export function updateSource(options: {
       releases: `https://github.com/${repo}/releases`,
     };
   }
-  const repo = env["INNYTYPES_UPDATE_REPO"] ?? built.updateRepo;
+  const repo = env["RELOAD_UPDATE_REPO"] ?? built.updateRepo;
   const testReleases = e2eHooksOn({ packaged, env })
-    ? env["INNYTYPES_TEST_UPDATE_RELEASES"]
+    ? env["RELOAD_TEST_UPDATE_RELEASES"]
     : undefined;
   return {
     repo,
-    publicKey: env["INNYTYPES_UPDATE_KEY"] ?? built.updatePublicKey,
+    publicKey: env["RELOAD_UPDATE_KEY"] ?? built.updatePublicKey,
     releases: testReleases ?? `https://github.com/${repo}/releases`,
   };
 }

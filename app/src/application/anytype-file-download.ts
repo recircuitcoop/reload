@@ -1,4 +1,4 @@
-// API-download-file, answered by InnyTypes itself (plan 0019, "Where the fix lives" (b)).
+// API-download-file, answered by Reload itself (plan 0019, "Where the fix lives" (b)).
 //
 // The pinned MCP child decodes every answer as UTF-8 and sends it as one stdout line, so a
 // file that is not text is destroyed inside it, and one larger than a MiB closes its session.
@@ -88,12 +88,12 @@ export function oversizedMessage(size: number | null, maxBytes: number): string 
       ? `over ${String(Math.ceil(maxBytes / MIB))} MB`
       : `${String(Math.ceil(size / MIB))} MB`;
   return (
-    `This file is ${shown}. InnyTypes sends files up to ${String(Math.ceil(maxBytes / MIB))} MB, ` +
+    `This file is ${shown}. Reload sends files up to ${String(Math.ceil(maxBytes / MIB))} MB, ` +
     "so it wasn't sent. Ask for part of it with a byte range."
   );
 }
 
-export const BUSY_MESSAGE = `InnyTypes is already sending ${String(MAX_DOWNLOADS)} files. Ask again when one has finished.`;
+export const BUSY_MESSAGE = `Reload is already sending ${String(MAX_DOWNLOADS)} files. Ask again when one has finished.`;
 export const ARGUMENTS_MESSAGE = `${DOWNLOAD_TOOL} needs a space_id and a file_id.`;
 export const ID_MESSAGE =
   "space_id and file_id must each be an Anytype id: letters, digits, '.', '_' and '-', " +
@@ -106,7 +106,7 @@ export const NOT_MODIFIED_MESSAGE =
 export function headerMessage(name: string): string {
   return `${name} must be one line of text, such as ${name === "Range" ? "bytes=0-1023" : 'an ETag like "abc"'}.`;
 }
-export const NOT_PAIRED_MESSAGE = "InnyTypes is not paired with Anytype, so it cannot read files.";
+export const NOT_PAIRED_MESSAGE = "Reload is not paired with Anytype, so it cannot read files.";
 
 export interface FileDownloadsDeps {
   /** Anytype's REST API. */

@@ -33,7 +33,7 @@ function service(options: { key?: string | null; onReady?: () => void } = {}) {
       backoff: DEFAULT_BACKOFF,
       crashLoop: { maxCrashes: 5, windowMs: 120_000 },
       profile: MCP_STABILITY,
-      keyLocation: "/home/x/.config/innytypes/anytype_api_key or /legacy/anytype_api_key",
+      keyLocation: "/home/x/.config/reload/anytype_api_key or /legacy/anytype_api_key",
       healthRetryMs: 10_000,
     },
     secrets,
@@ -73,7 +73,7 @@ describe("bringing the MCP child up", () => {
     expect(subject.status().detail).toContain("pair with Anytype");
     // Both places the key could come from are named.
     expect(subject.status().detail).toContain(
-      "/home/x/.config/innytypes/anytype_api_key or /legacy/anytype_api_key",
+      "/home/x/.config/reload/anytype_api_key or /legacy/anytype_api_key",
     );
     expect(api.probes).toEqual([]);
     expect(launcher.children).toEqual([]);

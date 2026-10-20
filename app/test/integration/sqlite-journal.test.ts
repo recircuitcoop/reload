@@ -12,7 +12,7 @@ const opened: SqliteJournal[] = [];
 const dirs: string[] = [];
 
 function scratchFile(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "inny-journal-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "reload-journal-"));
   dirs.push(dir);
   return path.join(dir, "journal.sqlite");
 }
@@ -27,7 +27,7 @@ function entry(inputId: string, instanceId = "n1"): JournalEntry {
   return newEntry({
     inputId,
     instanceId,
-    type: "inny-pkg-t",
+    type: "reload-pkg-t",
     message: { payload: { id: inputId }, topic: "pkg.t.v1", _msgid: `m-${inputId}` },
     now: 1,
   });

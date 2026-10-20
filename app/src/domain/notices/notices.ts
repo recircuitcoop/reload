@@ -32,7 +32,7 @@ export type NoticeKind =
   | "package-update-available"
   /** A package update is refused, and what is installed stays (WI-0018-17). */
   | "package-update-refused"
-  /** A newer version of InnyTypes itself is verified and queued to install at quit (WI-0018-24). */
+  /** A newer version of Reload itself is verified and queued to install at quit (WI-0018-24). */
   | "core-update-available"
   /** The core update check found a tampered feed or artifact; nothing is installed (WI-0018-24). */
   | "core-update-refused"
@@ -42,6 +42,10 @@ export type NoticeKind =
   | "legacy-packages-found"
   /** The MCP endpoint could not open because the old helper still holds its lock (WI-0018-25). */
   | "endpoint-blocked-by-legacy-helper"
+  /** The stored Node-RED credential secret could not be read, so a new one was made (plan 0028). */
+  | "credentials-reset"
+  /** Both Reload and the app it was renamed from held data; the old data was left (plan 0028). */
+  | "old-data-left"
   /** A run started (plan 0022 §I, ux-writing "Notifications"); stops after five good runs. */
   | "run-started"
   /** A run finished: what the flow did. */
@@ -64,6 +68,8 @@ export const NOTICE_KINDS: readonly NoticeKind[] = [
   "core-crash-loop",
   "legacy-packages-found",
   "endpoint-blocked-by-legacy-helper",
+  "credentials-reset",
+  "old-data-left",
   "run-started",
   "run-done",
   "run-failed",
@@ -151,26 +157,26 @@ function composeWords(notice: Notice): Message {
   switch (notice.kind) {
     case "child-stopped":
       // The supervisor's sentence already says what to do (crashLoopMessage: Press Restart).
-      return { title: `InnyTypes stopped restarting the ${subject}`, body: sentences(detail) };
+      return { title: `Reload stopped restarting the ${subject}`, body: sentences(detail) };
     case "node-stopped":
       return {
-        title: `InnyTypes stopped restarting the node ${subject}`,
+        title: `Reload stopped restarting the node ${subject}`,
         body: sentences(detail, "Redeploy the flow to let it try again."),
       };
     case "mcp-child-stopped":
       // The body is the service's sentence and nothing else: it already says why, and a remedy
       // invented here would be a second, worse account of it (notification.py HOST_DEGRADED).
-      return { title: `InnyTypes is running without the ${subject}`, body: sentences(detail) };
+      return { title: `Reload is running without the ${subject}`, body: sentences(detail) };
     case "mcp-child-restarted":
-      return { title: `InnyTypes restarted the ${subject}`, body: sentences(detail) };
+      return { title: `Reload restarted the ${subject}`, body: sentences(detail) };
     case "endpoint-degraded":
       return {
-        title: `InnyTypes is running without its ${subject}`,
+        title: `Reload is running without its ${subject}`,
         body: sentences(detail, "Choose another address in Settings."),
       };
     case "anytype-key-refused":
       return {
-        title: `${subject} refused the InnyTypes key`,
+        title: `${subject} refused the Reload key`,
         body: sentences(
           "An Anytype node's request was refused, so its input failed and was not retried",
           "Pair again with Anytype in Settings.",
@@ -178,7 +184,7 @@ function composeWords(notice: Notice): Message {
       };
     case "view-waiting":
       return {
-        title: "InnyTypes is waiting for you",
+        title: "Reload is waiting for you",
         body: detail === "" ? "A question waits in Live." : detail,
       };
     case "package-update-available":
@@ -193,41 +199,51 @@ function composeWords(notice: Notice): Message {
       };
     case "core-update-available":
       return {
-        title: `InnyTypes ${version} is ready`,
-        body: sentences(detail, "It installs the next time you quit InnyTypes."),
+        title: `Reload ${version} is ready`,
+        body: sentences(detail, "It installs the next time you quit Reload."),
       };
     case "core-update-refused":
       return {
-        title: "An InnyTypes update was refused",
+        title: "A Reload update was refused",
         body: sentences(detail, "Nothing on your machine has changed."),
       };
     case "core-crash-loop":
       // Offered, never applied (plan 0022 §G): the person chooses, in the banner or in General.
       return {
-        title: `Go back to InnyTypes ${version}?`,
+        title: `Go back to Reload ${version}?`,
         body: sentences(
-          "InnyTypes keeps stopping since its update",
+          "Reload keeps stopping since its update",
           "Go back from the banner or in Configuration › General. Your flows and settings are kept.",
         ),
       };
     case "legacy-packages-found":
       return {
-        title: "InnyTypes found plugin environments from the old installation",
+        title: "Reload found plugin environments from the old installation",
         body: sentences(detail, "Review and remove them in Configuration › General."),
       };
     case "endpoint-blocked-by-legacy-helper":
       return {
-        title: "InnyTypes is running without its MCP endpoint",
+        title: "Reload is running without its MCP endpoint",
         body: sentences(
           "The old InnyTypes helper is still running and holds its lock",
           "Quit it, then press Restart on the services process.",
         ),
       };
+    case "credentials-reset":
+      return {
+        title: "Enter the credentials in your flows again",
+        body: sentences(
+          "Reload could not read the key that protected them, so it made a new one",
+          "Open each flow that used a password or token and enter it again.",
+        ),
+      };
+    case "old-data-left":
+      return { title: "Reload kept its own data", body: sentences(detail) };
     case "run-started":
     case "run-done":
     case "run-failed":
       // Always raised with a title; a bare one says only that a run moved.
-      return { title: "InnyTypes", body: sentences(detail) };
+      return { title: "Reload", body: sentences(detail) };
   }
 }
 

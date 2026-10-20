@@ -97,12 +97,12 @@ describe("the pop-out rules", () => {
     expect(componentPackageOf(value({ title: "t" }))).toBeNull();
     expect(componentPackageOf(value("not content"))).toBeNull();
     expect(componentPackageOf(null)).toBeNull();
-    expect(viewPageUrl(null)).toBe("inny-view://app/view.html");
-    expect(viewPageUrl("kit")).toBe("inny-view://kit/view.html");
+    expect(viewPageUrl(null)).toBe("reload-view://app/view.html");
+    expect(viewPageUrl("kit")).toBe("reload-view://kit/view.html");
   });
 
   it("placement is keyed by kind and type, and only well-formed bounds are read back", () => {
-    expect(placementKey("view", { type: "inny-kit-ask" })).toBe("view:inny-kit-ask");
+    expect(placementKey("view", { type: "reload-kit-ask" })).toBe("view:reload-kit-ask");
     expect(placementKey("snapshot", { type: "" })).toBeNull();
     expect(placementKey("view", null)).toBeNull();
     expect(isBounds({ x: 1, y: 2, width: 3, height: 4 })).toBe(true);
@@ -259,20 +259,26 @@ function harness(answers: Partial<Record<CallOp, Answer>> = {}) {
 
 const VIEW: Answer = {
   ok: true,
-  value: { kind: "view", id: "v1", type: "inny-kit-ask", package: "kit", content: { title: "t" } },
+  value: {
+    kind: "view",
+    id: "v1",
+    type: "reload-kit-ask",
+    package: "kit",
+    content: { title: "t" },
+  },
 };
 
 describe("Popouts", () => {
-  it("opens a window with the exact webPreferences in the inny-views partition, the generic page, and locks it down", async () => {
+  it("opens a window with the exact webPreferences in the reload-views partition, the generic page, and locks it down", async () => {
     const { popouts, windows, logger, opened } = harness({ "view.get": VIEW });
     await popouts.open({ kind: "view", id: "v1" }, "presented");
     const [window] = windows as [FakeWindow];
     expect(window.options.webPreferences).toEqual({
       ...viewWebPreferences("/dist/shell/view-preload.cjs"),
-      partition: "inny-views",
+      partition: "reload-views",
     });
     expect(window.options).toMatchObject({ width: 560, height: 640, show: false });
-    expect(window.loaded).toBe("inny-view://app/view.html");
+    expect(window.loaded).toBe("reload-view://app/view.html");
     expect(popouts.list()).toEqual(["view:v1"]);
     expect(logger.has(/view:v1 opened in its own window \(presented\)/)).toBe(true);
     // Navigation is prevented; only an Anytype object link is handed to Anytype.
@@ -311,7 +317,7 @@ describe("Popouts", () => {
       },
     });
     await popouts.open({ kind: "view", id: "v1" }, "presented");
-    expect(windows[0]?.loaded).toBe("inny-view://kit/view.html");
+    expect(windows[0]?.loaded).toBe("reload-view://kit/view.html");
   });
 
   it("the bridge answers only for the window's own target, and refuses the wrong call", async () => {
@@ -382,18 +388,18 @@ describe("Popouts", () => {
     const value = {
       kind: "view",
       id: "kit-card",
-      type: "inny-kit-card",
+      type: "reload-kit-card",
       package: "kit",
       content: { title: "Card", component: { element: "kit-card", props: { n: 1 } } },
     };
     await popouts.preview("kit-card", value);
     const [window] = windows as [FakeWindow];
-    expect(window.options.title).toBe("InnyTypes — preview");
+    expect(window.options.title).toBe("Reload — preview");
     expect(window.options.webPreferences).toEqual({
       ...viewWebPreferences("/dist/shell/view-preload.cjs"),
-      partition: "inny-views",
+      partition: "reload-views",
     });
-    expect(window.loaded).toBe("inny-view://kit/view.html");
+    expect(window.loaded).toBe("reload-view://kit/view.html");
     expect(popouts.list()).toEqual(["preview:kit-card"]);
     // The page gets the view it was opened with; a draft is accepted and kept nowhere.
     expect(await bridge(window, "get")).toEqual({ ok: true, value });
@@ -426,7 +432,7 @@ describe("Popouts", () => {
     first.bounds = { x: 10, y: 20, width: 600, height: 500 };
     popouts.close({ kind: "view", id: "v1" });
     popouts.close({ kind: "view", id: "v1" }); // closing a closed one does nothing
-    expect(placements.get("view:inny-kit-ask")).toEqual(first.bounds);
+    expect(placements.get("view:reload-kit-ask")).toEqual(first.bounds);
     expect(logger.has(/view:v1 window closed/)).toBe(true);
     await popouts.open({ kind: "view", id: "v1" }, "again");
     expect(windows[1]?.options).toMatchObject({ x: 10, y: 20, width: 600, height: 500 });
@@ -434,10 +440,10 @@ describe("Popouts", () => {
 
   it("a runtime that cannot answer still gets a window, on the generic page, at the default size", async () => {
     const { popouts, windows, placements, logger } = harness({
-      "view.get": { ok: false, error: "the InnyTypes runtime is restarting" },
+      "view.get": { ok: false, error: "the Reload runtime is restarting" },
     });
     await popouts.open({ kind: "view", id: "fail" }, "presented");
-    expect(windows[0]?.loaded).toBe("inny-view://app/view.html");
+    expect(windows[0]?.loaded).toBe("reload-view://app/view.html");
     windows[0]?.close();
     expect(placements.size).toBe(0);
     // A page that fails to load is said.
@@ -450,7 +456,7 @@ describe("Popouts", () => {
     await failing.popouts.open({ kind: "view", id: "x" }, "presented");
     await Promise.resolve();
     await Promise.resolve();
-    expect(failing.logger.has(/did not load inny-view:\/\/fail\/view.html/)).toBe(true);
+    expect(failing.logger.has(/did not load reload-view:\/\/fail\/view.html/)).toBe(true);
     expect(logger.has(/opened/)).toBe(true);
   });
 });
@@ -542,7 +548,7 @@ describe("setAppUserModelId", () => {
     setAppUserModelId(app, "win32");
     setAppUserModelId(app, "darwin");
     setAppUserModelId(app, "linux");
-    expect(set).toEqual(["it.l1nx.innytypes.helper"]);
+    expect(set).toEqual(["it.recircu.reload"]);
   });
 });
 
@@ -590,9 +596,9 @@ describe("Inbox (the shell's)", () => {
     kept.receive(present("a", false));
     expect(popouts).toEqual(["a"]);
     expect(raised.map(compose)).toEqual([
-      { title: "InnyTypes is waiting for you", body: "Title a" },
-      { title: "InnyTypes is waiting for you", body: "Title b" },
-      { title: "InnyTypes is waiting for you", body: "A question waits in Live." },
+      { title: "Reload is waiting for you", body: "Title a" },
+      { title: "Reload is waiting for you", body: "Title b" },
+      { title: "Reload is waiting for you", body: "A question waits in Live." },
     ]);
     expect(logger.has(/view a re-presented: it waits quietly in the Inbox/)).toBe(true);
     expect(kept.items().map((item) => item.id)).toEqual(["a", "b", "untitled"]);
@@ -615,7 +621,7 @@ describe("Inbox (the shell's)", () => {
     expect(kept.items()).toEqual([{ id: "b", title: "B", window: "inline" }]);
     // The view that left the Inbox is no longer waiting: its notice is cleared.
     expect(cleared).toEqual(["view-waiting a"]);
-    setList({ ok: false, error: "the InnyTypes runtime is down" });
+    setList({ ok: false, error: "the Reload runtime is down" });
     await kept.refresh();
     expect(kept.items()).toEqual([{ id: "b", title: "B", window: "inline" }]);
     setList({ ok: true, value: "not a list" });

@@ -1,8 +1,8 @@
-# The declaration: `inny-package.json`
+# The declaration: `reload-package.json`
 
 Full contract: `docs/specs/node-protocol-v2.md` §2. This page is the shape of it, for reference
-while you write one; InnyTypes checks a declaration against
-`docs/specs/inny-package.v2.schema.json` (the spec's §2.6 schema, extracted verbatim) plus a
+while you write one; Reload checks a declaration against
+`docs/specs/reload-package.v2.schema.json` (the spec's §2.6 schema, extracted verbatim) plus a
 few rules a schema cannot express (unique ids, no reserved port names, an event type can only
 be owned by your own package) — see `app/src/domain/packages/declaration.ts`.
 
@@ -32,7 +32,7 @@ be owned by your own package) — see `app/src/domain/packages/declaration.ts`.
 - **`protocol`** is always `2`. A declaration for any other version is refused, naming both.
 - **A type's `id`** matches `^[a-z][a-z0-9_-]{0,63}$` (hyphens allowed here) and is unique
   within your package. The Node-RED node type name is derived, never declared:
-  `inny-<package>-<id>`.
+  `reload-<package>-<id>`.
 - **`kind`** is `source` (0 inputs, unless `input: true`), `node` (1 input, 0+ outputs — 0
   makes it a sink), or `view` (1 input; needs `view: "action"` or `view: "snapshot"`, spec §8).
 - **`command`** is an argv array, or `{darwin, win32, linux, default}` per platform. Three
@@ -49,13 +49,13 @@ be owned by your own package) — see `app/src/domain/packages/declaration.ts`.
 
 One of three kinds (`docs/authors/packaging.md` covers building each):
 
-| `kind` | What you ship | What InnyTypes runs |
+| `kind` | What you ship | What Reload runs |
 |---|---|---|
-| `uv-python` | Your `.py` files, plus `requirements.lock` if you have any dependencies at all (a hash-locked `uv pip compile --generate-hashes` output; no lock at all means no dependencies). | A `uv` venv on InnyTypes' bundled Python 3.13, `uv pip sync --require-hashes` from your lock. |
-| `node` | Pre-bundled JavaScript — one file with everything inlined (esbuild, or `inny-pack build` does this for you). No `package.json` dependencies, no install scripts, no native addon (`binding.gyp`): nothing ever runs `npm`. | InnyTypes' bundled Node, on your file directly. |
+| `uv-python` | Your `.py` files, plus `requirements.lock` if you have any dependencies at all (a hash-locked `uv pip compile --generate-hashes` output; no lock at all means no dependencies). | A `uv` venv on Reload's bundled Python 3.13, `uv pip sync --require-hashes` from your lock. |
+| `node` | Pre-bundled JavaScript — one file with everything inlined (esbuild, or `reload-pack build` does this for you). No `package.json` dependencies, no install scripts, no native addon (`binding.gyp`): nothing ever runs `npm`. | Reload's bundled Node, on your file directly. |
 | `executable` | One binary per `{platform}-{arch}` you support, with its sha256 in the declaration. | That binary, verified against the hash before it is ever run. |
 
-`python` must be `"3.13"` — InnyTypes bundles exactly one Python and refuses anything else.
+`python` must be `"3.13"` — Reload bundles exactly one Python and refuses anything else.
 
 ## Event type names
 
@@ -78,12 +78,12 @@ each instance can choose (§8.5); the SDK's `present`/`snapshot` calls are the s
 becomes a select; `string`/`number`/`integer`/`boolean` become the obvious control; a secret
 property becomes a password input backed by Node-RED credentials storage.
 
-A string property can ask InnyTypes for its options through one `innytype` object (spec §2.4.1,
+A string property can ask Reload for its options through one `reload` object (spec §2.4.1,
 revision 2.1): `{"spaces": true}` offers the paired Anytype's spaces, `{"types": {"of":
 "space"}}` the types of the space chosen in the sibling property `space`. The value saved is
 still the plain string; the annotation never changes what validates.
 
 ```json
-"space": { "type": "string", "title": "Space", "innytype": { "spaces": true } },
-"type": { "type": "string", "title": "Type", "innytype": { "types": { "of": "space" } } }
+"space": { "type": "string", "title": "Space", "reload": { "spaces": true } },
+"type": { "type": "string", "title": "Type", "reload": { "types": { "of": "space" } } }
 ```

@@ -32,10 +32,10 @@ export interface PackageRemoverPorts {
   readonly logger: Logger;
 }
 
-/** The types of `types` that belong to package `name` (`inny-<name>-<id>`, spec 2.1). */
+/** The types of `types` that belong to package `name` (`reload-<name>-<id>`, spec 2.1). */
 export function typesOf(name: string, types: readonly string[]): string[] {
   // A package name holds no hyphen, so the prefix cannot match another package's types.
-  return [...new Set(types.filter((type) => type.startsWith(`inny-${name}-`)))].sort();
+  return [...new Set(types.filter((type) => type.startsWith(`reload-${name}-`)))].sort();
 }
 
 export class PackageRemover {
@@ -51,7 +51,7 @@ export class PackageRemover {
     return this.#one.run(`The removal of ${name}`, async () => {
       const { roots, logger } = this.#ports;
       if (this.#ports.shipped().includes(name)) {
-        return this.#refused(name, `${name} is shipped with InnyTypes and cannot be removed`);
+        return this.#refused(name, `${name} is shipped with Reload and cannot be removed`);
       }
       let record: InstalledRecord | undefined;
       try {

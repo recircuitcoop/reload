@@ -37,7 +37,7 @@ export const MAX_ATTEMPTS = 2;
 export interface JournaledMessage {
   readonly payload: unknown;
   readonly topic?: unknown;
-  readonly inny?: unknown;
+  readonly reload?: unknown;
   readonly _msgid?: string;
 }
 
@@ -97,8 +97,8 @@ export function journaledMessage(message: JournaledMessage): JournaledMessage {
   if (message.topic !== undefined) {
     kept.topic = message.topic;
   }
-  if (message.inny !== undefined) {
-    kept.inny = message.inny;
+  if (message.reload !== undefined) {
+    kept.reload = message.reload;
   }
   if (message._msgid !== undefined) {
     kept._msgid = message._msgid;
@@ -109,10 +109,12 @@ export function journaledMessage(message: JournaledMessage): JournaledMessage {
 /** The `input` frame's event for a message: its topic, its payload and its run (spec 5.1). */
 export function eventOf(message: JournaledMessage): JournaledEvent {
   const type = typeof message.topic === "string" ? message.topic : "";
-  const inny = message.inny;
+  const reload = message.reload;
   const run =
-    typeof inny === "object" && inny !== null && typeof (inny as { run?: unknown }).run === "string"
-      ? (inny as { run: string }).run
+    typeof reload === "object" &&
+    reload !== null &&
+    typeof (reload as { run?: unknown }).run === "string"
+      ? (reload as { run: string }).run
       : undefined;
   return run === undefined ? { type, data: message.payload } : { type, data: message.payload, run };
 }

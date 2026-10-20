@@ -1,7 +1,7 @@
 // The suite's own home directory: no test can reach this user's, and one that tries fails.
 //
 // The vitest twin of tests/home_guard.py. A test that writes into the real home is not
-// hermetic, and on the machine of somebody who runs InnyTypes it writes next to a live app,
+// hermetic, and on the machine of somebody who runs Reload it writes next to a live app,
 // into the directories whose sockets, settings and keys that app is using. It was twice
 // found only by chance in the old app (plan 0012, slice 05). This setup file runs before
 // every test file and does two independent things:
@@ -38,7 +38,7 @@ export class WriteToRealDirectory extends Error {
 }
 
 /** Names the scratch home to any process started from this one. */
-export const SANDBOX_VARIABLE = "INNYTYPES_TEST_HOME";
+export const SANDBOX_VARIABLE = "RELOAD_TEST_HOME";
 
 interface GuardState {
   readonly realHomes: readonly string[];
@@ -50,7 +50,7 @@ interface GuardState {
 // vitest can run several test files in one worker process, and every file runs its setup
 // files again. The fs module is shared by all of them, so the guard is installed once per
 // process and its state lives on the process, not on this module.
-const STATE_KEY = Symbol.for("innytypes.test.homeGuard");
+const STATE_KEY = Symbol.for("reload.test.homeGuard");
 const holder = globalThis as typeof globalThis & { [STATE_KEY]?: GuardState };
 
 const REPOSITORY = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -189,7 +189,7 @@ function install(): GuardState {
   // database is asked too, in case HOME had already been moved before this process started.
   const realHomes = [...new Set([os.homedir(), os.userInfo().homedir].flatMap(bothSpellings))];
   const allowed = [...new Set([os.tmpdir(), REPOSITORY].flatMap(bothSpellings))];
-  const sandboxHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "inny-home-")));
+  const sandboxHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-home-")));
 
   process.env[SANDBOX_VARIABLE] = sandboxHome;
   process.env["HOME"] = sandboxHome;

@@ -8,8 +8,8 @@ import { FakeLauncher, obedient, RecordingLogger, RecordingNotifier } from "../f
 import { FakeClock } from "../fakes/clock";
 
 const FILES = {
-  "anytype-api-key": { file: "/scratch/.config/innytypes/anytype_api_key", legacy: "/l/key" },
-  "mcp-proxy-token": { file: "/scratch/.config/innytypes/mcp_proxy_token" },
+  "anytype-api-key": { file: "/scratch/.config/reload/anytype_api_key", legacy: "/l/key" },
+  "mcp-proxy-token": { file: "/scratch/.config/reload/mcp_proxy_token" },
 };
 const CONFIG = { generation: 1, port: null, userDir: "/u", restart: null, forkedAt: 0 };
 
@@ -37,7 +37,7 @@ describe("secret paths in init", () => {
       child: "services",
       fork: {
         modulePath: "/app/dist/services/main.cjs",
-        serviceName: "InnyTypes services",
+        serviceName: "Reload services",
         env: {},
       },
       childSettings: { port: null, userDir: "/u", secretFiles: FILES },

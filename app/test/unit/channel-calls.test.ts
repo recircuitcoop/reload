@@ -46,7 +46,7 @@ describe("the call timeout", () => {
     expect(await settled(call)).toEqual({
       ok: false,
       code: "timeout",
-      error: "the InnyTypes runtime did not answer in time",
+      error: "the Reload runtime did not answer in time",
     });
   });
 

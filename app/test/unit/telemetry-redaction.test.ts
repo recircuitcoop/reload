@@ -160,12 +160,10 @@ describe("telemetry redaction: credentials and paths", () => {
       "express/lib/router.js",
     );
     expect(
-      packageRelative(
-        "/Applications/InnyTypes.app/Contents/Resources/app.asar/dist/shell/main.cjs",
-      ),
-    ).toBe("innytypes/dist/shell/main.cjs");
-    expect(packageRelative("/Users/someone/git/innytypes/app/dist/runtime/main.cjs")).toBe(
-      "innytypes/dist/runtime/main.cjs",
+      packageRelative("/Applications/Reload.app/Contents/Resources/app.asar/dist/shell/main.cjs"),
+    ).toBe("reload/dist/shell/main.cjs");
+    expect(packageRelative("/Users/someone/git/reload/app/dist/runtime/main.cjs")).toBe(
+      "reload/dist/runtime/main.cjs",
     );
     expect(
       packageRelative("/home/someone/.venv/lib/python3.12/site-packages/httpx/_client.py"),

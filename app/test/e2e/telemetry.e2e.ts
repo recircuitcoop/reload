@@ -94,13 +94,13 @@ async function fakeServers(): Promise<{
 function appEnv(env: Record<string, string>, port: number): Record<string, string> {
   return {
     ...env,
-    INNYTYPES_E2E_HOOKS: "1",
-    INNYTYPES_TEST_CATALOGUE_CA: CERT,
-    INNYTYPES_TEST_MACHINE_ID: MACHINE,
-    INNYTYPES_LOG_CANARY: LOG_CANARY,
-    INNYTYPES_GLITCHTIP_DSN: `https://e2ekey@127.0.0.1:${String(port)}/5`,
-    INNYTYPES_UMAMI_URL: `https://127.0.0.1:${String(port)}/umami`,
-    INNYTYPES_UMAMI_WEBSITE_ID: "e2e-site",
+    RELOAD_E2E_HOOKS: "1",
+    RELOAD_TEST_CATALOGUE_CA: CERT,
+    RELOAD_TEST_MACHINE_ID: MACHINE,
+    RELOAD_LOG_CANARY: LOG_CANARY,
+    RELOAD_GLITCHTIP_DSN: `https://e2ekey@127.0.0.1:${String(port)}/5`,
+    RELOAD_UMAMI_URL: `https://127.0.0.1:${String(port)}/umami`,
+    RELOAD_UMAMI_WEBSITE_ID: "e2e-site",
   };
 }
 
@@ -174,7 +174,7 @@ test("telemetry asks first, sends nothing before a yes, sends only redacted repo
       .toEqual(["/umami/api/send", "/api/5/envelope/"]);
 
     const [usage, crash] = received;
-    const machineId = createHmac("sha256", "innytypes.machine-id.v1").update(MACHINE).digest("hex");
+    const machineId = createHmac("sha256", "reload.machine-id.v1").update(MACHINE).digest("hex");
     expect(JSON.parse(usage?.body ?? "")).toMatchObject({
       type: "event",
       payload: { website: "e2e-site", name: "usage", data: { machine_id: machineId } },

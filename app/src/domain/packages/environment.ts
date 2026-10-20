@@ -126,7 +126,7 @@ function planPython(
   if (asked !== BUNDLED_PYTHON) {
     refuse(
       declaration,
-      `it asks for Python ${asked}, and InnyTypes provides Python ${BUNDLED_PYTHON} only; ` +
+      `it asks for Python ${asked}, and Reload provides Python ${BUNDLED_PYTHON} only; ` +
         `declare "python": "${BUNDLED_PYTHON}"`,
     );
   }

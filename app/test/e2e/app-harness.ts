@@ -249,7 +249,7 @@ export function isAlive(pid: number): boolean {
 /**
  * A loopback port that was free a moment ago, found synchronously (a short node run), so
  * scratchDirectories can hand every run an MCP endpoint of its own: no run may bind the default
- * 31010, which a person's own InnyTypes may be serving (WI-0018-19).
+ * 31010, which a person's own Reload may be serving (WI-0018-19).
  */
 export function freePortNow(): number {
   const script =
@@ -260,7 +260,7 @@ export function freePortNow(): number {
 
 /** Where the services process keeps the Anytype key under a (scratch) home. */
 export function anytypeKeyFile(home: string): string {
-  return path.join(home, ".config", "innytypes", "anytype_api_key");
+  return path.join(home, ".config", "reload", "anytype_api_key");
 }
 
 /**
@@ -277,7 +277,7 @@ export function scratchDirectories(): {
   env: Record<string, string>;
   canaryKey: string;
 } {
-  const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "inny-e2e-")));
+  const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-e2e-")));
   const userData = path.join(scratch, "user-data");
   const canaryKey = `e2e-canary-key-${randomUUID()}`;
   fs.mkdirSync(path.dirname(anytypeKeyFile(scratch)), { recursive: true, mode: 0o700 });
@@ -295,15 +295,15 @@ export function scratchDirectories(): {
       // must never write into the log of this user's own installation.
       XDG_STATE_HOME: path.join(scratch, ".local", "state"),
       LOCALAPPDATA: path.join(scratch, "AppData", "Local"),
-      INNYTYPES_USER_DATA: userData,
-      INNYTYPES_HIDDEN_WINDOWS: "1",
+      RELOAD_USER_DATA: userData,
+      RELOAD_HIDDEN_WINDOWS: "1",
       // safeStorage against Chromium's in-memory mock keychain: no run writes to this
       // user's real one (WI-0018-06).
-      INNYTYPES_MOCK_KEYCHAIN: "1",
+      RELOAD_MOCK_KEYCHAIN: "1",
       // Port 9 (discard): nothing answers, so the services process never reaches an Anytype.
       ANYTYPE_API_BASE_URL: "http://127.0.0.1:9",
       // The MCP endpoint's default for this run: a free port, never the default 31010.
-      INNYTYPES_MCP_PORT: String(freePortNow()),
+      RELOAD_MCP_PORT: String(freePortNow()),
     },
     canaryKey,
   };
@@ -337,7 +337,7 @@ export function assertHermetic(app: ElectronApplication): void {
     return;
   }
   const log = run.output.join("");
-  for (const [, who, home] of log.matchAll(/(innytypes\.\w+): this process's HOME is (.*)/g)) {
+  for (const [, who, home] of log.matchAll(/(reload\.\w+): this process's HOME is (.*)/g)) {
     expect(`${String(who)} HOME ${String(home).trim()}`).toBe(`${String(who)} HOME ${run.home}`);
   }
   for (const [, file] of log.matchAll(/the Anytype key is read from (\S+)/g)) {
@@ -374,18 +374,18 @@ export async function launchApp(
   const window = await app.firstWindow();
   // Every process says its HOME as it starts, at INFO: all three must be in the scratch home.
   // A run that logs above INFO cannot show the children's lines; the shell is still asked.
-  const quiet = /^(warning|error|critical)$/i.test(env["INNYTYPES_LOG_LEVEL"] ?? "");
+  const quiet = /^(warning|error|critical)$/i.test(env["RELOAD_LOG_LEVEL"] ?? "");
   if (!quiet) {
     await expect
       .poll(
         () =>
-          [...output.join("").matchAll(/(innytypes\.\w+): this process's HOME is (.*)/g)]
+          [...output.join("").matchAll(/(reload\.\w+): this process's HOME is (.*)/g)]
             .map(([, who]) => who)
             .filter((who) => who !== undefined)
             .sort(),
         { timeout: 15_000 },
       )
-      .toEqual(expect.arrayContaining(["innytypes.runtime", "innytypes.services"]));
+      .toEqual(expect.arrayContaining(["reload.runtime", "reload.services"]));
   }
   // The shell's own line is written before this driver is listening, so it is asked directly;
   // the shell hands its children os.homedir(), which is this.
@@ -403,7 +403,7 @@ export async function childOnPage(window: Page, child: "runtime" | "services") {
   const statuses = await window.evaluate(() =>
     (
       globalThis as unknown as {
-        inny: {
+        reload: {
           app: {
             childStatus(): Promise<
               readonly {
@@ -417,7 +417,7 @@ export async function childOnPage(window: Page, child: "runtime" | "services") {
           };
         };
       }
-    ).inny.app.childStatus(),
+    ).reload.app.childStatus(),
   );
   const status = statuses.find((each) => each.child === child);
   return {
@@ -459,8 +459,8 @@ export async function waitForRunning(
 async function closeSetup(window: Page): Promise<void> {
   const answer = await window.evaluate(() =>
     (
-      globalThis as unknown as { inny: { app: { completeSetup(): Promise<{ ok: boolean }> } } }
-    ).inny.app.completeSetup(),
+      globalThis as unknown as { reload: { app: { completeSetup(): Promise<{ ok: boolean }> } } }
+    ).reload.app.completeSetup(),
   );
   expect(answer.ok).toBe(true);
   await expect(window.getByTestId("frame")).not.toHaveAttribute("data-route", /^(loading|setup)$/, {

@@ -1,4 +1,4 @@
-// API-download-file as InnyTypes answers it (plan 0019, slice 02): from Anytype's REST API, as
+// API-download-file as Reload answers it (plan 0019, slice 02): from Anytype's REST API, as
 // one embedded resource, bounded in size and in how many run at once. Anytype here is a fake
 // fetch serving files in the shape of its spec (GET /v2/spaces/{space_id}/files/{file_id}/content),
 // read through the real client: never the person's Anytype.
@@ -137,7 +137,7 @@ function resourceOf(answer: Readonly<Record<string, unknown>>): Record<string, u
   return content[0]?.resource ?? {};
 }
 
-describe("a file InnyTypes answers itself", () => {
+describe("a file Reload answers itself", () => {
   it("a PDF round-trips intact", async () => {
     const bytes = pdf(Math.round(7.3 * 1024 * 1024));
     const { downloads, asked } = subject({
@@ -200,7 +200,7 @@ describe("a file InnyTypes answers itself", () => {
       understated: { bytes: big, contentType: "application/pdf", declaredLength: 1024 },
     });
     const sentence =
-      "This file is 40 MB. InnyTypes sends files up to 16 MB, so it wasn't sent. " +
+      "This file is 40 MB. Reload sends files up to 16 MB, so it wasn't sent. " +
       "Ask for part of it with a byte range.";
 
     // Content-Length says so: refused before one byte of the body is read.
@@ -217,7 +217,7 @@ describe("a file InnyTypes answers itself", () => {
           {
             type: "text",
             text:
-              "This file is over 16 MB. InnyTypes sends files up to 16 MB, so it wasn't sent. " +
+              "This file is over 16 MB. Reload sends files up to 16 MB, so it wasn't sent. " +
               "Ask for part of it with a byte range.",
           },
         ],

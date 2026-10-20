@@ -21,7 +21,7 @@ tray icon and notifications are entry points into Live.
 
 ## The app's posture
 
-InnyTypes has three postures, and each moment below uses one of them:
+Reload has three postures, and each moment below uses one of them:
 
 | Posture | When | What that means for the design |
 |---|---|---|
@@ -43,8 +43,8 @@ again; everything it asks can be changed later in Configuration › General.
 
 **Rules, as a sequence of screens.** Each screen has one job and a Back button. Nothing is
 skippable that the pipeline needs; everything else is. The order is the owner's (2026-10-02):
-consent → pair Anytype → choose the source folder → the starter's node forms → Ready. InnyTypes'
-own setup asks only for what InnyTypes itself owns; anything a node package owns (the recorder is
+consent → pair Anytype → choose the source folder → the starter's node forms → Ready. Reload's
+own setup asks only for what Reload itself owns; anything a node package owns (the recorder is
 monty's source) is asked in that package's node form, during the starter flow's forms or later on
 the canvas (owner, 2026-10-02).
 
@@ -53,7 +53,7 @@ automatically setup the right plugins and go through the configuration step at s
 packages that ship inside the app (anytype and folder in 0.3.0) are set up on their own while the
 walkthrough runs, and the starter flow is always installed.
 
-1. **Welcome:** one sentence on what InnyTypes does, in the owner's terms: *records → transcript →
+1. **Welcome:** one sentence on what Reload does, in the owner's terms: *records → transcript →
    summaries → Anytype → next steps*. **Get started.**
 2. **Reports** (telemetry): the consent question, whole and with its buttons visible.
 3. **Connect Anytype.** If Anytype is running, the four-digit pairing code; if not, "Open Anytype"
@@ -127,7 +127,7 @@ content and a suggested size. The person decides the *presentation* in the Live 
 - **Edit layout** is a mode of the Live window. In it, the person moves and resizes places on the
   board, hides a place entirely (and shows it again), and adds and removes **tabs**; a board has at
   least one tab.
-- The layout is InnyTypes' own state for that flow, kept outside the flow. **Save and run** in
+- The layout is Reload's own state for that flow, kept outside the flow. **Save and run** in
   Configuration never touches it. A view node added to the flow gets a new place at the end of the
   last tab, at its suggested size; a view node removed from the flow takes its place with it.
 - **A hidden place never hides something urgent.** If a hidden place holds a waiting question or a
@@ -196,7 +196,7 @@ close button counts as "Later".
   "Meeting notes → *Renaissance*", "Moved recording to *Archive*", "Deleted the recording". Nothing
   on the board assumes Anytype is the only end.
 - A line for something made in Anytype names its type and space and is a link that **opens the
-  object in Anytype**; Anytype is the reading surface there, and InnyTypes does not re-render the
+  object in Anytype**; Anytype is the reading surface there, and Reload does not re-render the
   content. A line for a file moved opens the folder; a line for something deleted is plain text.
 - The **planned next steps** the scheduling node made are listed with their dates, each linking to
   its task or calendar entry.

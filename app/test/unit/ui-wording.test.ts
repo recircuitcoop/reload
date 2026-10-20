@@ -39,12 +39,12 @@ describe("the wording WI-0022-10 decided", () => {
     const rendered = FIXTURE_TABLES.inUse.rows.map((row) => row.rendered);
     expect(rendered).toHaveLength(IN_USE.length);
     expect(rendered[3]).toBe(
-      "Can't unregister *innyrize*: *Recordings to Anytype* uses its *Transcribe* step, " +
+      "Can't unregister *reload_summarize*: *Recordings to Anytype* uses its *Transcribe* step, " +
         "*Invoices from the mailbox* uses its *Read PDF* step and *Photos from the camera card* " +
         "uses its *Describe* step. Remove those steps first.",
     );
     expect(rendered[4]).toBe(
-      "*anytype* comes with InnyTypes and can't be removed. Unregister it instead.",
+      "*anytype* comes with Reload and can't be removed. Unregister it instead.",
     );
   });
 });

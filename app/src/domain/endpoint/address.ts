@@ -1,7 +1,7 @@
 // The loopback MCP endpoint's address (plan 0018 §4.1 points 3 and 4, the port of
 // anytype_mcp/endpoint.py and gateway.py's configured_endpoint): the one rule about which
 // addresses may be served, the one spelling of the URL, and the one reading of the stored
-// setting against INNYTYPES_MCP_HOST and INNYTYPES_MCP_PORT.
+// setting against RELOAD_MCP_HOST and RELOAD_MCP_PORT.
 //
 // Nothing here opens a socket, reads a file or looks at the environment. The gateway binds what
 // this answers, General shows what this answers, and a stored value is judged by it as
@@ -12,8 +12,8 @@ export const DEFAULT_PORT = 31010;
 export const MCP_PATH = "/mcp";
 
 /** The two variables plan 0007 introduced; plan 0008 made them the default only. */
-export const MCP_HOST_VARIABLE = "INNYTYPES_MCP_HOST";
-export const MCP_PORT_VARIABLE = "INNYTYPES_MCP_PORT";
+export const MCP_HOST_VARIABLE = "RELOAD_MCP_HOST";
+export const MCP_PORT_VARIABLE = "RELOAD_MCP_PORT";
 
 /** The loopback MCP service cannot be configured, moved or started safely. */
 export class EndpointError extends Error {
@@ -116,7 +116,7 @@ export function endpointUrl(host: string, port: number): string {
   return `http://${bracketed}:${String(port)}${MCP_PATH}`;
 }
 
-/** A whole number as INNYTYPES_MCP_PORT may spell it, or null. */
+/** A whole number as RELOAD_MCP_PORT may spell it, or null. */
 function wholeNumber(text: string): number | null {
   const trimmed = text.trim();
   return /^[+-]?\d+$/.test(trimmed) ? Number(trimmed) : null;
@@ -125,7 +125,7 @@ function wholeNumber(text: string): number | null {
 /**
  * The address this installation is configured to serve: stored first, the variables after,
  * then the documented default (gateway.py:90-151). Key by key: a stored port beats only
- * INNYTYPES_MCP_PORT, and a stored host only INNYTYPES_MCP_HOST. A variable that loses is named,
+ * RELOAD_MCP_PORT, and a stored host only RELOAD_MCP_HOST. A variable that loses is named,
  * and one that is not consulted cannot break the reading.
  */
 export function configuredEndpoint(

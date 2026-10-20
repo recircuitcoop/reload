@@ -41,7 +41,7 @@ export function SegmentedControl({
         }
       }}
       className={cx(
-        "inline-flex h-[var(--inny-size-control)] items-center gap-[2px] rounded-s bg-surface-sunken p-[2px]",
+        "inline-flex h-[var(--reload-size-control)] items-center gap-[2px] rounded-s bg-surface-sunken p-[2px]",
         className,
       )}
     >

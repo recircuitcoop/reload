@@ -36,8 +36,13 @@ import { RecordingLogger } from "../fakes/children";
 import { FakeClock } from "../fakes/clock";
 
 const TYPES: Record<string, FlowNodeType> = {
-  "inny-pkg-source": { package: "pkg", kind: "source", label: "Watch", config: { type: "object" } },
-  "inny-pkg-folder": {
+  "reload-pkg-source": {
+    package: "pkg",
+    kind: "source",
+    label: "Watch",
+    config: { type: "object" },
+  },
+  "reload-pkg-folder": {
     package: "pkg",
     kind: "source",
     label: "Watch a folder",
@@ -47,7 +52,7 @@ const TYPES: Record<string, FlowNodeType> = {
       properties: { folder: { type: "string", minLength: 1 } },
     },
   },
-  "inny-pkg-step": {
+  "reload-pkg-step": {
     package: "pkg",
     kind: "node",
     label: "File",
@@ -55,12 +60,12 @@ const TYPES: Record<string, FlowNodeType> = {
       type: "object",
       required: ["space"],
       properties: {
-        space: { type: "string", innytype: { spaces: true } },
+        space: { type: "string", reload: { spaces: true } },
         count: { type: "integer", minimum: 1 },
       },
     },
   },
-  "inny-pkg-secretive": {
+  "reload-pkg-secretive": {
     package: "pkg",
     kind: "node",
     label: "Transcribe",
@@ -70,14 +75,14 @@ const TYPES: Record<string, FlowNodeType> = {
       properties: { token: { type: "string", writeOnly: true }, label: { type: "string" } },
     },
   },
-  "inny-pkg-ask": {
+  "reload-pkg-ask": {
     package: "pkg",
     kind: "view",
     view: "action",
     label: "Approve",
     config: { type: "object" },
   },
-  "inny-pkg-show": {
+  "reload-pkg-show": {
     package: "pkg",
     kind: "view",
     view: "snapshot",
@@ -208,12 +213,12 @@ const TEMPLATES: FlowTemplate[] = [
 const TEMPLATE_NODES: Record<string, TabNode[]> = {
   starter: [
     { id: "t", type: "tab", label: "Starter", info: "how it works" },
-    { id: "s1", type: "inny-pkg-step", z: "t", name: "File it", wires: [[]] },
-    { id: "c1", type: "comment", z: "t", name: "Transcribe (needs innyrize)" },
+    { id: "s1", type: "reload-pkg-step", z: "t", name: "File it", wires: [[]] },
+    { id: "c1", type: "comment", z: "t", name: "Transcribe (needs reload_summarize)" },
   ],
   foreign: [
     { id: "t", type: "tab", label: "Foreign" },
-    { id: "o1", type: "inny-other-step", z: "t" },
+    { id: "o1", type: "reload-other-step", z: "t" },
   ],
 };
 
@@ -223,10 +228,10 @@ const RECORDINGS: FlowTab = {
   disabled: false,
   info: "about it",
   nodes: [
-    { id: "w", type: "inny-pkg-source", z: "rec", wires: [["t"]], y: 10 },
+    { id: "w", type: "reload-pkg-source", z: "rec", wires: [["t"]], y: 10 },
     {
       id: "t",
-      type: "inny-pkg-secretive",
+      type: "reload-pkg-secretive",
       z: "rec",
       name: "Transcribe",
       label: "x",
@@ -234,9 +239,9 @@ const RECORDINGS: FlowTab = {
       wires: [["f", "a"]],
       y: 20,
     },
-    { id: "f", type: "inny-pkg-step", z: "rec", space: "sp1", wires: [["v"]], y: 30 },
-    { id: "a", type: "inny-pkg-ask", z: "rec", name: "", wires: [], y: 40 },
-    { id: "v", type: "inny-pkg-show", z: "rec", wires: [], y: 50 },
+    { id: "f", type: "reload-pkg-step", z: "rec", space: "sp1", wires: [["v"]], y: 30 },
+    { id: "a", type: "reload-pkg-ask", z: "rec", name: "", wires: [], y: 40 },
+    { id: "v", type: "reload-pkg-show", z: "rec", wires: [], y: 50 },
     { id: "d", type: "debug", z: "rec", y: 60 },
   ],
   configs: [],
@@ -262,11 +267,16 @@ function harness(
             types: ["comment", "debug", "inject"],
             enabled: true,
           },
-          { id: "node-red/inny-pkg", module: "node-red", types: Object.keys(TYPES), enabled: true },
           {
-            id: "node-red/inny-other",
+            id: "node-red/reload-pkg",
             module: "node-red",
-            types: ["inny-other-step"],
+            types: Object.keys(TYPES),
+            enabled: true,
+          },
+          {
+            id: "node-red/reload-other",
+            module: "node-red",
+            types: ["reload-other-step"],
             enabled: true,
           },
         ]),
@@ -356,12 +366,12 @@ describe("flow.list", () => {
         { id: "v", name: "Result", kind: "result" },
       ],
       steps: [
-        { id: "t", name: "Transcribe", type: "inny-pkg-secretive", setUp: true },
-        { id: "f", name: "File", type: "inny-pkg-step", setUp: true },
-        { id: "a", name: "Approve", type: "inny-pkg-ask", setUp: true },
-        { id: "v", name: "Result", type: "inny-pkg-show", setUp: true },
+        { id: "t", name: "Transcribe", type: "reload-pkg-secretive", setUp: true },
+        { id: "f", name: "File", type: "reload-pkg-step", setUp: true },
+        { id: "a", name: "Approve", type: "reload-pkg-ask", setUp: true },
+        { id: "v", name: "Result", type: "reload-pkg-show", setUp: true },
       ],
-      sources: [{ id: "w", name: "Watch", type: "inny-pkg-source", setUp: true }],
+      sources: [{ id: "w", name: "Watch", type: "reload-pkg-source", setUp: true }],
     });
   });
 
@@ -414,8 +424,8 @@ describe("flow.list", () => {
       label: "Folder to Anytype",
       disabled: true,
       nodes: [
-        { id: "w", type: "inny-pkg-folder", z: "starter", folder, wires: [["f"]], x: 1 },
-        { id: "f", type: "inny-pkg-step", z: "starter", space, wires: [[]], x: 2 },
+        { id: "w", type: "reload-pkg-folder", z: "starter", folder, wires: [["f"]], x: 1 },
+        { id: "f", type: "reload-pkg-step", z: "starter", space, wires: [[]], x: 2 },
       ],
       configs: [],
     });
@@ -448,10 +458,10 @@ describe("flow.list", () => {
       label: "C",
       disabled: false,
       nodes: [],
-      configs: [{ id: "f", type: "inny-pkg-step", z: "cfg", space: "s" }],
+      configs: [{ id: "f", type: "reload-pkg-step", z: "cfg", space: "s" }],
     };
     const [flow] = await list(harness({ tabs: [tab] }));
-    expect(flow?.steps).toEqual([{ id: "f", name: "File", type: "inny-pkg-step", setUp: true }]);
+    expect(flow?.steps).toEqual([{ id: "f", name: "File", type: "reload-pkg-step", setUp: true }]);
   });
 
   it("skips a tab gone between listing and reading it", async () => {
@@ -518,7 +528,7 @@ describe("every write", () => {
       value: {
         refused: {
           reason: "not-installed",
-          sentence: "Not installed in InnyTypes: inny-other-step.",
+          sentence: "Not installed in Reload: reload-other-step.",
         },
       },
     });
@@ -623,8 +633,8 @@ describe("flow.duplicate and flow.export", () => {
     expect(copy).toMatchObject({ label: "Recordings (copy)", disabled: true, info: "about it" });
     const original = new Set(RECORDINGS.nodes.map((node) => node.id));
     expect(copy?.nodes.every((node) => !original.has(node.id))).toBe(true);
-    expect(copy?.nodes.find((node) => node.type === "inny-pkg-source")?.["wires"]).toEqual([
-      [copy?.nodes.find((node) => node.type === "inny-pkg-secretive")?.id],
+    expect(copy?.nodes.find((node) => node.type === "reload-pkg-source")?.["wires"]).toEqual([
+      [copy?.nodes.find((node) => node.type === "reload-pkg-secretive")?.id],
     ]);
     expect(copy?.nodes.map((node) => h.engine.secrets.get(node.id))).toEqual(
       copy?.nodes.map(() => undefined),
@@ -717,7 +727,7 @@ describe("flow.fromTemplate", () => {
     const made = h.engine.tabsById.get("tab-1");
     expect(made).toMatchObject({ label: "Starter", disabled: true, info: "how it works" });
     expect(made?.nodes.map((node) => [node.id, node.type, node["z"]])).toEqual([
-      ["new-1", "inny-pkg-step", "tab-1"],
+      ["new-1", "reload-pkg-step", "tab-1"],
       ["new-2", "comment", "tab-1"],
     ]);
     expect(h.meta.get("tab-1")).toEqual({ template: "starter", createdAt: 0 });
@@ -747,17 +757,17 @@ describe("flow.fromTemplate", () => {
 });
 
 describe("flow.node.form and flow.node.configure", () => {
-  it("answers a step's schema with its innytype annotation, its values, name and set secrets", async () => {
+  it("answers a step's schema with its reload annotation, its values, name and set secrets", async () => {
     const h = harness();
     expect(await h.call("flow.node.form", { flowId: "rec", nodeId: "f" })).toEqual({
       ok: true,
       value: {
         flowId: "rec",
         nodeId: "f",
-        type: "inny-pkg-step",
+        type: "reload-pkg-step",
         package: "pkg",
         stepName: "File",
-        schema: TYPES["inny-pkg-step"]?.config,
+        schema: TYPES["reload-pkg-step"]?.config,
         values: { space: "sp1" },
         secretsSet: [],
       },

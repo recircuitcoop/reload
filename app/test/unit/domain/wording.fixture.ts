@@ -180,10 +180,10 @@ export const STATUS_PILLS: readonly Row<StatusPill>[] = [
 // The runtime banner (WI-0022-11): ux-writing "Notifications" (Runtime) while it restarts, and
 // "Errors" (Runtime down for good) once the crash-loop limit, 5 crashes in 2 minutes, stopped it.
 export const RUNTIME_BANNERS: readonly Row<RuntimeBanner>[] = [
-  ["restarting", "InnyTypes stopped unexpectedly and is restarting."],
+  ["restarting", "Reload stopped unexpectedly and is restarting."],
   [
     "down",
-    "InnyTypes stopped unexpectedly 5 times in 2 minutes, so it's no longer restarted. Press Restart to try again.",
+    "Reload stopped unexpectedly 5 times in 2 minutes, so it's no longer restarted. Press Restart to try again.",
   ],
 ];
 
@@ -303,18 +303,18 @@ export const PACKAGE_GO_BACK: readonly Row<
   { button: string; confirm: string }
 >[] = [
   [
-    ["innyrize", UPDATED_PACKAGE],
+    ["reload_summarize", UPDATED_PACKAGE],
     {
       button: "Go back to 0.3",
-      confirm: "Go back to *innyrize* 0.3? The flows that use it keep running.",
+      confirm: "Go back to *reload_summarize* 0.3? The flows that use it keep running.",
     },
   ],
 ];
 
 const FOLDER_PACKAGE: Package = {
-  name: "innyrize",
+  name: "reload_summarize",
   version: "0.3",
-  source: { kind: "folder", path: "~/packages/innyrize" },
+  source: { kind: "folder", path: "~/packages/reload_summarize" },
   signed: false,
   shipped: false,
   registration: null,
@@ -323,25 +323,25 @@ const FOLDER_PACKAGE: Package = {
 };
 
 export const PACKAGE_CAPTIONS: readonly Row<Package, readonly string[]>[] = [
-  [FOLDER_PACKAGE, ["From a folder: *~/packages/innyrize*", "Unsigned"]],
+  [FOLDER_PACKAGE, ["From a folder: *~/packages/reload_summarize*", "Unsigned"]],
   [{ ...FOLDER_PACKAGE, source: { kind: "catalogue" }, signed: true }, []],
 ];
 
 export const IN_USE: readonly Row<readonly [string, Refusal]>[] = [
   [
     [
-      "innyrize",
+      "reload_summarize",
       {
         reason: "in-use",
         action: "unregister",
         uses: [{ flow: "Recordings to Anytype", step: "Transcribe" }],
       },
     ],
-    "Can't unregister *innyrize*: the flow *Recordings to Anytype* uses its *Transcribe* step. Remove that step first.",
+    "Can't unregister *reload_summarize*: the flow *Recordings to Anytype* uses its *Transcribe* step. Remove that step first.",
   ],
   [
     [
-      "innyrize",
+      "reload_summarize",
       {
         reason: "in-use",
         action: "unregister",
@@ -351,24 +351,24 @@ export const IN_USE: readonly Row<readonly [string, Refusal]>[] = [
         ],
       },
     ],
-    "Can't unregister *innyrize*: *Recordings to Anytype* uses its *Transcribe* step and *Invoices from the mailbox* uses its *Read PDF* step. Remove those steps first.",
+    "Can't unregister *reload_summarize*: *Recordings to Anytype* uses its *Transcribe* step and *Invoices from the mailbox* uses its *Read PDF* step. Remove those steps first.",
   ],
   // ux-writing: removing a package in use is the same sentence, with "remove".
   [
     [
-      "innyrize",
+      "reload_summarize",
       {
         reason: "in-use",
         action: "remove",
         uses: [{ flow: "Recordings to Anytype", step: "Transcribe" }],
       },
     ],
-    "Can't remove *innyrize*: the flow *Recordings to Anytype* uses its *Transcribe* step. Remove that step first.",
+    "Can't remove *reload_summarize*: the flow *Recordings to Anytype* uses its *Transcribe* step. Remove that step first.",
   ],
   // Decided by WI-0022-10: three or more uses join with commas and a last "and".
   [
     [
-      "innyrize",
+      "reload_summarize",
       {
         reason: "in-use",
         action: "unregister",
@@ -379,12 +379,12 @@ export const IN_USE: readonly Row<readonly [string, Refusal]>[] = [
         ],
       },
     ],
-    "Can't unregister *innyrize*: *Recordings to Anytype* uses its *Transcribe* step, *Invoices from the mailbox* uses its *Read PDF* step and *Photos from the camera card* uses its *Describe* step. Remove those steps first.",
+    "Can't unregister *reload_summarize*: *Recordings to Anytype* uses its *Transcribe* step, *Invoices from the mailbox* uses its *Read PDF* step and *Photos from the camera card* uses its *Describe* step. Remove those steps first.",
   ],
   // Decided by WI-0022-10: a shipped package is never removed (plan 0022 §F).
   [
     ["anytype", { reason: "shipped" }],
-    "*anytype* comes with InnyTypes and can't be removed. Unregister it instead.",
+    "*anytype* comes with Reload and can't be removed. Unregister it instead.",
   ],
 ];
 

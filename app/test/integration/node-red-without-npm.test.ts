@@ -17,7 +17,7 @@ const NPM_STUB = path.join(REPO_ROOT, "app", "packaging", "npm-stub");
 
 describe("@node-red/registry with only the npm stub present", () => {
   it("loads (module resolution succeeds) instead of crashing on the missing npm package", () => {
-    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "inny-no-npm-"));
+    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-no-npm-"));
     const nodeModules = path.join(scratch, "node_modules");
     fs.mkdirSync(nodeModules);
     try {

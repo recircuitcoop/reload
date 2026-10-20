@@ -43,7 +43,7 @@ function options(ledger: string, overrides: Partial<CheckOptions> = {}): CheckOp
 const scratch: string[] = [];
 
 function scratchFile(name: string, text: string): string {
-  const directory = mkdtempSync(path.join(os.tmpdir(), "inny-parity-"));
+  const directory = mkdtempSync(path.join(os.tmpdir(), "reload-parity-"));
   scratch.push(directory);
   const file = path.join(directory, name);
   writeFileSync(file, text);

@@ -450,7 +450,7 @@ class ChildNodeProcess implements NodeProcess {
     const event = envelopeOf(this.#spec.identity, this.#deps, declared.event);
     if (inputId === undefined || input === undefined) {
       // A new run: its id is this event's id (spec 5.4.2, 5.5).
-      const message = { payload: data, topic: declared.event, inny: { event, run: event.id } };
+      const message = { payload: data, topic: declared.event, reload: { event, run: event.id } };
       this.#host.send({ index, port, message });
       return;
     }
@@ -459,7 +459,7 @@ class ChildNodeProcess implements NodeProcess {
     const output: NodeOutput = {
       index,
       port,
-      message: { payload: data, topic: declared.event, inny: { event, run, cause: inputId } },
+      message: { payload: data, topic: declared.event, reload: { event, run, cause: inputId } },
     };
     input.delivery.send(output);
   }

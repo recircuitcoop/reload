@@ -124,7 +124,7 @@ const PACKAGE_MARKERS = ["/node_modules/", "/site-packages/", "/dist-packages/"]
  * `/src/` is not enough: `/Users/someone/app/private-notes.md` matches it, and the tail would be
  * the person's own names.
  */
-const OWN_MARKERS = ["/app.asar/", "/innytypes/app/"];
+const OWN_MARKERS = ["/app.asar/", "/reload/app/"];
 
 /** A Python standard library, wherever the interpreter lives (a package environment's). */
 const PYTHON_LIB = /\/(?:lib\/)?python3(?:\.\d+)?\//;
@@ -253,7 +253,7 @@ export function packageRelative(path: string): string {
     const at = normalised.lastIndexOf(marker);
     const tail = at <= 0 ? "" : normalised.slice(at + marker.length);
     if (tail !== "") {
-      return `innytypes/${tail}`;
+      return `reload/${tail}`;
     }
   }
   const library = PYTHON_LIB.exec(normalised);

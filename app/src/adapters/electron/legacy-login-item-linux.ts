@@ -1,7 +1,9 @@
 // The old installation's autostart entry on Linux (helper/linux.py LinuxLoginItem,
 // DESKTOP_ENTRY_ID = BUNDLE_IDENTIFIER "it.l1nx.innytypes.helper"): removed by WI-0018-25 only
 // once the new login item is confirmed working. Removing an entry already gone is not an error,
-// matching the old unregister()'s own tolerance.
+// matching the old unregister()'s own tolerance. InnyTypes 0.3.0 used the same identifier as its
+// appId, so its autostart entry has this name too, and Reload's first start removes it the same
+// way once its own is registered (plan 0028).
 
 import fs from "node:fs";
 import * as path from "node:path";

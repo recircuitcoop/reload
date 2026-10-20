@@ -1,12 +1,12 @@
 // The loopback MCP endpoint through the real app (WI-0018-19, plan 0018 §4.1 points 3 and 4):
 // served from the services process once the MCP child is validated, behind the proxy token file
 // under the scratch home, moved live over AppApi (bind-before-close, a refusal keeps it serving),
-// and the stored address winning over INNYTYPES_MCP_PORT at the next start.
+// and the stored address winning over RELOAD_MCP_PORT at the next start.
 // And a binary file larger than the child's frame bound round-trips intact (WI-0019-04, plan
-// 0019), answered by InnyTypes from the fake Anytype's REST API, never by the child.
+// 0019), answered by Reload from the fake Anytype's REST API, never by the child.
 //
 // Never the owner's Anytype, key or port: a fake Anytype, the fake MCP child, a scratch HOME, and
-// free loopback ports (the harness gives every run its own INNYTYPES_MCP_PORT, never 31010).
+// free loopback ports (the harness gives every run its own RELOAD_MCP_PORT, never 31010).
 import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
@@ -46,19 +46,19 @@ type EndpointApi = {
 
 const endpoint = (window: Page) =>
   window.evaluate(() =>
-    (window as unknown as { inny: { app: EndpointApi } }).inny.app.mcpEndpoint(),
+    (window as unknown as { reload: { app: EndpointApi } }).reload.app.mcpEndpoint(),
   );
 
 const anytypeStatus = (window: Page) =>
   window.evaluate(() =>
-    (window as unknown as { inny: { app: EndpointApi } }).inny.app.anytypeStatus(),
+    (window as unknown as { reload: { app: EndpointApi } }).reload.app.anytypeStatus(),
   );
 
 const move = (window: Page, host: string, port: number) =>
   window
     .evaluate(
       ([h, p]) =>
-        (window as unknown as { inny: { app: EndpointApi } }).inny.app.moveMcpEndpoint(h, p),
+        (window as unknown as { reload: { app: EndpointApi } }).reload.app.moveMcpEndpoint(h, p),
       [host, port] as const,
     )
     .catch((error: unknown) => String(error));
@@ -143,11 +143,11 @@ test("the endpoint is served behind the proxy token, moved live, and the stored 
   const anytype = await fakeAnytype();
   const blocker = net.createServer();
   try {
-    const firstPort = Number(env["INNYTYPES_MCP_PORT"]);
+    const firstPort = Number(env["RELOAD_MCP_PORT"]);
     const runEnv = {
       ...env,
       ANYTYPE_API_BASE_URL: anytype.url,
-      INNYTYPES_TEST_ANYTYPE: JSON.stringify({
+      RELOAD_TEST_ANYTYPE: JSON.stringify({
         entry: path.join(FAKE, "server.mjs"),
         args: ["--mode=canary"],
         surface: fakeSurface(scratch),
@@ -219,7 +219,7 @@ test("the endpoint is served behind the proxy token, moved live, and the stored 
       .toBe(second);
     expect(await endpoint(again.window)).toMatchObject({
       stored: true,
-      ignoredVariables: ["INNYTYPES_MCP_PORT"],
+      ignoredVariables: ["RELOAD_MCP_PORT"],
     });
     expect(await refused(firstPort)).toBe(true);
     await quit(again.app);
@@ -245,12 +245,12 @@ test("a binary file round-trips through the endpoint", async () => {
     const { app, window } = await launchApp({
       ...env,
       ANYTYPE_API_BASE_URL: anytype.url,
-      INNYTYPES_TEST_ANYTYPE: JSON.stringify({
+      RELOAD_TEST_ANYTYPE: JSON.stringify({
         entry: path.join(FAKE, "server.mjs"),
         surface: fakeSurface(scratch),
       }),
     });
-    const url = `http://127.0.0.1:${env["INNYTYPES_MCP_PORT"] ?? ""}/mcp`;
+    const url = `http://127.0.0.1:${env["RELOAD_MCP_PORT"] ?? ""}/mcp`;
     await expect.poll(async () => (await endpoint(window)).served, { timeout: 20_000 }).toBe(url);
     const childBefore = (await anytypeStatus(window)).childPid;
     expect(childBefore).not.toBeNull();

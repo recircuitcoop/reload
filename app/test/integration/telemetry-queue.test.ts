@@ -17,7 +17,7 @@ let scratch = "";
 let root = "";
 
 beforeEach(() => {
-  scratch = fs.mkdtempSync(path.join(os.tmpdir(), "inny-telemetry-"));
+  scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-telemetry-"));
   root = path.join(scratch, "telemetry-queue");
 });
 

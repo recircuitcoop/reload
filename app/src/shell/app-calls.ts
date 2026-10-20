@@ -36,7 +36,7 @@ export interface AppCallsDeps {
   readonly dialog: Pick<Dialog, "showSaveDialog" | "showOpenDialog">;
   /**
    * shell-settings.json: Setup's place, Run history's retention, the telemetry answer, and
-   * InnyTypes' own install record and "Check automatically" switch.
+   * Reload's own install record and "Check automatically" switch.
    */
   readonly settings: SetupSetting &
     RunRetentionSetting &
@@ -60,7 +60,7 @@ export interface AppCallsDeps {
   readonly logger: Logger;
 }
 
-/** Wires every v2 call; the answer feeds InnyTypes' own update checks into General's line. */
+/** Wires every v2 call; the answer feeds Reload's own update checks into General's line. */
 export function wireAppCalls(deps: AppCallsDeps): UpdateCalls {
   const { ipc, runtime, services, editor, dialog, settings, toPage, logger } = deps;
   wireRunCalls({ ipc, runtime, logger });

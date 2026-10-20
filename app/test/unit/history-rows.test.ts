@@ -154,11 +154,11 @@ describe("Delete run's confirmation", () => {
   it("asks for one run, or for several by their count", () => {
     expect(wordDeleteRuns(1)).toEqual({
       title: "Delete this run?",
-      body: "Its results in Anytype are kept; only InnyTypes' record of it goes.",
+      body: "Its results in Anytype are kept; only Reload's record of it goes.",
     });
     expect(wordDeleteRuns(3)).toEqual({
       title: "Delete 3 runs?",
-      body: "Their results in Anytype are kept; only InnyTypes' record of them goes.",
+      body: "Their results in Anytype are kept; only Reload's record of them goes.",
     });
   });
 });

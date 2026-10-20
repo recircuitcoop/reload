@@ -26,6 +26,6 @@ module.exports = function (RED) {
       done();
     });
   }
-  RED.nodes.registerType("inny-rawnode-sleeper", Sleeper);
-  RED.nodes.registerType("inny-rogue-sleeper", Sleeper);
+  RED.nodes.registerType("reload-rawnode-sleeper", Sleeper);
+  RED.nodes.registerType("reload-rogue-sleeper", Sleeper);
 };

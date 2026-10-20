@@ -32,7 +32,7 @@ describe("words for an AppApi refusal", () => {
         reason: "in-use",
         sentence: "packages.inUse.many",
         inUse: {
-          name: "innyrize",
+          name: "reload_summarize",
           action: "unregister",
           uses: [
             { flow: "A", step: "X" },
@@ -41,7 +41,7 @@ describe("words for an AppApi refusal", () => {
         },
       }),
     ).toBe(
-      "Can't unregister *innyrize*: *A* uses its *X* step and *B* uses its *Y* step. Remove those steps first.",
+      "Can't unregister *reload_summarize*: *A* uses its *X* step and *B* uses its *Y* step. Remove those steps first.",
     );
   });
 });

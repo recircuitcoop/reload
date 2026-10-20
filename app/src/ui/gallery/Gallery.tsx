@@ -29,7 +29,7 @@ export function Gallery() {
   return (
     <main
       data-testid="gallery"
-      data-gallery="innytypes-component-gallery"
+      data-gallery="reload-component-gallery"
       className="flex flex-col gap-8 p-6"
     >
       <header className="flex items-center justify-between">

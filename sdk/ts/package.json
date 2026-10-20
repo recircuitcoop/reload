@@ -1,9 +1,9 @@
 {
-  "name": "@innytypes/node",
+  "name": "@recircuit/reload-node",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "The TypeScript node SDK (node protocol v2, spec Appendix B): the whole surface of Appendix A/B, no runtime dependencies (WI-0018-26). packages/anytype (WI-0018-20) was its first author and keeps working on it.",
+  "description": "The TypeScript node SDK (node protocol v2, spec Appendix B): the whole surface of Appendix A/B, no runtime dependencies (WI-0018-26). packages/reload_anytype (WI-0018-20) was its first author and keeps working on it.",
   "license": "MIT",
   "types": "./src/node.ts",
   "exports": {

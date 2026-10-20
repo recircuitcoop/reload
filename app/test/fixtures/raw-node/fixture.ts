@@ -74,9 +74,9 @@ interface Declaration {
   types: { command: string[] }[];
 }
 
-/** The fixture's argv and cwd, resolved from its own inny-package.json. */
+/** The fixture's argv and cwd, resolved from its own reload-package.json. */
 export function rawNodeCommand(): { argv: string[]; cwd: string } {
-  const text = fs.readFileSync(path.join(RAW_NODE_DIR, "inny-package.json"), "utf8");
+  const text = fs.readFileSync(path.join(RAW_NODE_DIR, "reload-package.json"), "utf8");
   const declaration = JSON.parse(text) as Declaration;
   const command = (declaration.types[0] as { command: string[] }).command;
   return resolveCommand(command, process.platform, {
@@ -97,7 +97,7 @@ export function rawNodeSpec(
       flowId: "flow-1",
       package: "rawnode",
       typeId: "raw",
-      type: "inny-rawnode-raw",
+      type: "reload-rawnode-raw",
       name: "",
       kind: "node",
     },
@@ -106,7 +106,7 @@ export function rawNodeSpec(
     env: rawNodeEnv(),
     config,
     credentials,
-    dataDir: fs.mkdtempSync(path.join(os.tmpdir(), "inny-node-data-")),
+    dataDir: fs.mkdtempSync(path.join(os.tmpdir(), "reload-node-data-")),
     ports: [{ port: "out", event: "rawnode.out.v1" }],
   };
 }

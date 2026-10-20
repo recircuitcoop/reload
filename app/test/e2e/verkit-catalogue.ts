@@ -43,7 +43,7 @@ export function writePackageFolder(
 ): void {
   fs.mkdirSync(folder, { recursive: true });
   fs.writeFileSync(
-    path.join(folder, "inny-package.json"),
+    path.join(folder, "reload-package.json"),
     JSON.stringify({
       protocol: 2,
       package: name,
@@ -84,10 +84,10 @@ export async function serveVerkit(): Promise<{
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const base = `https://127.0.0.1:${String((server.address() as AddressInfo).port)}`;
   const files = (version: string): Files => {
-    const folder = fs.mkdtempSync(path.join(os.tmpdir(), "inny-verkit-"));
+    const folder = fs.mkdtempSync(path.join(os.tmpdir(), "reload-verkit-"));
     writePackageFolder(folder, "verkit", version, versionNode(version));
     const read = (file: string) => fs.readFileSync(path.join(folder, file), "utf8");
-    const out = { "inny-package.json": read("inny-package.json"), "node.js": read("node.js") };
+    const out = { "reload-package.json": read("reload-package.json"), "node.js": read("node.js") };
     fs.rmSync(folder, { recursive: true });
     return out;
   };

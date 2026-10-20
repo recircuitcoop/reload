@@ -62,7 +62,7 @@ class MemoryCache implements CatalogueCacheStore {
 }
 
 beforeEach(() => {
-  base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "inny-sources-")));
+  base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-sources-")));
   settingsFile = path.join(base, "shell-settings.json");
   settings = new JsonSettingsStore(settingsFile);
   logger = new RecordingLogger();
@@ -97,7 +97,7 @@ function declaration(name: string, version: string): string {
 }
 
 const files = (name: string, version = "1.0.0"): Files => ({
-  "inny-package.json": declaration(name, version),
+  "reload-package.json": declaration(name, version),
   "node.js": "process.stdout.write('')\n",
 });
 

@@ -42,7 +42,7 @@ export interface UpdateSettingsStore {
 }
 
 /**
- * What InnyTypes remembers about its own installs (plan 0022 §G): the `appUpdate` record that
+ * What Reload remembers about its own installs (plan 0022 §G): the `appUpdate` record that
  * domain/updates/history.ts reads and writes. Raw; read at start, written as it changes.
  */
 export interface UpdateHistoryStore {

@@ -1,8 +1,8 @@
 {
-  "name": "innytypes-node-runtime",
+  "name": "reload-node-runtime",
   "version": "0.1.0",
   "private": true,
-  "description": "Workspace root for the new InnyTypes application (plan 0018), and the pin of the official Anytype MCP server that innytypes.anytype_mcp launches.",
+  "description": "Workspace root for the new Reload application (plan 0018), and the pin of the official Anytype MCP server that innytypes.anytype_mcp launches.",
   "license": "MIT",
   "workspaces": [
     "app",

@@ -1,4 +1,4 @@
-// Conformance (spec §12.2) of the first-party folder source (packages/folder, WI-0022-25), the
+// Conformance (spec §12.2) of the first-party folder source (packages/reload_folder, WI-0022-25), the
 // bundle as it ships: the cases of the reference suite (sdk-node.test.ts) a source with no
 // inputs can be held to. Every frame either way goes through the runtime's own codec (ajv,
 // spec 4.5), so a frame of the wrong shape fails here exactly as it would in the app.
@@ -29,7 +29,7 @@ let scratch: string;
 
 beforeAll(async () => {
   built = await buildFolderPackage();
-  scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "inny-folder-conf-")));
+  scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-folder-conf-")));
 }, 60_000);
 
 afterAll(() => {
@@ -81,7 +81,7 @@ class Session {
     this.send({
       t: "start",
       protocol: 2,
-      node: { id: "conformance", type: "inny-folder-watch", name: "" },
+      node: { id: "conformance", type: "reload-reload_folder-watch", name: "" },
       config: { folder: this.folder, ...config },
       credentials: {},
       data_dir: this.dataDir,
@@ -130,7 +130,7 @@ afterEach(() => {
 });
 
 // Each emit waits out the fixed 2 s quiet period (watcher.ts QUIET_MS).
-describe("conformance: the folder source (packages/folder)", { timeout: 20_000 }, () => {
+describe("conformance: the folder source (packages/reload_folder)", { timeout: 20_000 }, () => {
   it("C1 start / ready: ready follows start within 30 s, and nothing reaches stdout before start", async () => {
     const node = session();
     await new Promise((resolve) => setTimeout(resolve, 300));

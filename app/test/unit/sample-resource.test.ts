@@ -64,10 +64,10 @@ describe("the bundled 10-second sample", () => {
     expect(bytes.length).toBeGreaterThanOrEqual(44 + wav.dataBytes);
   });
 
-  it("has its CC0 licence beside it, saying it was generated for InnyTypes", () => {
+  it("has its CC0 licence beside it, saying it was generated for Reload", () => {
     const licence = fs.readFileSync(path.join(SAMPLE, "LICENCE.txt"), "utf8");
     expect(licence).toContain("sample-10s.wav");
-    expect(licence).toContain("Generated for InnyTypes");
+    expect(licence).toContain("Generated for Reload");
     expect(licence).toContain("CC0 1.0 Universal");
   });
 

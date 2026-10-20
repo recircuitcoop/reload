@@ -1,6 +1,6 @@
 // Every Ark UI widget of the component library, drawn inside the pop-out page (plan 0022 risk 7:
 // "an e2e opens every Ark widget in the pop-up under the byte-identical CSP"). Development
-// builds only: view.tsx imports it behind INNY_BUILD_MODE, at `#ark-widgets`. The atoms and
+// builds only: view.tsx imports it behind RELOAD_BUILD_MODE, at `#ark-widgets`. The atoms and
 // molecules are the gallery's own pages, so nothing is drawn twice two ways; the modal Dialog is
 // the gallery's modal probe. The gallery draws its controls at rest, so the ones a person moves
 // (a switch, a checkbox, a number, a slider, tabs) are drawn once more here, live, holding their

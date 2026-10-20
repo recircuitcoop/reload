@@ -81,7 +81,7 @@ const VIOLATIONS: Record<string, string> = {
 const scratchRoots: string[] = [];
 
 function tree(files: Record<string, string>): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "inny-architecture-"));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "reload-architecture-"));
   scratchRoots.push(root);
   fs.writeFileSync(
     path.join(root, "tsconfig.json"),
@@ -168,8 +168,8 @@ describe("the architecture stage", { timeout: 60_000 }, () => {
       expect.arrayContaining([
         "god.ts max-lines",
         "god.tsx max-lines",
-        "Spelled.tsx innytypes-words/no-jsx-text",
-        "Templated.tsx innytypes-words/no-jsx-text",
+        "Spelled.tsx reload-words/no-jsx-text",
+        "Templated.tsx reload-words/no-jsx-text",
         "env-reader.ts no-restricted-properties",
         "env-global.ts no-restricted-syntax",
         "env-import.ts no-restricted-imports",

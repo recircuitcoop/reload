@@ -29,14 +29,14 @@ export interface PreviewDeps {
 }
 
 /**
- * Whether the item is there: in a build that is not installed, or with INNY_DEV=1 (the
+ * Whether the item is there: in a build that is not installed, or with RELOAD_DEV=1 (the
  * gallery's rule, plan 0022 D11). Never otherwise.
  */
 export function previewOn(options: {
   readonly packaged: boolean;
   readonly env: Readonly<Record<string, string | undefined>>;
 }): boolean {
-  return !options.packaged || options.env["INNY_DEV"] === "1";
+  return !options.packaged || options.env["RELOAD_DEV"] === "1";
 }
 
 /** Add a Develop menu holding Preview a view… after the application menu's own. */

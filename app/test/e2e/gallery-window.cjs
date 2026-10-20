@@ -14,9 +14,9 @@ const { app, BrowserWindow } = require("electron");
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch("force-device-scale-factor", "1");
 app.commandLine.appendSwitch("force-color-profile", "srgb");
-const userData = process.env["INNYTYPES_USER_DATA"];
+const userData = process.env["RELOAD_USER_DATA"];
 if (userData === undefined || userData === "") {
-  throw new Error("gallery-window.cjs needs INNYTYPES_USER_DATA (a scratch folder)");
+  throw new Error("gallery-window.cjs needs RELOAD_USER_DATA (a scratch folder)");
 }
 app.setPath("userData", userData);
 

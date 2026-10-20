@@ -12,7 +12,7 @@ import { forEachLine } from "../../src/domain/logging/lines";
 
 const [credential = "", count = "0"] = process.argv.slice(2);
 const log = sourceLog({
-  name: "innytypes.runtime",
+  name: "reload.runtime",
   pid: process.pid,
   write: syncWriter(1),
   now: () => Date.now(),

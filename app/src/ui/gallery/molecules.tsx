@@ -451,7 +451,7 @@ export function MoleculesPage() {
             ["warning", "Summarise isn't set up yet: choose an object type."],
             ["failed", "Couldn't reach Anytype. Is it running?"],
             ["done", "Connected. Found 8 spaces."],
-            ["info", "InnyTypes will notice when Anytype starts."],
+            ["info", "Reload will notice when Anytype starts."],
           ] as const satisfies readonly (readonly [InlineMessageKind, string])[]
         ).map(([kind, text]) => (
           <Cell key={kind} of="inline-message" width={480}>

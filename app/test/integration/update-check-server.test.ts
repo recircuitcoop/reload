@@ -57,7 +57,7 @@ afterAll(async () => {
 });
 
 beforeEach(() => {
-  scratch = fs.mkdtempSync(path.join(os.tmpdir(), "inny-update-server-"));
+  scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-update-server-"));
   published.clear();
   asked.length = 0;
 });
@@ -163,8 +163,8 @@ describe("the self-update check over real HTTPS", () => {
 
   it("a valid signed yml: downloads the artifact, checks its sha512, and stages the install", async () => {
     const signer = new Signer();
-    const artifact = encode("the InnyTypes.zip bytes");
-    const fileName = "InnyTypes-1.2.3-mac.zip";
+    const artifact = encode("the Reload.zip bytes");
+    const fileName = "Reload-1.2.3-mac.zip";
     const yaml = metadataYaml("1.2.3", fileName, artifact);
     published.set("/latest-mac.yml", encode(yaml));
     published.set("/latest-mac.yml.minisig", encode(signer.sign(encode(yaml))));
@@ -192,7 +192,7 @@ describe("the self-update check over real HTTPS", () => {
     const signer = new Signer();
     const impostor = new Signer();
     const artifact = encode("bytes");
-    const fileName = "InnyTypes-1.2.3-mac.zip";
+    const fileName = "Reload-1.2.3-mac.zip";
     const yaml = metadataYaml("1.2.3", fileName, artifact);
     published.set("/latest-mac.yml", encode(yaml));
     // Signed by a key other than the one this build trusts.
@@ -214,7 +214,7 @@ describe("the self-update check over real HTTPS", () => {
 
   it("a tampered artifact is refused: its bytes do not match the signed sha512", async () => {
     const signer = new Signer();
-    const fileName = "InnyTypes-1.2.3-mac.zip";
+    const fileName = "Reload-1.2.3-mac.zip";
     const yaml = metadataYaml("1.2.3", fileName, encode("the real bytes"));
     published.set("/latest-mac.yml", encode(yaml));
     published.set("/latest-mac.yml.minisig", encode(signer.sign(encode(yaml))));
@@ -366,11 +366,11 @@ describe("the self-update check over real HTTPS", () => {
 describe("Go back over real HTTPS: as verified as an update (plan 0022 §G, D4)", () => {
   const OLD = "0.9.0";
   const TAG = `v${OLD}`;
-  const fileName = `InnyTypes-${OLD}-mac.zip`;
+  const fileName = `Reload-${OLD}-mac.zip`;
 
   /** The older release, published under its tag; `sign` signs its yml (the trusted key or not). */
   function publishOld(sign: Signer, options: { version?: string; artifact?: Uint8Array } = {}) {
-    const artifact = encode("the older InnyTypes.zip bytes");
+    const artifact = encode("the older Reload.zip bytes");
     const yaml = metadataYaml(options.version ?? OLD, fileName, artifact);
     published.set(`/download/${TAG}/latest-mac.yml`, encode(yaml));
     published.set(`/download/${TAG}/latest-mac.yml.minisig`, encode(sign.sign(encode(yaml))));
@@ -452,7 +452,7 @@ describe("Go back over real HTTPS: as verified as an update (plan 0022 §G, D4)"
 
   it("a check made by hand runs with the switch off", async () => {
     const signer = new Signer();
-    const yaml = metadataYaml("1.0.0", "InnyTypes-1.0.0-mac.zip", encode("x"));
+    const yaml = metadataYaml("1.0.0", "Reload-1.0.0-mac.zip", encode("x"));
     published.set("/latest-mac.yml", encode(yaml));
     published.set("/latest-mac.yml.minisig", encode(signer.sign(encode(yaml))));
     const { check, events } = checker({

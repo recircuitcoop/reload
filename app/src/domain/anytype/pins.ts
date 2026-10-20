@@ -66,8 +66,8 @@ export function childEnvironment(
  * from HOME, and the key itself never passes through a flow, a start frame or the journal.
  * The TS node SDK's `anytypeKey()` reads the same two names.
  */
-export const ANYTYPE_KEY_FILE_VARIABLE = "INNYTYPES_ANYTYPE_KEY_FILE";
-export const ANYTYPE_KEY_LEGACY_FILE_VARIABLE = "INNYTYPES_ANYTYPE_KEY_LEGACY_FILE";
+export const ANYTYPE_KEY_FILE_VARIABLE = "RELOAD_ANYTYPE_KEY_FILE";
+export const ANYTYPE_KEY_LEGACY_FILE_VARIABLE = "RELOAD_ANYTYPE_KEY_LEGACY_FILE";
 
 /** The two variables for a key kept at `file`, with its read-only `legacy` fallback. */
 export function anytypeKeyEnvironment(where: {
@@ -81,7 +81,7 @@ export function anytypeKeyEnvironment(where: {
 }
 
 /** The first-party node package that reads the key (plan 0018 §4.2). */
-export const ANYTYPE_PACKAGE_NAME = "anytype";
+export const ANYTYPE_PACKAGE_NAME = "reload_anytype";
 
 /**
  * What one node process is told about the key: the two variables when it is a type of the

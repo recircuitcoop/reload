@@ -184,7 +184,7 @@ describe("where a first-party Anytype node finds the key (WI-0018-20)", () => {
       [ANYTYPE_KEY_FILE_VARIABLE]: "/k",
       [ANYTYPE_KEY_LEGACY_FILE_VARIABLE]: "/old",
     });
-    expect(anytypeKeyEnvironment({ file: "/k" })).toEqual({ INNYTYPES_ANYTYPE_KEY_FILE: "/k" });
+    expect(anytypeKeyEnvironment({ file: "/k" })).toEqual({ RELOAD_ANYTYPE_KEY_FILE: "/k" });
   });
 
   it("uses the same two names the TS node SDK's anytypeKey() reads", () => {
@@ -210,25 +210,25 @@ describe("where a first-party Anytype node finds the key (WI-0018-20)", () => {
 
 describe("which node processes are told where the key is (WI-0018-20)", () => {
   const files = {
-    "anytype-api-key": { file: "/h/.config/innytypes/anytype_api_key", legacy: "/h/old/key" },
-    "mcp-proxy-token": { file: "/h/.config/innytypes/mcp_proxy_token" },
+    "anytype-api-key": { file: "/h/.config/reload/anytype_api_key", legacy: "/h/old/key" },
+    "mcp-proxy-token": { file: "/h/.config/reload/mcp_proxy_token" },
   };
 
   it("a first-party Anytype type: the key's two paths and nothing else, never the proxy token's", () => {
-    const told = anytypeKeyVariables("anytype", true, files);
+    const told = anytypeKeyVariables("reload_anytype", true, files);
     expect(told).toEqual({
-      [ANYTYPE_KEY_FILE_VARIABLE]: "/h/.config/innytypes/anytype_api_key",
+      [ANYTYPE_KEY_FILE_VARIABLE]: "/h/.config/reload/anytype_api_key",
       [ANYTYPE_KEY_LEGACY_FILE_VARIABLE]: "/h/old/key",
     });
     expect(JSON.stringify(told)).not.toContain("mcp_proxy_token");
   });
 
-  it("any other package, an 'anytype' not shipped with the app, or no key location: nothing", () => {
+  it("any other package, a 'reload_anytype' not shipped with the app, or no key location: nothing", () => {
     expect(anytypeKeyVariables("monty", true, files)).toEqual({});
-    expect(anytypeKeyVariables("anytype", false, files)).toEqual({});
-    expect(anytypeKeyVariables("anytype", true, undefined)).toEqual({});
+    expect(anytypeKeyVariables("reload_anytype", false, files)).toEqual({});
+    expect(anytypeKeyVariables("reload_anytype", true, undefined)).toEqual({});
     expect(
-      anytypeKeyVariables("anytype", true, { "mcp-proxy-token": files["mcp-proxy-token"] }),
+      anytypeKeyVariables("reload_anytype", true, { "mcp-proxy-token": files["mcp-proxy-token"] }),
     ).toEqual({});
   });
 });

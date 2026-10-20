@@ -25,7 +25,7 @@ let files: ViewFiles;
 let pagesDir: string;
 
 beforeEach(() => {
-  scratch = fs.mkdtempSync(path.join(os.tmpdir(), "inny-schemes-"));
+  scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-schemes-"));
   pagesDir = path.join(scratch, "pages");
   const viewDir = path.join(scratch, "view");
   const kit = path.join(scratch, "packages", "kit");
@@ -36,7 +36,7 @@ beforeEach(() => {
   fs.writeFileSync(path.join(pagesDir, "x.mp3"), "not served");
   fs.writeFileSync(
     path.join(viewDir, "view.html"),
-    "<head><!-- inny:component --></head><script src=view.js></script>",
+    "<head><!-- reload:component --></head><script src=view.js></script>",
   );
   fs.writeFileSync(path.join(viewDir, "view.js"), "/* view */");
   fs.writeFileSync(path.join(kit, "view", "component.js"), "/* kit */");
@@ -48,20 +48,20 @@ afterEach(() => {
   fs.rmSync(scratch, { recursive: true, force: true });
 });
 
-describe("the app pages (inny-app://app/)", () => {
+describe("the app pages (reload-app://app/)", () => {
   it("are served with the app CSP, and nothing else is", async () => {
-    const page = appPageResponse("inny-app://app/index.html", pagesDir);
+    const page = appPageResponse("reload-app://app/index.html", pagesDir);
     expect(page.status).toBe(200);
     expect(page.headers.get("content-security-policy")).toBe(APP_CSP);
     expect(page.headers.get("content-type")).toMatch(/^text\/html/);
     expect(await page.text()).toBe("<p>app</p>");
     for (const url of [
-      "inny-app://app/missing.html",
-      "inny-app://other/index.html",
-      "inny-app://app/..%2Fview%2Fview.js",
-      "inny-app://app/sub/index.html",
+      "reload-app://app/missing.html",
+      "reload-app://other/index.html",
+      "reload-app://app/..%2Fview%2Fview.js",
+      "reload-app://app/sub/index.html",
       // The app pages serve no audio, even a sample sitting in their folder.
-      "inny-app://app/x.mp3",
+      "reload-app://app/x.mp3",
     ]) {
       expect(appPageResponse(url, pagesDir).status, url).toBe(404);
     }
@@ -71,45 +71,45 @@ describe("the app pages (inny-app://app/)", () => {
     fs.mkdirSync(path.join(pagesDir, "fonts"));
     fs.writeFileSync(path.join(pagesDir, "fonts", "plex.woff2"), "wOF2");
     fs.writeFileSync(path.join(pagesDir, "fonts", "plex.LICENSE.txt"), "OFL");
-    const font = appPageResponse("inny-app://app/fonts/plex.woff2", pagesDir);
+    const font = appPageResponse("reload-app://app/fonts/plex.woff2", pagesDir);
     expect(font.status).toBe(200);
     expect(font.headers.get("content-type")).toBe("font/woff2");
     expect(font.headers.get("content-security-policy")).toBe(APP_CSP);
     expect(await font.text()).toBe("wOF2");
     for (const url of [
-      "inny-app://app/fonts/plex.LICENSE.txt",
-      "inny-app://app/fonts/missing.woff2",
-      "inny-app://app/fonts/..%2Findex.html",
-      "inny-app://other/fonts/plex.woff2",
+      "reload-app://app/fonts/plex.LICENSE.txt",
+      "reload-app://app/fonts/missing.woff2",
+      "reload-app://app/fonts/..%2Findex.html",
+      "reload-app://other/fonts/plex.woff2",
     ]) {
       expect(appPageResponse(url, pagesDir).status, url).toBe(404);
     }
   });
 });
 
-describe("the view pages (inny-view://)", () => {
-  it("the generic page on inny-view://app/, with the pop-out CSP", async () => {
-    const page = viewPageResponse("inny-view://app/view.html", files);
+describe("the view pages (reload-view://)", () => {
+  it("the generic page on reload-view://app/, with the pop-out CSP", async () => {
+    const page = viewPageResponse("reload-view://app/view.html", files);
     expect(page.headers.get("content-security-policy")).toBe(VIEW_CSP);
     expect(await page.text()).not.toContain("component.js");
-    expect(viewPageResponse("inny-view://app/view.js", files).status).toBe(200);
-    expect(viewPageResponse("inny-view://app/component.js", files).status).toBe(404);
-    expect(viewPageResponse("inny-view://app/other.js", files).status).toBe(404);
-    expect(viewPageResponse("inny-view://app/../x", files).status).toBe(404);
+    expect(viewPageResponse("reload-view://app/view.js", files).status).toBe(200);
+    expect(viewPageResponse("reload-view://app/component.js", files).status).toBe(404);
+    expect(viewPageResponse("reload-view://app/other.js", files).status).toBe(404);
+    expect(viewPageResponse("reload-view://app/../x", files).status).toBe(404);
   });
 
   it("a package's origin: the same page loading its component, and its own view/ files only", async () => {
-    const page = viewPageResponse("inny-view://kit/view.html", files);
+    const page = viewPageResponse("reload-view://kit/view.html", files);
     expect(page.headers.get("content-security-policy")).toBe(VIEW_CSP);
     expect(await page.text()).toContain('<script src="component.js"></script>');
-    const component = viewPageResponse("inny-view://kit/component.js", files);
+    const component = viewPageResponse("reload-view://kit/component.js", files);
     expect(component.headers.get("content-security-policy")).toBe(VIEW_CSP);
     expect(await component.text()).toBe("/* kit */");
-    expect(await viewPageResponse("inny-view://kit/view.js", files).text()).toBe("/* view */");
-    expect(viewPageResponse("inny-view://kit/secret.txt", files).status).toBe(404);
-    expect(viewPageResponse("inny-view://kit/missing.js", files).status).toBe(404);
-    expect(viewPageResponse("inny-view://nobody/view.html", files).status).toBe(404);
-    expect(viewPageResponse("inny-view://bad-name/view.html", files).status).toBe(404);
+    expect(await viewPageResponse("reload-view://kit/view.js", files).text()).toBe("/* view */");
+    expect(viewPageResponse("reload-view://kit/secret.txt", files).status).toBe(404);
+    expect(viewPageResponse("reload-view://kit/missing.js", files).status).toBe(404);
+    expect(viewPageResponse("reload-view://nobody/view.html", files).status).toBe(404);
+    expect(viewPageResponse("reload-view://bad-name/view.html", files).status).toBe(404);
   });
 
   it("a package's own sample: the Listen button's source resolves to a file the scheme serves, under media-src 'self'", async () => {
@@ -119,7 +119,7 @@ describe("the view pages (inny-view://)", () => {
       { onBeforeRequest: () => undefined },
       files,
     );
-    const handler = handlers.get("inny-view");
+    const handler = handlers.get("reload-view");
     const page = viewPageUrl("kit");
     const pageResponse = await handler?.(new Request(page));
     // The pop-out page lets media come from its own origin, the package's origin.
@@ -139,8 +139,8 @@ describe("the view pages (inny-view://)", () => {
       const src = /<audio[^>]* src="([^"]+)"/.exec(html)?.[1] ?? "";
       // The page resolves the relative source against itself: the same scheme and host.
       const resolved = new URL(src, page);
-      expect(resolved.href).toBe(`inny-view://kit/${name}`);
-      expect(`${resolved.protocol}//${resolved.host}`).toBe("inny-view://kit");
+      expect(resolved.href).toBe(`reload-view://kit/${name}`);
+      expect(`${resolved.protocol}//${resolved.host}`).toBe("reload-view://kit");
       const sample = await handler?.(new Request(resolved.href));
       expect(sample?.status, name).toBe(200);
       expect(sample?.headers.get("content-type"), name).toBe(type);
@@ -148,13 +148,13 @@ describe("the view pages (inny-view://)", () => {
     }
     // A sample only ever comes from the package's view/ folder.
     fs.writeFileSync(path.join(scratch, "packages", "kit", "loose.mp3"), "outside view/");
-    expect((await handler?.(new Request("inny-view://kit/loose.mp3")))?.status).toBe(404);
+    expect((await handler?.(new Request("reload-view://kit/loose.mp3")))?.status).toBe(404);
   });
 
   it("a missing shell page is a 404, never a crash", () => {
     const empty = { ...files, viewDir: path.join(scratch, "absent") };
-    expect(viewPageResponse("inny-view://app/view.html", empty).status).toBe(404);
-    expect(viewPageResponse("inny-view://kit/view.html", empty).status).toBe(404);
+    expect(viewPageResponse("reload-view://app/view.html", empty).status).toBe(404);
+    expect(viewPageResponse("reload-view://kit/view.html", empty).status).toBe(404);
   });
 });
 
@@ -163,8 +163,8 @@ describe("registration", () => {
     const registered: unknown[] = [];
     registerSchemes({ registerSchemesAsPrivileged: (schemes) => registered.push(...schemes) });
     expect(registered).toEqual([
-      { scheme: "inny-app", privileges: { standard: true, secure: true } },
-      { scheme: "inny-view", privileges: { standard: true, secure: true } },
+      { scheme: "reload-app", privileges: { standard: true, secure: true } },
+      { scheme: "reload-view", privileges: { standard: true, secure: true } },
     ]);
 
     const handlers = new Map<string, (request: Request) => Response | Promise<Response>>();
@@ -177,9 +177,9 @@ describe("registration", () => {
       null;
     serveAppPages(protocol, pagesDir);
     serveViewPages(protocol, { onBeforeRequest: (listener) => (filter = listener) }, files);
-    const app = await handlers.get("inny-app")?.(new Request("inny-app://app/index.html"));
+    const app = await handlers.get("reload-app")?.(new Request("reload-app://app/index.html"));
     expect(app?.status).toBe(200);
-    const view = await handlers.get("inny-view")?.(new Request("inny-view://app/view.js"));
+    const view = await handlers.get("reload-view")?.(new Request("reload-view://app/view.js"));
     expect(view?.status).toBe(200);
 
     const cancelled = (url: string): boolean => {
@@ -189,11 +189,11 @@ describe("registration", () => {
       });
       return answer;
     };
-    expect(cancelled("inny-view://app/view.js")).toBe(false);
+    expect(cancelled("reload-view://app/view.js")).toBe(false);
     expect(cancelled("devtools://devtools/bundled/inspector.html")).toBe(false);
     expect(cancelled("http://127.0.0.1:18800/red/settings")).toBe(true);
     expect(cancelled("file:///etc/hosts")).toBe(true);
-    expect(cancelled("inny-app://app/index.html")).toBe(true);
+    expect(cancelled("reload-app://app/index.html")).toBe(true);
   });
 });
 

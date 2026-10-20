@@ -1,6 +1,6 @@
 // The package archive and the package's content hash (plan 0018 §3; WI-0018-15; plan 0013).
 //
-// A package is published as a `.tgz` holding its files, `inny-package.json` among them, plus:
+// A package is published as a `.tgz` holding its files, `reload-package.json` among them, plus:
 //
 // - `files.json`: `{"files": {"<relative path>": "<sha256 hex>", ...}}`, one entry for every
 //   file of the package and for nothing else;
@@ -20,12 +20,14 @@
 //
 // Pure: the sha256 primitive is handed in.
 
+import { OLD_DECLARATION_FILE, oldDeclarationProblem } from "./old-names";
+
 /** The listing of every file's hash, which the signature covers. */
 export const FILES_MANIFEST = "files.json";
 /** The detached minisign signature of `files.json`, minisign's own default name. */
 export const FILES_SIGNATURE = "files.json.minisig";
 /** The declaration every package holds at its root (spec 2.1). */
-export const DECLARATION_FILE = "inny-package.json";
+export const DECLARATION_FILE = "reload-package.json";
 
 /** The lowercase hex sha256 of some bytes. */
 export type Sha256 = (bytes: Uint8Array) => string;
@@ -117,6 +119,9 @@ export function parseFileManifest(bytes: Uint8Array): FileManifest {
     throw new PackageRefusal("files", `${FILES_MANIFEST}: ${problems.join("; ")}`);
   }
   if (!manifest.has(DECLARATION_FILE)) {
+    if (manifest.has(OLD_DECLARATION_FILE)) {
+      throw new PackageRefusal("files", oldDeclarationProblem(DECLARATION_FILE));
+    }
     throw new PackageRefusal("files", `${FILES_MANIFEST} does not list ${DECLARATION_FILE}`);
   }
   return manifest;

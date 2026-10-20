@@ -20,6 +20,7 @@ import {
   chooseSecretStorage,
   NO_KEYCHAIN_REASON,
   openSecretStore,
+  credentialSecretOf,
   readOrCreate,
   registering,
   type KeychainFacts,
@@ -76,7 +77,7 @@ function redactor(): { registry: SecretRegistry; sink: SecretSink } {
 let userData: string;
 
 beforeEach(() => {
-  userData = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "inny-keychain-")));
+  userData = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-keychain-")));
 });
 
 afterEach(() => {
@@ -334,5 +335,56 @@ describe("readOrCreate: the credential secret is generated once", () => {
       KeychainError,
     );
     expect(ciphertexts.writes).toEqual([]);
+  });
+});
+
+describe("credentialSecretOf: an unreadable credential secret stops the start, except on the move's own", () => {
+  const unreadable = () => {
+    const ciphertexts = new MemoryStore();
+    ciphertexts.values.set("node-red-credential-secret", "bm90LWEtYmxvYg==");
+    return { ciphertexts, store: new KeychainSecretStore(new FakeSafeStorage(), ciphertexts) };
+  };
+
+  it("stops a later start, and overwrites nothing (break it, watch it fail)", () => {
+    const { ciphertexts, store } = unreadable();
+    const logger = new RecordingLogger();
+    expect(() => credentialSecretOf(store, () => SECRET, { logger, replace: null })).toThrow(
+      KeychainError,
+    );
+    expect(ciphertexts.writes).toEqual([]);
+    expect(ciphertexts.values.get("node-red-credential-secret")).toBe("bm90LWEtYmxvYg==");
+  });
+
+  it("on the move's own start: a new secret, the old credentials set aside, one notice, the step done", () => {
+    const { ciphertexts, store } = unreadable();
+    const calls: string[] = [];
+    const replace = {
+      setAside: () => calls.push("setAside"),
+      notify: () => calls.push("notify"),
+      done: () => calls.push("done"),
+    };
+    const value = credentialSecretOf(store, () => SECRET, {
+      logger: new RecordingLogger(),
+      replace,
+    });
+    expect(value).toBe(SECRET);
+    expect(calls).toEqual(["setAside", "notify", "done"]);
+    expect(ciphertexts.writes).toHaveLength(1);
+    expect(store.read("node-red-credential-secret")).toBe(SECRET);
+  });
+
+  it("on the move's own start with a readable secret: kept, nothing set aside, the step done", () => {
+    const store = new MemoryStore();
+    store.values.set("node-red-credential-secret", "kept");
+    const calls: string[] = [];
+    const replace = {
+      setAside: () => calls.push("setAside"),
+      notify: () => calls.push("notify"),
+      done: () => calls.push("done"),
+    };
+    expect(
+      credentialSecretOf(store, () => SECRET, { logger: new RecordingLogger(), replace }),
+    ).toBe("kept");
+    expect(calls).toEqual(["done"]);
   });
 });

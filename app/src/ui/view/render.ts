@@ -13,7 +13,7 @@
 // | anytype    | `{objectId, spaceId, name}` as a link Anytype opens             |
 // | form       | JSON Schema properties, as inputs                               |
 // | component  | `{element, props?}`: the view's own package's web component     |
-// |            | (view-page.ts); once drawn, InnyTypes' Continue · Later · Skip this step |
+// |            | (view-page.ts); once drawn, Reload's Continue · Later · Skip this step |
 // |            | Its `form` is the fallback, drawn only when the widget can't be   |
 // |            | (fallbackHtml). Never drawn inline: elsewhere it waits (waitingHtml) |
 //
@@ -308,7 +308,7 @@ function actionHtml(action: unknown): string {
 }
 
 /**
- * The chrome under a view its package's component draws (spec 8.5.6): InnyTypes', never the
+ * The chrome under a view its package's component draws (spec 8.5.6): Reload's, never the
  * component's. Continue starts disabled; the component's `setValid(true)` enables it. Only the
  * pop-out page puts it in place, and only once the component is drawn (view-page.ts): everywhere
  * else a view keeps VIEW_BUTTONS, which work without a component.
@@ -410,7 +410,7 @@ export function viewHtml(value: unknown, packageFiles: boolean, chrome = false):
 }
 
 /** The action view's form in the pop-out, which the chrome's Continue submits (view.tsx). */
-export const VIEW_FORM_ID = "inny-view-form";
+export const VIEW_FORM_ID = "reload-view-form";
 
 /** The custom element a view's content names for its package's component; null when none. */
 export function componentElementOf(value: unknown): string | null {

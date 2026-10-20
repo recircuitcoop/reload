@@ -26,7 +26,7 @@ export function supervised(
     child: options.child ?? "runtime",
     fork: {
       modulePath: "/app/dist/runtime/main.cjs",
-      serviceName: "InnyTypes runtime",
+      serviceName: "Reload runtime",
       env: { HOME: "/home/test" },
     },
     childSettings:

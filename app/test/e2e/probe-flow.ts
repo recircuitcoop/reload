@@ -11,7 +11,7 @@ const FLOW_NODES = [
   { id: FLOW, type: "tab", label: "Probe flow" },
   {
     id: "tk",
-    type: "inny-everycontrol-ticker",
+    type: "reload-everycontrol-ticker",
     z: FLOW,
     greeting: "hi",
     delay_ms: "200",
@@ -21,7 +21,7 @@ const FLOW_NODES = [
   },
   {
     id: "pr",
-    type: "inny-everycontrol-probe",
+    type: "reload-everycontrol-probe",
     z: FLOW,
     name: "probe",
     label: "the label",

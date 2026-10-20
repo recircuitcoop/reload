@@ -29,7 +29,7 @@ function shell(options: { level?: number; registry?: SecretRegistry } = {}) {
 }
 
 /** A child's source log whose stdout is a list of lines. */
-function child(name = "innytypes.runtime", registry?: SecretRegistry) {
+function child(name = "reload.runtime", registry?: SecretRegistry) {
   const written: string[] = [];
   const log = sourceLog({
     name,
@@ -44,23 +44,23 @@ function child(name = "innytypes.runtime", registry?: SecretRegistry) {
 describe("OneLog, the shell's writer", () => {
   it("writes its own records in the old format, and echoes each line", () => {
     const { log, file, echoed } = shell();
-    const logger = log.logger("innytypes.shell", 42);
+    const logger = log.logger("reload.shell", 42);
     logger.debug("d");
     logger.info("i");
     logger.warn("w");
     logger.error("e");
     expect(file.map((line) => line.slice(24))).toEqual([
-      "DEBUG        42 innytypes.shell: d\n",
-      "INFO         42 innytypes.shell: i\n",
-      "WARNING      42 innytypes.shell: w\n",
-      "ERROR        42 innytypes.shell: e\n",
+      "DEBUG        42 reload.shell: d\n",
+      "INFO         42 reload.shell: i\n",
+      "WARNING      42 reload.shell: w\n",
+      "ERROR        42 reload.shell: e\n",
     ]);
     expect(echoed).toEqual(file);
   });
 
   it("drops records below its level and keeps the rest", () => {
     const { log, text, feed } = shell({ level: LEVELS.WARNING });
-    const logger = log.logger("innytypes.shell", 1);
+    const logger = log.logger("reload.shell", 1);
     logger.debug("debug-line");
     logger.info("info-line");
     logger.warn("warn-line");
@@ -79,11 +79,11 @@ describe("OneLog, the shell's writer", () => {
 
   it("redacts a registered secret in its own records and in the name", () => {
     const { log, text } = shell();
-    const logger = log.logger(`innytypes.${KEY}`, 1);
+    const logger = log.logger(`reload.${KEY}`, 1);
     logger.protect(KEY);
     logger.error(`failed with ${KEY}`);
     expect(text()).not.toContain(KEY);
-    expect(text()).toContain(`innytypes.${REDACTED}: failed with ${REDACTED}`);
+    expect(text()).toContain(`reload.${REDACTED}: failed with ${REDACTED}`);
   });
 
   it("appends a child's record with the child's own pid, level and name", () => {
@@ -92,12 +92,12 @@ describe("OneLog, the shell's writer", () => {
       time: NOW,
       level: "WARNING" as const,
       pid: 4242,
-      name: "innytypes.services",
+      name: "reload.services",
       msg: "m",
     };
     feed("services", "stdout", encodeRecord(record).trimEnd());
     expect(file).toHaveLength(1);
-    expect(file[0]?.slice(24)).toBe("WARNING    4242 innytypes.services: m\n");
+    expect(file[0]?.slice(24)).toBe("WARNING    4242 reload.services: m\n");
   });
 
   it("redacts a child's record again in the shell, whatever the child did", () => {
@@ -135,8 +135,8 @@ describe("OneLog, the shell's writer", () => {
     feed("runtime", "stdout", "watching /Volumes");
     feed("runtime", "stdout", "");
     expect(file.map((line) => line.slice(24))).toEqual([
-      "STDERR       99 innytypes.runtime: cannot read /Volumes/x\n",
-      "stdout       99 innytypes.runtime: watching /Volumes\n",
+      "STDERR       99 reload.runtime: cannot read /Volumes/x\n",
+      "stdout       99 reload.runtime: watching /Volumes\n",
     ]);
   });
 
@@ -167,12 +167,12 @@ describe("OneLog, the shell's writer", () => {
     log.announce({
       role: "shell",
       pid: 5,
-      destination: "/l/innytypes.log",
+      destination: "/l/reload.log",
       levelProblem: "'chatty' is not a logging level",
     });
     expect(file.map((line) => line.slice(24))).toEqual([
-      "WARNING       5 innytypes.logs: 'chatty' is not a logging level; logging at DEBUG instead\n",
-      "INFO          5 innytypes.logs: innytypes shell (process 5) is logging to /l/innytypes.log at DEBUG\n",
+      "WARNING       5 reload.logs: 'chatty' is not a logging level; logging at DEBUG instead\n",
+      "INFO          5 reload.logs: reload shell (process 5) is logging to /l/reload.log at DEBUG\n",
     ]);
   });
 
@@ -203,7 +203,7 @@ describe("the source log, a child's side", () => {
         time: NOW,
         level,
         pid: 7,
-        name: "innytypes.runtime",
+        name: "reload.runtime",
         msg: "diwe"[index],
       })),
     );
@@ -248,7 +248,7 @@ describe("the source log, a child's side", () => {
     expect(new Set(records.map((record) => record.name))).toEqual(
       new Set([nodeLoggerName(source)]),
     );
-    expect(nodeLoggerName(source)).toBe("innytypes.node.diarize.a1b2");
+    expect(nodeLoggerName(source)).toBe("reload.node.diarize.a1b2");
   });
 
   it("cuts an enormous node stderr line at the source", () => {
@@ -260,7 +260,7 @@ describe("the source log, a child's side", () => {
 
   it("keeps running when the pipe to the shell is gone", () => {
     const log = sourceLog({
-      name: "innytypes.runtime",
+      name: "reload.runtime",
       pid: 1,
       write: () => {
         throw new Error("EPIPE");
@@ -299,13 +299,13 @@ describe("Node-RED's log", () => {
 
   it("is one custom handler and no console logger", () => {
     const { settings } = routed();
-    expect(Object.keys(settings)).toEqual(["innytypes"]);
-    expect(settings.innytypes).toMatchObject({ level: "debug", metrics: false, audit: false });
+    expect(Object.keys(settings)).toEqual(["reload"]);
+    expect(settings.reload).toMatchObject({ level: "debug", metrics: false, audit: false });
   });
 
   it("routes each Node-RED level to the one log's, tagging a node's lines", () => {
     const { lines, settings } = routed();
-    const write = settings.innytypes.handler();
+    const write = settings.reload.handler();
     write({ level: 10, msg: "gone" });
     write({ level: 20, msg: new Error("boom") });
     write({ level: 30, msg: "careful", type: "inject", id: "n1" });
@@ -329,7 +329,7 @@ describe("Node-RED's log", () => {
     const error = new Error("plain");
     error.stack = undefined as unknown as string;
     delete error.stack;
-    settings.innytypes.handler()({ level: 20, msg: error });
+    settings.reload.handler()({ level: 20, msg: error });
     expect(lines).toEqual(["ERROR plain"]);
   });
 });

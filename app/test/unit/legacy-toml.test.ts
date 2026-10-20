@@ -13,7 +13,7 @@ describe("parseLegacyToml", () => {
           "auto_check_versions = true",
           "count = 12",
           "fraction = 1.5",
-          'name = "InnyTypes"',
+          'name = "Reload"',
           "quoted = 'literal string'",
         ].join("\n"),
       ),
@@ -23,7 +23,7 @@ describe("parseLegacyToml", () => {
       auto_check_versions: true,
       count: 12,
       fraction: 1.5,
-      name: "InnyTypes",
+      name: "Reload",
       quoted: "literal string",
     });
   });

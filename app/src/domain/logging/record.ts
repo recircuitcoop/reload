@@ -25,7 +25,7 @@ export const LEVELS: Readonly<Record<LevelName, number>> = {
   stdout: 30,
 };
 
-/** The levels a person may write in INNYTYPES_LOG_LEVEL, for the refusal to name. */
+/** The levels a person may write in RELOAD_LOG_LEVEL, for the refusal to name. */
 export const LEVEL_NAMES = ["debug", "info", "warning", "error", "critical"] as const;
 
 /**
@@ -46,7 +46,7 @@ export interface LogRecord {
   readonly level: LevelName;
   /** The process id of the writer: three processes share one file (logs.py:198-200). */
   readonly pid: number;
-  /** Who wrote it: `innytypes.shell`, `innytypes.runtime`, `innytypes.node.<type>.<id>`. */
+  /** Who wrote it: `reload.shell`, `reload.runtime`, `reload.node.<type>.<id>`. */
   readonly name: string;
   readonly msg: string;
 }

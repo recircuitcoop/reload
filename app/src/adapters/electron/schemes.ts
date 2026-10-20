@@ -1,6 +1,6 @@
 // The shell's own schemes (plan 0018 §2.2, spec 8.5.3; arch_pivot P11 §5.1): app pages on
-// `inny-app://app/`, view pages on `inny-view://app/` and a package's web component on
-// `inny-view://<package>/`. Every page comes from the shell, never from the runtime, so a
+// `reload-app://app/`, view pages on `reload-view://app/` and a package's web component on
+// `reload-view://<package>/`. Every page comes from the shell, never from the runtime, so a
 // runtime restart can neither blank the app nor hang a pop-out half-loaded.
 //
 // Each response carries its CSP as a header. Only flat file names with a known extension are
@@ -74,7 +74,7 @@ function readFile(file: string): Buffer | null {
   }
 }
 
-/** The app pages, from `pagesDir`, on `inny-app://app/` only. */
+/** The app pages, from `pagesDir`, on `reload-app://app/` only. */
 export function appPageResponse(url: string, pagesDir: string): Response {
   const parsed = new URL(url);
   const file = parsed.host === APP_HOST ? servedFile(parsed.pathname) : null;
@@ -90,7 +90,7 @@ export interface ViewFiles {
 }
 
 /**
- * A view page. On `inny-view://app/`: the generic renderer. On `inny-view://<package>/`: the
+ * A view page. On `reload-view://app/`: the generic renderer. On `reload-view://<package>/`: the
  * same page, which also loads the package's `component.js`, and the package's own files from
  * its `view/` folder, all under the one CSP. The page's own files (VIEW_PAGE_FILES, the tokens
  * among them) always come from the shell, on every origin.

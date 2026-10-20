@@ -1,4 +1,4 @@
-// AppApi v2 over the renderer's IPC (plan 0022 §N): the half of `window.inny.app` the redesigned
+// AppApi v2 over the renderer's IPC (plan 0022 §N): the half of `window.reload.app` the redesigned
 // screens use. app-bridge.ts spreads it into the whole AppApi. Each call is one `invoke` of a
 // `{op, args}` channel, answered by the shell's *-calls.ts with an Answer; each push event is one
 // `on`, its value passed as it came.

@@ -65,7 +65,7 @@ describe("the types a preview draws", () => {
     expect(previewView(reorder)).toEqual({
       kind: "view",
       id: "widget_kit-re_order",
-      type: "inny-widget_kit-re_order",
+      type: "reload-widget_kit-re_order",
       package: "widget_kit",
       content: {
         title: "Reorder",
@@ -115,11 +115,11 @@ function harness(response: number, documents = [KIT]) {
 }
 
 describe("Preview a view…", () => {
-  it("is there in a build that is not installed, or with INNY_DEV=1, and never otherwise", () => {
+  it("is there in a build that is not installed, or with RELOAD_DEV=1, and never otherwise", () => {
     expect(previewOn({ packaged: false, env: {} })).toBe(true);
-    expect(previewOn({ packaged: true, env: { INNY_DEV: "1" } })).toBe(true);
+    expect(previewOn({ packaged: true, env: { RELOAD_DEV: "1" } })).toBe(true);
     expect(previewOn({ packaged: true, env: {} })).toBe(false);
-    expect(previewOn({ packaged: true, env: { INNY_DEV: "0" } })).toBe(false);
+    expect(previewOn({ packaged: true, env: { RELOAD_DEV: "0" } })).toBe(false);
   });
 
   it("is a Develop menu after the application menu's own", () => {

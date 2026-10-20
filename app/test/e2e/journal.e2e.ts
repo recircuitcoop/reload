@@ -17,7 +17,7 @@ test("the runtime opens its journal with node:sqlite, in WAL mode, under the use
   const { scratch, userData, env } = scratchDirectories();
   try {
     const log = path.join(scratch, "journal.log");
-    const { app, window } = await launchApp({ ...env, INNYTYPES_LOG_FILE: log });
+    const { app, window } = await launchApp({ ...env, RELOAD_LOG_FILE: log });
     const runtime = await waitForRunning(window, "runtime");
     await quit(app);
     await expect.poll(() => processesNaming(userData), { timeout: 10_000 }).toEqual([]);
@@ -27,8 +27,7 @@ test("the runtime opens its journal with node:sqlite, in WAL mode, under the use
     const line = text
       .split("\n")
       .find(
-        (l) =>
-          l.includes(" innytypes.runtime: journal: ") && l.includes(` ${String(runtime.pid)} `),
+        (l) => l.includes(" reload.runtime: journal: ") && l.includes(` ${String(runtime.pid)} `),
       );
     expect(line).toMatch(/journal: node:sqlite \(SQLite 3\.\d+\.\d+\), WAL, 0 entries in /);
     expect(line).toContain(file);

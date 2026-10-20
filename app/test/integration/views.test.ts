@@ -55,7 +55,10 @@ async function presentOne(
   delivery: RecordingDelivery,
   data: unknown = { n: 1 },
 ): Promise<string> {
-  const id = running.node.input({ payload: data, topic: "t.v1", inny: { run: "run-1" } }, delivery);
+  const id = running.node.input(
+    { payload: data, topic: "t.v1", reload: { run: "run-1" } },
+    delivery,
+  );
   expect(id).not.toBeNull();
   await waitFor("present", () => running.host.presented.some((p) => p.inputId === id));
   return id as string;
@@ -121,7 +124,7 @@ describe.each(VIEW_LANGUAGES)("views through the node process adapter (%s)", (la
         port: "answer",
         message: expect.objectContaining({
           payload: { answer: "Ada" },
-          inny: expect.objectContaining({ run: "run-1", cause: id }) as unknown,
+          reload: expect.objectContaining({ run: "run-1", cause: id }) as unknown,
         }) as unknown,
       },
     ]);
@@ -202,7 +205,7 @@ describe.each(VIEW_LANGUAGES)("views through the node process adapter (%s)", (la
   it("a snapshot is recorded; a trigger starts a new run on the action port", async () => {
     const running = start(viewSpec(language, "record"), new MemoryJournal());
     const delivery = new RecordingDelivery();
-    running.node.input({ payload: { n: 3 }, topic: "t.v1", inny: { run: "old-run" } }, delivery);
+    running.node.input({ payload: { n: 3 }, topic: "t.v1", reload: { run: "old-run" } }, delivery);
     await waitFor("done", () => delivery.finished);
     expect(running.host.snapshots).toEqual([
       {
@@ -220,9 +223,9 @@ describe.each(VIEW_LANGUAGES)("views through the node process adapter (%s)", (la
     expect(output?.index).toBe(1);
     expect(output?.message.payload).toEqual({ state: { n: 3 }, values: { why: 1 } });
     // A new run: its id is the new event's own, never the run the snapshot was taken in.
-    expect(output?.message.inny.run).toBe(output?.message.inny.event.id);
-    expect(output?.message.inny.run).not.toBe("old-run");
-    expect(output?.message.inny.cause).toBeUndefined();
+    expect(output?.message.reload.run).toBe(output?.message.reload.event.id);
+    expect(output?.message.reload.run).not.toBe("old-run");
+    expect(output?.message.reload.cause).toBeUndefined();
   });
 
   it("a press or a submission with no process running is refused, not dropped", async () => {

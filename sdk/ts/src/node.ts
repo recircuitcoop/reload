@@ -1,9 +1,9 @@
-// @innytypes/node: the TypeScript node SDK (node protocol v2, spec Appendix B), complete
+// @recircuit/reload-node: the TypeScript node SDK (node protocol v2, spec Appendix B), complete
 // (WI-0018-26): start, run with input/cancel/action/trigger/fire/close, emit, done, error,
 // status, log, present, snapshot, and anytypeKey(). WI-0018-20 built the subset the
 // first-party Anytype nodes need first; this file grows it to the whole of Appendix B and
 // passes C1 to C14 (app/test/conformance/sdk-node.test.ts, sdk-views.test.ts) without
-// changing anything packages/anytype already calls. No runtime dependencies, Node's standard
+// changing anything packages/reload_anytype already calls. No runtime dependencies, Node's standard
 // library only, so a package that bundles it ships one file that runs as it is.
 //
 // Revision 2.1 (spec 1.3, still wire protocol 2) adds done()'s report (notes, results) and
@@ -78,7 +78,7 @@ export type MediaItem = ImageItem | AudioItem;
 /** An action view's widget (spec 8.1.3, plan 0021): its package's own custom element, drawn in
  * the pop-up only and handed `props` (any JSON object, judged at present by the type's `props`
  * schema). A `form` beside it is drawn instead when the widget can't be. Write the element
- * with `defineView` (`@innytypes/node/view`). */
+ * with `defineView` (`@recircuit/reload-node/view`). */
 export interface ViewComponent {
   readonly element: string;
   readonly props?: Readonly<Record<string, unknown>>;
@@ -414,8 +414,8 @@ export async function run(handlers: Handlers): Promise<void> {
 // ── the Anytype key (spec 11.1) ──────────────────────────────────────────────────────────
 
 /** Where the runtime says the key is; the app's domain/anytype/pins.ts names the same two. */
-export const ANYTYPE_KEY_FILE_VARIABLE = "INNYTYPES_ANYTYPE_KEY_FILE";
-export const ANYTYPE_KEY_LEGACY_FILE_VARIABLE = "INNYTYPES_ANYTYPE_KEY_LEGACY_FILE";
+export const ANYTYPE_KEY_FILE_VARIABLE = "RELOAD_ANYTYPE_KEY_FILE";
+export const ANYTYPE_KEY_LEGACY_FILE_VARIABLE = "RELOAD_ANYTYPE_KEY_LEGACY_FILE";
 
 /** The runtime gave this process no key file: it is not a first-party Anytype node. */
 export class NoKeyFileError extends Error {
@@ -458,7 +458,7 @@ export function anytypeKey(
   const file = env[ANYTYPE_KEY_FILE_VARIABLE];
   if (file === undefined || file === "") {
     throw new NoKeyFileError(
-      "InnyTypes gave this node no Anytype key file; only its own Anytype nodes are given one",
+      "Reload gave this node no Anytype key file; only its own Anytype nodes are given one",
     );
   }
   const legacy = env[ANYTYPE_KEY_LEGACY_FILE_VARIABLE];

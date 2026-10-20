@@ -29,9 +29,9 @@ function seams(platform: string, overrides: Partial<IdentifierSeams> = {}): Iden
 describe("the machine id", () => {
   it("is the HMAC of the injected identifier, keyed with the fixed label", () => {
     expect(machineIdHash(UUID)).toBe(
-      createHmac("sha256", "innytypes.machine-id.v1").update(UUID).digest("hex"),
+      createHmac("sha256", "reload.machine-id.v1").update(UUID).digest("hex"),
     );
-    expect(MACHINE_ID_KEY).toBe("innytypes.machine-id.v1");
+    expect(MACHINE_ID_KEY).toBe("reload.machine-id.v1");
   });
 
   it("is the same every time for the same machine, and different for a different one", () => {
@@ -153,7 +153,7 @@ describe("the Windows identifier", () => {
   });
 });
 
-describe("every platform InnyTypes ships for has its own identifier source", () => {
+describe("every platform Reload ships for has its own identifier source", () => {
   it("and an operating system nobody ships for has none, refused by name", () => {
     expect(() => osMachineIdentifier(seams("freebsd"))).toThrow(
       "no machine identifier source for freebsd",

@@ -212,7 +212,7 @@ describe("wireQuit, wireServiceCalls, wireDesktop and the e2e hooks", () => {
     });
     board.raise({ kind: "view-waiting", subject: "v" });
     board.raise({ kind: "view-waiting", subject: "v" });
-    expect(shown).toEqual(["InnyTypes is waiting for you"]);
+    expect(shown).toEqual(["Reload is waiting for you"]);
     expect(written).toEqual([1]);
     expect(call(IPC.setLaunchAtLogin, true)).toMatchObject({ on: false });
   });
@@ -225,6 +225,6 @@ describe("wireQuit, wireServiceCalls, wireDesktop and the e2e hooks", () => {
       badge: () => 0,
     };
     exposeE2eHooks(hooks);
-    expect((globalThis as { innytypesE2E?: unknown }).innytypesE2E).toBe(hooks);
+    expect((globalThis as { reloadE2E?: unknown }).reloadE2E).toBe(hooks);
   });
 });

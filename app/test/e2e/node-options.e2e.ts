@@ -1,5 +1,5 @@
 // A step's form choosing its space and type from Anytype, in the real app (plan 0022 §B, D9;
-// WI-0022-09): a fixture type declaring `innytype.spaces` and `innytype.types.of`, opened on the
+// WI-0022-09): a fixture type declaring `reload.spaces` and `reload.types.of`, opened on the
 // real canvas. The form says "Reading your spaces…" while the services process reads a fake
 // Anytype with the run's key, then lists the spaces; choosing one lists its types, and choosing
 // another reads again. What the node keeps is the plain id and key. Not paired, the form shows
@@ -32,8 +32,8 @@ import {
   waitForRunning,
 } from "./app-harness";
 
-/** test/fixtures/raw-node's one type: `space` (innytype.spaces) and `type` (types of space). */
-const RAW = "inny-rawnode-raw";
+/** test/fixtures/raw-node's one type: `space` (reload.spaces) and `type` (types of space). */
+const RAW = "reload-rawnode-raw";
 const FAKE = path.join(APP, "test", "fixtures", "fake-mcp");
 
 /** The fake MCP child's surface, so the services process comes up ready on it. */
@@ -108,8 +108,8 @@ async function launch(env: Record<string, string>, scratch: string, url: string)
   return launchApp({
     ...env,
     ANYTYPE_API_BASE_URL: url,
-    INNYTYPES_LOG_FILE: path.join(scratch, "innytypes.log"),
-    INNYTYPES_TEST_ANYTYPE: JSON.stringify({
+    RELOAD_LOG_FILE: path.join(scratch, "reload.log"),
+    RELOAD_TEST_ANYTYPE: JSON.stringify({
       entry: path.join(FAKE, "server.mjs"),
       surface: fakeSurface(scratch),
     }),
@@ -148,10 +148,10 @@ test("spaces and types in a step's form", async () => {
     const { frame, page } = await editorOf(window, port);
 
     await openForm(page, {});
-    const form = frame.getByTestId(`inny-form-${RAW}`);
-    const space = form.getByTestId("inny-field-space");
-    const type = form.getByTestId("inny-field-type");
-    const spaceNote = form.getByTestId("inny-note-space");
+    const form = frame.getByTestId(`reload-form-${RAW}`);
+    const space = form.getByTestId("reload-field-space");
+    const type = form.getByTestId("reload-field-type");
+    const spaceNote = form.getByTestId("reload-note-space");
 
     // ── reading, then the spaces by name ─────────────────────────────────────────────────
     await expect(spaceNote).toHaveText("Reading your spaces…", { timeout: 15_000 });
@@ -196,7 +196,7 @@ test("spaces and types in a step's form", async () => {
       expect(request.authorization).toBe(`Bearer ${canaryKey}`);
     }
     const answers = await page.evaluate(async () => {
-      const read = (query: string) => fetch(`inny/options?${query}`).then((r) => r.text());
+      const read = (query: string) => fetch(`reload/options?${query}`).then((r) => r.text());
       return [await read("source=spaces"), await read("source=types&space=sp-home")];
     });
     expect(answers[0]).toContain("Work");
@@ -213,7 +213,7 @@ test("spaces and types in a step's form", async () => {
     });
     await quit(app);
     expect(output.join("")).not.toContain(canaryKey);
-    expect(fs.readFileSync(path.join(scratch, "innytypes.log"), "utf8")).not.toContain(canaryKey);
+    expect(fs.readFileSync(path.join(scratch, "reload.log"), "utf8")).not.toContain(canaryKey);
   } finally {
     release();
     await cleanUp(launched, scratch);
@@ -224,7 +224,7 @@ test("spaces and types in a step's form", async () => {
 test("not paired, a step's form says how to pair and keeps what the step stored", async () => {
   test.setTimeout(120_000);
   const { scratch, env, canaryKey } = scratchDirectories();
-  // No key under the scratch home: InnyTypes is not paired.
+  // No key under the scratch home: Reload is not paired.
   fs.rmSync(anytypeKeyFile(scratch));
   const anytype = new FakeAnytypeServer(canaryKey);
   anytype.spaces = [{ id: "sp-work", name: "Work" }];
@@ -238,12 +238,12 @@ test("not paired, a step's form says how to pair and keeps what the step stored"
     const { frame, page } = await editorOf(window, port);
 
     await openForm(page, { space: "sp-stored" });
-    const form = frame.getByTestId(`inny-form-${RAW}`);
-    await expect(form.getByTestId("inny-note-space")).toHaveText(
+    const form = frame.getByTestId(`reload-form-${RAW}`);
+    await expect(form.getByTestId("reload-note-space")).toHaveText(
       "Pair with Anytype in Configuration › General to choose a space.",
       { timeout: 15_000 },
     );
-    const space = form.getByTestId("inny-field-space");
+    const space = form.getByTestId("reload-field-space");
     await expect(space).toHaveValue("sp-stored");
     await expect(space).toBeDisabled();
     // Anytype was asked for no list: there is no key to ask with.

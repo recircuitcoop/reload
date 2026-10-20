@@ -1,6 +1,6 @@
 // Pop-out windows for views and snapshots (spec 8.5; arch_pivot P10, spike shell/popouts.js).
 //
-// Each pop-out runs sandboxed: the exact webPreferences of spec 8.5.4, in the `inny-views`
+// Each pop-out runs sandboxed: the exact webPreferences of spec 8.5.4, in the `reload-views`
 // partition, on a page the shell serves (adapters/electron/schemes.ts) under a strict CSP. No
 // navigation, no new windows. Its only way out is the five-call bridge, and the bridge takes
 // no ids: this file binds each window, by its webContents, to the one view or snapshot it was
@@ -94,9 +94,9 @@ const OVERSIZED: Answer = { ok: false, error: REFUSED_ANSWER };
 
 /** Each kind of pop-out's window title. */
 const TITLES: Readonly<Record<PopoutTarget["kind"], string>> = {
-  view: "InnyTypes — waiting for you",
-  snapshot: "InnyTypes — snapshot",
-  preview: "InnyTypes — preview",
+  view: "Reload — waiting for you",
+  snapshot: "Reload — snapshot",
+  preview: "Reload — preview",
 };
 
 /** How long a submitted pop-out stays, so its page can say it was sent. */

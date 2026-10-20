@@ -1,6 +1,6 @@
 {
   "protocol": 2,
-  "package": "folder",
+  "package": "reload_folder",
   "version": "0.1.0",
   "environment": { "kind": "node", "node": ">=22" },
   "types": [
@@ -23,7 +23,7 @@
           }
         }
       },
-      "outputs": [{ "port": "created", "event": "folder.file.created.v1" }]
+      "outputs": [{ "port": "created", "event": "reload_folder.file.created.v1" }]
     }
   ]
 }

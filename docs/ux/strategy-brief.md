@@ -13,7 +13,7 @@ The inputs:
 
 ## 1. The problem, in the owner's words
 
-> *"while innytypes is not functional, it takes ages and it is very uncomfortable. I need to connect
+> *"while reload is not functional, it takes ages and it is very uncomfortable. I need to connect
 > the recording device and process the recordings immediately: transcription -> MULTIPLE summaries
 > -> route the multiple summaries to AnyType -> Analyse AnyType renewed context -> Transmit to
 > customer spaces -> plan new steps and schedule them ... I got NOTHING"*
@@ -26,7 +26,7 @@ one partly and none of the others:
 | # | Step in the owner's job | What exists today |
 |---|---|---|
 | 1 | Plug in the recorder, and processing starts at once | monty's folder watcher emits `monty.new.v1`. **Drives** (the BOYA) are not covered yet: monty's WI-0002-05 is still being built. |
-| 2 | Transcription | innyrize is planned; whodunnit, the engine, exists. **Not in the app.** |
+| 2 | Transcription | reload_summarize is planned; whodunnit, the engine, exists. **Not in the app.** |
 | 3 | **Several** summaries, of different types, on the same text | No summary node definition. whodunnit's summary templates are a separate, unported add-on. |
 | 4 | Send the summaries to Anytype | The Create/Update object nodes exist, but they need a hand-typed space and type key. **The app does not read spaces and types from Anytype for the node forms.** |
 | 5 | Analyse the updated Anytype context | No analysis node definition. |
@@ -37,7 +37,7 @@ So *"I got NOTHING"* is literally true of the job. A redesign that only restyles
 would still deliver nothing. **The rework has to make the pipeline real, and organise the app around
 running it.**
 
-**How the pipeline is made real (the owner's correction, 2026-09-27).** InnyTypes is not the
+**How the pipeline is made real (the owner's correction, 2026-09-27).** Reload is not the
 pipeline; the pipeline is a **Node-RED flow**, and every step in it is a **node definition** shipped
 in a node package:
 - the steps that don't exist yet are **new node definitions**, never features baked into the app:
@@ -48,7 +48,7 @@ in a node package:
   so routing to a customer space is flow configuration, not app logic;
 - the owner's pipeline ships as a **flow template** whose node forms the person fills in.
 
-InnyTypes' own job is the runtime and the shell: run flows reliably, keep the palette of node
+Reload's own job is the runtime and the shell: run flows reliably, keep the palette of node
 definitions, provide views and notifications, read Anytype's spaces and types for the node forms,
 show what is running and what is waiting, and let the person edit the flow.
 
@@ -95,7 +95,7 @@ asking the person only what only they can answer.**
 - **O2 "I have to build it myself."** Ship the owner's pipeline as a ready-made **flow template**
   (like Home Assistant's blueprints) whose node forms the person fills in once Anytype is paired and
   the recorder is known. The canvas is for changing it, not for starting.
-- **O3 "Each summary must land in the right place."** *Owner requirement:* InnyTypes reads the
+- **O3 "Each summary must land in the right place."** *Owner requirement:* Reload reads the
   **spaces and object types from Anytype itself** and offers them in the node forms, so the
   destination, the fields and the forms are queried and filled in dynamically, not typed by hand.
   Which summary goes to which customer space is decided in the flow.
@@ -120,7 +120,7 @@ time.
 
 | Surface | What the person is doing | What is in it | What it replaces |
 |---|---|---|---|
-| **Setup** | Getting started, *"once and out of the way"* | A short walkthrough, never a settings page: consent to reports → pair Anytype → choose the source folder → the starter flow's step forms → Ready (owner, 2026-10-02). (No recorder step: the recorder is monty's source, asked for in monty's own node form, never in InnyTypes' setup.) There is no package step: the **official packages** that ship with InnyTypes are set up on their own; third-party packages are added later in Configuration. The starter flow is always installed; Ready offers **Open Live**, *"where the application lives"*, and, as a secondary action, **I'll build my own**, which takes them to Configuration › Flows. It never shows again. | The first-run screens |
+| **Setup** | Getting started, *"once and out of the way"* | A short walkthrough, never a settings page: consent to reports → pair Anytype → choose the source folder → the starter flow's step forms → Ready (owner, 2026-10-02). (No recorder step: the recorder is monty's source, asked for in monty's own node form, never in Reload's setup.) There is no package step: the **official packages** that ship with Reload are set up on their own; third-party packages are added later in Configuration. The starter flow is always installed; Ready offers **Open Live**, *"where the application lives"*, and, as a secondary action, **I'll build my own**, which takes them to Configuration › Flows. It never shows again. | The first-run screens |
 | **Configuration** | Changing how it works | A *"multitab view"*: **Flows** (the list of flows, templates via **New flow**, the canvas, and **Save and run**) and **General** (the settings about no single flow: Anytype pairing, recorders and folders, AI apps (the MCP endpoint), start at login, updates, reports, packages, advanced diagnostics). | Editor, Events (event types become a source setting inside a flow), Packages, Settings |
 | **Live** | Living with it, *"the room where the application lives"* | The **board** of the chosen flow: a source fires → nodes run with visible progress → the flow may wait with a question → the person answers → the result. Pop-outs and notifications reach the person when the window is closed. | Inbox, Jobs, Snapshots, and the status blocks |
 
@@ -140,7 +140,7 @@ the Live window with **Edit layout**:
 - **one board per flow**; switching flow switches board;
 - a board has **tabs**; Edit layout adds and removes tabs, moves and resizes places on the board,
   and hides places entirely;
-- the layout is InnyTypes' own per-flow state, kept outside the flow and untouched by a redeploy;
+- the layout is Reload's own per-flow state, kept outside the flow and untouched by a redeploy;
   a new view node gets a new place at the end;
 - a hidden place's waiting question or failure still reaches the person by notification or pop-out,
   so a layout can never hide something urgent.
@@ -186,13 +186,13 @@ Shared across surfaces:
 3. **Customer spaces:** *"summaries, work, customer feedback... Currently there is always an
    approval before sending, but this will be managed in the node-red flow config with a new
    view."* So an approval view node, placed in the flow.
-4. **Analysing the context:** *"I dont want you to bake this in the application flow: InnyType is
+4. **Analysing the context:** *"I dont want you to bake this in the application flow: Reload is
    configured by the node-red flow orchestrator with a new NODE DEFINITION."*
 5. **Next steps:** *"both but this is IN THE NODE RED and NODE DEFINITION."* Anytype tasks and the
    calendar, through a scheduling node.
 
 The rule behind all five: **anything the pipeline does is a node definition configured in the
-flow; InnyTypes provides the runtime, the palette, the views and the data (spaces, types) the nodes
+flow; Reload provides the runtime, the palette, the views and the data (spaces, types) the nodes
 need.**
 
 ## 9. Next

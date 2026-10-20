@@ -17,7 +17,7 @@ let base: string;
 let roots: FsPackageRoots;
 
 beforeEach(() => {
-  base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "inny-roots-")));
+  base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-roots-")));
   roots = new FsPackageRoots(base);
 });
 

@@ -43,7 +43,7 @@ type AnytypeApi = {
 
 function anytypeStatus(window: Page): Promise<Status> {
   return window.evaluate(() =>
-    (window as unknown as { inny: { app: AnytypeApi } }).inny.app.anytypeStatus(),
+    (window as unknown as { reload: { app: AnytypeApi } }).reload.app.anytypeStatus(),
   );
 }
 
@@ -153,10 +153,10 @@ test("pairing stores the key owner-only, the runtime's redactor gets it directly
     const { app, window } = await launchApp(
       {
         ...env,
-        INNYTYPES_LOG_FILE: logFile,
-        INNYTYPES_E2E_HOOKS: "1",
+        RELOAD_LOG_FILE: logFile,
+        RELOAD_E2E_HOOKS: "1",
         ANYTYPE_API_BASE_URL: anytype.url,
-        INNYTYPES_TEST_ANYTYPE: JSON.stringify({
+        RELOAD_TEST_ANYTYPE: JSON.stringify({
           entry: path.join(FAKE, "server.mjs"),
           args: ["--mode=canary"],
           surface: fakeSurface(scratch),
@@ -171,17 +171,21 @@ test("pairing stores the key owner-only, the runtime's redactor gets it directly
 
     // Pairing, as the Settings page will drive it: the key never reaches the page.
     const started = await window.evaluate(() =>
-      (window as unknown as { inny: { app: AnytypeApi } }).inny.app.startAnytypePairing(),
+      (window as unknown as { reload: { app: AnytypeApi } }).reload.app.startAnytypePairing(),
     );
     expect(started.pairing).toBe(true);
     const refused = await window
       .evaluate(() =>
-        (window as unknown as { inny: { app: AnytypeApi } }).inny.app.completeAnytypePairing("12"),
+        (window as unknown as { reload: { app: AnytypeApi } }).reload.app.completeAnytypePairing(
+          "12",
+        ),
       )
       .catch((error: unknown) => String(error));
     expect(refused).toContain("Enter the four-digit code shown by Anytype.");
     const paired = await window.evaluate(() =>
-      (window as unknown as { inny: { app: AnytypeApi } }).inny.app.completeAnytypePairing("1234"),
+      (window as unknown as { reload: { app: AnytypeApi } }).reload.app.completeAnytypePairing(
+        "1234",
+      ),
     );
     expect(JSON.stringify(paired)).not.toContain(KEY);
     expect(fs.readFileSync(keyFile(scratch), "utf8")).toBe(KEY);
@@ -199,9 +203,9 @@ test("pairing stores the key owner-only, the runtime's redactor gets it directly
       await app.evaluate(() =>
         (
           globalThis as unknown as {
-            innytypesE2E: { restart(child: string, reason: string): boolean };
+            reloadE2E: { restart(child: string, reason: string): boolean };
           }
-        ).innytypesE2E.restart("runtime", "types"),
+        ).reloadE2E.restart("runtime", "types"),
       ),
     ).toBe(true);
     const after = await waitForRunning(window, "runtime", runtime.generation + 1);
@@ -223,7 +227,7 @@ test("pairing stores the key owner-only, the runtime's redactor gets it directly
     expect(printed.length).toBeGreaterThan(0);
     for (const line of printed) {
       expect(line).toContain("WARNING");
-      expect(line).toContain("innytypes.anytype-mcp");
+      expect(line).toContain("reload.anytype-mcp");
       expect(line).toContain(String(before.childPid));
       expect(line).toContain("Bearer [redacted]");
     }
@@ -247,7 +251,7 @@ test("an MCP child that stops answering pings but stays alive is restarted, with
     const { app, window, output } = await launchApp({
       ...env,
       ANYTYPE_API_BASE_URL: anytype.url,
-      INNYTYPES_TEST_ANYTYPE: JSON.stringify({
+      RELOAD_TEST_ANYTYPE: JSON.stringify({
         entry: path.join(FAKE, "server.mjs"),
         args: ["--mode=deaf"],
         surface: fakeSurface(scratch),
@@ -265,7 +269,7 @@ test("an MCP child that stops answering pings but stays alive is restarted, with
       .poll(() => output.join(""), { timeout: 20_000 })
       .toContain(
         // Raised in the services process, told by the shell's notice board (WI-0018-21).
-        `notice: InnyTypes restarted the Anytype MCP child: It (pid ${String(deaf.childPid)})`,
+        `notice: Reload restarted the Anytype MCP child: It (pid ${String(deaf.childPid)})`,
       );
     await expect
       .poll(async () => (await anytypeStatus(window)).childPid, { timeout: 15_000 })

@@ -3,7 +3,7 @@
 // "Installing · 60%", "Updated to 0.4 on Tuesday", the in-use refusal) are ui/strings.ts's
 // (WI-0022-10), listed in app/test/unit/domain/wording.fixture.test.ts.
 //
-// A package has three facets, each a state InnyTypes verified, and when:
+// A package has three facets, each a state Reload verified, and when:
 // * registration: registered | not-registered — the current generation's `ready.types[]`.
 // * installation: installed | not-installed | installing {progress} | verifying | failed-check —
 //   the content hash re-checked at start and on demand.
@@ -14,7 +14,7 @@
 //   again, until a different version is listed.
 //
 // THE RULE: no state without `verifiedAt`. Every state type below carries a required
-// `verifiedAt: Date`, so a state cannot be built without one. A facet InnyTypes has not verified
+// `verifiedAt: Date`, so a state cannot be built without one. A facet Reload has not verified
 // yet is `null`, and the row shows nothing for it and offers none of its actions.
 //
 // Transitions are functions that return the package with its new facet, or a structured refusal.
@@ -32,7 +32,7 @@ import type { VersionFinding } from "./versions";
 /** How long Go back is offered after an update, and the previous environment kept (D5). */
 export const ROLLBACK_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** What every state carries: when InnyTypes last verified it. */
+/** What every state carries: when Reload last verified it. */
 interface Verified {
   readonly verifiedAt: Date;
 }
@@ -107,7 +107,7 @@ export type PackageSource =
   | { readonly kind: "catalogue" }
   | { readonly kind: "folder"; readonly path: string; readonly unreadable?: true };
 
-/** One package as its row knows it. A facet is null until InnyTypes has verified it. */
+/** One package as its row knows it. A facet is null until Reload has verified it. */
 export interface Package {
   readonly name: string;
   readonly version: string;
@@ -418,7 +418,7 @@ export interface RowActions {
  * Check for changes or Go back). An unverified facet offers nothing; a busy package offers
  * nothing new; Unregister and Remove stay enabled while used, so pressing them gives the
  * refusal that names every use. A package that failed its check is removed or installed again
- * from where it came from; a shipped one offers neither (reinstalling InnyTypes restores it). A
+ * from where it came from; a shipped one offers neither (reinstalling Reload restores it). A
  * folder is asked with Check for changes, never updated, and not while it cannot be read.
  */
 export function rowActions(pkg: Package, now: Date): RowActions {

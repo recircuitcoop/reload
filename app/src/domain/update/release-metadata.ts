@@ -11,10 +11,10 @@
 //
 //     version: 1.2.3
 //     files:
-//       - url: InnyTypes-1.2.3-arm64-mac.zip
+//       - url: Reload-1.2.3-arm64-mac.zip
 //         sha512: <base64>
 //         size: 12345678
-//     path: InnyTypes-1.2.3-arm64-mac.zip
+//     path: Reload-1.2.3-arm64-mac.zip
 //     sha512: <base64>
 //     releaseDate: '2026-09-27T00:00:00.000Z'
 //
@@ -253,7 +253,7 @@ export function metadataFileName(channel: string, platform: ReleasePlatform): st
  * The one file this machine's architecture should install. A metadata document naming exactly
  * one file (the common case: one target built) is that file regardless of its name; naming
  * more than one is disambiguated by an `-<arch>.` or `-<arch>-` segment in its URL, as
- * electron-builder's own filenames carry it (`InnyTypes-1.2.3-arm64-mac.zip`).
+ * electron-builder's own filenames carry it (`Reload-1.2.3-arm64-mac.zip`).
  */
 export function pickReleaseFile(files: readonly ReleaseFile[], arch: string): ReleaseFile {
   const first = files[0];

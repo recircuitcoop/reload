@@ -1,15 +1,15 @@
 // The pop-out page's logic (spec 8.5), mounted by view.tsx: one view or snapshot, drawn by the generic renderer, answered
-// through the five-call bridge `window.inny` and nothing else. While the runtime restarts,
+// through the five-call bridge `window.reload` and nothing else. While the runtime restarts,
 // `get()` is retried and the page says so (spec 8.5.8).
 //
-// On a package's own origin (`inny-view://<package>/`) the page has also loaded the package's
+// On a package's own origin (`reload-view://<package>/`) the page has also loaded the package's
 // component.js; a content `component: {element, props?}` is then drawn by that custom element,
 // which is handed the view (its props and its draft with it) as its `view` property, once its
-// element is defined. Only then does the chrome under it become InnyTypes' widget chrome (spec
+// element is defined. Only then does the chrome under it become Reload's widget chrome (spec
 // 8.5.6): Continue starts disabled, the component's `setValid(true)` enables it, and pressing it
 // submits what the component's `answer()` returns; Later closes the window; Skip this step
 // dismisses. Until then the view keeps its enabled Submit and Dismiss. A component written
-// before 0.4.0 still answers with `inny-submit`.
+// before 0.4.0 still answers with `reload-submit`.
 //
 // A widget that cannot be drawn falls back (plan 0021 §5): its element is not defined within
 // LOAD_TIMEOUT_MS, its component.js is missing or breaks the CSP while it loads, drawing it
@@ -40,7 +40,7 @@ import {
 /** How often the page asks again while the runtime cannot answer. */
 export const RETRY_MS = 1_000;
 
-export const RESTARTING = "The InnyTypes runtime is restarting; trying again in a moment…";
+export const RESTARTING = "The Reload runtime is restarting; trying again in a moment…";
 
 /** How long a widget's element has to be defined before the page falls back (plan 0021 §5). */
 export const LOAD_TIMEOUT_MS = 3_000;
@@ -65,9 +65,9 @@ export interface ViewPage {
   drawn?(value: unknown): void;
   /** Handed the page's own Skip this step and Later, for a chrome's buttons to run. */
   controls?(actions: { readonly skip: () => void; readonly later: () => void }): void;
-  /** `inny-valid` is listened for on the window, where the bridge dispatches it. */
+  /** `reload-valid` is listened for on the window, where the bridge dispatches it. */
   on(
-    type: "submit" | "click" | "inny-submit" | typeof VALID_EVENT,
+    type: "submit" | "click" | "reload-submit" | typeof VALID_EVENT,
     listener: (event: PageEvent) => void,
   ): void;
   /**
@@ -134,7 +134,7 @@ export function mountViewPage(page: ViewPage, bridge: ViewBridge): Promise<void>
       say(error instanceof Error ? error.message : String(error));
     }
   };
-  /** Continue under a component: InnyTypes sends what the component answers (plan 0021 D2). */
+  /** Continue under a component: Reload sends what the component answers (plan 0021 D2). */
   const continueWith = async (drawn: Widget): Promise<void> => {
     const values = await answerOf(drawn);
     if (values === null) {
@@ -174,7 +174,7 @@ export function mountViewPage(page: ViewPage, bridge: ViewBridge): Promise<void>
       page.close();
     }
   });
-  page.on("inny-submit", (event) => {
+  page.on("reload-submit", (event) => {
     const detail = typeof event.detail === "object" && event.detail !== null ? event.detail : {};
     void answer(bridge.submit(detail as Record<string, unknown>));
   });

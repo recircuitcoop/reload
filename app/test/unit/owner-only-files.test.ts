@@ -32,7 +32,7 @@ const modeOf = (target: string): number => fs.statSync(target).mode & 0o777;
 let scratch: string;
 
 beforeEach(() => {
-  scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "inny-secrets-")));
+  scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-secrets-")));
 });
 
 afterEach(() => {
@@ -57,13 +57,13 @@ function everyFile(root: string): { file: string; bytes: Buffer }[] {
 }
 
 describe("the existing paths (plan 0018 §4.1)", () => {
-  it("keeps the key and the proxy token in ~/.config/innytypes, as the old app did", () => {
+  it("keeps the key and the proxy token in ~/.config/reload", () => {
     const files = anytypeSecretFiles({ platform: "darwin", home: "/Users/a", env: {} });
-    expect(files["anytype-api-key"]?.file).toBe("/Users/a/.config/innytypes/anytype_api_key");
+    expect(files["anytype-api-key"]?.file).toBe("/Users/a/.config/reload/anytype_api_key");
     expect(files["mcp-proxy-token"]).toEqual({
-      file: "/Users/a/.config/innytypes/mcp_proxy_token",
+      file: "/Users/a/.config/reload/mcp_proxy_token",
     });
-    expect(credentialsDirectory("C:\\Users\\a", "win32")).toBe("C:\\Users\\a\\.config\\innytypes");
+    expect(credentialsDirectory("C:\\Users\\a", "win32")).toBe("C:\\Users\\a\\.config\\reload");
   });
 
   it("reads the legacy key where platformdirs' user_config_path put it", () => {
@@ -345,7 +345,7 @@ describe("nothing but the store's own files", () => {
     store.write("mcp-proxy-token", TOKEN);
     const holding = everyFile(home).filter(({ bytes }) => bytes.includes(KEY));
     expect(holding.map(({ file }) => path.relative(home, file))).toEqual([
-      path.join(".config", "innytypes", "anytype_api_key"),
+      path.join(".config", "reload", "anytype_api_key"),
     ]);
   });
 });

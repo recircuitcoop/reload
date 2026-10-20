@@ -63,12 +63,12 @@ interface Flow {
   sources: { id: string; type: string }[];
 }
 interface Api {
-  inny: { app: Record<string, (...args: unknown[]) => Promise<Answer>> };
+  reload: { app: Record<string, (...args: unknown[]) => Promise<Answer>> };
 }
 
 /** One AppApi call from the page. */
 const call = (window: Page, name: string, ...args: unknown[]) =>
-  window.evaluate(([op, given]) => (window as unknown as Api).inny.app[op]?.(...given), [
+  window.evaluate(([op, given]) => (window as unknown as Api).reload.app[op]?.(...given), [
     name,
     args,
   ] as const) as Promise<Answer>;
@@ -225,7 +225,7 @@ test("the starter's forms, then Ready, then Open Live lands in Live", async () =
       {
         ...env,
         ANYTYPE_API_BASE_URL: url,
-        INNYTYPES_TEST_ANYTYPE: JSON.stringify({
+        RELOAD_TEST_ANYTYPE: JSON.stringify({
           entry: path.join(FAKE, "server.mjs"),
           surface: fakeSurface(scratch),
         }),
@@ -295,8 +295,8 @@ test("the starter's forms, then Ready, then Open Live lands in Live", async () =
       on: true,
       health: { kind: "ready" },
     });
-    expect(starter.sources.map((source) => source.type)).toEqual(["inny-folder-watch"]);
-    expect(starter.steps.map((step) => step.type)).toEqual(["inny-anytype-create-object"]);
+    expect(starter.sources.map((source) => source.type)).toEqual(["reload-reload_folder-watch"]);
+    expect(starter.steps.map((step) => step.type)).toEqual(["reload-reload_anytype-create-object"]);
 
     // Try with a sample: the sample lands in the folder, and a real run reaches Done.
     await button(window, "setup.ready.sample").click();

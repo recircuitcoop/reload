@@ -1,6 +1,6 @@
 // The widget kit's widgets (plan 0021): plain custom elements with no dependencies, served by
-// the shell on inny-view://widgetkit/ under the pop-out CSP, styled only with the view kit
-// (view-kit.css) and the design tokens the page links. The page draws InnyTypes' chrome under
+// the shell on reload-view://widgetkit/ under the pop-out CSP, styled only with the view kit
+// (view-kit.css) and the design tokens the page links. The page draws Reload's chrome under
 // them; a widget draws only its body.
 //
 // - <widgetkit-reorder>: the view's `props.items` (or its draft) as rows, put in order by
@@ -18,7 +18,7 @@ class WidgetkitReorder extends HTMLElement {
     this.order = (draft || (Array.isArray(props.items) ? props.items : [])).map(String);
     this.dragged = null;
     this.draw();
-    window.inny.setValid(draft !== null);
+    window.reload.setValid(draft !== null);
   }
 
   /** Move the row at `from` to `to`, draw again, and keep the order as a draft. */
@@ -29,21 +29,21 @@ class WidgetkitReorder extends HTMLElement {
     const [item] = this.order.splice(from, 1);
     this.order.splice(to, 0, item);
     this.draw();
-    window.inny.setValid(true);
-    void window.inny.draft({ order: [...this.order] });
+    window.reload.setValid(true);
+    void window.reload.draft({ order: [...this.order] });
   }
 
   draw() {
     const list = document.createElement("ol");
-    list.className = "inny-list";
+    list.className = "reload-list";
     list.setAttribute("data-testid", "reorder-list");
     this.order.forEach((item, n) => {
       const row = document.createElement("li");
-      row.className = "inny-list-row";
+      row.className = "reload-list-row";
       row.draggable = true;
       row.setAttribute("data-testid", `reorder-row-${n}`);
       const handle = document.createElement("span");
-      handle.className = "inny-drag-handle";
+      handle.className = "reload-drag-handle";
       handle.setAttribute("aria-hidden", "true");
       handle.textContent = "⋮⋮";
       const text = document.createElement("span");
@@ -71,7 +71,7 @@ class WidgetkitReorder extends HTMLElement {
   button(label, testid, onPress) {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "inny-button";
+    button.className = "reload-button";
     button.textContent = label;
     button.setAttribute("data-testid", testid);
     button.addEventListener("click", onPress);

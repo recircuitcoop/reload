@@ -89,7 +89,7 @@ function offendingLines(file: string): string[] {
 
 /** A scratch file holding `text`, removed after `check` has looked at it. */
 function planted(text: string, check: (file: string) => void): void {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "inny-no-secrets-"));
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "reload-no-secrets-"));
   try {
     const file = path.join(directory, "doc.md");
     fs.writeFileSync(file, text);

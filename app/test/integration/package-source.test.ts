@@ -18,7 +18,7 @@ let dir: string;
 const source = new FsPackageSource();
 
 beforeEach(() => {
-  dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "inny-source-")));
+  dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-source-")));
 });
 
 afterEach(() => {
@@ -36,14 +36,14 @@ describe("readArchive", () => {
     const bytes = gzipSync(
       tar([
         { name: "./", type: "5" },
-        { name: "./inny-package.json", data: text("{}") },
+        { name: "./reload-package.json", data: text("{}") },
         { name: "lib/", type: "5" },
         { name: "lib/util.py", data: text("X = 1\n".repeat(200)) },
         { name: "empty", data: new Uint8Array() },
       ]),
     );
     expect(decoded(await source.readArchive(archive(bytes)))).toEqual({
-      "inny-package.json": "{}",
+      "reload-package.json": "{}",
       "lib/util.py": "X = 1\n".repeat(200),
       empty: "",
     });
@@ -52,7 +52,7 @@ describe("readArchive", () => {
   it("reads an archive the system's tar wrote", async () => {
     const tree = path.join(dir, "tree");
     fs.mkdirSync(path.join(tree, "lib"), { recursive: true });
-    fs.writeFileSync(path.join(tree, "inny-package.json"), "{}");
+    fs.writeFileSync(path.join(tree, "reload-package.json"), "{}");
     fs.writeFileSync(path.join(tree, "lib", "util.py"), "X = 1\n");
     const file = path.join(dir, "system.tgz");
     execFileSync("tar", ["-czf", file, "-C", tree, "."], {
@@ -60,7 +60,7 @@ describe("readArchive", () => {
       timeout: 30_000,
     });
     expect(decoded(await source.readArchive(file))).toEqual({
-      "inny-package.json": "{}",
+      "reload-package.json": "{}",
       "lib/util.py": "X = 1\n",
     });
   });
@@ -119,18 +119,20 @@ describe("readArchive", () => {
   });
 
   it("round-trips the test writer's archives", async () => {
-    const files = await source.readArchive(archive(tgz({ "inny-package.json": "{}", "x/y": "z" })));
-    expect(decoded(files)).toEqual({ "inny-package.json": "{}", "x/y": "z" });
+    const files = await source.readArchive(
+      archive(tgz({ "reload-package.json": "{}", "x/y": "z" })),
+    );
+    expect(decoded(files)).toEqual({ "reload-package.json": "{}", "x/y": "z" });
   });
 });
 
 describe("readFolder", () => {
   it("reads every file under the folder, with / separators", async () => {
     fs.mkdirSync(path.join(dir, "pkg", "lib", "deep"), { recursive: true });
-    fs.writeFileSync(path.join(dir, "pkg", "inny-package.json"), "{}");
+    fs.writeFileSync(path.join(dir, "pkg", "reload-package.json"), "{}");
     fs.writeFileSync(path.join(dir, "pkg", "lib", "deep", "a.py"), "A");
     expect(decoded(await source.readFolder(path.join(dir, "pkg")))).toEqual({
-      "inny-package.json": "{}",
+      "reload-package.json": "{}",
       "lib/deep/a.py": "A",
     });
   });

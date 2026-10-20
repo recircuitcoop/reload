@@ -63,7 +63,7 @@ export function wireLaunchAtLogin(
 }
 
 /**
- * Where the Anytype desktop app is, for this run: the INNYTYPES_ANYTYPE_APP override when set
+ * Where the Anytype desktop app is, for this run: the RELOAD_ANYTYPE_APP override when set
  * ("none" for no Anytype at all, which is also how a test says so), else the installed one.
  */
 export function anytypeAppPath(

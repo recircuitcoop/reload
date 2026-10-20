@@ -24,8 +24,8 @@
 
 export const STRINGS = {
   // ── Navigation and page titles ───────────────────────────────────────────────────────────
-  "nav.main": "InnyTypes", // decided (WI-0022-11): the main sidebar's spoken name, the product's
-  "nav.setup": "Set up InnyTypes",
+  "nav.main": "Reload", // decided (WI-0022-11): the main sidebar's spoken name, the product's
+  "nav.setup": "Set up Reload",
   "nav.configuration": "Configuration",
   "nav.flows": "Flows",
   "nav.general": "General",
@@ -43,18 +43,18 @@ export const STRINGS = {
   "status.needsAttention": "Needs attention",
 
   // ── The first run (Setup) ────────────────────────────────────────────────────────────────
-  "setup.welcome.title": "Welcome to InnyTypes",
+  "setup.welcome.title": "Welcome to Reload",
   "setup.welcome.body":
-    "InnyTypes turns your recordings into notes, summaries and next steps, in Anytype and wherever else you point it, on its own. Set it up once. It takes about ten minutes.",
+    "Reload turns your recordings into notes, summaries and next steps, in Anytype and wherever else you point it, on its own. Set it up once. It takes about ten minutes.",
   "setup.welcome.start": "Get started",
-  "setup.reports.title": "Help improve InnyTypes?",
+  "setup.reports.title": "Help improve Reload?",
   "setup.reports.body":
     "Send usage counts, under a machine id that carries no name. Never your recordings, transcripts or notes. You can change this in Configuration › General.",
   "setup.reports.send": "Send reports",
   "setup.reports.dontSend": "Don't send",
   "setup.anytype.title": "Connect Anytype",
   "setup.anytype.running": "Anytype is asking for a code. Type it here.",
-  "setup.anytype.notRunning": "Open Anytype, then come back. InnyTypes will notice.",
+  "setup.anytype.notRunning": "Open Anytype, then come back. Reload will notice.",
   "setup.anytype.connect": "Connect",
   "setup.anytype.skip": "Skip for now",
   "setup.anytype.connected.one": "Connected. Found {n} space.",
@@ -63,13 +63,12 @@ export const STRINGS = {
   "setup.back": "Back",
   // Owner decisions 1 and 8: no "Choose your packages" step (packages are set up on their own)
   // and no "Start with a simple flow?" choice (the starter is always installed). Removed keys:
-  // setup.packages.title, .body, .anytype, .monty, .innyrize; setup.starter.title, .body,
+  // setup.packages.title, .body, .anytype, .monty, .reload_summarize; setup.starter.title, .body,
   // .install, .own. "I'll build my own" moved to Ready (setup.ready.own).
   // Source folder: the folder the starter flow watches. The folder's name, chosen, shows in full
   // under the button: it is the person's own folder, not a line.
   "setup.folder.title": "Source folder",
-  "setup.folder.body":
-    "Choose the folder InnyTypes watches. Every new file in it starts your flow.",
+  "setup.folder.body": "Choose the folder Reload watches. Every new file in it starts your flow.",
   "setup.folder.choose": "Choose a folder…",
   "setup.form.title": "Set up: *{step}*",
   "setup.form.progress": "Step {step} of {of}.",
@@ -91,21 +90,21 @@ export const STRINGS = {
   // what is true of this version: usage counts go to Umami Cloud after a yes; crash reports have
   // nowhere to go yet (D23).
   "privacy.optional":
-    "Reports are optional, and saying no changes nothing else: InnyTypes keeps restarting its processes and updating its packages either way.", // decided
+    "Reports are optional, and saying no changes nothing else: Reload keeps restarting its processes and updating its packages either way.", // decided
   "privacy.sent": "What is sent", // decided
   "privacy.sent.where":
     "If you say yes, usage counts are sent to Umami Cloud, the analytics service that processes them. Each one carries:", // decided
   "privacy.sent.machineId":
     "a machine id: a keyed hash (HMAC-SHA256) of your computer's own identifier, the same every time. The identifier itself never leaves this computer", // decided
   "privacy.sent.versions":
-    "the InnyTypes version, your operating system, its version and the processor type", // decided
+    "the Reload version, your operating system, its version and the processor type", // decided
   "privacy.sent.packages":
-    "the name and version of each package that ships with InnyTypes or is signed, and how many unsigned packages are installed, never their names", // decided
+    "the name and version of each package that ships with Reload or is signed, and how many unsigned packages are installed, never their names", // decided
   "privacy.sent.stamp": "when the report was made, and a random number that tells it apart", // decided
   "privacy.sent.address":
     "Like any request over the internet, each one also gives Umami Cloud your IP address, from which Umami works out your country, region and city.", // decided
   "privacy.sent.wrapped":
-    "Sending puts each one in the form Umami Cloud takes, adding only the InnyTypes version and values that are the same on every computer.", // decided
+    "Sending puts each one in the form Umami Cloud takes, adding only the Reload version and values that are the same on every computer.", // decided
   "privacy.sent.crashes": "Crash reports aren't sent: this version has nowhere to send them.", // decided
   "privacy.never": "What is never sent", // decided
   "privacy.never.line":
@@ -116,9 +115,9 @@ export const STRINGS = {
   "privacy.rights.pseudonymous":
     "The machine id carries no name, but under the GDPR it is still pseudonymous personal data.", // decided
   "privacy.rights.contact":
-    "Under the GDPR you can ask about your data and ask for it to be deleted. Write to Re:Circuit Cooperative, who make InnyTypes, at privacy@recircu.it.", // decided
+    "Under the GDPR you can ask about your data and ask for it to be deleted. Write to Re:Circuit Cooperative, who make Reload, at privacy@recircu.it.", // decided
   "privacy.rights.line":
-    "Usage counts carry no name, email or account, only the machine id, so InnyTypes holds nothing to look anyone up by.", // decided
+    "Usage counts carry no name, email or account, only the machine id, so Reload holds nothing to look anyone up by.", // decided
   "privacy.rights.see":
     "See what would be sent, in Configuration › General, shows what each report carries before it is sent.", // decided
   "privacy.rights.change":
@@ -211,10 +210,10 @@ export const STRINGS = {
   "notify.filed": "Filed: {result}.",
   "notify.done": "Done: {result}.",
   "notify.failed": "Couldn't finish *{event}*. {reason}",
-  "notify.runtime.restarting": "InnyTypes stopped unexpectedly and is restarting.",
+  "notify.runtime.restarting": "Reload stopped unexpectedly and is restarting.",
   "notify.runtime.gaveUp":
-    "InnyTypes stopped {count} times in {minutes} minutes and won't restart on its own.",
-  "notify.update.ready": "InnyTypes {version} is ready. It installs when you quit.",
+    "Reload stopped {count} times in {minutes} minutes and won't restart on its own.",
+  "notify.update.ready": "Reload {version} is ready. It installs when you quit.",
   "notify.package.available": "*{name}* {version} is available.",
   "notify.openInAnytype": "Open in Anytype",
   "notify.open": "Open",
@@ -303,9 +302,9 @@ export const STRINGS = {
   "history.clearSelection": "Clear selection",
   "history.rerunOf": "Re-run {day} {time}",
   "history.deleteRun.confirm":
-    "Delete this run? Its results in Anytype are kept; only InnyTypes' record of it goes.",
+    "Delete this run? Its results in Anytype are kept; only Reload's record of it goes.",
   "history.deleteRuns.confirm":
-    "Delete {n} runs? Their results in Anytype are kept; only InnyTypes' record of them goes.",
+    "Delete {n} runs? Their results in Anytype are kept; only Reload's record of them goes.",
   "history.empty": "No runs yet. Plug in your recorder, or drop a file in a watched folder.",
   "history.emptyFiltered": "No {state} runs in the last {days} days.",
   // decided (WI-0022-15): the filter row's and the table's spoken names
@@ -334,10 +333,10 @@ export const STRINGS = {
   "general.addFolder": "Add a folder…",
   "general.aiApps": "AI apps",
   "general.aiApps.line":
-    "Claude, Codex and other apps can use your Anytype through InnyTypes at `{address}`.",
+    "Claude, Codex and other apps can use your Anytype through Reload at `{address}`.",
   "general.copySetup": "Copy setup for {app}",
   "general.startAtLogin": "Start at login",
-  "general.startAtLogin.line": "InnyTypes starts when you log in.",
+  "general.startAtLogin.line": "Reload starts when you log in.",
   "general.updates": "Updates",
   "general.checkNow": "Check now",
   "general.checkAutomatically": "Check automatically",
@@ -363,13 +362,13 @@ export const STRINGS = {
   "general.anytype.codeRefused": "Anytype didn't take that code. Type the four digits it shows.", // decided
   "general.recorder.off": "{name} · not watching: its flow is off", // decided
   "general.recorders.none": "No recorder or folder is watched yet.", // decided
-  "general.aiApps.notServed": "AI apps can't reach your Anytype through InnyTypes right now.", // decided
+  "general.aiApps.notServed": "AI apps can't reach your Anytype through Reload right now.", // decided
   // "Copy setup for …" (ux-writing): the AI app's name and the one command the button copies,
   // the endpoint's URL in its slot and its token read from the variable at call time, never
   // copied. Kept here, the one file that may name an AI app (independent-client.test.ts).
   "general.aiApps.app": "Codex", // decided
   "general.aiApps.setup":
-    "codex mcp add innytypes --url {url} --bearer-token-env-var INNYTYPES_MCP_TOKEN", // decided
+    "codex mcp add reload --url {url} --bearer-token-env-var RELOAD_MCP_TOKEN", // decided
   "general.aiApps.copied": "Copied. Paste it in a terminal.", // decided
   "general.aiApps.moved":
     "Moved. Apps set up with the old address need the new one: copy their setup again.", // decided
@@ -402,9 +401,9 @@ export const STRINGS = {
   // the steps in ChatGPT's own Settings, and the two values they ask for, each copied on a press.
   // The token is never drawn: only Copy token puts it on the clipboard.
   "general.chatgpt": "Set up ChatGPT",
-  "general.chatgpt.line": "In the ChatGPT app, add InnyTypes as a server:",
+  "general.chatgpt.line": "In the ChatGPT app, add Reload as a server:",
   "general.chatgpt.step.open": "Open Settings › MCP servers and choose Add server.",
-  "general.chatgpt.step.name": "Name: innytypes. Transport: Streamable HTTP.",
+  "general.chatgpt.step.name": "Name: reload. Transport: Streamable HTTP.",
   "general.chatgpt.step.url": "URL: paste the address. Copy address copies it.",
   "general.chatgpt.step.token":
     "Authentication: Bearer token. Paste the token. Copy token copies it.",
@@ -451,7 +450,7 @@ export const STRINGS = {
   "packages.failedCheck": "Failed its check",
   "packages.install": "Install",
   "packages.installAgain": "Install again", // decided (WI-0022-19): a package that failed its check
-  "packages.shippedFailed": "Reinstall InnyTypes to restore it.", // decided (WI-0022-19)
+  "packages.shippedFailed": "Reinstall Reload to restore it.", // decided (WI-0022-19)
   "packages.folderUnreadable": "Its folder can't be read.", // decided (WI-0022-19)
   "packages.remove": "Remove",
   "packages.upToDate": "Up to date",
@@ -475,7 +474,7 @@ export const STRINGS = {
   "packages.inUse.comma": "{list}, {next}",
   "packages.action.unregister": "unregister",
   "packages.action.remove": "remove",
-  "packages.shipped": "*{name}* comes with InnyTypes and can't be removed. Unregister it instead.", // decided
+  "packages.shipped": "*{name}* comes with Reload and can't be removed. Unregister it instead.", // decided
   "packages.fromFolder.caption": "From a folder: *{path}*",
   "packages.unsigned": "Unsigned",
   "packages.unsigned.title": "Install an unsigned package?",
@@ -494,7 +493,7 @@ export const STRINGS = {
 
   // ── Errors, by pattern ───────────────────────────────────────────────────────────────────
   "error.anytypeUnreachable":
-    "Couldn't reach Anytype. Is it running? InnyTypes will retry on its own.",
+    "Couldn't reach Anytype. Is it running? Reload will retry on its own.",
   "error.keyRefused": "Anytype refused the key. Pair again in Configuration › General.",
   "error.stepKeyRefused": "{service} refused the key. Check the key in the *{step}* step.",
   "error.recorderUnreadable": "Couldn't read *{recorder}*. Unplug it and plug it back in.",
@@ -503,7 +502,7 @@ export const STRINGS = {
   "error.updateTampered":
     "The update didn't pass its safety check and wasn't installed. Try again later.",
   "error.runtimeDown":
-    "InnyTypes stopped unexpectedly {count} times in {minutes} minutes, so it's no longer restarted. Press Restart to try again.",
+    "Reload stopped unexpectedly {count} times in {minutes} minutes, so it's no longer restarted. Press Restart to try again.",
   "quit.title": "Save your flow before quitting?",
   "quit.body": "Unsaved changes on the canvas are lost otherwise.",
   "quit.save": "Save and quit",
@@ -511,8 +510,8 @@ export const STRINGS = {
   "dialog.cancel": "Cancel",
   // A call refused before it reached its work (AppApi's Refusal): decided.
   "refused.notAvailable": "This isn't available yet.",
-  "refused.restarting": "InnyTypes is restarting. Try again in a moment.",
-  "refused.down": "InnyTypes isn't running. Press Restart to try again.",
+  "refused.restarting": "Reload is restarting. Try again in a moment.",
+  "refused.down": "Reload isn't running. Press Restart to try again.",
   "refused.failed": "That didn't work. Try again in a moment.",
 
   // ── The Node-RED canvas ──────────────────────────────────────────────────────────────────

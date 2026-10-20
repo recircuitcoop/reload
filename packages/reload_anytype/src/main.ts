@@ -1,7 +1,7 @@
 // The Anytype node package's one process entry (plan 0018 §4.2): bundled by esbuild into
 // dist/anytype.cjs with the SDK subset and the SAME api-client the services process uses, and
 // run with {node}. One process per instance; which of the five types it is comes from the
-// start frame's node type (`inny-anytype-<id>`).
+// start frame's node type (`reload-reload_anytype-<id>`).
 //
 // How the key stays out of flows and logs:
 // * it is not config and not a credential, so no flow file, start frame, journal entry or
@@ -30,10 +30,10 @@ import {
 } from "../../../sdk/ts/src/node";
 import { InputProblem, OPERATIONS } from "./operations";
 
-/** What an input fails with while InnyTypes has no key: pairing is the fix. */
-export const NO_KEY_MESSAGE = "InnyTypes is not paired with Anytype yet; pair in Settings";
+/** What an input fails with while Reload has no key: pairing is the fix. */
+export const NO_KEY_MESSAGE = "Reload is not paired with Anytype yet; pair in Settings";
 
-const TYPE_PREFIX = "inny-anytype-";
+const TYPE_PREFIX = "reload-reload_anytype-";
 
 async function main(): Promise<void> {
   const info = await start();

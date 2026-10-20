@@ -17,7 +17,7 @@ function ids() {
 
 const node = (id: string, fields: Record<string, unknown> = {}): TabNode => ({
   id,
-  type: "inny-pkg-step",
+  type: "reload-pkg-step",
   ...fields,
 });
 
@@ -30,7 +30,7 @@ describe("remapIds", () => {
       node("lin", { type: "link in", z: "tab", links: ["end"] }),
       node("grp", { type: "group", z: "tab", nodes: ["src", "mid"] }),
       node("catch", { type: "catch", z: "tab", scope: ["mid"], types: ["page", "task"] }),
-      node("cfg", { type: "inny-pkg-config" }),
+      node("cfg", { type: "reload-pkg-config" }),
     ];
     const copy = remapIds(nodes, ids());
     expect(copy.map((n) => n.id)).toEqual(["n1", "n2", "n3", "n4", "n5", "n6", "n7"]);
@@ -55,7 +55,7 @@ describe("remapIds", () => {
     const [copy] = remapIds([original], ids());
     expect(copy).toEqual({
       id: "n1",
-      type: "inny-pkg-step",
+      type: "reload-pkg-step",
       nested: { kept: 1 },
       wires: "not a list of ports",
     });

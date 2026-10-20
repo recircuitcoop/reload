@@ -1,10 +1,10 @@
 // The desktop promises in the real app (WI-0018-21): launch at login through Configuration ›
 // General's Start at login switch (WI-0022-18),
-// the Anytype desktop app started or adopted and quit only if InnyTypes started it, and Quit in
+// the Anytype desktop app started or adopted and quit only if Reload started it, and Quit in
 // the app menu.
 //
 // Nothing here reaches this user's desktop: the login item is the Linux autostart adapter over a
-// scratch directory (INNYTYPES_TEST_AUTOSTART_DIR, e2e hooks only), and Anytype is a fake app
+// scratch directory (RELOAD_TEST_AUTOSTART_DIR, e2e hooks only), and Anytype is a fake app
 // binary in the scratch home (test/fakes/anytype-app.ts). The real Electron login-item call is
 // proven in test/unit/launch-at-login.test.ts with Electron's app mocked.
 import { spawn } from "node:child_process";
@@ -28,11 +28,11 @@ import {
 /** The node that runs the fake app: this test runner's own, never anything on PATH. */
 const NODE = process.execPath;
 
-test("launch at login moves only after the OS said yes, Anytype is started and quit with InnyTypes, and Quit is in the app menu", async () => {
+test("launch at login moves only after the OS said yes, Anytype is started and quit with Reload, and Quit is in the app menu", async () => {
   const { scratch, userData, env } = scratchDirectories();
   const anytype = fakeAnytypeApp(scratch, NODE);
   const autostart = path.join(scratch, "autostart");
-  const entry = path.join(autostart, "it.l1nx.innytypes.helper.desktop");
+  const entry = path.join(autostart, "it.recircu.reload.desktop");
   // What the switch stored; Setup's state beside it is the frame's, stored as the window opens
   // (plan 0022 §H, WI-0022-11).
   const stored = (): unknown => {
@@ -46,13 +46,13 @@ test("launch at login moves only after the OS said yes, Anytype is started and q
   try {
     const { app, window } = await launchApp({
       ...env,
-      INNYTYPES_E2E_HOOKS: "1",
-      INNYTYPES_TEST_AUTOSTART_DIR: autostart,
-      INNYTYPES_ANYTYPE_APP: anytype,
+      RELOAD_E2E_HOOKS: "1",
+      RELOAD_TEST_AUTOSTART_DIR: autostart,
+      RELOAD_ANYTYPE_APP: anytype,
     });
     await waitForRunning(window, "runtime");
 
-    // ── Anytype was not running, so InnyTypes started it ───────────────────────────────────
+    // ── Anytype was not running, so Reload started it ───────────────────────────────────
     await expect.poll(() => fakeAnytypePid(anytype), { timeout: 15_000 }).not.toBeNull();
     anytypePid = fakeAnytypePid(anytype);
 
@@ -131,7 +131,7 @@ test("an Anytype already running is adopted, never started twice, and left runni
   try {
     await expect.poll(() => fakeAnytypePid(anytype), { timeout: 10_000 }).not.toBeNull();
     anytypePid = fakeAnytypePid(anytype);
-    const { app, window, output } = await launchApp({ ...env, INNYTYPES_ANYTYPE_APP: anytype });
+    const { app, window, output } = await launchApp({ ...env, RELOAD_ANYTYPE_APP: anytype });
     await waitForRunning(window, "runtime");
     await expect
       .poll(() => output.join(""), { timeout: 15_000 })
@@ -142,9 +142,7 @@ test("an Anytype already running is adopted, never started twice, and left runni
     expect(fakeAnytypePid(anytype)).toBe(anytypePid);
 
     await quit(app);
-    expect(output.join("")).toContain(
-      "leaving the Anytype desktop app running: InnyTypes adopted it",
-    );
+    expect(output.join("")).toContain("leaving the Anytype desktop app running: Reload adopted it");
     expect(isAlive(anytypePid ?? 0)).toBe(true);
     await expect.poll(() => processesNaming(userData), { timeout: 10_000 }).toEqual([]);
   } finally {

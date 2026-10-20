@@ -40,7 +40,7 @@ export class Pairing {
   /** Ask Anytype to show a code; a second start replaces the first challenge. */
   async start(): Promise<void> {
     this.#challenge = await this.#api.startPairing();
-    this.#logger.info("Anytype is showing a pairing code for InnyTypes");
+    this.#logger.info("Anytype is showing a pairing code for Reload");
   }
 
   /**

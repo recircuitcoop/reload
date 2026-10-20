@@ -11,10 +11,14 @@ export interface LegacyImportReport {
   readonly launchAtLoginWanted: boolean;
   readonly imported: readonly string[];
   readonly ignored: readonly LegacyIgnoredItem[];
+  /** What the first start of Reload moved from Reload (plan 0028 step 1), when anything did. */
+  readonly moved?: readonly string[];
 }
 
 export interface LegacyImportReportStore {
   /** Whether the import already ran, once, before now. */
   exists(): boolean;
   write(report: LegacyImportReport): void;
+  /** Add what the first start of Reload moved to the report, which is kept otherwise as it is. */
+  recordMove(moved: readonly string[]): void;
 }

@@ -1,4 +1,4 @@
-// InnyTypes' own update in the real app (plan 0022 §G, owner decision D4), driven through
+// Reload's own update in the real app (plan 0022 §G, owner decision D4), driven through
 // Configuration › General › Updates and the runtime banner.
 //
 // - Every state's sentence from ux-writing, reached by Check now against a feed that answers,
@@ -112,8 +112,8 @@ function publish(
   signer: Signer,
   served?: Uint8Array,
 ): string {
-  const artifact = new TextEncoder().encode(`InnyTypes ${version}, the zip's bytes`);
-  const file = `InnyTypes-${version}-${process.arch}-${PLATFORM}.zip`;
+  const artifact = new TextEncoder().encode(`Reload ${version}, the zip's bytes`);
+  const file = `Reload-${version}-${process.arch}-${PLATFORM}.zip`;
   const yaml = new TextEncoder().encode(
     `version: ${version}\nfiles:\n  - url: ${file}\n    sha512: ${sha512Base64(artifact)}\n` +
       `    size: ${String(artifact.length)}\npath: ${file}\nsha512: ${sha512Base64(artifact)}\n`,
@@ -140,10 +140,10 @@ function setUp(host: Host, signer: Signer, lastVersion?: string) {
   }
   const env = {
     ...dirs.env,
-    INNYTYPES_E2E_HOOKS: "1",
-    INNYTYPES_TEST_CATALOGUE_CA: CERT,
-    INNYTYPES_TEST_UPDATE_RELEASES: `${host.base}/releases`,
-    INNYTYPES_UPDATE_KEY: signer.publicKeyLine,
+    RELOAD_E2E_HOOKS: "1",
+    RELOAD_TEST_CATALOGUE_CA: CERT,
+    RELOAD_TEST_UPDATE_RELEASES: `${host.base}/releases`,
+    RELOAD_UPDATE_KEY: signer.publicKeyLine,
   };
   return { ...dirs, env };
 }
@@ -243,7 +243,7 @@ test("every state sentence", async () => {
     await auto.getByTestId("general-update-auto-switch").click();
     await expect(auto).toHaveAttribute("data-on", "false");
 
-    // Quit and update quits InnyTypes (the quit is where the install happens).
+    // Quit and update quits Reload (the quit is where the install happens).
     const exited = exitOf(first.app);
     await quitAndUpdate.click();
     await exited;
@@ -350,11 +350,11 @@ test("tampered old release refused", async () => {
     await expect(stateLine(window)).toHaveText(refused);
     expect(host.asked).toContain(artifact);
 
-    // Neither reached electron-updater, nothing is going back, and InnyTypes kept running.
+    // Neither reached electron-updater, nothing is going back, and Reload kept running.
     const log = output.join("");
     expect(log).not.toContain("electron-updater: pinned to");
     expect(log).not.toContain(`update: going back to ${OLD}:`);
-    expect(log.match(/notice: An InnyTypes update was refused:/g)?.length).toBeGreaterThan(0);
+    expect(log.match(/notice: A Reload update was refused:/g)?.length).toBeGreaterThan(0);
     expect(settingsOf(userData)["appUpdate"]).toMatchObject({ goingBackTo: null });
     await waitForRunning(window, "runtime");
     await quit(app);
@@ -387,7 +387,7 @@ test("a crash loop just after an update offers Go back, and never applies it", a
     await expect(offer).toHaveText(t("general.goBack", { version: OLD }));
     // One notice, offering it.
     expect(
-      output.join("").match(new RegExp(`notice: Go back to InnyTypes ${escape(OLD)}\\?`, "g")),
+      output.join("").match(new RegExp(`notice: Go back to Reload ${escape(OLD)}\\?`, "g")),
     ).toHaveLength(1);
 
     // Offered, never applied: the state is as it was and no release was even asked for.

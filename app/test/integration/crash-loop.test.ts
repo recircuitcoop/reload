@@ -90,7 +90,7 @@ describe("the crash-loop limit", () => {
       { kind: "child-stopped", subject: "runtime", detail: message },
     ]);
     expect(message).toBe(
-      "The InnyTypes runtime stopped unexpectedly 5 times in 2 minutes, so it is no longer " +
+      "The Reload runtime stopped unexpectedly 5 times in 2 minutes, so it is no longer " +
         "restarted. Press Restart to try again.",
     );
     expect(await api.childStatus()).toEqual([
@@ -169,7 +169,7 @@ describe("the crash-loop limit", () => {
     expect(services.supervisor.status()).toMatchObject({ state: "running", generation: 1 });
     expect(services.launcher.children).toHaveLength(1);
     expect(notifier.notices.map((notice) => compose(notice).title)).toEqual([
-      "InnyTypes stopped restarting the runtime",
+      "Reload stopped restarting the runtime",
     ]);
 
     // The services process then crashes once: its own first crash, not the runtime's sixth.

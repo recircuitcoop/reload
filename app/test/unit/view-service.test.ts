@@ -40,7 +40,7 @@ const ACTIONS = [
 function liveRecord(node: FakeViewNode, wires: string[][] = [["next"], ["downstream"], []]) {
   const view: LiveView = {
     node,
-    type: "inny-viewpy-record",
+    type: "reload-viewpy-record",
     package: "viewpy",
     label: "Record",
     window: "popout",
@@ -141,7 +141,7 @@ describe("ViewService: snapshots", () => {
     expect(snapshots.get("snap-1")).toEqual({
       id: "snap-1",
       instanceId: "rec",
-      type: "inny-viewpy-record",
+      type: "reload-viewpy-record",
       label: "Record",
       time: 1_000,
       content: { title: "t" },
@@ -149,7 +149,7 @@ describe("ViewService: snapshots", () => {
       window: "popout",
       actions: ACTIONS,
     });
-    expect(logger.has(/snapshot snap-1 recorded from \[inny-viewpy-record rec\]/)).toBe(true);
+    expect(logger.has(/snapshot snap-1 recorded from \[reload-viewpy-record rec\]/)).toBe(true);
   });
 
   it("an oversized sample is refused in place, and the snapshot is kept (plan 0020)", () => {
@@ -164,14 +164,14 @@ describe("ViewService: snapshots", () => {
       title: "t",
       media: [{ kind: "audio", refused: TOO_LARGE }],
     });
-    expect(logger.has(/a snapshot from \[inny-viewpy-record rec\]: the sample is too large/)).toBe(
-      true,
-    );
+    expect(
+      logger.has(/a snapshot from \[reload-viewpy-record rec\]: the sample is too large/),
+    ).toBe(true);
   });
 
   it("keeps the run a snapshot was taken in, as the journal knows its input (plan 0022 §E)", () => {
     service.attach("rec", liveRecord(new FakeViewNode()));
-    const message = { payload: 1, inny: { run: "run-7" } };
+    const message = { payload: 1, reload: { run: "run-7" } };
     journal.put(newEntry({ inputId: "in-1", instanceId: "rec", type: "t", message, now: 0 }));
     service.snapshot({ instanceId: "rec", content: {}, state: null, inputId: "in-1" });
     // An input with no run is a run of its own; a snapshot with no input belongs to none.
@@ -409,7 +409,7 @@ describe("ViewService: a pending view", () => {
   it("an op it does not serve, or a store that throws, is answered, never thrown", async () => {
     expect(await service.call("anytype.status", null)).toEqual({
       ok: false,
-      error: "the InnyTypes runtime does not serve anytype.status",
+      error: "the Reload runtime does not serve anytype.status",
     });
     snapshots.get = () => {
       throw new Error("corrupt");

@@ -10,7 +10,7 @@ import { cx, variantAttributes } from "../variant";
 export type SidebarMode = "setup" | "main";
 
 interface SidebarCommon {
-  /** The navigation's name, read aloud ("InnyTypes"). */
+  /** The navigation's name, read aloud ("Reload"). */
   readonly label: string;
   /** The status pill at the bottom. */
   readonly status: ReactNode;
@@ -45,7 +45,7 @@ export function Sidebar(props: SidebarProps) {
       {...variantAttributes("sidebar", { mode }, "sidebar")}
       aria-label={label}
       className={cx(
-        "flex h-full w-[var(--inny-size-nav-width)] shrink-0 flex-col gap-1 border-r border-surface-line bg-surface-canvas p-3",
+        "flex h-full w-[var(--reload-size-nav-width)] shrink-0 flex-col gap-1 border-r border-surface-line bg-surface-canvas p-3",
         className,
       )}
     >

@@ -37,10 +37,10 @@ export function MenuItem({
       disabled={state === "disabled"}
       {...(onSelect === undefined ? {} : { onSelect })}
       className={cx(
-        "flex h-[var(--inny-size-control)] cursor-pointer items-center gap-2 rounded-s px-2 text-body outline-none",
+        "flex h-[var(--reload-size-control)] cursor-pointer items-center gap-2 rounded-s px-2 text-body outline-none",
         state === "danger" ? "text-failed" : "text-primary",
         state === "hover" ? "bg-surface-sunken" : "data-highlighted:bg-surface-sunken",
-        state === "disabled" && "cursor-not-allowed opacity-[var(--inny-opacity-disabled)]",
+        state === "disabled" && "cursor-not-allowed opacity-[var(--reload-opacity-disabled)]",
         className,
       )}
     >

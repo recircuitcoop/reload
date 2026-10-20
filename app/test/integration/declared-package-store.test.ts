@@ -12,7 +12,7 @@ import { RecordingLogger } from "../fakes/children";
 let root: string;
 
 beforeEach(() => {
-  root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "inny-store-")));
+  root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-store-")));
 });
 
 afterEach(() => {
@@ -21,7 +21,7 @@ afterEach(() => {
 
 function declare(folder: string, content: string | Buffer): void {
   fs.mkdirSync(path.join(root, folder), { recursive: true });
-  fs.writeFileSync(path.join(root, folder, "inny-package.json"), content);
+  fs.writeFileSync(path.join(root, folder, "reload-package.json"), content);
 }
 
 /** Every file and folder under root, to show that reading wrote nothing. */
@@ -74,7 +74,7 @@ describe("DeclaredPackageStore", () => {
     const logger = new RecordingLogger();
     expect(new DeclaredPackageStore([root], logger).packages()).toEqual(["good"]);
     const reason = (folder: string) => logger.lines.find((l) => l.includes(`${folder} `)) ?? "";
-    expect(reason("missing")).toContain("has no inny-package.json; it is left out");
+    expect(reason("missing")).toContain("has no reload-package.json; it is left out");
     expect(reason("not-json")).toContain("is not JSON");
     expect(reason("not-utf8")).toContain("is not UTF-8 text");
     expect(reason("no-name")).toContain("names no valid package");
@@ -84,10 +84,10 @@ describe("DeclaredPackageStore", () => {
   });
 
   it("reports an unreadable declaration with its reason", () => {
-    fs.mkdirSync(path.join(root, "dir-not-file", "inny-package.json"), { recursive: true });
+    fs.mkdirSync(path.join(root, "dir-not-file", "reload-package.json"), { recursive: true });
     const logger = new RecordingLogger();
     expect(new DeclaredPackageStore([root], logger).packages()).toEqual([]);
-    expect(logger.lines).toEqual([expect.stringContaining("inny-package.json: Error: EISDIR")]);
+    expect(logger.lines).toEqual([expect.stringContaining("reload-package.json: Error: EISDIR")]);
   });
 
   it("keeps the first of two folders declaring one name, and says so (spec 2.1)", () => {

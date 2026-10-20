@@ -1,13 +1,13 @@
 // The folder package's one process entry (plan 0022 D18, WI-0022-25): bundled by esbuild into
 // dist/folder.cjs with the SDK, and run with {node}. One process per instance of its one type,
-// `watch` (`inny-folder-watch`), a source: every new file that has finished writing in the
-// configured folder is emitted on `created` as `folder.file.created.v1`, a new run each.
+// `watch` (`reload-reload_folder-watch`), a source: every new file that has finished writing in the
+// configured folder is emitted on `created` as `reload_folder.file.created.v1`, a new run each.
 // Which files count, and when, is watcher.ts.
 
 import { emit, log, run, start, status } from "../../../sdk/ts/src/node";
 import { FolderWatcher, passOn, SCAN_MS, settingsOf } from "./watcher";
 
-const TYPE = "inny-folder-watch";
+const TYPE = "reload-reload_folder-watch";
 /** The status while the files passed on cannot be written down in the data folder. */
 const CANNOT_WRITE = "cannot write down the files passed on";
 
@@ -81,7 +81,7 @@ async function main(): Promise<void> {
         show(CANNOT_WRITE, "red", "ring");
         return;
       }
-      // "watching" as a green dot only once a scan has finished: InnyTypes' Setup waits for it
+      // "watching" as a green dot only once a scan has finished: Reload's Setup waits for it
       // before Try with a sample drops a file in (the files there at the first scan are never
       // passed on). The ring the runtime shows when the process starts comes before any scan.
       show("watching", "green", "dot");

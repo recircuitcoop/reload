@@ -33,6 +33,16 @@ export interface MigrationWiring {
   readonly legacyPackages: LegacyPackageEnvironments;
   readonly notices: NoticeBoard;
   readonly logger: Logger;
+  /**
+   * What this start moved from a 0.3.0 installation (adapters/fs/legacy-move.ts; empty: nothing), and
+   * whether that included its userData, whose login item is then registered anew.
+   */
+  readonly firstStart: {
+    readonly moved: readonly string[];
+    readonly movedUserData: boolean;
+    /** Said once: both folders held data, and the old one was left where it was. */
+    readonly leftAlone: string | null;
+  };
 }
 
 export function wireMigration(deps: MigrationWiring): void {
@@ -48,7 +58,17 @@ export function wireMigration(deps: MigrationWiring): void {
   // risk 4): the very same ask-the-OS-first, write-the-setting-only-on-success ordering the
   // General's own switch uses (application/launch-at-login.ts), so a refusal here leaves
   // both the new switch and the old login item exactly as they were.
-  if (report !== null && report.launchAtLoginWanted) {
+  if (deps.firstStart.moved.length > 0) {
+    deps.reportStore.recordMove(deps.firstStart.moved);
+    for (const line of deps.firstStart.moved) {
+      deps.logger.info(`legacy import: moved ${line}`);
+    }
+  }
+
+  // 0.3.0's switch moved with its settings, but its login item is registered under the
+  // old identifier: register Reload's, and only then remove the old one, by the same rule.
+  const reRegister = deps.firstStart.movedUserData && deps.launchAtLogin.status().on;
+  if ((report !== null && report.launchAtLoginWanted) || reRegister) {
     const status = deps.launchAtLogin.set(true);
     if (status.problem === null) {
       if (deps.legacyLoginItem?.present() === true) {
@@ -63,6 +83,13 @@ export function wireMigration(deps: MigrationWiring): void {
     }
   }
 
+  if (deps.firstStart.leftAlone !== null) {
+    deps.notices.raise({
+      kind: "old-data-left",
+      subject: LEGACY_SUBJECT,
+      detail: deps.firstStart.leftAlone,
+    });
+  }
   raiseLegacyPackagesNotice(deps.legacyPackages, deps.notices);
 
   deps.ipc.handle(IPC.legacyPackages, (): readonly string[] => deps.legacyPackages.list());

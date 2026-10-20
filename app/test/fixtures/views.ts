@@ -37,7 +37,7 @@ interface Declaration {
 }
 
 function declarationOf(language: ViewLanguage): Declaration {
-  const text = fs.readFileSync(path.join(viewPackageDir(language), "inny-package.json"), "utf8");
+  const text = fs.readFileSync(path.join(viewPackageDir(language), "reload-package.json"), "utf8");
   return JSON.parse(text) as Declaration;
 }
 
@@ -78,7 +78,7 @@ export function viewSpec(
       flowId: "flow-1",
       package: pkg,
       typeId,
-      type: `inny-${pkg}-${typeId}`,
+      type: `reload-${pkg}-${typeId}`,
       name: "",
       kind: "view",
     },
@@ -86,7 +86,7 @@ export function viewSpec(
     env: rawNodeEnv(),
     config,
     credentials: {},
-    dataDir: fs.mkdtempSync(path.join(os.tmpdir(), "inny-view-data-")),
+    dataDir: fs.mkdtempSync(path.join(os.tmpdir(), "reload-view-data-")),
     ports,
     viewTimeoutMs:
       typeId === "ask"

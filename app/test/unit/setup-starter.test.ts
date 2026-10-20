@@ -29,12 +29,14 @@ function starterRow(on: boolean, ready: boolean): FlowSummary {
     lastRun: null,
     viewNodes: [],
     steps: [{ id: "file-1", name: "File in Anytype", type: "t", setUp: ready }],
-    sources: [{ id: SOURCE, name: "Watch a folder", type: "inny-folder-watch", setUp: true }],
+    sources: [
+      { id: SOURCE, name: "Watch a folder", type: "reload-reload_folder-watch", setUp: true },
+    ],
   };
 }
 
 function harness() {
-  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "inny-setup-"));
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-setup-"));
   const folder = path.join(scratch, "Inbox");
   fs.mkdirSync(folder);
   const sampleFile = path.join(scratch, "sample-10s.wav");

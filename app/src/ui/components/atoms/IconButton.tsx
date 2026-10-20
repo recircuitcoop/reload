@@ -60,10 +60,10 @@ export function IconButton({
       {...rest}
       onClick={onClick}
       className={cx(
-        "inline-flex size-[var(--inny-size-control)] shrink-0 items-center justify-center rounded-s text-primary",
+        "inline-flex size-[var(--reload-size-control)] shrink-0 items-center justify-center rounded-s text-primary",
         "transition-[background-color,border-color] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
         LOOK[kind][state],
-        state === "disabled" && "cursor-not-allowed opacity-[var(--inny-opacity-disabled)]",
+        state === "disabled" && "cursor-not-allowed opacity-[var(--reload-opacity-disabled)]",
         className,
       )}
     >

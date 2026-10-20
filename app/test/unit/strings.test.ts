@@ -47,11 +47,15 @@ const INTERNALS: readonly (readonly [string, RegExp, string])[] = [
     /(?:^|[\s(*`"])(?:~|\.{1,2})?\/[\w.-]+\/|[A-Z]:\\|\.(?:json|ts|js|py|sqlite)\b/,
     "no key in /Users/me/anytype_api_key",
   ],
-  ["a type key", /\binny-[a-z0-9-]+|\buser\.[a-z0-9_]+\.v\d+/i, "inny-innyrize-diarize"],
+  [
+    "a type key",
+    /\breload-[a-z0-9-]+|\buser\.[a-z0-9_]+\.v\d+/i,
+    "reload-reload_summarize-diarize",
+  ],
   [
     "a package-internal name",
-    /\b(?:node-?red|utilityProcess|services process|mcp child|journal|sqlite|generation \d+|innyrize-[a-z]+|monty-[a-z]+|anytype-mcp)\b/i,
-    "innyrize-diarize (n1): 71%",
+    /\b(?:node-?red|utilityProcess|services process|mcp child|journal|sqlite|generation \d+|reload_summarize-[a-z]+|monty-[a-z]+|anytype-mcp)\b/i,
+    "reload_summarize-diarize (n1): 71%",
   ],
 ];
 
@@ -171,7 +175,7 @@ const NOT_A_LINE: ReadonlySet<string> = new Set([
   "Done. Recording moved to *Archive*.",
   "Failed at *Transcribe*: Mistral refused the key.",
   "Couldn't check for updates: no connection. Last checked Monday.",
-  "Can't unregister *innyrize*: the flow *Recordings to Anytype* uses its *Transcribe* step. Remove that step first.",
+  "Can't unregister *reload_summarize*: the flow *Recordings to Anytype* uses its *Transcribe* step. Remove that step first.",
   "4 installed · 1 update",
   "Run history",
   "Copy setup for Codex",
@@ -190,12 +194,12 @@ const NOT_A_LINE: ReadonlySet<string> = new Set([
  */
 const REMOVED_BY_THE_OWNER: ReadonlySet<string> = new Set([
   "Choose your packages",
-  "These come with InnyTypes. Each one adds steps you can use in your flows. You can add others later in Configuration › General.",
+  "These come with Reload. Each one adds steps you can use in your flows. You can add others later in Configuration › General.",
   "*anytype*: files notes, tasks and links in Anytype.",
   "*monty*: watches your recorder and folders.",
-  "*innyrize*: transcribes and tells who spoke.",
+  "*reload_summarize*: transcribes and tells who spoke.",
   "Start with a simple flow?",
-  "InnyTypes can install a ready-made flow now: your recordings are transcribed, summarised and filed. You can change every step later. Or build your own from scratch.",
+  "Reload can install a ready-made flow now: your recordings are transcribed, summarised and filed. You can change every step later. Or build your own from scratch.",
   "Install the simple flow",
 ]);
 

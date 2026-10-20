@@ -31,7 +31,7 @@ export interface EmbeddedNodeRedOptions {
   /** From nodeRedSettings() (settings.ts). */
   readonly settings: Record<string, unknown>;
   readonly guard: RequestGuard;
-  /** A step's dynamic options, for the canvas form's `/red/inny/options` (plan 0022 §B). */
+  /** A step's dynamic options, for the canvas form's `/red/reload/options` (plan 0022 §B). */
   readonly nodeOptions?: (query: OptionsQuery) => Promise<OptionsAnswer>;
 }
 

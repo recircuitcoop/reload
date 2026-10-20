@@ -133,14 +133,14 @@ function plant(userData: string): { marker: string } {
   fs.cpSync(path.join(FIXTURES, "node-red-sleeper"), path.join(nodeRed, "generated"), {
     recursive: true,
   });
-  const planted = path.join(nodeRed, "node_modules", "node-red-contrib-inny-probe");
+  const planted = path.join(nodeRed, "node_modules", "node-red-contrib-reload-probe");
   fs.cpSync(path.join(FIXTURES, "node-red-probe-module"), planted, { recursive: true });
   // Listed as a user-installed module too, the strongest case: still never loaded.
   fs.writeFileSync(
     path.join(nodeRed, "package.json"),
     JSON.stringify({
       name: "node-red-project",
-      dependencies: { "node-red-contrib-inny-probe": "1.0.0" },
+      dependencies: { "node-red-contrib-reload-probe": "1.0.0" },
     }),
   );
   return { marker: path.join(planted, "LOADED") };
@@ -217,7 +217,7 @@ test("the palette lock: no install route, no planted module, only core/common of
     expect((await send(port, { method: "POST", path: "/red/nodes", body: byUrl })).status).toBe(
       404,
     );
-    const boundary = "innyboundary";
+    const boundary = "reloadboundary";
     const upload =
       `--${boundary}\r\nContent-Disposition: form-data; name="tarball"; filename="x-1.0.0.tgz"\r\n` +
       `Content-Type: application/gzip\r\n\r\nnot really a tarball\r\n--${boundary}--\r\n`;
@@ -237,37 +237,37 @@ test("the palette lock: no install route, no planted module, only core/common of
     expect(await registeredTypes(port)).toEqual(
       [
         ...CORE_COMMON_TYPES,
-        "inny-anytype-create-object",
-        "inny-anytype-read-object",
-        "inny-anytype-read-space",
-        "inny-anytype-search",
-        "inny-anytype-update-object",
-        "inny-everycontrol-probe",
-        "inny-everycontrol-ticker",
-        "inny-folder-watch",
-        "inny-folderflow-link",
-        "inny-folderflow-watch",
-        "inny-livekit-copy",
-        "inny-livekit-recorder",
-        "inny-livekit-work",
-        "inny-popoutkit-ask",
-        "inny-popoutkit-record",
-        "inny-popoutkit-slow",
-        "inny-rawnode-raw",
-        "inny-rawnode-sleeper",
-        "inny-rogue-sleeper",
-        "inny-sdkpy-ask",
-        "inny-sdkpy-kitchen",
-        "inny-sdkpy-record",
-        "inny-sdkts-ask",
-        "inny-sdkts-kitchen",
-        "inny-sdkts-record",
-        "inny-viewpy-ask",
-        "inny-viewpy-record",
-        "inny-viewts-ask",
-        "inny-viewts-record",
-        "inny-widgetkit-missing",
-        "inny-widgetkit-reorder",
+        "reload-reload_anytype-create-object",
+        "reload-reload_anytype-read-object",
+        "reload-reload_anytype-read-space",
+        "reload-reload_anytype-search",
+        "reload-reload_anytype-update-object",
+        "reload-everycontrol-probe",
+        "reload-everycontrol-ticker",
+        "reload-reload_folder-watch",
+        "reload-folderflow-link",
+        "reload-folderflow-watch",
+        "reload-livekit-copy",
+        "reload-livekit-recorder",
+        "reload-livekit-work",
+        "reload-popoutkit-ask",
+        "reload-popoutkit-record",
+        "reload-popoutkit-slow",
+        "reload-rawnode-raw",
+        "reload-rawnode-sleeper",
+        "reload-rogue-sleeper",
+        "reload-sdkpy-ask",
+        "reload-sdkpy-kitchen",
+        "reload-sdkpy-record",
+        "reload-sdkts-ask",
+        "reload-sdkts-kitchen",
+        "reload-sdkts-record",
+        "reload-viewpy-ask",
+        "reload-viewpy-record",
+        "reload-viewts-ask",
+        "reload-viewts-record",
+        "reload-widgetkit-missing",
+        "reload-widgetkit-reorder",
       ].sort(),
     );
     expect(fs.existsSync(marker)).toBe(false);
@@ -291,8 +291,8 @@ test("the deploy guard refuses function, exec and template, and every running in
 
     const running = [
       { id: "tab1", type: "tab", label: "Flow 1" },
-      { id: "s1", type: "inny-rawnode-sleeper", z: "tab1", wires: [] },
-      { id: "s2", type: "inny-rawnode-sleeper", z: "tab1", wires: [] },
+      { id: "s1", type: "reload-rawnode-sleeper", z: "tab1", wires: [] },
+      { id: "s2", type: "reload-rawnode-sleeper", z: "tab1", wires: [] },
       { id: "i1", type: "inject", z: "tab1", wires: [["s1"]] },
     ];
     expect((await deploy(port, running)).status).toBe(204);
@@ -310,18 +310,18 @@ test("the deploy guard refuses function, exec and template, and every running in
     expect(excluded.status).toBe(400);
     expect(JSON.parse(excluded.text)).toEqual({
       code: "unknown_types",
-      message: "Not installed in InnyTypes: function, exec, template",
+      message: "Not installed in Reload: function, exec, template",
     });
 
     // A registered type whose package is not in the store is refused the same way.
     const rogue = await deploy(port, [
       ...running,
-      { id: "r1", type: "inny-rogue-sleeper", z: "tab1" },
+      { id: "r1", type: "reload-rogue-sleeper", z: "tab1" },
     ]);
     expect(rogue.status).toBe(400);
     expect(JSON.parse(rogue.text)).toEqual({
       code: "unknown_types",
-      message: "Not installed in InnyTypes: inny-rogue-sleeper",
+      message: "Not installed in Reload: reload-rogue-sleeper",
     });
 
     // The single-flow routes, and a url-encoded deploy, cannot go round the guard.

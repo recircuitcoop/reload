@@ -16,7 +16,7 @@ import { TelemetryError } from "../../domain/telemetry/reports";
  * The HMAC key. NOT a secret: it ships in every copy. Its job is domain separation, so this hash of
  * a machine's identifier matches no other software's hash of the same identifier.
  */
-export const MACHINE_ID_KEY = "innytypes.machine-id.v1";
+export const MACHINE_ID_KEY = "reload.machine-id.v1";
 
 /** The machine id: the keyed hash of the raw identifier, as hex. */
 export function machineIdHash(raw: string): string {

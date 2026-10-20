@@ -6,7 +6,7 @@
 // call in its constructor), and application/update-check.ts calls it only after its own
 // verification of `latest-*.yml` and its signature succeeded — never on its own.
 //
-// What electron-updater downloads is bound to what InnyTypes verified. electron-updater reads the
+// What electron-updater downloads is bound to what Reload verified. electron-updater reads the
 // feed again on its own fetch, which a server can answer differently, so `autoDownload` is off:
 // each check first compares what electron-updater found with the verified release
 // (domain/update/release-metadata.ts's releaseMismatch: the same version, and only files the

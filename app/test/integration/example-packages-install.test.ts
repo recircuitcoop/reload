@@ -8,7 +8,7 @@
 // same way docs/authors/packaging.md tells an author to before publishing -- never into
 // sdk/ts/examples/echo itself. It needs neither uv nor Python, so it otherwise uses the same
 // "runtimes throw" builder app/test/integration/package-install.test.ts does. sdk-py's
-// uv-python package has no requirements.lock (it vendors innytypes_node rather than depending
+// uv-python package has no requirements.lock (it vendors reload_node rather than depending
 // on an unpublished index entry -- docs/authors/python-sdk.md), so building its environment is
 // `uv venv` on a real system Python 3.13 and nothing to sync: the same real builder
 // app/test/integration/package-environments.test.ts uses, offline, no index reached.
@@ -94,7 +94,7 @@ function installerWith(builder: EnvironmentBuilder): PackageInstaller {
 }
 
 beforeEach(() => {
-  base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "inny-example-install-")));
+  base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-example-install-")));
   roots = new FsPackageRoots(path.join(base, "node-packages"));
   logger = new RecordingLogger();
   restarts = [];
@@ -113,9 +113,9 @@ afterEach(() => {
  */
 function bundledEchoTsCopy(): string {
   const source = path.join(REPO, "sdk", "ts", "examples", "echo");
-  const copy = fs.mkdtempSync(path.join(os.tmpdir(), "inny-example-echots-"));
-  fs.copyFileSync(path.join(source, "inny-package.json"), path.join(copy, "inny-package.json"));
-  // esbuild runs on the ORIGINAL src/main.ts (so "@innytypes/node" resolves through this
+  const copy = fs.mkdtempSync(path.join(os.tmpdir(), "reload-example-echots-"));
+  fs.copyFileSync(path.join(source, "reload-package.json"), path.join(copy, "reload-package.json"));
+  // esbuild runs on the ORIGINAL src/main.ts (so "@recircuit/reload-node" resolves through this
   // workspace's own node_modules symlink, exactly as it would for a real author's checkout),
   // writing only its output into the temp copy: nothing generated ever touches sdk/ts itself.
   const esbuild = path.join(REPO, "node_modules", ".bin", "esbuild");
@@ -155,7 +155,7 @@ describe("the Python example package (sdk/python/examples/echo)", () => {
   beforeAll(() => {
     // Its own cache dir throughout, including the discovery probe below: the home guard
     // refuses any test that writes into the real ~/.cache, and uv writes there by default.
-    sharedCache = fs.mkdtempSync(path.join(os.tmpdir(), "inny-example-uv-cache-"));
+    sharedCache = fs.mkdtempSync(path.join(os.tmpdir(), "reload-example-uv-cache-"));
     try {
       execFileSync("uv", ["python", "find", "--no-project", "--no-config", "--system", "3.13"], {
         env: { ...process.env, UV_CACHE_DIR: sharedCache, UV_PYTHON_DOWNLOADS: "never" },

@@ -37,7 +37,7 @@ describe("journal before send, clear on done or error (spec 7.1)", () => {
     await waitFor("working", () => node.host.statuses.some((s) => s.text === "working"));
     expect(node.journal.get(id ?? "")).toMatchObject({
       instanceId: node.spec.identity.id,
-      type: "inny-rawnode-raw",
+      type: "reload-rawnode-raw",
       message: { payload: { do: "slow" }, topic: "t.in.v1", _msgid: "m" },
       event: { type: "t.in.v1", data: { do: "slow" } },
       attempts: 1,
@@ -106,13 +106,13 @@ describe("journal before send, clear on done or error (spec 7.1)", () => {
 });
 
 describe("replay carries no internal marker (plan 0018 §7)", () => {
-  it("the replayed message has payload, topic, inny and _msgid only, and keeps its input id", async () => {
+  it("the replayed message has payload, topic, reload and _msgid only, and keeps its input id", async () => {
     const journal = new MemoryJournal();
     const first = raw(journal);
     const upstream: InputMessage = {
       payload: { do: "slow" },
       topic: "t.in.v1",
-      inny: { run: "run-9" },
+      reload: { run: "run-9" },
       _msgid: "msg-9",
     };
     const id = first.node.input(
@@ -126,7 +126,7 @@ describe("replay carries no internal marker (plan 0018 §7)", () => {
     const replayed: InputMessage[] = [];
     expect(next.node.replay((message) => replayed.push(message))).toBe(1);
     expect(replayed).toEqual([upstream]);
-    expect(Object.keys(replayed[0] ?? {}).sort()).toEqual(["_msgid", "inny", "payload", "topic"]);
+    expect(Object.keys(replayed[0] ?? {}).sort()).toEqual(["_msgid", "payload", "reload", "topic"]);
     expect(Object.getOwnPropertySymbols(replayed[0])).toEqual([]);
 
     // The same object back through Node-RED's receive is the journaled input again...

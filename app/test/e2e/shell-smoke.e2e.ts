@@ -26,7 +26,7 @@ function processesNaming(marker: string): string[] {
 test("the shell opens its window and quits with no process left", async () => {
   // A temp home and userData unique to this run. Electron passes --user-data-dir to every
   // helper process it starts, so this path is in the command line of the whole app.
-  const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "inny-e2e-")));
+  const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-e2e-")));
   const userData = path.join(scratch, "user-data");
 
   try {
@@ -35,12 +35,12 @@ test("the shell opens its window and quits with no process left", async () => {
       env: {
         ...process.env,
         HOME: scratch,
-        INNYTYPES_USER_DATA: userData,
-        INNYTYPES_HIDDEN_WINDOWS: "1",
+        RELOAD_USER_DATA: userData,
+        RELOAD_HIDDEN_WINDOWS: "1",
       },
     });
     const window = await app.firstWindow();
-    await expect(window).toHaveTitle("InnyTypes");
+    await expect(window).toHaveTitle("Reload");
     await expect(window.getByTestId("frame")).toBeVisible();
     expect(await app.evaluate(({ app: shell }) => shell.getPath("userData"))).toBe(userData);
     expect(processesNaming(userData).length).toBeGreaterThan(0);

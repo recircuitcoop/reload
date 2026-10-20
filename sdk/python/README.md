@@ -1,10 +1,10 @@
-# innytypes-node
+# reload-node
 
-The Python node SDK for InnyTypes node packages: node protocol v2
+The Python node SDK for Reload node packages: node protocol v2
 (`docs/specs/node-protocol-v2.md`, Appendix A), standard library only.
 
 ```python
-from innytypes_node import Node
+from reload_node import Node
 
 node = Node()  # reads and checks the start frame (spec 4.1)
 

@@ -35,8 +35,8 @@ import {
 } from "../fixtures/raw-node/fixture";
 import { viewPackageDir } from "../fixtures/views";
 
-const ASK = "inny-viewpy-ask";
-const RECORD = "inny-viewpy-record";
+const ASK = "reload-viewpy-ask";
+const RECORD = "reload-viewpy-record";
 
 let scratch: string;
 let journal: SqliteJournal;
@@ -49,7 +49,7 @@ let live: FakeNode[];
 let snapshotIds: string[];
 
 beforeEach(() => {
-  scratch = fs.mkdtempSync(path.join(os.tmpdir(), "inny-views-"));
+  scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-views-"));
   journal = openSqliteJournal(path.join(scratch, "journal.sqlite"));
   snapshots = openSqliteSnapshots(path.join(scratch, "snapshots.sqlite"));
   raised = [];
@@ -72,7 +72,7 @@ beforeEach(() => {
   const validator = new AjvSchemaValidator();
   const folder = viewPackageDir("py");
   const document: unknown = JSON.parse(
-    fs.readFileSync(path.join(folder, "inny-package.json"), "utf8"),
+    fs.readFileSync(path.join(folder, "reload-package.json"), "utf8"),
   );
   const loaded = loadNodeTypes([{ name: "viewpy", folder, document }], validator, logger);
   const registration = new TypeRegistration({
@@ -162,7 +162,7 @@ describe("a view instance in the Node-RED glue", () => {
 
   it("a snapshot is kept with the type's actions and the instance id; a press starts a new run, or is refused with 409", async () => {
     const rec = create(RECORD, { id: "rec1", z: "t", name: "Rec", wires: [[], ["later"], []] });
-    const passed = rec.input({ payload: { n: 5 }, topic: "t.v1", inny: { run: "old-run" } });
+    const passed = rec.input({ payload: { n: 5 }, topic: "t.v1", reload: { run: "old-run" } });
     await waitFor("done", () => passed.ends.length === 1);
     expect(snapshotIds).toHaveLength(1);
     const record = snapshotIds[0] as string;
@@ -187,10 +187,10 @@ describe("a view instance in the Node-RED glue", () => {
       value: null,
     });
     await waitFor("the new run", () => rec.sent.length === 1);
-    const message = rec.sent[0]?.[1] as { inny: { run: string; event: { id: string } } };
+    const message = rec.sent[0]?.[1] as { reload: { run: string; event: { id: string } } };
     expect(rec.sent[0]?.[0]).toBeNull();
-    expect(message.inny.run).toBe(message.inny.event.id);
-    expect(message.inny.run).not.toBe("old-run");
+    expect(message.reload.run).toBe(message.reload.event.id);
+    expect(message.reload.run).not.toBe("old-run");
 
     expect(await views.call("snapshot.action", { id: record, action: "spare" })).toEqual({
       ok: false,

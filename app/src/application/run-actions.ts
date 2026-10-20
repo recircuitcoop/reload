@@ -100,11 +100,11 @@ function runIds(args: Fields): string[] {
   return value;
 }
 
-/** The instance that emitted a message: the last part of its envelope's `inny://` source. */
+/** The instance that emitted a message: the last part of its envelope's `reload://` source. */
 export function sourceOf(message: JournaledMessage): string | null {
-  const event = isRecord(message.inny) ? message.inny["event"] : undefined;
+  const event = isRecord(message.reload) ? message.reload["event"] : undefined;
   const source = isRecord(event) ? event["source"] : undefined;
-  if (typeof source !== "string" || !source.startsWith("inny://")) {
+  if (typeof source !== "string" || !source.startsWith("reload://")) {
     return null;
   }
   return source.slice(source.lastIndexOf("/") + 1) || null;
@@ -313,22 +313,22 @@ export class RunActions implements RerunTargets {
 
 /** The source's event again, with a fresh envelope: a new id (the new run's) and time. */
 function freshEvent(message: JournaledMessage, runId: string, at: number): NodeMessage {
-  const inny = isRecord(message.inny) ? message.inny : {};
-  const event = { ...(inny["event"] as NodeMessage["inny"]["event"]), id: runId };
+  const reload = isRecord(message.reload) ? message.reload : {};
+  const event = { ...(reload["event"] as NodeMessage["reload"]["event"]), id: runId };
   return {
     payload: message.payload,
     topic: typeof message.topic === "string" ? message.topic : event.type,
-    inny: { event: { ...event, time: new Date(at).toISOString() }, run: runId },
+    reload: { event: { ...event, time: new Date(at).toISOString() }, run: runId },
   };
 }
 
 /** A step's kept input with its run re-stamped; Node-RED gives it a new `_msgid`. */
 function restamped(message: JournaledMessage, runId: string): InputMessage {
-  const inny = isRecord(message.inny) ? message.inny : {};
+  const reload = isRecord(message.reload) ? message.reload : {};
   return {
     payload: message.payload,
     ...(message.topic === undefined ? {} : { topic: message.topic }),
-    inny: { ...inny, run: runId },
+    reload: { ...reload, run: runId },
   };
 }
 

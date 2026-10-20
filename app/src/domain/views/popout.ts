@@ -1,8 +1,8 @@
 // Pop-outs and the pages the shell serves (spec 8.5, plan 0018 §2.2; arch_pivot P10f, P11 §5.1).
 //
-// App pages are served by the SHELL on `inny-app://app/`, never by the runtime, so a runtime
-// restart never blanks them. A view page is served on `inny-view://app/` (the generic renderer)
-// or `inny-view://<package>/` (a package's own web component), in its own session partition,
+// App pages are served by the SHELL on `reload-app://app/`, never by the runtime, so a runtime
+// restart never blanks them. A view page is served on `reload-view://app/` (the generic renderer)
+// or `reload-view://<package>/` (a package's own web component), in its own session partition,
 // with the CSP below as a response header. Its only way out is the five-call bridge, which
 // carries no ids: the shell binds each window to the one view or snapshot it was opened for.
 // What crosses it is JSON, judged by the runtime (domain/views/answers.ts, spec 8.5.7).
@@ -10,13 +10,13 @@
 // Pure: the constants and the placement rules. Electron is the adapter's.
 
 /** The scheme of the app pages, and the one host they are served on. */
-export const APP_SCHEME = "inny-app";
+export const APP_SCHEME = "reload-app";
 export const APP_HOST = "app";
 /** The scheme of view pages; host `app` is the generic renderer, any other host a package. */
-export const VIEW_SCHEME = "inny-view";
+export const VIEW_SCHEME = "reload-view";
 export const VIEW_HOST = "app";
 /** The session partition of every pop-out (spec 8.5.3). */
-export const VIEW_PARTITION = "inny-views";
+export const VIEW_PARTITION = "reload-views";
 
 /** The pop-out CSP, exactly as spec 8.5.5 words it (proven in P10f). */
 export const VIEW_CSP =
@@ -55,10 +55,10 @@ export function viewWebPreferences(preload: string) {
  * call, `setValid`, is page-local and has none.
  */
 export const BRIDGE_CHANNELS = {
-  get: "inny-view:get",
-  submit: "inny-view:submit",
-  action: "inny-view:action",
-  draft: "inny-view:draft",
+  get: "reload-view:get",
+  submit: "reload-view:submit",
+  action: "reload-view:action",
+  draft: "reload-view:draft",
 } as const;
 
 /**
@@ -167,7 +167,7 @@ export function parsePlacements(text: string | null): Map<string, Bounds> {
 
 // ── the files the shell serves ───────────────────────────────────────────────────────────
 
-/** What the app pages (`inny-app://app/`) are served as: the shell's own page files. */
+/** What the app pages (`reload-app://app/`) are served as: the shell's own page files. */
 const CONTENT_TYPES: Readonly<Record<string, string>> = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -176,7 +176,7 @@ const CONTENT_TYPES: Readonly<Record<string, string>> = {
   ".svg": "image/svg+xml",
 };
 
-/** What a view page's origin (`inny-view://`) serves: the same, plus a package's own samples (plan 0020 §1). */
+/** What a view page's origin (`reload-view://`) serves: the same, plus a package's own samples (plan 0020 §1). */
 const VIEW_CONTENT_TYPES: Readonly<Record<string, string>> = {
   ...CONTENT_TYPES,
   ".mp3": "audio/mpeg",
@@ -223,7 +223,7 @@ export const servedViewFile = (pathname: string): { name: string; type: string }
  * The view page's own files, served from the shell's view folder on every view origin, a
  * package's included: the page, its script, the design tokens as CSS custom properties (light
  * and dark, built from docs/ux/tokens), the view kit written only against them for a package's
- * widget (plan 0021 §7), and app.css, the classes InnyTypes' own chrome is drawn with (the
+ * widget (plan 0021 §7), and app.css, the classes Reload's own chrome is drawn with (the
  * Question pop-out, plan 0022 §M). A package's own `view/` folder can never stand in for one.
  * All under VIEW_CSP, unchanged: `style-src 'self'` already allows the three stylesheets.
  */
@@ -236,7 +236,7 @@ export const VIEW_PAGE_FILES: readonly string[] = [
 ];
 
 /** Where a package's view page loads its component script: a marker in view.html. */
-export const COMPONENT_MARKER = "<!-- inny:component -->";
+export const COMPONENT_MARKER = "<!-- reload:component -->";
 export const COMPONENT_SCRIPT = '<script src="component.js"></script>';
 
 /** An Anytype object link (a deep link the desktop app opens), and nothing else. */

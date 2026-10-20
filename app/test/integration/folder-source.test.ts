@@ -1,8 +1,8 @@
-// The first-party folder source (packages/folder, plan 0022 D18, WI-0022-25), end to end below
+// The first-party folder source (packages/reload_folder, plan 0022 D18, WI-0022-25), end to end below
 // the app: bundled as `npm run build:packages` bundles it, and run through the runtime's own
 // node-process adapter as the runtime runs a source, against real scratch folders. What it
 // emits is what the adapter hands Node-RED: one message on `created` per new file, a new run
-// each (no input), typed `folder.file.created.v1`.
+// each (no input), typed `reload_folder.file.created.v1`.
 
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
@@ -32,7 +32,7 @@ import {
 } from "../fixtures/raw-node/fixture";
 
 const APP = path.resolve(import.meta.dirname, "..", "..");
-/** The source's fixed quiet period (QUIET_MS in packages/folder/src/watcher.ts). */
+/** The source's fixed quiet period (QUIET_MS in packages/reload_folder/src/watcher.ts). */
 const QUIET_MS = 2000;
 /** Long enough for a file to go quiet and a scan or two more: nothing else is coming. */
 const SETTLED_MS = QUIET_MS + 1000;
@@ -58,7 +58,7 @@ let scratch: string;
 
 beforeAll(async () => {
   built = await buildFolderPackage();
-  scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "inny-folder-source-")));
+  scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-folder-source-")));
 }, 60_000);
 
 afterAll(() => {
@@ -87,7 +87,7 @@ interface Created {
   body?: string;
 }
 
-/** Start one instance of `inny-folder-watch`, as the runtime starts a source. */
+/** Start one instance of `reload-reload_folder-watch`, as the runtime starts a source. */
 async function watch(
   config: Record<string, unknown> = {},
   same?: { folder: string; dataDir: string },
@@ -99,9 +99,9 @@ async function watch(
     identity: {
       id: `f${randomUUID().slice(0, 8)}`,
       flowId: "flow-1",
-      package: "folder",
+      package: "reload_folder",
       typeId: "watch",
-      type: "inny-folder-watch",
+      type: "reload-reload_folder-watch",
       name: "",
       kind: "source",
     },
@@ -140,16 +140,16 @@ function created(watching: Watching): Created[] {
 const names = (watching: Watching) => created(watching).map((file) => file.name);
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-describe("packages/folder: the declaration and how it ships", () => {
-  it("declares one source, watch, on folder.file.created.v1, run from the file the build writes", () => {
-    const text = fs.readFileSync(path.join(FOLDER_PACKAGE_SOURCE, "inny-package.json"), "utf8");
+describe("packages/reload_folder: the declaration and how it ships", () => {
+  it("declares one source, watch, on reload_folder.file.created.v1, run from the file the build writes", () => {
+    const text = fs.readFileSync(path.join(FOLDER_PACKAGE_SOURCE, "reload-package.json"), "utf8");
     const parsed = parseDeclaration(JSON.parse(text), (value) =>
       new AjvSchemaValidator().declaration(value),
     );
     if (!parsed.ok) {
       throw new Error(parsed.problems.join("; "));
     }
-    expect(parsed.declaration.package).toBe("folder");
+    expect(parsed.declaration.package).toBe("reload_folder");
     expect(
       parsed.declaration.types.map((type) => [type.id, type.kind, type.command, type.outputs]),
     ).toEqual([
@@ -157,7 +157,7 @@ describe("packages/folder: the declaration and how it ships", () => {
         "watch",
         "source",
         ["{node}", "{package}/dist/folder.cjs"],
-        [{ port: "created", event: "folder.file.created.v1" }],
+        [{ port: "created", event: "reload_folder.file.created.v1" }],
       ],
     ]);
     // The folder is the one required setting: a starter made from the template is not set up
@@ -170,13 +170,13 @@ describe("packages/folder: the declaration and how it ships", () => {
       }
     ).scripts;
     expect(scripts["build:packages"]).toContain(
-      "esbuild ../packages/folder/src/main.ts --bundle --platform=node --target=node22 --format=cjs --outfile=../packages/folder/dist/folder.cjs",
+      "esbuild ../packages/reload_folder/src/main.ts --bundle --platform=node --target=node22 --format=cjs --outfile=../packages/reload_folder/dist/folder.cjs",
     );
-    expect(scripts["types"]).toContain("tsc -p ../packages/folder");
+    expect(scripts["types"]).toContain("tsc -p ../packages/reload_folder");
   });
 });
 
-describe("packages/folder: watching one folder", { timeout: 30_000 }, () => {
+describe("packages/reload_folder: watching one folder", { timeout: 30_000 }, () => {
   it("says watching as a green dot only once its first scan is done: a file dropped then is passed on, one there before is not", async () => {
     const folder = fs.mkdtempSync(path.join(scratch, "watched-"));
     const dataDir = fs.mkdtempSync(path.join(scratch, "data-"));
@@ -211,8 +211,8 @@ describe("packages/folder: watching one folder", { timeout: 30_000 }, () => {
     ]);
     // A new run: typed as declared, with a run of its own and no input.
     const message = watching.host.sent[0]?.message;
-    expect(message?.topic).toBe("folder.file.created.v1");
-    expect(message?.inny).toMatchObject({ run: expect.any(String) as unknown });
+    expect(message?.topic).toBe("reload_folder.file.created.v1");
+    expect(message?.reload).toMatchObject({ run: expect.any(String) as unknown });
   });
 
   // 200 KB of 0x01: valid UTF-8 under MAX_BODY_BYTES, but a JSON string escapes each byte to six

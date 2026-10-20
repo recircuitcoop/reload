@@ -12,11 +12,11 @@ import { ReleaseMismatchError } from "../../src/ports/self-updater";
 const CURRENT = "3.0.0";
 const NEWER = "3.0.1";
 const OLDER = "2.0.1";
-const TAG_URL = "https://example.invalid/acme/innytypes/releases/download/v2.0.1";
-const GITHUB = "github:acme/innytypes";
+const TAG_URL = "https://example.invalid/acme/reload/releases/download/v2.0.1";
+const GITHUB = "github:acme/reload";
 
 function release(version: string, sha512 = `sha-of-${version}`): ReleaseMetadata {
-  return { version, files: [{ url: `InnyTypes-${version}-mac.zip`, sha512, size: 10 }] };
+  return { version, files: [{ url: `Reload-${version}-mac.zip`, sha512, size: 10 }] };
 }
 
 const order = (a: string, b: string): number => {
@@ -87,14 +87,14 @@ function fakeLogger() {
 }
 
 function installer(fake: ReturnType<typeof fakeAppUpdater>, logger = fakeLogger()) {
-  return new ElectronUpdaterInstaller(fake as never, "acme/innytypes", "latest", logger);
+  return new ElectronUpdaterInstaller(fake as never, "acme/reload", "latest", logger);
 }
 
 describe("ElectronUpdaterInstaller", () => {
   it("configures the updater: no download of its own, an install at quit, downgrades never allowed", () => {
     const updater = fakeAppUpdater();
     const logger = fakeLogger();
-    new ElectronUpdaterInstaller(updater as never, "acme/innytypes", "beta", logger);
+    new ElectronUpdaterInstaller(updater as never, "acme/reload", "beta", logger);
     expect(updater.autoDownload).toBe(false);
     expect(updater.autoInstallOnAppQuit).toBe(true);
     expect(updater.channel).toBe("beta");
@@ -104,7 +104,7 @@ describe("ElectronUpdaterInstaller", () => {
     expect(updater.setFeedURL).toHaveBeenCalledWith({
       provider: "github",
       owner: "acme",
-      repo: "innytypes",
+      repo: "reload",
     });
     expect(updater.checkForUpdates).not.toHaveBeenCalled();
   });

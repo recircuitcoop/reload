@@ -380,7 +380,7 @@ describe("the address it binds", () => {
 
 describe("the proxy token", () => {
   function tokenFile() {
-    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "inny-token-"));
+    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-token-"));
     const file = path.join(scratch, "credentials", "mcp_proxy_token");
     const registry = new SecretRegistry();
     const store = registering(new OwnerOnlyFileStore({ "mcp-proxy-token": { file } }), registry);
@@ -458,10 +458,10 @@ describe("the proxy token", () => {
 
 describe("Host and Origin", () => {
   it.each([
-    ["host", "innytypes.attacker.example", "a name the browser was told is this service"],
+    ["host", "reload.attacker.example", "a name the browser was told is this service"],
     ["host", "127.0.0.1:1", "the right address on a port this service does not own"],
     ["host", "", "no Host at all"],
-    ["origin", "http://innytypes.attacker.example", "a page served by a real site"],
+    ["origin", "http://reload.attacker.example", "a page served by a real site"],
     ["origin", "http://localhost:{port}", "a name rather than an address"],
     ["origin", "http://127.0.0.1:1", "loopback, on another port"],
     ["origin", "null", "an opaque origin"],
@@ -876,7 +876,7 @@ describe("moving the endpoint", () => {
 
 describe("the settings file", () => {
   function scratchFile() {
-    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "inny-settings-"));
+    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-settings-"));
     return { scratch, file: path.join(scratch, "user-data", "settings.json") };
   }
 

@@ -22,7 +22,7 @@ import { FakeClock } from "../fakes/clock";
 const require = createRequire(import.meta.url);
 const CORE_NODES_DIR = path.dirname(require.resolve("@node-red/nodes/package.json"));
 /** A type with one password credential, planted as a generated type would be. */
-const KEYED = "inny-keyed-step";
+const KEYED = "reload-keyed-step";
 const KEYED_TYPE: FlowNodeType = {
   package: "keyed",
   kind: "node",
@@ -46,7 +46,7 @@ function plantKeyedType(generatedDir: string): void {
   fs.writeFileSync(
     path.join(generatedDir, "keyed.html"),
     `<script type="text/javascript">
-  RED.nodes.registerType(${JSON.stringify(KEYED)}, { category: "InnyTypes", defaults: { note: { value: "" } },
+  RED.nodes.registerType(${JSON.stringify(KEYED)}, { category: "Reload", defaults: { note: { value: "" } },
     credentials: { token: { type: "password" } }, inputs: 1, outputs: 1 });
 </script>
 `,
@@ -66,7 +66,7 @@ describe("flow administration in the embedded Node-RED", () => {
   let ids = 0;
 
   beforeAll(async () => {
-    scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "inny-flow-admin-")));
+    scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-flow-admin-")));
     const userDir = path.join(scratch, "node-red");
     const generatedDir = path.join(userDir, "generated");
     fs.mkdirSync(generatedDir, { recursive: true });

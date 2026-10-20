@@ -188,7 +188,7 @@ function History({
 
 const CHECKED = "checked today 09:14";
 
-/** Penpot's nine package rows: monty, innyrize and anytype, the catalogue that exists today. */
+/** Penpot's nine package rows: monty, reload_summarize and anytype, the catalogue that exists today. */
 const PACKAGE_ROWS: readonly {
   readonly state: PackageRowState;
   readonly name: string;
@@ -227,7 +227,7 @@ const PACKAGE_ROWS: readonly {
   },
   {
     state: "installing",
-    name: "innyrize",
+    name: "reload_summarize",
     version: "0.3",
     facets: [
       ["off", "Not registered"],
@@ -240,7 +240,7 @@ const PACKAGE_ROWS: readonly {
   },
   {
     state: "verifying",
-    name: "innyrize",
+    name: "reload_summarize",
     version: "0.3",
     facets: [
       ["off", "Not registered"],
@@ -253,7 +253,7 @@ const PACKAGE_ROWS: readonly {
   },
   {
     state: "failed-check",
-    name: "anytype",
+    name: "reload_anytype",
     version: "1.0",
     facets: [
       ["off", "Not registered"],
@@ -266,7 +266,7 @@ const PACKAGE_ROWS: readonly {
   },
   {
     state: "update-available",
-    name: "innyrize",
+    name: "reload_summarize",
     version: "0.3",
     facets: [
       ["done", "Registered"],
@@ -281,7 +281,7 @@ const PACKAGE_ROWS: readonly {
   },
   {
     state: "updating",
-    name: "innyrize",
+    name: "reload_summarize",
     version: "0.3",
     facets: [
       ["done", "Registered"],
@@ -295,7 +295,7 @@ const PACKAGE_ROWS: readonly {
   },
   {
     state: "updated",
-    name: "innyrize",
+    name: "reload_summarize",
     version: "0.4",
     facets: [
       ["done", "Registered"],
@@ -310,9 +310,9 @@ const PACKAGE_ROWS: readonly {
   },
   {
     state: "from-a-folder",
-    name: "innyrize",
+    name: "reload_summarize",
     version: "0.3",
-    captions: ["From a folder: ~/packages/innyrize", "Unsigned"],
+    captions: ["From a folder: ~/packages/reload_summarize", "Unsigned"],
     facets: [
       ["done", "Registered"],
       ["done", "Installed"],
@@ -331,7 +331,7 @@ export function SamplePackageRow({ row }: { readonly row: (typeof PACKAGE_ROWS)[
       state={row.state}
       name={row.name}
       version={row.version}
-      publisher={row.name === "anytype" ? "by InnyTypes" : "by l1nx"}
+      publisher={row.name === "reload_anytype" ? "by Reload" : "by l1nx"}
       {...(row.captions === undefined ? {} : { captions: row.captions })}
       facets={row.facets.map(([state, label]) => ({ state, label, checked: CHECKED }))}
       actions={row.actions.map(([kind, label]) => (
@@ -367,7 +367,7 @@ function generalSection(section: GeneralSectionKind) {
         <GeneralSection
           section={section}
           title="AI apps"
-          state="Claude, Codex and other apps can use your Anytype through InnyTypes at 127.0.0.1:31010."
+          state="Claude, Codex and other apps can use your Anytype through Reload at 127.0.0.1:31010."
         >
           <Field label="Change port">
             {(control) => (
@@ -389,7 +389,7 @@ function generalSection(section: GeneralSectionKind) {
         <GeneralSection
           section={section}
           title="Start at login"
-          state="InnyTypes starts when you log in."
+          state="Reload starts when you log in."
         >
           <Switch state="on" label="Start at login" />
         </GeneralSection>
@@ -469,7 +469,7 @@ export function ConfigurationOrganismsPage() {
           <div className="h-[520px]">
             <Sidebar
               mode="setup"
-              label="Set up InnyTypes"
+              label="Set up Reload"
               steps={SETUP_STEPS}
               current={3}
               status={<StatusPill state="running">Running</StatusPill>}
@@ -480,7 +480,7 @@ export function ConfigurationOrganismsPage() {
           <div className="h-[520px]">
             <Sidebar
               mode="main"
-              label="InnyTypes"
+              label="Reload"
               active="live"
               liveLabel="Live"
               configurationLabel="Configuration"

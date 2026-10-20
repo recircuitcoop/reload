@@ -19,7 +19,7 @@ function entry(inputId: string, instanceId: string, data: unknown = { do: "echo"
   return newEntry({
     inputId,
     instanceId,
-    type: "inny-rawnode-raw",
+    type: "reload-rawnode-raw",
     message: { payload: data, topic: "t.in.v1", _msgid: `m-${inputId}` },
     now: 1,
   });
@@ -123,8 +123,8 @@ describe("JournalReplay: the Jobs page", () => {
     expect(replay.call("job.list", null)).toEqual({
       ok: true,
       value: [
-        { id: "in-1", instanceId: "a", type: "inny-rawnode-raw", attempts: 1, createdAt: 1 },
-        { id: "in-3", instanceId: "gone", type: "inny-rawnode-raw", attempts: 1, createdAt: 1 },
+        { id: "in-1", instanceId: "a", type: "reload-rawnode-raw", attempts: 1, createdAt: 1 },
+        { id: "in-3", instanceId: "gone", type: "reload-rawnode-raw", attempts: 1, createdAt: 1 },
       ],
     });
     expect(replay.call("job.cancel", { id: "in-1" })).toEqual({ ok: true, value: null });
@@ -156,7 +156,7 @@ describe("JournalReplay: Run history's delete (plan 0022 §E)", () => {
         inputId,
         instanceId: "a",
         type: "t",
-        message: { payload: 1, inny: { run } },
+        message: { payload: 1, reload: { run } },
         now: 1,
       });
     store.put(ofRun("in-1", "r1"));
@@ -224,7 +224,7 @@ describe("one replay for 50 instances through the adapter", () => {
         for (const [n, delivery] of deliveries) {
           expect(delivery.ends).toEqual([undefined]);
           expect(delivery.outputs[0]?.message.payload).toBe(n);
-          expect(delivery.outputs[0]?.message.inny.cause).toBe(`in-${String(n)}`);
+          expect(delivery.outputs[0]?.message.reload.cause).toBe(`in-${String(n)}`);
         }
         expect(store.all()).toEqual([]);
         expect(logger.has(/flows started: 50 journaled inputs re-sent/)).toBe(true);

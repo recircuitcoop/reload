@@ -47,7 +47,7 @@ let restarts: string[];
 let types: readonly string[] | null;
 
 beforeEach(() => {
-  base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "inny-board-")));
+  base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-board-")));
   roots = new FsPackageRoots(path.join(base, "node-packages"));
   settings = new JsonSettingsStore(path.join(base, "shell-settings.json"));
   logger = new RecordingLogger();
@@ -70,7 +70,7 @@ function writeFolder(name: string, version: string, body = "// one\n"): string {
   const folder = path.join(base, "sources", name);
   fs.mkdirSync(folder, { recursive: true });
   fs.writeFileSync(
-    path.join(folder, "inny-package.json"),
+    path.join(folder, "reload-package.json"),
     JSON.stringify({
       protocol: 2,
       package: name,
@@ -313,11 +313,11 @@ describe("from a folder (plan 0013)", () => {
 
 describe("shipped packages and install phases", () => {
   it("a shipped package is checked at start against this build's manifest, never against what this machine saw first", async () => {
-    const shipped = shippedPackage("anytype");
+    const shipped = shippedPackage("reload_anytype");
     await build([shipped]);
     const first = setUp([shipped]).board;
     await first.start();
-    expect(row(await first.board(), "anytype").installation).toEqual({
+    expect(row(await first.board(), "reload_anytype").installation).toEqual({
       state: "installed",
       verifiedAt: new Date(now),
     });
@@ -326,24 +326,24 @@ describe("shipped packages and install phases", () => {
     now += DAY;
     const tampered = setUp([shipped]).board;
     await tampered.start();
-    const failed = row(await tampered.board(), "anytype");
+    const failed = row(await tampered.board(), "reload_anytype");
     expect(failed.installation).toEqual({
       state: "failed-check",
       reason: "content-moved",
       verifiedAt: new Date(now),
     });
-    // Not offered again from anywhere: reinstalling InnyTypes restores it.
+    // Not offered again from anywhere: reinstalling Reload restores it.
     expect(rowActions(failed, new Date(now))).toEqual({ enabled: [], disabled: ["register"] });
     // An app update ships new content under the same version, with its own manifest: installed.
     await build([shipped]);
     const updated = setUp([shipped]).board;
     await updated.start();
-    expect(row(await updated.board(), "anytype").installation?.state).toBe("installed");
+    expect(row(await updated.board(), "reload_anytype").installation?.state).toBe("installed");
     // A build with no manifest passes nothing.
     manifest = {};
     const unbuilt = setUp([shipped]).board;
     await unbuilt.start();
-    expect(row(await unbuilt.board(), "anytype").installation?.state).toBe("failed-check");
+    expect(row(await unbuilt.board(), "reload_anytype").installation?.state).toBe("failed-check");
   });
 
   it("an install's phases are pushed in order, each with its percentage and when", async () => {
@@ -365,7 +365,7 @@ describe("from the catalogue", () => {
     const signer = new Signer();
     const folder = writeFolder("verkit", "0.1.0");
     const files = Object.fromEntries(
-      ["inny-package.json", "node.js"].map((file) => [
+      ["reload-package.json", "node.js"].map((file) => [
         file,
         fs.readFileSync(path.join(folder, file), "utf8"),
       ]),
@@ -377,7 +377,7 @@ describe("from the catalogue", () => {
     const { rows, offers } = await board.board();
     expect(offers).toEqual([]);
     expect(rows.find((entry) => entry.package.name === "verkit")).toMatchObject({
-      publisher: "InnyTypes",
+      publisher: "Reload",
       package: {
         signed: true,
         source: { kind: "catalogue" },
@@ -494,34 +494,34 @@ describe("update and Go back (D5)", () => {
 
 describe("register and unregister (D6)", () => {
   it("unregister is refused while used, naming every use; otherwise stored, and only the runtime restarts", async () => {
-    const { board } = await withShipped("anytype");
+    const { board } = await withShipped("reload_anytype");
     await board.start();
-    types = ["inny-anytype-create", "inject"];
+    types = ["reload-reload_anytype-create", "inject"];
     const uses = [
       { flow: "Recordings to Anytype", step: "File" },
       { flow: "Invoices from the mailbox", step: "File invoice" },
     ];
-    expect(await board.unregister("anytype", uses)).toEqual({
+    expect(await board.unregister("reload_anytype", uses)).toEqual({
       ok: false,
       refusal: { reason: "in-use", action: "unregister", uses },
     });
-    expect(row(await board.board(), "anytype").registration?.state).toBe("registered");
+    expect(row(await board.board(), "reload_anytype").registration?.state).toBe("registered");
 
-    expect(await board.unregister("anytype", [])).toEqual({ ok: true });
-    expect(unregisteredOf(settings.readPackages())).toEqual(["anytype"]);
-    expect(restarts).toEqual(["anytype was unregistered"]);
+    expect(await board.unregister("reload_anytype", [])).toEqual({ ok: true });
+    expect(unregisteredOf(settings.readPackages())).toEqual(["reload_anytype"]);
+    expect(restarts).toEqual(["reload_anytype was unregistered"]);
     types = ["inject"];
-    expect(row(await board.board(), "anytype").registration).toEqual({
+    expect(row(await board.board(), "reload_anytype").registration).toEqual({
       state: "not-registered",
       verifiedAt: new Date(now),
     });
     // A shipped package is unregistered, never removed.
-    expect(await board.remove("anytype", [])).toEqual({
+    expect(await board.remove("reload_anytype", [])).toEqual({
       ok: false,
       refusal: { reason: "shipped" },
     });
 
-    expect(await board.register("anytype")).toEqual({ ok: true });
+    expect(await board.register("reload_anytype")).toEqual({ ok: true });
     expect(unregisteredOf(settings.readPackages())).toEqual([]);
   });
 
@@ -529,7 +529,7 @@ describe("register and unregister (D6)", () => {
     const { board } = setUp();
     await board.start();
     await board.installFolder(writeFolder("monty", "0.1.0"));
-    types = ["inny-monty-ping"];
+    types = ["reload-monty-ping"];
     expect(await board.unregister("monty", [])).toEqual({ ok: true });
     expect(unregisteredOf(settings.readPackages())).toEqual(["monty"]);
     expect(await board.remove("monty", [])).toEqual({ ok: true });
@@ -537,7 +537,7 @@ describe("register and unregister (D6)", () => {
   });
 
   it("no state without when it was checked; registration unverified while the runtime is not running", async () => {
-    const { board } = await withShipped("anytype");
+    const { board } = await withShipped("reload_anytype");
     await board.start();
     await board.installFolder(writeFolder("monty", "0.1.0"));
     types = null;
@@ -556,7 +556,7 @@ describe("the start asks only when the settings let it (D14)", () => {
     const signer = new Signer();
     const folder = writeFolder("verkit", "0.1.0");
     const files = Object.fromEntries(
-      ["inny-package.json", "node.js"].map((file) => [
+      ["reload-package.json", "node.js"].map((file) => [
         file,
         fs.readFileSync(path.join(folder, file), "utf8"),
       ]),
@@ -680,7 +680,7 @@ describe("Install again repairs the version installed, in place", () => {
     const signer = new Signer();
     const folder = writeFolder("verkit", "0.1.0");
     const files = Object.fromEntries(
-      ["inny-package.json", "node.js"].map((file) => [
+      ["reload-package.json", "node.js"].map((file) => [
         file,
         fs.readFileSync(path.join(folder, file), "utf8"),
       ]),

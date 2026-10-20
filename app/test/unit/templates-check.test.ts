@@ -26,7 +26,7 @@ function check(...args: string[]): { code: number; out: string } {
 
 describe("the templates' build check", () => {
   it("passes the shipped templates and copies them where the build says", () => {
-    const out = fs.mkdtempSync(path.join(os.tmpdir(), "inny-templates-"));
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), "reload-templates-"));
     try {
       fs.writeFileSync(path.join(out, "stale.json"), "[]");
       expect(check("templates", "--out", out)).toEqual({ code: 0, out: "templates: 3 checked\n" });
@@ -45,7 +45,7 @@ describe("the templates' build check", () => {
       }[];
       expect(index.find((entry) => entry.id === "recordings-to-anytype")).toMatchObject({
         line: "transcribe, summarise, file, approve, send, schedule",
-        packages: ["anytype", "innyrize", "monty"],
+        packages: ["reload_anytype", "reload_summarize", "reload_mount"],
         official: true,
         starter: false,
       });
@@ -54,7 +54,7 @@ describe("the templates' build check", () => {
       expect(index.filter((entry) => entry.starter)).toEqual([
         expect.objectContaining({
           id: "folder-to-anytype",
-          packages: ["anytype", "folder"],
+          packages: ["reload_anytype", "reload_folder"],
           official: true,
         }),
       ]);
@@ -70,9 +70,9 @@ describe("the templates' build check", () => {
     ) as { id: string; type: string; wires?: string[][] }[];
     // No step is a note on the canvas any more: the watch step is the folder package's source.
     expect(nodes.filter((node) => node.type === "comment")).toEqual([]);
-    const watch = nodes.filter((node) => node.type === "inny-folder-watch");
+    const watch = nodes.filter((node) => node.type === "reload-reload_folder-watch");
     expect(watch).toHaveLength(1);
-    const file = nodes.find((node) => node.type === "inny-anytype-create-object");
+    const file = nodes.find((node) => node.type === "reload-reload_anytype-create-object");
     expect(watch[0]?.wires).toEqual([[file?.id]]);
     // Its folder is the one thing Setup's Source folder step writes: the template sets none.
     expect(watch[0]).not.toHaveProperty("folder");
@@ -91,9 +91,9 @@ describe("the templates' build check", () => {
       "templates: template leaky: the id n1 is used twice",
       "templates: template leaky: n2 is not on the template's tab",
       "templates: template leaky: holds credentials; a template never does",
-      "templates: template strangers: f is of type function, which is neither Node-RED's core/common nor InnyTypes'",
-      "templates: template strangers: m is of type inny-monty-watch, from the package monty it does not declare",
-      "templates: template strangers: n is of type inny-anytype-nope, which the package anytype does not have",
+      "templates: template strangers: f is of type function, which is neither Node-RED's core/common nor Reload's",
+      "templates: template strangers: m is of type reload-monty-watch, from the package monty it does not declare",
+      "templates: template strangers: n is of type reload-reload_anytype-nope, which the package reload_anytype does not have",
       expect.stringMatching(/^templates: template absent: cannot be read as JSON/),
       "templates: index: the id leaky is listed twice",
       'templates: index: {"id":"Bad Id","name":"Bad","line":"x","packages":[],"official":true} is not {id, name, line, packages, official, starter?}',
@@ -113,7 +113,7 @@ describe("the templates' build check", () => {
   });
 
   it("fails an index that is not a list, or not there", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "inny-templates-"));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "reload-templates-"));
     try {
       expect(check(dir)).toMatchObject({
         code: 1,

@@ -2,7 +2,7 @@
 // 0007 and 0008): where it is served, how it is moved from General's Change port, and what General
 // is told about it.
 //
-// * The saved address is the stored setting, then INNYTYPES_MCP_HOST and INNYTYPES_MCP_PORT, then
+// * The saved address is the stored setting, then RELOAD_MCP_HOST and RELOAD_MCP_PORT, then
 //   the default (domain/endpoint/address.ts), read afresh each time so nothing caches a stale one.
 // * The endpoint opens once the MCP child has first been validated (plan 0007's order: a URL a
 //   client can configure exists only for a child whose surface was checked), and stays up across
@@ -33,7 +33,7 @@ const MCP_ENDPOINT = "MCP endpoint";
 
 export interface McpEndpointDeps {
   readonly settings: SettingsStore;
-  /** INNYTYPES_MCP_HOST and INNYTYPES_MCP_PORT as the process was given them. */
+  /** RELOAD_MCP_HOST and RELOAD_MCP_PORT as the process was given them. */
   readonly variables: Readonly<Record<string, string | undefined>>;
   readonly listener: McpListener;
   readonly logger: Logger;

@@ -1,5 +1,5 @@
 // The AppApi contract (plan 0018 §2.4, plan 0022 §N), with no DOM and no Electron: every method
-// of the bridge the preload exposes as `window.inny.app` (shell/app-bridge.ts and
+// of the bridge the preload exposes as `window.reload.app` (shell/app-bridge.ts and
 // app-bridge-v2.ts), against a recording IPC. app-api-v2.test.ts takes the v2 calls on through
 // the shell's handlers. The list of methods is checked whole, so a method added to the contract without a case
 // here fails this test.
@@ -184,30 +184,30 @@ const CALLS: Record<string, { call: (api: AppApi) => Promise<unknown>; sent: unk
     sent: [IPC.packageCall, { op: "package.list", args: null }],
   },
   installCatalogueEntry: {
-    call: (api) => api.installCatalogueEntry("official", "innyrize"),
+    call: (api) => api.installCatalogueEntry("official", "reload_summarize"),
     sent: [
       IPC.packageCall,
-      { op: "package.install", args: { source: "official", id: "innyrize" } },
+      { op: "package.install", args: { source: "official", id: "reload_summarize" } },
     ],
   },
   installFolder: {
-    call: (api) => api.installFolder("/Users/me/innyrize"),
+    call: (api) => api.installFolder("/Users/me/reload_summarize"),
     sent: [
       IPC.packageCall,
-      { op: "package.installFolder", args: { folder: "/Users/me/innyrize" } },
+      { op: "package.installFolder", args: { folder: "/Users/me/reload_summarize" } },
     ],
   },
   uninstallPackage: {
-    call: (api) => api.uninstallPackage("innyrize"),
-    sent: [IPC.packageCall, { op: "package.remove", args: { name: "innyrize" } }],
+    call: (api) => api.uninstallPackage("reload_summarize"),
+    sent: [IPC.packageCall, { op: "package.remove", args: { name: "reload_summarize" } }],
   },
   reinstallPackage: {
-    call: (api) => api.reinstallPackage("innyrize"),
-    sent: [IPC.packageCall, { op: "package.reinstall", args: { name: "innyrize" } }],
+    call: (api) => api.reinstallPackage("reload_summarize"),
+    sent: [IPC.packageCall, { op: "package.reinstall", args: { name: "reload_summarize" } }],
   },
   updatePackage: {
-    call: (api) => api.updatePackage("innyrize"),
-    sent: [IPC.packageCall, { op: "package.update", args: { name: "innyrize" } }],
+    call: (api) => api.updatePackage("reload_summarize"),
+    sent: [IPC.packageCall, { op: "package.update", args: { name: "reload_summarize" } }],
   },
   setUpdateAutoCheck: {
     call: (api) => api.setUpdateAutoCheck(true),
@@ -218,24 +218,24 @@ const CALLS: Record<string, { call: (api: AppApi) => Promise<unknown>; sent: unk
     sent: [IPC.updateCall, { op: "update.releaseNotes", args: null }],
   },
   registerPackage: {
-    call: (api) => api.registerPackage("innyrize"),
-    sent: [IPC.packageCall, { op: "package.register", args: { name: "innyrize" } }],
+    call: (api) => api.registerPackage("reload_summarize"),
+    sent: [IPC.packageCall, { op: "package.register", args: { name: "reload_summarize" } }],
   },
   unregisterPackage: {
-    call: (api) => api.unregisterPackage("innyrize"),
-    sent: [IPC.packageCall, { op: "package.unregister", args: { name: "innyrize" } }],
+    call: (api) => api.unregisterPackage("reload_summarize"),
+    sent: [IPC.packageCall, { op: "package.unregister", args: { name: "reload_summarize" } }],
   },
   chooseInstallFolder: {
     call: (api) => api.chooseInstallFolder(),
     sent: [IPC.packageCall, { op: "package.chooseFolder", args: null }],
   },
   checkFolder: {
-    call: (api) => api.checkFolder("innyrize"),
-    sent: [IPC.packageCall, { op: "package.checkFolder", args: { name: "innyrize" } }],
+    call: (api) => api.checkFolder("reload_summarize"),
+    sent: [IPC.packageCall, { op: "package.checkFolder", args: { name: "reload_summarize" } }],
   },
   goBackPackage: {
-    call: (api) => api.goBackPackage("innyrize"),
-    sent: [IPC.packageCall, { op: "package.goBack", args: { name: "innyrize" } }],
+    call: (api) => api.goBackPackage("reload_summarize"),
+    sent: [IPC.packageCall, { op: "package.goBack", args: { name: "reload_summarize" } }],
   },
   status: {
     call: (api) => api.status(),

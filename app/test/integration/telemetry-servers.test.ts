@@ -90,7 +90,7 @@ beforeEach(() => {
   received.length = 0;
   receivedInTheClear.length = 0;
   behaviour = 200;
-  scratch = fs.mkdtempSync(path.join(os.tmpdir(), "inny-telemetry-servers-"));
+  scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-telemetry-servers-"));
 });
 
 afterEach(() => {
@@ -190,7 +190,7 @@ describe("telemetry against local fake GlitchTip and Umami servers", () => {
     expect(got?.url).toBe("/api/17/envelope/");
     expect(got?.headers["content-type"]).toBe("application/x-sentry-envelope");
     expect(got?.headers["x-sentry-auth"]).toBe(
-      "Sentry sentry_version=7, sentry_client=innytypes/2.0.0, sentry_key=glitchkey",
+      "Sentry sentry_version=7, sentry_client=reload/2.0.0, sentry_key=glitchkey",
     );
     // Byte for byte what the transport renders from the queued report.
     expect(got?.body).toBe(outgoingFor(queued(report), endpoints(), "2.0.0").body);
@@ -207,10 +207,10 @@ describe("telemetry against local fake GlitchTip and Umami servers", () => {
     pipeline.recordUsage(usagePayload(VERSIONS, [{ id: "anytype", version: "1.0.0" }]));
     await pipeline.flush();
     expect(received.map((request) => request.url)).toEqual(["/umami/api/send"]);
-    expect(received[0]?.headers["user-agent"]).toBe("innytypes/2.0.0");
+    expect(received[0]?.headers["user-agent"]).toBe("reload/2.0.0");
     expect(JSON.parse(received[0]?.body ?? "")).toMatchObject({
       type: "event",
-      payload: { website: "site-7", name: "usage", hostname: "app.innytypes.invalid" },
+      payload: { website: "site-7", name: "usage", hostname: "app.reload.invalid" },
     });
   });
 

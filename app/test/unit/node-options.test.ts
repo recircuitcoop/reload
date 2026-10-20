@@ -339,8 +339,8 @@ describe("a dynamic select in a form", () => {
   const [space, type] = formModel({
     type: "object",
     properties: {
-      space: { type: "string", innytype: { spaces: true } },
-      type: { type: "string", innytype: { types: { of: "space" } } },
+      space: { type: "string", reload: { spaces: true } },
+      type: { type: "string", reload: { types: { of: "space" } } },
     },
   }).fields as [Parameters<typeof dynamicSelect>[0], Parameters<typeof dynamicSelect>[0]];
   const answered = (options: { value: string; label: string }[]) =>

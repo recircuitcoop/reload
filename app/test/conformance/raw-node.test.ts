@@ -67,7 +67,7 @@ class Session {
     this.send({
       t: "start",
       protocol: 2,
-      node: { id: "conformance", type: "inny-rawnode-raw", name: "" },
+      node: { id: "conformance", type: "reload-rawnode-raw", name: "" },
       config: {},
       credentials,
       data_dir: "/nonexistent-data-dir",
@@ -268,7 +268,7 @@ describe("conformance: the raw node (no SDK)", () => {
   });
 
   it("C13 credentials: a credential value never appears on stdout or stderr", async () => {
-    const canary = "inny-canary-5f2c9a71e0d34b8c";
+    const canary = "reload-canary-5f2c9a71e0d34b8c";
     const node = session();
     node.start({ token: canary });
     node.send({ t: "input", id: "use", event: { type: "t.v1", data: { do: "credential" } } });
@@ -279,7 +279,7 @@ describe("conformance: the raw node (no SDK)", () => {
     expect(node.frames.find((f) => f.t === "emit" && f.in === "use")).toMatchObject({
       data: canary.length,
     });
-    expect(node.stderr).toMatch(/used a credential of 28 characters/);
+    expect(node.stderr).toContain(`used a credential of ${String(canary.length)} characters`);
     expect(Buffer.concat(node.stdout).includes(canary)).toBe(false);
     expect(node.stderr.includes(canary)).toBe(false);
     // The one line that is not a frame is the fixture's deliberate stray stdout.

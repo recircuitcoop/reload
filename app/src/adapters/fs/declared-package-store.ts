@@ -1,5 +1,5 @@
 // The package store until verified installs exist (WI-0018-15, WI-0018-16): the packages
-// found in fixed folders, by the `package` name their inny-package.json declares.
+// found in fixed folders, by the `package` name their reload-package.json declares.
 //
 // The runtime gives it the first-party packages shipped with the app and the test fixtures.
 // Each immediate subfolder of a root is one package. A folder whose declaration cannot be
@@ -8,11 +8,12 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { OLD_DECLARATION_FILE, oldDeclarationProblem } from "../../domain/packages/old-names";
 import type { Logger } from "../../ports/logger";
 import type { PackageStore } from "../../ports/package-store";
 
 /** The declaration every node package holds at its root (spec 2.1). */
-export const DECLARATION = "inny-package.json";
+export const DECLARATION = "reload-package.json";
 
 /** Spec 2.1: the package name. */
 const PACKAGE_NAME = /^[a-z][a-z0-9_]{1,39}$/;
@@ -33,6 +34,9 @@ function readDeclaredName(
     bytes = fs.readFileSync(path.join(folder, DECLARATION));
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" && fs.existsSync(path.join(folder, OLD_DECLARATION_FILE))) {
+      return { problem: `is refused: ${oldDeclarationProblem(DECLARATION)}` };
+    }
     return {
       problem: code === "ENOENT" ? `has no ${DECLARATION}` : `${DECLARATION}: ${String(error)}`,
     };

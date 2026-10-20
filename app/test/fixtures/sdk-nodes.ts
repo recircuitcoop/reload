@@ -1,5 +1,5 @@
-// The two SDK reference node packages -- sdk-py (Python, built on innytypes-node) and sdk-ts
-// (TypeScript, built on @innytypes/node) -- and how the conformance tests start them
+// The two SDK reference node packages -- sdk-py (Python, built on reload-node) and sdk-ts
+// (TypeScript, built on @recircuit/reload-node) -- and how the conformance tests start them
 // (WI-0018-26). Unlike raw-node and view{py,ts}, which are deliberately hand-rolled and share
 // no code with any SDK, these ARE built through the SDKs: this is what "run the conformance
 // suite against a reference node built on each SDK" (not only the raw fixtures) means.
@@ -37,7 +37,7 @@ interface Declaration {
 }
 
 function declarationOf(language: SdkLanguage): Declaration {
-  const text = fs.readFileSync(path.join(sdkPackageDir(language), "inny-package.json"), "utf8");
+  const text = fs.readFileSync(path.join(sdkPackageDir(language), "reload-package.json"), "utf8");
   return JSON.parse(text) as Declaration;
 }
 

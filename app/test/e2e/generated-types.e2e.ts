@@ -24,8 +24,8 @@ import {
   waitForRunning,
 } from "./app-harness";
 
-const PROBE = "inny-everycontrol-probe";
-const TICKER = "inny-everycontrol-ticker";
+const PROBE = "reload-everycontrol-probe";
+const TICKER = "reload-everycontrol-ticker";
 const SECRET = "s3cret-e2e-9f2c";
 
 function request(
@@ -259,9 +259,9 @@ test("the form in the real editor: every control, required marked, rows added, r
       const RED = (window as unknown as { RED: EditorRed }).RED;
       RED.editor.edit(RED.nodes.node("f1"));
     });
-    const form = frame.getByTestId(`inny-form-${PROBE}`);
+    const form = frame.getByTestId(`reload-form-${PROBE}`);
     await expect(form).toBeVisible();
-    const field = (path: string) => form.getByTestId(`inny-field-${path}`);
+    const field = (path: string) => form.getByTestId(`reload-field-${path}`);
     for (const each of ["label", "ratio", "count", "enabled", "mode", "level"]) {
       await expect(field(each)).toHaveCount(1);
     }
@@ -269,26 +269,26 @@ test("the form in the real editor: every control, required marked, rows added, r
     await expect(field("volumes.1.name")).toHaveValue("b");
     // Required fields are marked: label, count, volumes, retry.attempts and each row's name
     // and path; the token, a credential, in the type's own template.
-    await expect(form.getByTestId("inny-required")).toHaveCount(3 + 1 + 2 * 2);
-    await expect(frame.getByTestId("inny-required-token")).toHaveCount(1);
+    await expect(form.getByTestId("reload-required")).toHaveCount(3 + 1 + 2 * 2);
+    await expect(frame.getByTestId("reload-required-token")).toHaveCount(1);
     await expect(frame.locator("#node-input-token")).toHaveCount(1);
     await expect(frame.locator("#node-input-token")).toHaveAttribute("type", "password");
 
     // Clicks in the tray are dispatched: the hidden test window is small, and Node-RED's
     // sidebar can lie over the edit tray, which is layout, not the form under test. The
     // header's Deploy button is always in view, and is clicked.
-    const table = form.getByTestId("inny-table-volumes");
-    const rows = table.getByTestId(/^inny-row-/);
-    await table.getByTestId("inny-action-add").dispatchEvent("click");
+    const table = form.getByTestId("reload-table-volumes");
+    const rows = table.getByTestId(/^reload-row-/);
+    await table.getByTestId("reload-action-add").dispatchEvent("click");
     await expect(rows).toHaveCount(3);
     await table
-      .getByTestId("inny-row-volumes.2")
-      .getByTestId("inny-action-remove")
+      .getByTestId("reload-row-volumes.2")
+      .getByTestId("reload-action-remove")
       .dispatchEvent("click");
     await expect(rows).toHaveCount(2);
     await table
-      .getByTestId("inny-row-volumes.1")
-      .getByTestId("inny-action-up")
+      .getByTestId("reload-row-volumes.1")
+      .getByTestId("reload-action-up")
       .dispatchEvent("click");
     await expect(field("volumes.0.name")).toHaveValue("b");
     await field("label").fill("Filled");

@@ -95,7 +95,7 @@ describe("the pinned package", () => {
   });
 
   it("is refused when the installed version is not the pinned one", () => {
-    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "inny-pin-"));
+    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-pin-"));
     try {
       const manifest = path.join(scratch, "package.json");
       fs.writeFileSync(manifest, JSON.stringify({ version: "9.9.9", bin: { "anytype-mcp": "x" } }));
@@ -303,7 +303,7 @@ describe("the child's stderr in the one log (plan 0015)", () => {
     const { written, childLine } = oneLogLines(registry);
     // main.ts's path: the key store wrapped by `registering`, the proxy token through readOrCreate.
     const own = sourceLog({
-      name: "innytypes.services",
+      name: "reload.services",
       pid: 1,
       write: () => undefined,
       now: () => 0,
@@ -437,7 +437,7 @@ describe("the child's stderr in the one log (plan 0015)", () => {
     for (const record of records) {
       expect(record).toMatchObject({
         kind: "log",
-        record: { level: "WARNING", pid: child.pid, name: "innytypes.anytype-mcp" },
+        record: { level: "WARNING", pid: child.pid, name: "reload.anytype-mcp" },
       });
     }
     const all = written.join("");

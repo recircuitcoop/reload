@@ -7,7 +7,7 @@
 // other platform this spec skips and says so. A difference above the threshold fails the gate.
 // They are regenerated only on an intentional visual change, on a Mac, with
 //
-//   INNYTYPES_UPDATE_BASELINES=1 npx playwright test gallery
+//   RELOAD_UPDATE_BASELINES=1 npx playwright test gallery
 //
 // (playwright.config.ts turns that variable into updateSnapshots "all"; without it a missing
 // baseline is a failure, never silently written). Playwright's own --update-snapshots (-u) is
@@ -128,7 +128,7 @@ async function setTheme(page: Page, theme: Theme): Promise<void> {
 }
 
 async function openGallery(): Promise<{ page: Page; stop: () => Promise<void> }> {
-  const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "inny-gallery-")));
+  const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-gallery-")));
   const app = await launchTracked({
     executablePath: ELECTRON_BINARY,
     args: [WINDOW],
@@ -139,7 +139,7 @@ async function openGallery(): Promise<{ page: Page; stop: () => Promise<void> }>
         ),
       ),
       HOME: scratch,
-      INNYTYPES_USER_DATA: path.join(scratch, "user-data"),
+      RELOAD_USER_DATA: path.join(scratch, "user-data"),
     },
   });
   const page = await app.firstWindow();
@@ -173,8 +173,8 @@ test.describe("gallery", () => {
   // would rewrite them, so it fails here before any screenshot is taken.
   test.beforeAll(() => {
     const updating = test.info().config.updateSnapshots !== "none";
-    if (updating && process.env["INNYTYPES_UPDATE_BASELINES"] !== "1") {
-      throw new Error("Baselines are regenerated only with INNYTYPES_UPDATE_BASELINES=1");
+    if (updating && process.env["RELOAD_UPDATE_BASELINES"] !== "1") {
+      throw new Error("Baselines are regenerated only with RELOAD_UPDATE_BASELINES=1");
     }
   });
 
@@ -379,11 +379,11 @@ test.describe("gallery", () => {
         }, token);
       await setTheme(page, "light");
       const lightFills = [
-        await surface("--inny-surface-panel"),
-        await surface("--inny-surface-canvas"),
+        await surface("--reload-surface-panel"),
+        await surface("--reload-surface-canvas"),
       ];
       await setTheme(page, "dark");
-      expect(await surface("--inny-surface-panel")).not.toBe(lightFills[0]);
+      expect(await surface("--reload-surface-panel")).not.toBe(lightFills[0]);
       // Every element of every component on the gallery's page, and its fill.
       const fills = await page.getByTestId("gallery").evaluate((main) =>
         [...main.querySelectorAll("[data-component], [data-component] *")].map((element) => ({

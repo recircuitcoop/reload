@@ -50,25 +50,25 @@ describe("the address the endpoint may serve", () => {
   });
 });
 
-describe("the stored setting against INNYTYPES_MCP_HOST and INNYTYPES_MCP_PORT", () => {
+describe("the stored setting against RELOAD_MCP_HOST and RELOAD_MCP_PORT", () => {
   it("with nothing stored leaves the variables in charge, then the default", () => {
-    expect(configuredEndpoint({}, { INNYTYPES_MCP_PORT: "32999" })).toMatchObject({
+    expect(configuredEndpoint({}, { RELOAD_MCP_PORT: "32999" })).toMatchObject({
       host: "127.0.0.1",
       port: 32999,
       url: "http://127.0.0.1:32999/mcp",
       stored: false,
       ignoredVariables: [],
     });
-    expect(
-      configuredEndpoint({}, { INNYTYPES_MCP_HOST: "::1", INNYTYPES_MCP_PORT: "32999" }).url,
-    ).toBe("http://[::1]:32999/mcp");
+    expect(configuredEndpoint({}, { RELOAD_MCP_HOST: "::1", RELOAD_MCP_PORT: "32999" }).url).toBe(
+      "http://[::1]:32999/mcp",
+    );
     expect(configuredEndpoint({}, {})).toMatchObject({ host: DEFAULT_HOST, port: DEFAULT_PORT });
-    expect(configuredEndpoint({}, { INNYTYPES_MCP_HOST: "  " }).host).toBe(DEFAULT_HOST);
+    expect(configuredEndpoint({}, { RELOAD_MCP_HOST: "  " }).host).toBe(DEFAULT_HOST);
   });
 
   it("serves the stored address, not the variables: the setting wins", () => {
     const stored = { host: "127.0.0.2", port: 32010 };
-    const variables = { INNYTYPES_MCP_HOST: "127.0.0.3", INNYTYPES_MCP_PORT: "31999" };
+    const variables = { RELOAD_MCP_HOST: "127.0.0.3", RELOAD_MCP_PORT: "31999" };
     expect(configuredEndpoint(stored, variables)).toMatchObject({
       host: "127.0.0.2",
       port: 32010,
@@ -79,11 +79,11 @@ describe("the stored setting against INNYTYPES_MCP_HOST and INNYTYPES_MCP_PORT",
   it("names every variable it is ignoring, and none that is unset or not overridden", () => {
     const stored = { host: "127.0.0.2", port: 32010 };
     expect(
-      configuredEndpoint(stored, { INNYTYPES_MCP_HOST: "127.0.0.3", INNYTYPES_MCP_PORT: "31999" })
+      configuredEndpoint(stored, { RELOAD_MCP_HOST: "127.0.0.3", RELOAD_MCP_PORT: "31999" })
         .ignoredVariables,
-    ).toEqual(["INNYTYPES_MCP_HOST", "INNYTYPES_MCP_PORT"]);
+    ).toEqual(["RELOAD_MCP_HOST", "RELOAD_MCP_PORT"]);
     expect(configuredEndpoint(stored, {}).ignoredVariables).toEqual([]);
-    const untouched = configuredEndpoint({}, { INNYTYPES_MCP_PORT: "31999" });
+    const untouched = configuredEndpoint({}, { RELOAD_MCP_PORT: "31999" });
     expect(untouched.stored).toBe(false);
     expect(untouched.ignoredVariables).toEqual([]);
   });
@@ -91,28 +91,28 @@ describe("the stored setting against INNYTYPES_MCP_HOST and INNYTYPES_MCP_PORT",
   it("lets each stored key win on its own: a stored port does not take the host with it", () => {
     const endpoint = configuredEndpoint(
       { port: 32010 },
-      { INNYTYPES_MCP_HOST: "127.0.0.3", INNYTYPES_MCP_PORT: "31999" },
+      { RELOAD_MCP_HOST: "127.0.0.3", RELOAD_MCP_PORT: "31999" },
     );
     expect([endpoint.host, endpoint.port]).toEqual(["127.0.0.3", 32010]);
-    expect(endpoint.ignoredVariables).toEqual(["INNYTYPES_MCP_PORT"]);
+    expect(endpoint.ignoredVariables).toEqual(["RELOAD_MCP_PORT"]);
   });
 
   it("keeps a stored port when the variable it beats is unreadable, and refuses it otherwise", () => {
-    const variables = { INNYTYPES_MCP_PORT: "thirty-one-thousand" };
+    const variables = { RELOAD_MCP_PORT: "thirty-one-thousand" };
     expect(configuredEndpoint({ host: "127.0.0.1", port: 32010 }, variables).port).toBe(32010);
     expect(() => configuredEndpoint({}, variables)).toThrow(
-      "INNYTYPES_MCP_PORT must be a whole number",
+      "RELOAD_MCP_PORT must be a whole number",
     );
   });
 
   it.each([
-    [{}, { INNYTYPES_MCP_PORT: "0" }, "the MCP port must be between 1 and 65535"],
+    [{}, { RELOAD_MCP_PORT: "0" }, "the MCP port must be between 1 and 65535"],
     [
       {},
-      { INNYTYPES_MCP_HOST: "0.0.0.0" },
+      { RELOAD_MCP_HOST: "0.0.0.0" },
       "the MCP address must be loopback; wildcard and network binds are refused",
     ],
-    [{}, { INNYTYPES_MCP_HOST: "localhost" }, "the MCP address must be a numeric loopback address"],
+    [{}, { RELOAD_MCP_HOST: "localhost" }, "the MCP address must be a numeric loopback address"],
     [{ host: "192.168.1.2" }, {}, "must be loopback"],
   ])("judges what it reads by the same rule: %j %j is refused", (stored, variables, reason) => {
     expect(() => configuredEndpoint(stored, variables)).toThrow(reason);
@@ -121,7 +121,7 @@ describe("the stored setting against INNYTYPES_MCP_HOST and INNYTYPES_MCP_PORT",
 
 describe("who may speak to the endpoint", () => {
   it.each([
-    ["innytypes.attacker.example", "a name the browser was told is this service"],
+    ["reload.attacker.example", "a name the browser was told is this service"],
     ["127.0.0.1:1", "the right address on a port this service does not own"],
     [undefined, "no Host at all"],
     ["localhost:4000", "a name rather than the address"],
@@ -135,7 +135,7 @@ describe("who may speak to the endpoint", () => {
   });
 
   it.each([
-    ["http://innytypes.attacker.example", "a page served by a real site"],
+    ["http://reload.attacker.example", "a page served by a real site"],
     ["http://localhost:4000", "a name rather than an address"],
     ["http://127.0.0.1:1", "loopback, on another port"],
     ["null", "an opaque origin"],

@@ -8,8 +8,8 @@ export class LoginItemError extends Error {
 }
 
 export interface LoginItem {
-  /** Ask the OS to start InnyTypes at login. Throws LoginItemError when it will not. */
+  /** Ask the OS to start Reload at login. Throws LoginItemError when it will not. */
   register(): void;
-  /** Ask the OS to stop starting InnyTypes at login. Throws LoginItemError when it will not. */
+  /** Ask the OS to stop starting Reload at login. Throws LoginItemError when it will not. */
   unregister(): void;
 }

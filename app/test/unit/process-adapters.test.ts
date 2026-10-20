@@ -47,7 +47,7 @@ describe("UtilityProcessLauncher", () => {
     );
     const handle = launcher.fork({
       modulePath: "/dist/runtime/main.cjs",
-      serviceName: "InnyTypes runtime",
+      serviceName: "Reload runtime",
       env: { HOME: "/h" },
     });
     return { forks, process, handle, printed };
@@ -59,7 +59,7 @@ describe("UtilityProcessLauncher", () => {
       {
         modulePath: "/dist/runtime/main.cjs",
         args: [],
-        options: { env: { HOME: "/h" }, serviceName: "InnyTypes runtime", stdio: "pipe" },
+        options: { env: { HOME: "/h" }, serviceName: "Reload runtime", stdio: "pipe" },
       },
     ]);
     expect(forks[0]?.options.env).not.toHaveProperty("PATH");
@@ -101,7 +101,7 @@ describe("UtilityProcessLauncher", () => {
     process.stdout.emit("end");
     process.stderr.emit("end");
     const from = (stream: string, text: string) => ({
-      service: "InnyTypes runtime",
+      service: "Reload runtime",
       pid: 41,
       stream,
       line: { text, cut: false },

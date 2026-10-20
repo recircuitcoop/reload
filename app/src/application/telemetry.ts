@@ -1,4 +1,4 @@
-// The only route from InnyTypes to a telemetry server (plan 0018 §3 telemetry.py: Port, the
+// The only route from Reload to a telemetry server (plan 0018 §3 telemetry.py: Port, the
 // consent-first design kept whole; the port of TelemetryPipeline, telemetry.py:1125-1370).
 //
 // Everything here exists to make one sentence true: nothing leaves this machine that the person

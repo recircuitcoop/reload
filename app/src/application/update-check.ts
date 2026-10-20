@@ -1,4 +1,4 @@
-// Whether a newer InnyTypes exists, and getting it ready to install (helper/update.py and
+// Whether a newer Reload exists, and getting it ready to install (helper/update.py and
 // swap.py, replaced; plan 0018 §1, §3; WI-0018-24).
 //
 // Plan 0003 D10, the rule this whole file exists to keep: trust the signature, never the
@@ -52,7 +52,7 @@ export const MAX_SIGNATURE_BYTES = 4096;
 /** electron-builder's mac zip and Linux AppImage artifacts: generous, still bounded. */
 export const MAX_ARTIFACT_BYTES = 500 * 1024 * 1024;
 
-const NOTICE_SUBJECT = "InnyTypes";
+const NOTICE_SUBJECT = "Reload";
 
 export type UpdateOutcome =
   { readonly ok: true; readonly message: string } | { readonly ok: false; readonly error: string };
@@ -146,7 +146,7 @@ export class UpdateCheck {
       this.#emit({ kind: "found", version: null, at: this.#now() });
       notifier.clear("core-update-available", NOTICE_SUBJECT);
       notifier.clear("core-update-refused", NOTICE_SUBJECT);
-      return { ok: true, message: "Checked: InnyTypes is up to date." };
+      return { ok: true, message: "Checked: Reload is up to date." };
     }
 
     let file;
@@ -185,7 +185,7 @@ export class UpdateCheck {
       // a refusal (nothing was tampered with), so no notice, but nothing is staged either.
       logger.warn(`update: the platform updater could not be reached: ${reasonOf(error)}`);
     }
-    return { ok: true, message: `Checked: InnyTypes ${parsed.version} is available.` };
+    return { ok: true, message: `Checked: Reload ${parsed.version} is available.` };
   }
 
   /**
@@ -242,7 +242,7 @@ export class UpdateCheck {
       );
     }
     this.#staged = true;
-    return { ok: true, message: `Verified: InnyTypes ${to.version} installs when you quit.` };
+    return { ok: true, message: `Verified: Reload ${to.version} installs when you quit.` };
   }
 
   #policy():

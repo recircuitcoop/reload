@@ -239,7 +239,7 @@ export class ViewService implements Views {
       case "snapshot.list":
         return ok(this.#snapshotList());
       default:
-        return refused(`the InnyTypes runtime does not serve ${op}`);
+        return refused(`the Reload runtime does not serve ${op}`);
     }
   }
 

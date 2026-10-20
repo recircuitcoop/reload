@@ -135,7 +135,7 @@ export function serveShell(deps: ServeShellDeps): void {
           link.post({ v: 1, t: "reply", rid, result });
         };
         if (deps.onCall === undefined) {
-          reply({ ok: false, error: `the InnyTypes ${child} does not serve ${op} yet` });
+          reply({ ok: false, error: `the Reload ${child} does not serve ${op} yet` });
           return;
         }
         deps.onCall(op, message.args).then(reply, (error: unknown) => {

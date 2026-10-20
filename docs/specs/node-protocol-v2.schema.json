@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://innytypes/schemas/frames.v2.json",
+  "$id": "https://reload/schemas/frames.v2.json",
   "$defs": {
     "id": {
       "type": "string",

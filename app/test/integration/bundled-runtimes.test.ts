@@ -40,7 +40,7 @@ describe.skipIf(!HAS_RUNTIMES)(
     });
 
     it("builds a real uv venv on the bundled Python 3.13, with no lock (a dependency-free package)", async () => {
-      const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "inny-bundled-env-"));
+      const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-bundled-env-"));
       try {
         const builder = new PackageEnvironmentBuilder({
           locator: new BundledRuntimeLocator(RUNTIMES_DIR, process.platform),

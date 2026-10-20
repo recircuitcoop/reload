@@ -18,7 +18,7 @@ export function fieldBoxClass(
     state === "focus"
       ? "outline-2 -outline-offset-1 outline-focus"
       : "focus-within:outline-2 focus-within:-outline-offset-1 focus-within:outline-focus",
-    state === "disabled" && "cursor-not-allowed opacity-[var(--inny-opacity-disabled)]",
+    state === "disabled" && "cursor-not-allowed opacity-[var(--reload-opacity-disabled)]",
     ...extra,
   );
 }
@@ -33,4 +33,4 @@ export const POPUP_SURFACE_CLASS =
 
 /** One option in such a list: 32 high, the highlighted one on the sunken fill. */
 export const OPTION_CLASS =
-  "flex h-[var(--inny-size-control)] cursor-pointer items-center gap-2 rounded-s px-3 text-body text-primary data-highlighted:bg-surface-sunken data-disabled:cursor-not-allowed data-disabled:opacity-[var(--inny-opacity-disabled)]";
+  "flex h-[var(--reload-size-control)] cursor-pointer items-center gap-2 rounded-s px-3 text-body text-primary data-highlighted:bg-surface-sunken data-disabled:cursor-not-allowed data-disabled:opacity-[var(--reload-opacity-disabled)]";

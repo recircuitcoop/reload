@@ -61,7 +61,7 @@ class MemorySettings implements SettingsStore {
   }
 }
 
-function endpoint(variables: Record<string, string> = { INNYTYPES_MCP_PORT: "40001" }) {
+function endpoint(variables: Record<string, string> = { RELOAD_MCP_PORT: "40001" }) {
   const listener = new FakeListener();
   const settings = new MemorySettings();
   const logger = new RecordingLogger();
@@ -96,14 +96,14 @@ describe("opening the endpoint", () => {
   });
 
   it("serves the stored address and not the variable, and names the variable it ignores", async () => {
-    const { subject, listener, settings } = endpoint({ INNYTYPES_MCP_PORT: "40001" });
+    const { subject, listener, settings } = endpoint({ RELOAD_MCP_PORT: "40001" });
     settings.stored = { host: "127.0.0.1", port: 40002 };
     await subject.start();
     expect(listener.binds).toEqual([{ host: "127.0.0.1", port: 40002 }]);
     expect(subject.status()).toMatchObject({
       served: "http://127.0.0.1:40002/mcp",
       stored: true,
-      ignoredVariables: ["INNYTYPES_MCP_PORT"],
+      ignoredVariables: ["RELOAD_MCP_PORT"],
     });
   });
 
@@ -122,7 +122,7 @@ describe("opening the endpoint", () => {
   });
 
   it("shows no address and the refusal for a configuration that can never be served", async () => {
-    const { subject, listener } = endpoint({ INNYTYPES_MCP_HOST: "0.0.0.0" });
+    const { subject, listener } = endpoint({ RELOAD_MCP_HOST: "0.0.0.0" });
     await subject.start();
     expect(listener.binds).toEqual([]);
     expect(subject.status()).toMatchObject({
@@ -170,7 +170,7 @@ describe("moving the endpoint", () => {
       served: "http://127.0.0.1:40005/mcp",
       saved: "http://127.0.0.1:40005/mcp",
       stored: true,
-      ignoredVariables: ["INNYTYPES_MCP_PORT"],
+      ignoredVariables: ["RELOAD_MCP_PORT"],
       problem: null,
       warning: CLIENTS_MUST_BE_UPDATED,
     });

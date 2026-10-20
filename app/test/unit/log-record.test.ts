@@ -48,8 +48,8 @@ describe("levels", () => {
 describe("the line format", () => {
   it("is logs.py's LOG_FORMAT: local asctime, level padded to 8, pid to 6, name, message", () => {
     const time = new Date(2026, 8, 25, 7, 4, 3, 9).getTime();
-    const record: LogRecord = { time, level: "STDERR", pid: 42, name: "innytypes.x", msg: "hi" };
-    expect(formatLine(record)).toBe("2026-09-25 07:04:03,009 STDERR       42 innytypes.x: hi\n");
+    const record: LogRecord = { time, level: "STDERR", pid: 42, name: "reload.x", msg: "hi" };
+    expect(formatLine(record)).toBe("2026-09-25 07:04:03,009 STDERR       42 reload.x: hi\n");
   });
 
   it("cuts a long printed line and says so", () => {
@@ -64,7 +64,7 @@ describe("the wire", () => {
     time: 1,
     level: "INFO",
     pid: 7,
-    name: "innytypes.runtime",
+    name: "reload.runtime",
     msg: "a\nb",
   };
 

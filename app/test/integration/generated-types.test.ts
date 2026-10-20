@@ -35,8 +35,8 @@ import {
 } from "../fixtures/raw-node/fixture";
 
 const FIXTURE = path.resolve(import.meta.dirname, "..", "fixtures", "every-control");
-const PROBE = "inny-everycontrol-probe";
-const TICKER = "inny-everycontrol-ticker";
+const PROBE = "reload-everycontrol-probe";
+const TICKER = "reload-everycontrol-ticker";
 
 let scratch: string;
 let journal: MemoryJournal;
@@ -51,7 +51,7 @@ let live: FakeNode[];
 function setUp(commandFor?: () => never): TypeRegistration {
   const validator = new AjvSchemaValidator();
   const document: unknown = JSON.parse(
-    fs.readFileSync(path.join(FIXTURE, "inny-package.json"), "utf8"),
+    fs.readFileSync(path.join(FIXTURE, "reload-package.json"), "utf8"),
   );
   const loaded = loadNodeTypes(
     [{ name: "everycontrol", folder: FIXTURE, document }],
@@ -167,7 +167,7 @@ function startFrame(id: string): Record<string, unknown> {
 }
 
 beforeEach(() => {
-  scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "inny-types-")));
+  scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-types-")));
   journal = new MemoryJournal();
   events = new EventEmitter();
   logger = new RecordingLogger();
@@ -264,9 +264,11 @@ describe("a generated type's instance", () => {
       extra: "kept",
       topic: "everycontrol.second.v1",
       payload: { received: { x: 1 }, label: "L" },
-      inny: { event: { type: "everycontrol.second.v1", source: `inny://everycontrol/probe/p2` } },
+      reload: {
+        event: { type: "everycontrol.second.v1", source: `reload://everycontrol/probe/p2` },
+      },
     });
-    expect((second?.["inny"] as { cause: string }).cause).toMatch(/[0-9a-f-]{36}/);
+    expect((second?.["reload"] as { cause: string }).cause).toMatch(/[0-9a-f-]{36}/);
     // Journaled before it was sent, cleared when it was done.
     expect(journal.calls).toHaveLength(2);
     expect(journal.calls[0]).toMatch(/^put /);
@@ -290,9 +292,9 @@ describe("a generated type's instance", () => {
     await waitFor("the tick", () => node.sent.length === 1);
     const [message] = node.sent[0] ?? [];
     expect(message).toMatchObject({ payload: { greeting: "hi" }, topic: "everycontrol.tick.v1" });
-    const inny = message?.["inny"] as { run: string; event: { id: string }; cause?: string };
-    expect(inny.run).toBe(inny.event.id);
-    expect(inny.cause).toBeUndefined();
+    const reload = message?.["reload"] as { run: string; event: { id: string }; cause?: string };
+    expect(reload.run).toBe(reload.event.id);
+    expect(reload.cause).toBeUndefined();
     expect(node.statuses).toContainEqual({ fill: "green", shape: "ring", text: "watching" });
   });
 
@@ -310,7 +312,7 @@ describe("a generated type's instance", () => {
     expect(node.answered[0]?.outputs[0]?.[1]).toMatchObject({
       _msgid: "old",
       payload: { received: { again: true }, label: "L" },
-      inny: { cause: "kept-1" },
+      reload: { cause: "kept-1" },
     });
     expect(journal.all()).toEqual([]);
   });
@@ -333,7 +335,7 @@ describe("a generated type's instance", () => {
   it("refuses to register a type no loaded package declares", () => {
     const registration = setUp();
     expect(() => {
-      registration.register(red, "inny-everycontrol-nope");
-    }).toThrow("inny-everycontrol-nope is not a type of any loaded node package");
+      registration.register(red, "reload-everycontrol-nope");
+    }).toThrow("reload-everycontrol-nope is not a type of any loaded node package");
   });
 });

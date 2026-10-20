@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   DeployGuard,
   hostAllowed,
-  innyPackageOf,
+  reloadPackageOf,
   refusedTypes,
   typesNamedIn,
 } from "../../src/application/deploy-guard";
@@ -20,7 +20,7 @@ const CORE: NodeSet = {
 const GENERATED: NodeSet = {
   id: "node-red/generated",
   module: "node-red",
-  types: ["inny-rawnode-raw", "inny-rogue-raw"],
+  types: ["reload-rawnode-raw", "reload-rogue-raw"],
   enabled: true,
 };
 const SETS = [CORE, GENERATED];
@@ -64,22 +64,37 @@ describe("typesNamedIn", () => {
   });
 });
 
-describe("innyPackageOf", () => {
-  it("is the package of inny-<package>-<id>, whose name has no hyphen", () => {
-    expect(innyPackageOf("inny-rawnode-raw")).toBe("rawnode");
-    expect(innyPackageOf("inny-user_events-a-b")).toBe("user_events");
+describe("reloadPackageOf", () => {
+  it("is the package of reload-<package>-<id>, whose name has no hyphen", () => {
+    expect(reloadPackageOf("reload-rawnode-raw")).toBe("rawnode");
+    expect(reloadPackageOf("reload-user_events-a-b")).toBe("user_events");
   });
 
   it("is null for anything else", () => {
-    for (const type of ["inject", "inny-", "inny-x-y", "inny-Raw-x", "inny-raw", "xinny-raw-x"]) {
-      expect(innyPackageOf(type)).toBeNull();
+    for (const type of [
+      "inject",
+      "reload-",
+      "reload-x-y",
+      "reload-Raw-x",
+      "reload-raw",
+      "xreload-raw-x",
+    ]) {
+      expect(reloadPackageOf(type)).toBeNull();
     }
   });
 });
 
 describe("refusedTypes", () => {
-  it("allows structure, core types, and InnyTypes types of verified packages", () => {
-    const types = ["tab", "subflow", "group", "subflow:abc", "inject", "catch", "inny-rawnode-raw"];
+  it("allows structure, core types, and Reload types of verified packages", () => {
+    const types = [
+      "tab",
+      "subflow",
+      "group",
+      "subflow:abc",
+      "inject",
+      "catch",
+      "reload-rawnode-raw",
+    ];
     expect(refusedTypes(types, SETS, VERIFIED)).toEqual([]);
   });
 
@@ -92,8 +107,8 @@ describe("refusedTypes", () => {
   });
 
   it("refuses a registered type whose package is not in the store", () => {
-    expect(refusedTypes(["inny-rogue-raw"], SETS, VERIFIED)).toEqual(["inny-rogue-raw"]);
-    expect(refusedTypes(["inny-rawnode-raw"], SETS, new Set())).toEqual(["inny-rawnode-raw"]);
+    expect(refusedTypes(["reload-rogue-raw"], SETS, VERIFIED)).toEqual(["reload-rogue-raw"]);
+    expect(refusedTypes(["reload-rawnode-raw"], SETS, new Set())).toEqual(["reload-rawnode-raw"]);
   });
 
   it("refuses a type from any module but Node-RED's own, even if it loaded", () => {
@@ -168,7 +183,7 @@ describe("DeployGuard", () => {
       status: 400,
       body: {
         code: "unknown_types",
-        message: "Not installed in InnyTypes: function, exec, template",
+        message: "Not installed in Reload: function, exec, template",
       },
     });
     expect(logger.lines).toEqual([
@@ -181,7 +196,7 @@ describe("DeployGuard", () => {
     expect(await deployGuard.checkDeploy("flows", [])).toEqual({ ok: true });
     expect(asked()).toBe(0);
     expect(
-      await deployGuard.checkDeploy("flow", { nodes: [{ type: "inny-rawnode-raw" }] }),
+      await deployGuard.checkDeploy("flow", { nodes: [{ type: "reload-rawnode-raw" }] }),
     ).toEqual({ ok: true });
     expect(asked()).toBe(1);
     expect(logger.lines).toEqual([]);

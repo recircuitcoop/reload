@@ -137,7 +137,7 @@ test("General pairs with Anytype: Pair asks for the code, a wrong one is refused
       {
         ...env,
         ANYTYPE_API_BASE_URL: anytype.url,
-        INNYTYPES_TEST_ANYTYPE: fakeChild(scratch),
+        RELOAD_TEST_ANYTYPE: fakeChild(scratch),
       },
       { allowedKeys: [KEY] },
     );
@@ -199,18 +199,18 @@ test("General's AI apps line names the address served, Change port moves it live
   const blocker = net.createServer();
   const apps: ElectronApplication[] = [];
   try {
-    const firstPort = Number(env["INNYTYPES_MCP_PORT"]);
+    const firstPort = Number(env["RELOAD_MCP_PORT"]);
     const { app, window } = await launchApp({
       ...env,
       ANYTYPE_API_BASE_URL: anytype.url,
-      INNYTYPES_TEST_ANYTYPE: fakeChild(scratch),
+      RELOAD_TEST_ANYTYPE: fakeChild(scratch),
     });
     apps.push(app);
     const general = await openGeneral(window);
     const state = general.getByTestId("general-ai-apps-state");
     // The address is drawn as code, its backticks not shown.
     await expect(state).toHaveText(
-      `Claude, Codex and other apps can use your Anytype through InnyTypes at 127.0.0.1:${String(firstPort)}.`,
+      `Claude, Codex and other apps can use your Anytype through Reload at 127.0.0.1:${String(firstPort)}.`,
       { timeout: 20_000 },
     );
     await expect(state.getByTestId("inline-code")).toHaveText(`127.0.0.1:${String(firstPort)}`);
@@ -292,11 +292,11 @@ test("Set up ChatGPT says ChatGPT's own steps, Copy address copies the address s
   const anytype = await fakeAnytype();
   const apps: ElectronApplication[] = [];
   try {
-    const firstPort = Number(env["INNYTYPES_MCP_PORT"]);
+    const firstPort = Number(env["RELOAD_MCP_PORT"]);
     const { app, window, output } = await launchApp({
       ...env,
       ANYTYPE_API_BASE_URL: anytype.url,
-      INNYTYPES_TEST_ANYTYPE: fakeChild(scratch),
+      RELOAD_TEST_ANYTYPE: fakeChild(scratch),
     });
     apps.push(app);
     const general = await openGeneral(window);
@@ -384,7 +384,7 @@ test("Set up ChatGPT says ChatGPT's own steps, Copy address copies the address s
     expect(await window.content()).not.toContain(token);
     await quit(app);
     expect(output.join("")).not.toContain(token);
-    const log = path.join(scratch, "Library", "Logs", "innytypes", "innytypes.log");
+    const log = path.join(scratch, "Library", "Logs", "reload", "reload.log");
     expect(fs.existsSync(log)).toBe(true);
     expect(fs.readFileSync(log, "utf8")).not.toContain(token);
   } finally {
@@ -399,13 +399,13 @@ test("General's AI apps offers the host beside the port: a host that is not loop
   const anytype = await fakeAnytype();
   const apps: ElectronApplication[] = [];
   try {
-    const firstPort = Number(env["INNYTYPES_MCP_PORT"]);
+    const firstPort = Number(env["RELOAD_MCP_PORT"]);
     // The variable names the IPv4 host; the stored one must win over it at the next start.
     const runEnv = {
       ...env,
-      INNYTYPES_MCP_HOST: "127.0.0.1",
+      RELOAD_MCP_HOST: "127.0.0.1",
       ANYTYPE_API_BASE_URL: anytype.url,
-      INNYTYPES_TEST_ANYTYPE: fakeChild(scratch),
+      RELOAD_TEST_ANYTYPE: fakeChild(scratch),
     };
     const { app, window } = await launchApp(runEnv);
     apps.push(app);
@@ -455,7 +455,7 @@ test("General's AI apps offers the host beside the port: a host that is not loop
     expect(storedMcp()).toEqual({ host: "::1", port: secondPort });
     await quit(app);
 
-    // The next start: the stored address wins over INNYTYPES_MCP_HOST and INNYTYPES_MCP_PORT.
+    // The next start: the stored address wins over RELOAD_MCP_HOST and RELOAD_MCP_PORT.
     const again = await launchApp(runEnv);
     apps.push(again.app);
     const reopened = await openGeneral(again.window);
@@ -496,10 +496,10 @@ test("General shows the queued reports in full, Advanced's status details, Recor
   );
   const runEnv = {
     ...env,
-    INNYTYPES_E2E_HOOKS: "1",
-    INNYTYPES_TEST_MACHINE_ID: "E2E-GENERAL-MACHINE-7c1e",
-    INNYTYPES_UMAMI_URL: `https://127.0.0.1:${String(closedPort)}/umami`,
-    INNYTYPES_UMAMI_WEBSITE_ID: "e2e-site",
+    RELOAD_E2E_HOOKS: "1",
+    RELOAD_TEST_MACHINE_ID: "E2E-GENERAL-MACHINE-7c1e",
+    RELOAD_UMAMI_URL: `https://127.0.0.1:${String(closedPort)}/umami`,
+    RELOAD_UMAMI_WEBSITE_ID: "e2e-site",
   };
   const apps: ElectronApplication[] = [];
   try {
@@ -523,9 +523,9 @@ test("General shows the queued reports in full, Advanced's status details, Recor
     const queued = await window.evaluate(() =>
       (
         globalThis as unknown as {
-          inny: { app: { telemetryReports(): Promise<{ kind: string; payload: unknown }[]> } };
+          reload: { app: { telemetryReports(): Promise<{ kind: string; payload: unknown }[]> } };
         }
-      ).inny.app.telemetryReports(),
+      ).reload.app.telemetryReports(),
     );
     expect(queued.map((report) => report.kind)).toEqual(["usage"]);
     // In full: each report's every field, exactly as it would leave.
@@ -558,7 +558,7 @@ test("General shows the queued reports in full, Advanced's status details, Recor
       "running",
     );
     await expect(advanced.getByTestId("general-advanced-endpoint")).toContainText(
-      `http://127.0.0.1:${env["INNYTYPES_MCP_PORT"] ?? ""}/mcp`,
+      `http://127.0.0.1:${env["RELOAD_MCP_PORT"] ?? ""}/mcp`,
       { timeout: 20_000 },
     );
     await expect(advanced.getByTestId("general-advanced-anytype")).toBeVisible();
@@ -638,7 +638,7 @@ test("General's Recorders and folders lists each folder source by its folder's n
       type Flow = { id: string; sources: { id: string; type: string }[] };
       const api = (
         globalThis as unknown as {
-          inny: {
+          reload: {
             app: {
               flowFromTemplate(id: string): Promise<{ ok: boolean; value: { id: string } }>;
               flows(): Promise<{ ok: boolean; value: Flow[] }>;
@@ -650,7 +650,7 @@ test("General's Recorders and folders lists each folder source by its folder's n
             };
           };
         }
-      ).inny.app;
+      ).reload.app;
       // A flow write waits for the canvas to finish loading ("loading"): asked again until then.
       let made = await api.flowFromTemplate("folder-to-anytype");
       for (let tries = 0; !made.ok && tries < 60; tries += 1) {
@@ -660,7 +660,7 @@ test("General's Recorders and folders lists each folder source by its folder's n
       if (!made.ok) return { made: JSON.stringify(made), configured: false, flowId: "" };
       const flows = await api.flows();
       const flow = flows.value.find((each) => each.id === made.value.id);
-      const source = flow?.sources.find((each) => each.type === "inny-folder-watch");
+      const source = flow?.sources.find((each) => each.type === "reload-reload_folder-watch");
       const configured = await api.configureNode(made.value.id, source?.id ?? "", { folder });
       return {
         made: made.ok,
@@ -683,9 +683,9 @@ test("General's Recorders and folders lists each folder source by its folder's n
       (flowId) =>
         (
           globalThis as unknown as {
-            inny: { app: { setFlowOn(id: string, on: boolean): Promise<{ ok: boolean }> } };
+            reload: { app: { setFlowOn(id: string, on: boolean): Promise<{ ok: boolean }> } };
           }
-        ).inny.app.setFlowOn(flowId, true),
+        ).reload.app.setFlowOn(flowId, true),
       step.flowId,
     );
     expect(on.ok).toBe(true);

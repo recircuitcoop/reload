@@ -2,7 +2,7 @@
 // (size.popout-width): the title (20), the subtitle (caption, secondary), the fields, then
 // Continue (Primary), Later (Secondary) and Skip this step (Quiet).
 //
-// Only the chrome is InnyTypes'. The title, the subtitle and every field are the view node's own
+// Only the chrome is Reload's. The title, the subtitle and every field are the view node's own
 // `present.content` (design-system "The contract"), drawn by the caller and passed in as children:
 // nothing here knows what a speaker, a supplier or an album is. Form No is a question without
 // fields, answered by the buttons alone.
@@ -56,7 +56,7 @@ export function QuestionPopout({
       {...variantAttributes("question-popout", { form }, "question-popout")}
       aria-label={title}
       className={cx(
-        "flex w-[var(--inny-size-popout-width)] max-w-full flex-col gap-5 rounded-l bg-surface-panel p-5 shadow-popout",
+        "flex w-[var(--reload-size-popout-width)] max-w-full flex-col gap-5 rounded-l bg-surface-panel p-5 shadow-popout",
         className,
       )}
     >

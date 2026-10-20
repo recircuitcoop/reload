@@ -6,7 +6,7 @@ import { ESLint } from "eslint";
 import { describe, expect, it } from "vitest";
 
 const APP = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const RULE = "innytypes-node-red/no-node-red-restart";
+const RULE = "reload-node-red/no-node-red-restart";
 
 /** The messages the rule reports for `code`, linted as an adapter file. */
 async function findings(code: string): Promise<string[]> {

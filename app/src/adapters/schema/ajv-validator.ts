@@ -1,14 +1,14 @@
 // ajv, the JSON Schema 2020-12 validator (plan 0018 §1), behind the SchemaValidator port.
 //
 // The declaration schema is the spec's own §2.6 block, extracted verbatim to
-// docs/specs/inny-package.v2.schema.json. Every problem names its field as a JSON Pointer; a
+// docs/specs/reload-package.v2.schema.json. Every problem names its field as a JSON Pointer; a
 // missing required property is named by its own path, not its parent's, so a refusal says
 // "types/0/label: is required" rather than "types/0: must have required property 'label'".
 
 import { Ajv2020, type ErrorObject, type ValidateFunction } from "ajv/dist/2020.js";
 
-import declarationSchema from "../../../../docs/specs/inny-package.v2.schema.json" with { type: "json" };
-import { INNYTYPE_ANNOTATION } from "../../domain/forms/innytype";
+import declarationSchema from "../../../../docs/specs/reload-package.v2.schema.json" with { type: "json" };
+import { RELOAD_ANNOTATION } from "../../domain/forms/reload-keyword";
 import type { FieldProblem, JsonSchema } from "../../domain/packages/declaration";
 import type { SchemaFailure, SchemaValidator } from "../../ports/schema-validator";
 
@@ -64,10 +64,8 @@ export class AjvSchemaValidator implements SchemaValidator {
     strictRequired: false,
   });
   // A type's own config schema, written by its author: keywords JSON Schema leaves open
-  // (`x-secret`) are allowed. `innytype` is a known annotation (spec 2.4.1), never a refusal.
-  readonly #lenient = new Ajv2020({ allErrors: true, strict: false }).addKeyword(
-    INNYTYPE_ANNOTATION,
-  );
+  // (`x-secret`) are allowed. `reload` is a known annotation (spec 2.4.1), never a refusal.
+  readonly #lenient = new Ajv2020({ allErrors: true, strict: false }).addKeyword(RELOAD_ANNOTATION);
   readonly #declaration: ValidateFunction;
   /** Compiled config schemas, by their JSON text: each type's is compiled once. */
   readonly #compiled = new Map<string, ValidateFunction>();
@@ -101,7 +99,7 @@ export class AjvSchemaValidator implements SchemaValidator {
     return { keyword: first?.keyword ?? "", schemaPath: first?.schemaPath ?? "" };
   }
 
-  /** Why `schema` cannot be compiled, as ajv says it; null when it can (inny-pack build). */
+  /** Why `schema` cannot be compiled, as ajv says it; null when it can (reload-pack build). */
   compileProblem(schema: JsonSchema): string | null {
     const validate = this.#compile(schema);
     return typeof validate === "string" ? validate : null;

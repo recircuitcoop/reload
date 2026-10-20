@@ -87,7 +87,7 @@ export class LaunchAtLogin {
 export const unpackagedLoginItem: LoginItem = {
   register: () => {
     throw new LoginItemError(
-      "starting InnyTypes at login needs the installed application, and this run is not one",
+      "starting Reload at login needs the installed application, and this run is not one",
     );
   },
   unregister: () => {

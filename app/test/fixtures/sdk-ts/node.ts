@@ -1,4 +1,4 @@
-// The TypeScript SDK reference node (WI-0018-26): built on @innytypes/node
+// The TypeScript SDK reference node (WI-0018-26): built on @recircuit/reload-node
 // (sdk/ts/src/node.ts), not a raw hand-rolled speaker of the protocol like the viewts/
 // folderflow/popoutkit fixtures. Node's standard library only, run as-is by a Node that
 // strips types (Node 22.18+, or Electron as Node); it is not meant to be built.

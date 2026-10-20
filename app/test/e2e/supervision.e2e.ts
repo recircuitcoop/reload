@@ -79,10 +79,10 @@ test("kill -9 of the runtime restarts it on the same port, and leaves no orphan"
     const utilities = await app.evaluate(({ app: shell }) =>
       shell.getAppMetrics().filter((metric) => metric.type === "Utility"),
     );
-    expect(utilities.filter((m) => m.name === "InnyTypes runtime").map((m) => m.pid)).toEqual([
+    expect(utilities.filter((m) => m.name === "Reload runtime").map((m) => m.pid)).toEqual([
       after.pid,
     ]);
-    expect(utilities.filter((m) => m.name === "InnyTypes services").map((m) => m.pid)).toEqual([
+    expect(utilities.filter((m) => m.name === "Reload services").map((m) => m.pid)).toEqual([
       services.pid,
     ]);
 
@@ -117,9 +117,7 @@ test("the crash-loop limit shows an error with Restart, and Restart brings the r
       "down-for-good",
     );
     // Told once (WI-0018-21), and recorded in the notice file until Restart clears it.
-    expect(output.join("").match(/notice: InnyTypes stopped restarting the runtime/g)).toHaveLength(
-      1,
-    );
+    expect(output.join("").match(/notice: Reload stopped restarting the runtime/g)).toHaveLength(1);
     const noticeFile = path.join(userData, "notices.json");
     const recorded = (): unknown => JSON.parse(fs.readFileSync(noticeFile, "utf8"));
     expect(recorded()).toEqual([
@@ -278,9 +276,9 @@ test("closing the window does not quit, and a second launch brings the window fo
         .filter((metric) => metric.type === "Utility")
         .map((m) => m.name ?? ""),
     );
-    expect(utilities.filter((name) => name.startsWith("InnyTypes")).sort()).toEqual([
-      "InnyTypes runtime",
-      "InnyTypes services",
+    expect(utilities.filter((name) => name.startsWith("Reload")).sort()).toEqual([
+      "Reload runtime",
+      "Reload services",
     ]);
     expect(isAlive(runtime.pid)).toBe(true);
 

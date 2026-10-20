@@ -7,7 +7,7 @@ General) and Live.
 
 ## Voice
 
-InnyTypes speaks like a capable assistant who has just done something for you and tells you in one
+Reload speaks like a capable assistant who has just done something for you and tells you in one
 line. It is calm, specific and plain. It names things by what you call them (your recorder, your
 spaces, your customers), never by how it is built.
 
@@ -17,7 +17,7 @@ spaces, your customers), never by how it is built.
 | "Not paired with Anytype yet." | "no Anytype API key in /Users/.../anytype_api_key" |
 | "Waiting for you: who spoke?" | "Action view pending (input 22783672)" |
 | "Couldn't reach Anytype. Is it running?" | "ECONNREFUSED 127.0.0.1:31009" |
-| "Transcribing, about 12 minutes left." | "innyrize-diarize (n1): 71% (640s of 900s)" |
+| "Transcribing, about 12 minutes left." | "reload_summarize-diarize (n1): 71% (640s of 900s)" |
 
 **Rules**
 - Second person, active voice, present tense for state and past tense for what got done.
@@ -66,7 +66,7 @@ first run is over; the navigation then holds Configuration and Live.
 
 | Surface | Title | One-line purpose (shown when empty) |
 |---|---|---|
-| Setup (first run only) | **Set up InnyTypes** | (the screens below; never shown again) |
+| Setup (first run only) | **Set up Reload** | (the screens below; never shown again) |
 | Configuration › Flows | **Configuration**, tab **Flows** | "No flows yet. Start from a template, or open a blank canvas." |
 | Configuration › General | **Configuration**, tab **General** | (sections below; never empty) |
 | Live, no flow yet | **Live** | "Nothing lives here yet. Make a flow in Configuration › Flows." · [Go to Flows] |
@@ -90,11 +90,11 @@ forms at setup time, so the flow is set up by the time Ready shows.
 
 | Screen | Title | Body | Buttons |
 |---|---|---|---|
-| Welcome | **Welcome to InnyTypes** | "InnyTypes turns your recordings into notes, summaries and next steps, in Anytype and wherever else you point it, on its own. Set it up once. It takes about ten minutes." | Get started |
-| Reports | **Help improve InnyTypes?** | "Send usage counts, under a machine id that carries no name. Never your recordings, transcripts or notes. You can change this in Configuration › General." | Send reports · Don't send |
-| Anytype | **Connect Anytype** | Running: "Anytype is asking for a code. Type it here." Not running: "Open Anytype, then come back. InnyTypes will notice." | Connect · Skip for now |
+| Welcome | **Welcome to Reload** | "Reload turns your recordings into notes, summaries and next steps, in Anytype and wherever else you point it, on its own. Set it up once. It takes about ten minutes." | Get started |
+| Reports | **Help improve Reload?** | "Send usage counts, under a machine id that carries no name. Never your recordings, transcripts or notes. You can change this in Configuration › General." | Send reports · Don't send |
+| Anytype | **Connect Anytype** | Running: "Anytype is asking for a code. Type it here." Not running: "Open Anytype, then come back. Reload will notice." | Connect · Skip for now |
 | Anytype, done | | "Connected. Found 8 spaces." | Continue |
-| Source folder | **Source folder** | "Choose the folder InnyTypes watches. Every new file in it starts your flow." After choosing: the folder's name, in full, under the button. | Choose a folder… · Continue |
+| Source folder | **Source folder** | "Choose the folder Reload watches. Every new file in it starts your flow." After choosing: the folder's name, in full, under the button. | Choose a folder… · Continue |
 | Node forms | **Set up: *step name*** (one per step of the starter) | The step's own form. Progress: "Step 1 of 2." | Continue · Back |
 | Ready | **Ready** | "Your flow is on. Drop a file in *folder* to start. Or try it now with a 10-second sample." | Try with a sample · Open Live · I'll build my own (secondary) |
 
@@ -200,9 +200,9 @@ never assume Anytype.
   result line: "Done: moved *client call* to *Archive*." · [Open]
 - A question or failure from a hidden place on the board is notified exactly as any other.
 - Failed: "Couldn't finish *client call*. Transcription failed: Mistral refused the key." · [Retry] [Open]
-- Runtime: "InnyTypes stopped unexpectedly and is restarting." Then, if it gives up: "InnyTypes
+- Runtime: "Reload stopped unexpectedly and is restarting." Then, if it gives up: "Reload
   stopped 5 times in 2 minutes and won't restart on its own." · [Restart]
-- Update: "InnyTypes 1.1 is ready. It installs when you quit." · [Quit and update] [Later]
+- Update: "Reload 1.1 is ready. It installs when you quit." · [Quit and update] [Later]
 - Package: "*monty* 0.3 is available." · [Update] [Not now]
 
 ## Configuration › Flows
@@ -238,7 +238,7 @@ a run is found again, read, and re-run (owner, 2026-10-02).
   · **Delete** · **Clear selection**.
 - Re-running: the row's state turns Running and a new card appears on the board; the old row stays
   with the caption "Re-run Tuesday 14:30". Re-run from a step keeps the earlier steps' results.
-- Deleting a run: "Delete this run? Its results in Anytype are kept; only InnyTypes' record of it
+- Deleting a run: "Delete this run? Its results in Anytype are kept; only Reload's record of it
   goes." · [Delete] [Cancel]. For several: "Delete 3 runs? …"
 - Empty: "No runs yet. Plug in your recorder, or drop a file in a watched folder." Filtered empty:
   "No failed runs in the last 7 days."
@@ -256,19 +256,19 @@ Sections, each with a one-line state:
 - **Anytype:** "Connected · 8 spaces" / "Not paired yet." · **Pair** / **Pair again**. Never a path.
 - **Recorders and folders:** "BOYA · watching" · **Add a folder…**
 - **AI apps** (the MCP endpoint): "Claude, Codex and other apps can use your Anytype through
-  InnyTypes at `127.0.0.1:31010`." · **Address** (pre-filled with the host served) and **Port**
+  Reload at `127.0.0.1:31010`." · **Address** (pre-filled with the host served) and **Port**
   (pre-filled with the current port) · **Change** (moves both at once) · a host that is not a
   numeric loopback address is refused: "Only a numeric loopback address can be used, so nothing
   changed." · **Copy setup for Codex** etc. · **Set up ChatGPT** (owner, 2026-10-15: ChatGPT adds
-  the server in its own Settings): "In the ChatGPT app, add InnyTypes as a server:" then the steps
-  "Open Settings › MCP servers and choose Add server.", "Name: innytypes. Transport: Streamable
+  the server in its own Settings): "In the ChatGPT app, add Reload as a server:" then the steps
+  "Open Settings › MCP servers and choose Add server.", "Name: reload. Transport: Streamable
   HTTP.", "URL: paste the address. Copy address copies it." and "Authentication: Bearer token.
   Paste the token. Copy token copies it." and "Save, then choose Restart." · **Copy address** ("Address copied. Paste it as the URL
   in ChatGPT.") · **Copy token** ("Token copied. Paste it as the Bearer token in ChatGPT."; none
   yet: "There's no token yet. Try again once AI apps can reach your Anytype."). The token is never
   shown.
-- **Start at login:** switch · "InnyTypes starts when you log in."
-- **Updates** (InnyTypes itself): the one-line state is always one of "Up to date · 0.2.1 ·
+- **Start at login:** switch · "Reload starts when you log in."
+- **Updates** (Reload itself): the one-line state is always one of "Up to date · 0.2.1 ·
   checked today 09:14", "Checking…", "0.3.0 is ready. It installs when you quit." · **Quit and
   update**, "Downloading 0.3.0 · 42%", "Couldn't check for updates: no connection. Last checked
   Monday.", or "Update to 0.3.0 didn't pass its safety check and wasn't installed." · **Check
@@ -282,10 +282,10 @@ Sections, each with a one-line state:
 - **Packages:** "4 installed · 1 update" · **Add a package…** ▾ (From the catalogue · From a
   folder on this Mac…). Each row: name · version · "by *publisher*" · its state · its actions.
   A package has two switches and one update, each with its own state word:
-  - **Registered** means InnyTypes knows the package and offers its steps on the canvas; not
+  - **Registered** means Reload knows the package and offers its steps on the canvas; not
     registered means it is on disk but offers nothing. Row word: "Registered" / "Not registered"
     · **Register** / **Unregister**. Unregistering a package in use: "Can't unregister
-    *innyrize*: the flow *Recordings to Anytype* uses its *Transcribe* step. Remove that step
+    *reload_summarize*: the flow *Recordings to Anytype* uses its *Transcribe* step. Remove that step
     first."
   - **Installed** means its files and environment are on this Mac and verified. Row word:
     "Installed" / "Not installed" / "Installing · 60%" / "Verifying…" / "Failed its check" ·
@@ -293,12 +293,12 @@ Sections, each with a one-line state:
     "remove".
   - **Update:** "Up to date" / "Update to 0.4 available" / "Updating…" / "Updated to 0.4 on
     Tuesday" · **Update** / **Go back to 0.3** (shown for seven days after an update; confirms
-    once: "Go back to *innyrize* 0.3? The flows that use it keep running." · [Go back] [Cancel]).
-  - A row from a folder says "From a folder: *~/packages/innyrize*" in caption and offers
+    once: "Go back to *reload_summarize* 0.3? The flows that use it keep running." · [Go back] [Cancel]).
+  - A row from a folder says "From a folder: *~/packages/reload_summarize*" in caption and offers
     **Check for changes** instead of **Update**; "Unsigned" where it applies.
   - Unsigned install, as a dialog: "**Install an unsigned package?** Nobody vouches for this code.
     It will run with your permissions." · [Install anyway] [Cancel]
-  - Every state word above is what InnyTypes last verified, with "checked *when*" in caption; a
+  - Every state word above is what Reload last verified, with "checked *when*" in caption; a
     row never shows a state it hasn't checked.
 - **Advanced:** the status details (runtime, services, ports) live here, for support.
 
@@ -306,14 +306,14 @@ Sections, each with a one-line state:
 
 | Situation | Text |
 |---|---|
-| Anytype not reachable | "Couldn't reach Anytype. Is it running? InnyTypes will retry on its own." |
+| Anytype not reachable | "Couldn't reach Anytype. Is it running? Reload will retry on its own." |
 | Key refused | "Anytype refused the key. Pair again in Configuration › General." |
 | Transcription key refused | "Mistral refused the key. Check the key in the *Transcribe* step." |
 | Recorder full or unreadable | "Couldn't read *BOYA*. Unplug it and plug it back in." |
 | A step's form incomplete | "*Summarise* isn't set up yet: choose an object type." |
 | Port taken | "Port 31010 is used by another app. Choose another port." |
 | Update download tampered | "The update didn't pass its safety check and wasn't installed. Try again later." |
-| Runtime down for good | "InnyTypes stopped unexpectedly 5 times in 2 minutes, so it's no longer restarted. Press Restart to try again." (kept as is) |
+| Runtime down for good | "Reload stopped unexpectedly 5 times in 2 minutes, so it's no longer restarted. Press Restart to try again." (kept as is) |
 | Quit with unsaved canvas edits | "**Save your flow before quitting?** Unsaved changes on the canvas are lost otherwise." · [Save and quit] [Quit without saving] [Cancel] |
 
 ## The Node-RED canvas

@@ -12,7 +12,7 @@ export interface SkeletonProps {
 
 const SHAPE: Record<SkeletonKind, string> = {
   text: "h-[12px] w-full rounded-s",
-  circle: "size-[var(--inny-size-control)] rounded-pill",
+  circle: "size-[var(--reload-size-control)] rounded-pill",
   block: "h-[72px] w-full rounded-m",
 };
 

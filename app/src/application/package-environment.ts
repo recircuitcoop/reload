@@ -32,6 +32,7 @@ import {
   type Sha256,
 } from "../domain/packages/archive";
 import { parseDeclaration, type Declaration } from "../domain/packages/declaration";
+import { OLD_DECLARATION_FILE, oldDeclarationProblem } from "../domain/packages/old-names";
 import { planEnvironment, type Target } from "../domain/packages/environment";
 import type { ContentHashes } from "../ports/content-hashes";
 import type { BuiltEnvironment, EnvironmentBuilder } from "../ports/environment-builder";
@@ -135,6 +136,9 @@ function declarationOf(
 ): Declaration {
   const bytes = files.get(DECLARATION_FILE);
   if (bytes === undefined) {
+    if (files.has(OLD_DECLARATION_FILE)) {
+      throw new PackageRefusal("declaration", oldDeclarationProblem(DECLARATION_FILE));
+    }
     throw new PackageRefusal("declaration", `the package has no ${DECLARATION_FILE}`);
   }
   let document: unknown;

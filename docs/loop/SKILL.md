@@ -1,4 +1,4 @@
-# Loop pack — innytypes
+# Loop pack — reload
 
 Per-project codified knowledge for the loop (docs-and-code-agree gate input), so the maker
 and the checker share intent. The numbered plans are in `docs/plans/`; plan 0001 is the host, plan 0002 the Anytype MCP

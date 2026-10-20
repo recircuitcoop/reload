@@ -1,4 +1,4 @@
-// The e2e gate's hooks on the shell (INNYTYPES_E2E_HOOKS=1), apart from main.ts so the
+// The e2e gate's hooks on the shell (RELOAD_E2E_HOOKS=1), apart from main.ts so the
 // composition root keeps only adapter construction (plan 0018 §2.3).
 
 import type { Message, NoticeAction } from "../domain/notices/notices";
@@ -55,7 +55,7 @@ export class DeliveredNotices {
 }
 
 /**
- * Whether the e2e gate's hooks are on: INNYTYPES_E2E_HOOKS=1 in a build that is not installed.
+ * Whether the e2e gate's hooks are on: RELOAD_E2E_HOOKS=1 in a build that is not installed.
  * An installed build (`packaged`) never turns them on, whatever its environment says: they point
  * the app at test hosts and test certificates, and expose its children to the caller.
  */
@@ -63,7 +63,7 @@ export function e2eHooksOn(options: {
   readonly packaged: boolean;
   readonly env: Readonly<Record<string, string | undefined>>;
 }): boolean {
-  return !options.packaged && options.env["INNYTYPES_E2E_HOOKS"] === "1";
+  return !options.packaged && options.env["RELOAD_E2E_HOOKS"] === "1";
 }
 
 /**
@@ -78,5 +78,5 @@ export function exposeE2eHooks(hooks: {
   /** The dock badge's count, as this (test) app set it. */
   readonly badge: () => number;
 }): void {
-  Object.assign(globalThis, { innytypesE2E: hooks });
+  Object.assign(globalThis, { reloadE2E: hooks });
 }

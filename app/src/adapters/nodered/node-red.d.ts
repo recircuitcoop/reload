@@ -1,4 +1,4 @@
-// The part of Node-RED 5's embedding API that InnyTypes uses, and nothing more.
+// The part of Node-RED 5's embedding API that Reload uses, and nothing more.
 //
 // Node-RED ships no types. Declaring only the public surfaces keeps the internal `RED.nodes`
 // out of reach of the compiler as well as of the lint rule (arch_pivot P9–P10 §2): what is

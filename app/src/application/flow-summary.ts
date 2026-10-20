@@ -60,7 +60,7 @@ export interface FlowSummary {
 export interface SummaryDeps {
   readonly engine: Pick<FlowEngine, "secretsSet">;
   readonly runs: Pick<RunStore, "list">;
-  /** A node type InnyTypes generated; undefined for Node-RED's own. */
+  /** A node type Reload generated; undefined for Node-RED's own. */
   readonly nodeType: (type: string) => FlowNodeType | undefined;
   readonly validator: SchemaValidator;
   /** What flows-meta.json keeps of each flow: the template that made it. */

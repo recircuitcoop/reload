@@ -35,7 +35,7 @@ export function Switch({
       onCheckedChange={(details) => onStateChange?.(details.checked ? "on" : "off")}
       className={cx(
         "inline-flex items-center gap-2 text-body text-primary",
-        disabled ? "cursor-not-allowed opacity-[var(--inny-opacity-disabled)]" : "cursor-pointer",
+        disabled ? "cursor-not-allowed opacity-[var(--reload-opacity-disabled)]" : "cursor-pointer",
         className,
       )}
     >

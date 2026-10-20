@@ -310,7 +310,7 @@ describe("the spaces and types a step's form chooses from (plan 0022 §B)", () =
 describe("pairing", () => {
   let scratch: string;
   beforeEach(() => {
-    scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "inny-pairing-")));
+    scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-pairing-")));
   });
   afterEach(() => {
     fs.rmSync(scratch, { recursive: true, force: true });
@@ -349,10 +349,10 @@ describe("pairing", () => {
     const { subject, file, registry } = pairing();
     await subject.start();
     expect(anytype.seen[0]).toMatchObject({ method: "POST", url: "/v1/auth/challenges" });
-    expect(JSON.parse(anytype.seen[0]?.body ?? "")).toEqual({ app_name: "InnyTypes" });
+    expect(JSON.parse(anytype.seen[0]?.body ?? "")).toEqual({ app_name: "Reload" });
     expect(anytype.seen[0]?.headers["anytype-version"]).toBe(ANYTYPE_VERSION);
     await subject.complete("4321");
-    expect(file).toBe(path.join(scratch, ".config", "innytypes", "anytype_api_key"));
+    expect(file).toBe(path.join(scratch, ".config", "reload", "anytype_api_key"));
     expect(fs.readFileSync(file, "utf8")).toBe(PAIRED_KEY);
     if (process.platform !== "win32") {
       expect(fs.statSync(file).mode & 0o777).toBe(0o600);
@@ -411,7 +411,7 @@ describe("pairing", () => {
   });
 });
 
-describe("the object and search calls (the packages/anytype nodes, WI-0018-20)", () => {
+describe("the object and search calls (the packages/reload_anytype nodes, WI-0018-20)", () => {
   /** A client over this file's fake, which answers each request with `answer`. */
   function answering(answer: unknown, status = 200): AnytypeClient {
     anytype.route = (seen) =>

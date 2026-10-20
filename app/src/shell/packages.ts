@@ -145,8 +145,8 @@ function versionOf(document: unknown): string {
 }
 
 /**
- * The official catalogue: what the build was released with (package.json's "innytypes"). The
- * INNYTYPES_CATALOGUE_URL and INNYTYPES_CATALOGUE_KEY variables point it elsewhere for
+ * The official catalogue: what the build was released with (package.json's "reload"). The
+ * RELOAD_CATALOGUE_URL and RELOAD_CATALOGUE_KEY variables point it elsewhere for
  * development and the e2e gate only: an installed build (`packaged`) ignores them, so nothing in
  * its environment can change the catalogue it reads or the key that must have signed it.
  */
@@ -160,8 +160,8 @@ export function catalogueSource(options: {
     return { catalogueUrl: built.catalogueUrl, catalogueKey: built.catalogueKey };
   }
   return {
-    catalogueUrl: env["INNYTYPES_CATALOGUE_URL"] ?? built.catalogueUrl,
-    catalogueKey: env["INNYTYPES_CATALOGUE_KEY"] ?? built.catalogueKey,
+    catalogueUrl: env["RELOAD_CATALOGUE_URL"] ?? built.catalogueUrl,
+    catalogueKey: env["RELOAD_CATALOGUE_KEY"] ?? built.catalogueKey,
   };
 }
 

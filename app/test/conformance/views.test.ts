@@ -47,7 +47,7 @@ class Session {
     this.send({
       t: "start",
       protocol: 2,
-      node: { id: "conformance", type: `inny-view${language}-${typeId}`, name: "" },
+      node: { id: "conformance", type: `reload-view${language}-${typeId}`, name: "" },
       config: {},
       credentials: {},
       data_dir: "/nonexistent-data-dir",

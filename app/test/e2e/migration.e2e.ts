@@ -15,6 +15,7 @@ import * as path from "node:path";
 import { expect, test, type ElectronApplication, type Page } from "@playwright/test";
 import { legacyConfigPath, type LegacyConfigLocation } from "../../src/adapters/fs/legacy-config";
 import { legacyLockPath } from "../../src/adapters/fs/legacy-helper-lock";
+import { legacyCredentialsDirectory } from "../../src/adapters/fs/legacy-move";
 import { credentialsDirectory } from "../../src/adapters/fs/owner-only-files";
 import { toolSignature } from "../../src/adapters/anytype/tool-surface";
 import { ANYTYPE_VERSION, PACKAGE_VERSION } from "../../src/domain/anytype/pins";
@@ -35,21 +36,21 @@ const endpoint = (window: Page): Promise<EndpointStatus> =>
   window.evaluate(async () => {
     try {
       return await (
-        window as unknown as { inny: { app: { mcpEndpoint(): Promise<EndpointStatus> } } }
-      ).inny.app.mcpEndpoint();
+        window as unknown as { reload: { app: { mcpEndpoint(): Promise<EndpointStatus> } } }
+      ).reload.app.mcpEndpoint();
     } catch (error) {
       return { served: null, problem: String(error) };
     }
   });
 
-/** Forces a restart regardless of state (the e2e hooks, INNYTYPES_E2E_HOOKS=1, exposed on the
+/** Forces a restart regardless of state (the e2e hooks, RELOAD_E2E_HOOKS=1, exposed on the
  * shell's own globalThis, so this runs in the main process via app.evaluate): the public Restart
  * button only works from down-for-good, and the services process here never crashed. */
 const restartServices = (app: ElectronApplication) =>
   app.evaluate(() =>
     (
-      globalThis as unknown as { innytypesE2E: { restart(child: string, reason: string): boolean } }
-    ).innytypesE2E.restart("services", "types"),
+      globalThis as unknown as { reloadE2E: { restart(child: string, reason: string): boolean } }
+    ).reloadE2E.restart("services", "types"),
   );
 
 /** One JSON-RPC call, the way an existing Codex configuration makes it. */
@@ -110,9 +111,9 @@ async function scratchWithLegacyLocation() {
     XDG_CONFIG_HOME: path.join(base.scratch, ".config"),
     XDG_DATA_HOME: path.join(base.scratch, ".local", "share"),
     XDG_RUNTIME_DIR: path.join(base.scratch, ".runtime"),
-    INNYTYPES_E2E_HOOKS: "1",
+    RELOAD_E2E_HOOKS: "1",
     ANYTYPE_API_BASE_URL: anytype.url,
-    INNYTYPES_TEST_ANYTYPE: JSON.stringify({
+    RELOAD_TEST_ANYTYPE: JSON.stringify({
       entry: path.join(FAKE, "server.mjs"),
       args: ["--mode=canary"],
       surface: fakeSurface(base.scratch),
@@ -124,7 +125,7 @@ async function scratchWithLegacyLocation() {
 
 test("an existing Codex configuration (token and port) keeps working after the cutover", async () => {
   const { scratch, env, location, anytype } = await scratchWithLegacyLocation();
-  const fixturePort = Number(env["INNYTYPES_MCP_PORT"]);
+  const fixturePort = Number(env["RELOAD_MCP_PORT"]);
 
   // ── the fixture old install ────────────────────────────────────────────────────────────
   const configFile = legacyConfigPath(location);
@@ -135,10 +136,12 @@ test("an existing Codex configuration (token and port) keeps working after the c
       "\n",
     ),
   );
-  const credentials = credentialsDirectory(scratch, process.platform);
-  fs.mkdirSync(credentials, { recursive: true, mode: 0o700 });
+  // Where the old app kept the token; Reload's first start moves it to its own directory.
+  const oldCredentials = legacyCredentialsDirectory(scratch, process.platform);
+  fs.mkdirSync(oldCredentials, { recursive: true, mode: 0o700 });
   const existingToken = "existing-codex-token-0123456789abcdef";
-  fs.writeFileSync(path.join(credentials, "mcp_proxy_token"), existingToken, { mode: 0o600 });
+  fs.writeFileSync(path.join(oldCredentials, "mcp_proxy_token"), existingToken, { mode: 0o600 });
+  const credentials = credentialsDirectory(scratch, process.platform);
 
   let app: RunningApp | undefined;
   let window: Page;
@@ -147,8 +150,7 @@ test("an existing Codex configuration (token and port) keeps working after the c
     window = app.window;
     const url = `http://127.0.0.1:${String(fixturePort)}/mcp`;
     await expect.poll(async () => (await endpoint(window)).served, { timeout: 20_000 }).toBe(url);
-    // The existing token, unrotated, still authenticates: the same file the old Codex config
-    // named it in was never touched.
+    // The existing token, unrotated, still authenticates, moved to Reload's own directory.
     expect(await rpc(url, existingToken)).not.toBe(401);
     expect(fs.readFileSync(path.join(credentials, "mcp_proxy_token"), "utf8").trim()).toBe(
       existingToken,

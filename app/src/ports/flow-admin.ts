@@ -87,7 +87,7 @@ export interface TemplateSource {
   nodes(id: string): readonly TabNode[] | null;
 }
 
-/** A node type InnyTypes generated, as flow administration reads it. */
+/** A node type Reload generated, as flow administration reads it. */
 export interface FlowNodeType {
   readonly package: string;
   readonly kind: Kind;

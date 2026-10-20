@@ -1,7 +1,29 @@
 # Changelog
 
-All notable changes to InnyTypes are recorded here, newest first. Versions follow
+All notable changes to Reload (called InnyTypes before 0.4.0) are recorded here, newest first. Versions follow
 [semantic versioning](https://semver.org/): the number changes when what you can rely on does.
+
+## 0.4.0 — unreleased
+
+**The app is now called Reload.** It is InnyTypes 0.3.0 under a new name, and nothing else
+changes in what it does. The first time Reload opens over an InnyTypes installation it moves your
+flows, run history, settings, packages and Anytype pairing to Reload's own place; quit InnyTypes
+before you open Reload, and remove InnyTypes once Reload has opened. See
+[docs/INSTALL.md](docs/INSTALL.md), section 4.1.
+
+- **AI apps must be reconnected** under the server name `reload`. The token is now kept in
+  `~/.config/reload/mcp_proxy_token`; set each AI app up again as in docs/INSTALL.md, section 7,
+  and remove its old `innytypes` entry.
+- **Credentials stored inside flows must be entered again.** Reload cannot read the key that
+  protected them under the old name, so it makes a new one and says so once in a notification.
+- **Function code in your flows that reads `msg.inny`** must be changed to `msg.reload` by hand:
+  the field a step's message carries is renamed, and Reload does not rewrite code you wrote.
+- **For package authors:** the declaration file is now `reload-package.json`, the schema keyword
+  is `reload`, the view schemes are `reload-app:` and `reload-view:`, the design tokens are
+  `--reload-*`, the SDKs are `@recircuit/reload-node` (npm) and `reload-node` (PyPI, import
+  `reload_node`), and the packing tool is `tools/reload-pack`. A package that still uses
+  `inny-package.json` or the `innytype` keyword is refused with a message naming the new ones.
+  The shipped packages are now `reload_anytype` and `reload_folder`.
 
 ## 0.3.0 — 2026-10-15
 

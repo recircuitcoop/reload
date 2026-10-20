@@ -41,7 +41,7 @@ export interface EventEnvelope {
 export interface NodeMessage {
   readonly payload: unknown;
   readonly topic: string;
-  readonly inny: {
+  readonly reload: {
     readonly event: EventEnvelope;
     readonly run: string;
     /** The input id that caused this output; absent for a new run. */
@@ -133,7 +133,7 @@ export interface NodeIdentity {
   /** The package name and the type id within it (spec 2.1). */
   readonly package: string;
   readonly typeId: string;
-  /** The Node-RED type name, `inny-<package>-<id>` (spec 2.1.4). */
+  /** The Node-RED type name, `reload-<package>-<id>` (spec 2.1.4). */
   readonly type: string;
   /** The instance's name on the canvas; empty when it has none. */
   readonly name: string;

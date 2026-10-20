@@ -26,7 +26,7 @@ const FLOW_NODES = [
   { id: FLOW, type: "tab", label: "Probe flow" },
   {
     id: "tk",
-    type: "inny-everycontrol-ticker",
+    type: "reload-everycontrol-ticker",
     z: FLOW,
     greeting: "hi",
     delay_ms: "200",
@@ -36,7 +36,7 @@ const FLOW_NODES = [
   },
   {
     id: "pr",
-    type: "inny-everycontrol-probe",
+    type: "reload-everycontrol-probe",
     z: FLOW,
     name: "probe",
     label: "the label",
@@ -50,8 +50,8 @@ const FLOW_NODES = [
 ];
 
 type Answer = { ok: boolean; value?: unknown };
-interface Inny {
-  inny: {
+interface Reload {
+  reload: {
     app: {
       completeSetup(): Promise<Answer>;
       runs(query: object): Promise<Answer>;
@@ -74,7 +74,7 @@ async function deployed(port: number): Promise<{ id: string; type: string; disab
 
 async function runsOf(window: Page, flowId: string): Promise<{ state: string }[]> {
   const answer = await window.evaluate(
-    (id) => (window as unknown as Inny).inny.app.runs({ flowId: id, limit: 50 }),
+    (id) => (window as unknown as Reload).reload.app.runs({ flowId: id, limit: 50 }),
     flowId,
   );
   return (answer.value as { runs: { state: string }[] }).runs;
@@ -90,7 +90,7 @@ async function launched(apps: ElectronApplication[], env: Record<string, string>
   const { window } = running;
   await expect(frame(window)).toHaveAttribute("data-route", "setup", { timeout: 15_000 });
   expect(
-    (await window.evaluate(() => (window as unknown as Inny).inny.app.completeSetup())).ok,
+    (await window.evaluate(() => (window as unknown as Reload).reload.app.completeSetup())).ok,
   ).toBe(true);
   const port = Number((await waitForRunning(window, "runtime")).port);
   const posted = await fetch(`http://127.0.0.1:${String(port)}/red/flows`, {

@@ -51,7 +51,7 @@ describe("placeholders", () => {
 
   it("resolves the argv and the working directory, both on the unpacked package", () => {
     const packed = path.join(
-      "/Applications/InnyTypes.app/Contents/Resources/app.asar",
+      "/Applications/Reload.app/Contents/Resources/app.asar",
       "packages",
       "monty",
     );
@@ -69,9 +69,9 @@ describe("placeholders", () => {
     // The exact argv 0.2.0's services process logged before every start of the child failed:
     // plain Node cannot read inside app.asar.
     const packed =
-      "/Applications/InnyTypes.app/Contents/Resources/app.asar/node_modules/@anyproto/anytype-mcp/bin/cli.mjs";
+      "/Applications/Reload.app/Contents/Resources/app.asar/node_modules/@anyproto/anytype-mcp/bin/cli.mjs";
     expect(unpackedDir(packed)).toBe(
-      "/Applications/InnyTypes.app/Contents/Resources/app.asar.unpacked/node_modules/@anyproto/anytype-mcp/bin/cli.mjs",
+      "/Applications/Reload.app/Contents/Resources/app.asar.unpacked/node_modules/@anyproto/anytype-mcp/bin/cli.mjs",
     );
     // services/main.ts imports Electron's parentPort at load, so its wiring is read, not run:
     // the pinned entry goes through unpackedDir before it reaches the launcher.

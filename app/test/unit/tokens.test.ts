@@ -13,12 +13,12 @@ const REPO = path.resolve(APP, "..");
 const BUILD = path.join(REPO, "tools", "tokens", "build.mjs");
 const CHECK = path.join(REPO, "tools", "tokens", "check.mjs");
 const FIXTURES = path.join(APP, "test", "fixtures", "tokens");
-const REAL_TOKENS = path.join(REPO, "docs", "ux", "tokens", "innytypes.tokens.json");
+const REAL_TOKENS = path.join(REPO, "docs", "ux", "tokens", "reload.tokens.json");
 
 const scratchRoots: string[] = [];
 
 function scratch(): string {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "inny-tokens-"));
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "reload-tokens-"));
   scratchRoots.push(root);
   return root;
 }
@@ -52,7 +52,7 @@ function block(css: string, selector: string): Map<string, string> {
   expect(start, `no block for ${selector}`).toBeGreaterThanOrEqual(0);
   const body = css.slice(start + selector.length + 2, css.indexOf("}", start));
   return new Map(
-    [...body.matchAll(/(--inny-[\w-]+):\s*([^;]+);/g)].map((match) => [
+    [...body.matchAll(/(--reload-[\w-]+):\s*([^;]+);/g)].map((match) => [
       match[1] ?? "",
       match[2] ?? "",
     ]),
@@ -83,8 +83,8 @@ describe("tools/tokens/build.mjs", () => {
 
     // The light set is the :root default, beside every base value.
     const root = block(css, ":root");
-    expect(root.get("--inny-surface-canvas")).toBe("var(--inny-color-paper-1)");
-    expect(root.get("--inny-color-paper-1")).toMatch(/^#[0-9a-f]{6}$/);
+    expect(root.get("--reload-surface-canvas")).toBe("var(--reload-color-paper-1)");
+    expect(root.get("--reload-color-paper-1")).toMatch(/^#[0-9a-f]{6}$/);
 
     // The dark set applies under the system preference unless the page pins light, and
     // whenever the page pins dark; both blocks carry every dark token, the same values.
@@ -93,13 +93,13 @@ describe("tools/tokens/build.mjs", () => {
     );
     const preferred = block(css, '  :root:not([data-theme="light"])');
     const pinned = block(css, ':root[data-theme="dark"]');
-    expect(preferred.get("--inny-surface-canvas")).toBe("var(--inny-color-night-1)");
+    expect(preferred.get("--reload-surface-canvas")).toBe("var(--reload-color-night-1)");
     expect([...pinned]).toEqual([...preferred]);
 
     // Every semantic token of the light default is overridden in dark, so no light surface
     // survives a switch to dark.
     const semantic = [...root.keys()].filter(
-      (name) => !/^--inny-(color|space|radius|stroke|size|font|opacity|duration)-/.test(name),
+      (name) => !/^--reload-(color|space|radius|stroke|size|font|opacity|duration)-/.test(name),
     );
     expect(semantic.length).toBeGreaterThan(0);
     expect([...preferred.keys()]).toEqual(semantic);
@@ -108,8 +108,8 @@ describe("tools/tokens/build.mjs", () => {
   it("writes shadows as CSS box-shadow values and font families quoted where needed", () => {
     const root = block(build(REAL_TOKENS).css, ":root");
 
-    expect(root.get("--inny-shadow-raised")).toMatch(/^0px 2px 8px 0px #[0-9a-f]{8}$/);
-    expect(root.get("--inny-font-family-sans")).toBe('"IBM Plex Sans", system-ui, sans-serif');
+    expect(root.get("--reload-shadow-raised")).toMatch(/^0px 2px 8px 0px #[0-9a-f]{8}$/);
+    expect(root.get("--reload-font-family-sans")).toBe('"IBM Plex Sans", system-ui, sans-serif');
   });
 
   it("refuses an alias to a token that does not exist", () => {
@@ -181,11 +181,11 @@ describe("tools/tokens/check.mjs", () => {
     const ui = scratch();
     fs.writeFileSync(
       path.join(ui, "page.css"),
-      ".a {\n  color: white;\n  fill: oklch(0.5 0.1 120);\n  border-color: var(--inny-color-red-3);\n}\n",
+      ".a {\n  color: white;\n  fill: oklch(0.5 0.1 120);\n  border-color: var(--reload-color-red-3);\n}\n",
     );
     fs.writeFileSync(
       path.join(ui, "row.tsx"),
-      'export const row = "bg-[red] text-[color:var(--x)] p-4";\nexport const s = "hsl(0 0% 0%)";\nexport const h = "hover:[background:var(--inny-accent-default)]";\n',
+      'export const row = "bg-[red] text-[color:var(--x)] p-4";\nexport const s = "hsl(0 0% 0%)";\nexport const h = "hover:[background:var(--reload-accent-default)]";\n',
     );
 
     const result = run(CHECK, [ui]);
@@ -198,7 +198,7 @@ describe("tools/tokens/check.mjs", () => {
     expect(result.output).toContain("row.tsx:1:30: text-[color:var(--x)]");
     expect(result.output).toContain("row.tsx:2:19: hsl(");
     // A colour property set by an arbitrary class is refused even when its value is a token.
-    expect(result.output).toContain("row.tsx:3:25: [background:var(--inny-accent-default)]");
+    expect(result.output).toContain("row.tsx:3:25: [background:var(--reload-accent-default)]");
   });
 
   it("does not take a private class member or an anchor for a hex colour", () => {

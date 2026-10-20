@@ -1,6 +1,6 @@
 # Anytype test objects
 
-Every Anytype object an InnyTypes test, trial or machine proof has created, so the owner can find
+Every Anytype object a Reload test, trial or machine proof has created, so the owner can find
 and handle it by hand.
 
 ## The rules (owner, 2026-09-27)
@@ -20,7 +20,7 @@ and handle it by hand.
 |---|---|---|---|
 | TEST | `bafyreieck65mcoyhbxg573k3o5xay7hudarinkjrrayfqz3lodlioepaj4.1zl109kygfonz` | 2026-09-27 | the main session, on the owner's instruction |
 
-Description set on the space: "InnyTypes automated tests only. Never production."
+Description set on the space: "Reload automated tests only. Never production."
 
 ## Objects created in TEST
 
@@ -34,10 +34,10 @@ untouched for the owner to handle.
 
 | Name | Object id | Made by |
 |---|---|---|
-| InnyTypes spike test 2026-09-25 14:14:06 | `bafyreic3a3fulfqgyjou7idhfwpysadeirhbwyljfsz3n3d72iqsqulouq` | the trial's flow run |
-| InnyTypes spike test 2026-09-25 14:14:36 | `bafyreiaik6nyt6iiyr2sln7heenofnmwaqbpprg7v64aixjdt4ydfgx2s4` | a form submitted by hand in the trial window |
-| InnyTypes spike test 2026-09-25 14:29:55 | `bafyreibohsxxzadhwgqxegrhys66w6xhkwht4jfilevnyou3aabgzsp6ki` | a form submitted by hand in the trial window |
-| InnyTypes spike test 2026-09-25 14:30:42 | `bafyreigzg74wzvfrfhzuokmpyl2jsl4nbrthugtuv3unpiekja3yg3fyym` | a form submitted by hand in the trial window |
-| InnyTypes spike test (packaged app) 2026-09-25 14:18:54 | `bafyreieilmeen4h62asarj2pe4uqg4kl5ekjuivc5vxhno2oivrpko56re` | the trial's packaged-app run |
+| Reload spike test 2026-09-25 14:14:06 | `bafyreic3a3fulfqgyjou7idhfwpysadeirhbwyljfsz3n3d72iqsqulouq` | the trial's flow run |
+| Reload spike test 2026-09-25 14:14:36 | `bafyreiaik6nyt6iiyr2sln7heenofnmwaqbpprg7v64aixjdt4ydfgx2s4` | a form submitted by hand in the trial window |
+| Reload spike test 2026-09-25 14:29:55 | `bafyreibohsxxzadhwgqxegrhys66w6xhkwht4jfilevnyou3aabgzsp6ki` | a form submitted by hand in the trial window |
+| Reload spike test 2026-09-25 14:30:42 | `bafyreigzg74wzvfrfhzuokmpyl2jsl4nbrthugtuv3unpiekja3yg3fyym` | a form submitted by hand in the trial window |
+| Reload spike test (packaged app) 2026-09-25 14:18:54 | `bafyreieilmeen4h62asarj2pe4uqg4kl5ekjuivc5vxhno2oivrpko56re` | the trial's packaged-app run |
 
-To find them in Anytype, search for "InnyTypes spike test".
+To find them in Anytype, search for "Reload spike test".

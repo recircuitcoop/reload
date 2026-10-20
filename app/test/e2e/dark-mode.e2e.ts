@@ -21,7 +21,7 @@ function declarations(header: string): Map<string, string> {
   expect(at, header).toBeGreaterThanOrEqual(0);
   const block = TOKENS.slice(at, TOKENS.indexOf("}", at));
   return new Map(
-    [...block.matchAll(/(--inny-[\w-]+):\s*([^;]+);/g)].map(([, name, value]) => [
+    [...block.matchAll(/(--reload-[\w-]+):\s*([^;]+);/g)].map(([, name, value]) => [
       name as string,
       (value as string).trim(),
     ]),
@@ -38,7 +38,7 @@ function colour(token: string, theme: "light" | "dark"): string {
   if (value === undefined) {
     throw new Error(`${token} is not in tokens.css`);
   }
-  const reference = /^var\((--inny-[\w-]+)\)$/.exec(value);
+  const reference = /^var\((--reload-[\w-]+)\)$/.exec(value);
   if (reference !== null) {
     return colour(reference[1] as string, theme);
   }
@@ -50,7 +50,7 @@ function colour(token: string, theme: "light" | "dark"): string {
   return `rgb(${String(r)}, ${String(g)}, ${String(b)})`;
 }
 
-const SURFACES = ["canvas", "panel", "sunken", "line"].map((name) => `--inny-surface-${name}`);
+const SURFACES = ["canvas", "panel", "sunken", "line"].map((name) => `--reload-surface-${name}`);
 const LIGHT_SURFACES = SURFACES.map((token) => colour(token, "light"));
 
 /** WCAG's contrast ratio of two `rgb(…)` colours. */
@@ -98,18 +98,18 @@ test("(a) the system's dark scheme draws the dark tokens, body text at 4.5:1 or 
 
     await window.emulateMedia({ colorScheme: "light" });
     expect(await page()).toEqual([
-      colour("--inny-surface-canvas", "light"),
-      colour("--inny-text-primary", "light"),
+      colour("--reload-surface-canvas", "light"),
+      colour("--reload-text-primary", "light"),
     ]);
 
     await window.emulateMedia({ colorScheme: "dark" });
     expect(await page()).toEqual([
-      colour("--inny-surface-canvas", "dark"),
-      colour("--inny-text-primary", "dark"),
+      colour("--reload-surface-canvas", "dark"),
+      colour("--reload-text-primary", "dark"),
     ]);
     const surfaces = await computed(window, SURFACES);
     expect(surfaces).toEqual(SURFACES.map((token) => colour(token, "dark")));
-    const words = await computed(window, ["--inny-text-primary", "--inny-text-secondary"]);
+    const words = await computed(window, ["--reload-text-primary", "--reload-text-secondary"]);
     // Body text on every surface it is set on; the line colour is a border, not a surface.
     for (const [w, text] of words.entries()) {
       for (const [s, surface] of surfaces.slice(0, 3).entries()) {
@@ -184,7 +184,7 @@ test("(b) data-theme dark on every route and a pop-out: no component keeps a lig
     }
 
     await app.evaluate(({ BrowserWindow }) => {
-      BrowserWindow.getAllWindows()[0]?.webContents.send("inny:quit-question", {});
+      BrowserWindow.getAllWindows()[0]?.webContents.send("reload:quit-question", {});
     });
     await expect(window.getByTestId("quit-question")).toBeVisible({ timeout: 15_000 });
     light.push(...(await lightInDark(window, "quit question")));
@@ -203,7 +203,7 @@ test("(b) data-theme dark on every route and a pop-out: no component keeps a lig
     await app.evaluate(({ Menu }) => {
       Menu.getApplicationMenu()?.getMenuItemById("preview-a-view")?.click();
     });
-    const popouts = () => app.windows().filter((page) => page.url().startsWith("inny-view://"));
+    const popouts = () => app.windows().filter((page) => page.url().startsWith("reload-view://"));
     await expect.poll(() => popouts().length, { timeout: 15_000 }).toBe(1);
     const popout = popouts()[0] as Page;
     await expect(popout.getByTestId("question-popout")).toBeVisible({ timeout: 15_000 });

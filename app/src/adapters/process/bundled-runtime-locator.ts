@@ -7,7 +7,7 @@
 //   <runtimesDir>/node/bin/node        (node/node.exe on Windows)
 //
 // The composition roots construct this once packaged (shell/main.ts hands each child
-// INNYTYPES_RUNTIMES_DIR, resolved from process.resourcesPath); SystemRuntimeLocator stands in
+// RELOAD_RUNTIMES_DIR, resolved from process.resourcesPath); SystemRuntimeLocator stands in
 // everywhere else. Real node, not Electron acting as node: no ELECTRON_RUN_AS_NODE is needed,
 // which is what lets the RunAsNode fuse stay off in the packaged app.
 

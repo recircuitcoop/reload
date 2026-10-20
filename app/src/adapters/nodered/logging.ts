@@ -23,7 +23,7 @@ export interface NodeRedLogMessage {
 }
 
 export interface NodeRedLoggingSettings {
-  readonly innytypes: {
+  readonly reload: {
     readonly level: "debug";
     readonly metrics: false;
     readonly audit: false;
@@ -60,6 +60,6 @@ export function nodeRedLogging(logger: LeveledLogger): NodeRedLoggingSettings {
     }
   };
   return {
-    innytypes: { level: "debug", metrics: false, audit: false, handler: () => write },
+    reload: { level: "debug", metrics: false, audit: false, handler: () => write },
   };
 }

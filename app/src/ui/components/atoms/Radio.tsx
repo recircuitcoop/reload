@@ -61,7 +61,7 @@ export function Radio({ state, disabled = false, value, label, className }: Radi
       disabled={disabled}
       className={cx(
         "inline-flex items-center gap-2 text-body text-primary",
-        disabled ? "cursor-not-allowed opacity-[var(--inny-opacity-disabled)]" : "cursor-pointer",
+        disabled ? "cursor-not-allowed opacity-[var(--reload-opacity-disabled)]" : "cursor-pointer",
         className,
       )}
     >

@@ -1,15 +1,15 @@
-// Minisign-COMPATIBLE key generation and signing for inny-pack (WI-0018-26). The app only
+// Minisign-COMPATIBLE key generation and signing for reload-pack (WI-0018-26). The app only
 // ever verifies a signature (app/src/domain/signature/minisign.ts is pure parsing and
 // verification; app/src/adapters/signature/minisign.ts supplies node:crypto's Ed25519 and
 // @noble/hashes' BLAKE2b as its primitives) -- a package AUTHOR needs to sign, which is what
 // this file adds. It writes exactly the format that verifier parses: the "Ed" (not
-// pre-hashed) algorithm, over node:crypto's Ed25519 alone, so inny-pack needs no dependency
+// pre-hashed) algorithm, over node:crypto's Ed25519 alone, so reload-pack needs no dependency
 // of its own to produce a signature app/src/domain/signature/minisign.ts accepts unmodified.
 //
 // A "signing key" here is NOT a minisign secret key file (minisign's own is scrypt+xsalsa20
 // encrypted under a passphrase); reimplementing that encrypted container is out of scope, and
 // nothing in the app ever reads a secret key -- only a public key and a signature reach it.
-// The file this module writes and reads (SigningKeyFile) is inny-pack's own small JSON, and
+// The file this module writes and reads (SigningKeyFile) is reload-pack's own small JSON, and
 // docs/authors/packaging.md says plainly that it must never be committed or shared.
 
 import {
@@ -56,7 +56,7 @@ export function publicKeyText(key: SigningKey, comment: string): string {
   return `untrusted comment: ${comment}\n${blob.toString("base64")}\n`;
 }
 
-/** inny-pack's own key file shape (see the file header: not a minisign secret key file). */
+/** reload-pack's own key file shape (see the file header: not a minisign secret key file). */
 export interface SigningKeyFile {
   readonly keyId: string;
   readonly publicKeyDer: string;

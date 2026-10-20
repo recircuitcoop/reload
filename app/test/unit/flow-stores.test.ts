@@ -10,7 +10,7 @@ import { RecordingLogger } from "../fakes/children";
 
 const scratches: string[] = [];
 function scratch(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "inny-flow-stores-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "reload-flow-stores-"));
   scratches.push(dir);
   return dir;
 }

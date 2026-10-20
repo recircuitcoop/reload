@@ -127,7 +127,7 @@ export class JsonSettingsStore
     this.#write("update", { ...update });
   }
 
-  // InnyTypes' own install record (plan 0022 §G), raw: domain/updates/history.ts judges it. Its
+  // Reload's own install record (plan 0022 §G), raw: domain/updates/history.ts judges it. Its
   // own key, never inside `update`, which an older release refuses whole if it holds more.
   readUpdateHistory(): unknown {
     return this.#read()["appUpdate"];

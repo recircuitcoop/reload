@@ -14,6 +14,9 @@ class MemoryReportStore implements LegacyImportReportStore {
   write(report: LegacyImportReport): void {
     this.written.push(report);
   }
+  recordMove(): void {
+    throw new Error("the import itself never records a move");
+  }
 }
 
 class MemoryShellSettings implements ShellSettings {

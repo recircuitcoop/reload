@@ -11,7 +11,7 @@ import type { StoredBoard } from "../../src/ports/board-store";
 const BOARD: StoredBoard = { layout: newLayout("f1", "Overview"), fresh: ["q1"] };
 
 const scratchFile = () =>
-  path.join(fs.mkdtempSync(path.join(os.tmpdir(), "inny-boards-")), "boards.json");
+  path.join(fs.mkdtempSync(path.join(os.tmpdir(), "reload-boards-")), "boards.json");
 
 describe("board store", () => {
   it("keeps a board across a new store on the same file, written through a rename", () => {

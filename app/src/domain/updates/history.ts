@@ -1,4 +1,4 @@
-// What InnyTypes remembers about its own installs (plan 0022 §G, owner decision D4): the version
+// What Reload remembers about its own installs (plan 0022 §G, owner decision D4): the version
 // that ran last, the release Go back returns to, a Go back under way, and the last check's time.
 // Values only; the shell stores it as `appUpdate` in shell-settings.json.
 //

@@ -403,7 +403,7 @@ function Offers({
   );
 }
 
-/** Go back confirms once: "Go back to *innyrize* 0.3? The flows that use it keep running." */
+/** Go back confirms once: "Go back to *reload_summarize* 0.3? The flows that use it keep running." */
 function GoBackDialog({
   pkg,
   onClose,

@@ -20,7 +20,7 @@ all.
 
 ## Patterns worth borrowing
 
-| Pattern | From | Why it fits InnyTypes |
+| Pattern | From | Why it fits Reload |
 |---|---|---|
 | Notifications with buttons in them, so a person answers without opening the app, with each button tied to its own run | Home Assistant | The best way seen to handle "the flow waits for you" while the flow runs in the background |
 | "Ask for Input": a small question asked in place, in the middle of a flow | Apple Shortcuts | The right weight for a small decision such as naming a speaker |
@@ -38,11 +38,11 @@ Nothing combines all three:
 
 n8n has the waiting step but no destination and no local-first story. Home Assistant has the best
 way of asking, but no knowledge app behind it. Anytype has the destination but no automation. This
-is the space InnyTypes can own.
+is the space Reload can own.
 
 ## The biggest threat: meeting-recorder apps
 
-Granola, Otter and MacWhisper win on effort alone: nothing to configure. InnyTypes' real
+Granola, Otter and MacWhisper win on effort alone: nothing to configure. Reload's real
 advantages only count if the first flow runs in about as few clicks as installing Granola. Those
 advantages are:
 - work that survives unplugging the recorder or the laptop sleeping;

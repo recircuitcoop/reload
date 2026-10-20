@@ -39,7 +39,7 @@ const CERT = fs.readFileSync(path.join(TLS, "localhost-cert.pem"), "utf8");
 const KEY = fs.readFileSync(path.join(TLS, "localhost-key.pem"), "utf8");
 
 const NAME = "verkit";
-const TYPE = "inny-verkit-vers";
+const TYPE = "reload-verkit-vers";
 const BUILD_MS = 60_000;
 
 /**
@@ -68,7 +68,7 @@ readline.createInterface({ input: process.stdin }).on("line", (line) => {
 
 function packageFiles(name: string, version: string, body: string): Files {
   return {
-    "inny-package.json": JSON.stringify({
+    "reload-package.json": JSON.stringify({
       protocol: 2,
       package: name,
       version,
@@ -208,10 +208,10 @@ test("an update is offered and applied, only the runtime restarts and the node r
   });
   const withCatalogue = {
     ...env,
-    INNYTYPES_CATALOGUE_URL: `${server.base}/official/catalogue.json`,
-    INNYTYPES_CATALOGUE_KEY: signer.publicKeyLine,
-    INNYTYPES_E2E_HOOKS: "1",
-    INNYTYPES_TEST_CATALOGUE_CA: CERT,
+    RELOAD_CATALOGUE_URL: `${server.base}/official/catalogue.json`,
+    RELOAD_CATALOGUE_KEY: signer.publicKeyLine,
+    RELOAD_E2E_HOOKS: "1",
+    RELOAD_TEST_CATALOGUE_CA: CERT,
   };
   const launch = async () => {
     const running = await launchApp(withCatalogue);
@@ -343,10 +343,10 @@ test("a registered source's package is offered and installed by its publisher, t
     );
     const { app, window } = await launchApp({
       ...env,
-      INNYTYPES_CATALOGUE_URL: `${server.base}/official/catalogue.json`,
-      INNYTYPES_CATALOGUE_KEY: official.publicKeyLine,
-      INNYTYPES_E2E_HOOKS: "1",
-      INNYTYPES_TEST_CATALOGUE_CA: CERT,
+      RELOAD_CATALOGUE_URL: `${server.base}/official/catalogue.json`,
+      RELOAD_CATALOGUE_KEY: official.publicKeyLine,
+      RELOAD_E2E_HOOKS: "1",
+      RELOAD_TEST_CATALOGUE_CA: CERT,
     });
     apps.push(app);
     await waitForRunning(window, "runtime");
@@ -404,10 +404,10 @@ test("a version whose update failed is shown blocked with its reason and no Upda
   const launch = async () => {
     const running = await launchApp({
       ...env,
-      INNYTYPES_CATALOGUE_URL: `${server.base}/official/catalogue.json`,
-      INNYTYPES_CATALOGUE_KEY: signer.publicKeyLine,
-      INNYTYPES_E2E_HOOKS: "1",
-      INNYTYPES_TEST_CATALOGUE_CA: CERT,
+      RELOAD_CATALOGUE_URL: `${server.base}/official/catalogue.json`,
+      RELOAD_CATALOGUE_KEY: signer.publicKeyLine,
+      RELOAD_E2E_HOOKS: "1",
+      RELOAD_TEST_CATALOGUE_CA: CERT,
     });
     apps.push(running.app);
     running.window.on("dialog", () => undefined);
@@ -427,9 +427,11 @@ test("a version whose update failed is shown blocked with its reason and no Upda
     const installed = await first.window.evaluate(() =>
       (
         globalThis as unknown as {
-          inny: { app: { installCatalogueEntry(s: string, id: string): Promise<{ ok: boolean }> } };
+          reload: {
+            app: { installCatalogueEntry(s: string, id: string): Promise<{ ok: boolean }> };
+          };
         }
-      ).inny.app.installCatalogueEntry("official", "verkit"),
+      ).reload.app.installCatalogueEntry("official", "verkit"),
     );
     expect(installed.ok).toBe(true);
     await waitForRunning(first.window, "runtime", first.runtime.generation + 1);

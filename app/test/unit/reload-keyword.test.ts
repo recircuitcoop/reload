@@ -1,4 +1,4 @@
-// The `innytype` annotation (spec 2.4.1, decision D9): one object per config property, read
+// The `reload` annotation (spec 2.4.1, decision D9): one object per config property, read
 // back for the form, accepted by strict validation, refused at the declaration when malformed,
 // and never a change to what validates.
 import { Ajv2020 } from "ajv/dist/2020.js";
@@ -6,15 +6,15 @@ import { describe, expect, it } from "vitest";
 
 import { AjvSchemaValidator } from "../../src/adapters/schema/ajv-validator";
 import {
-  INNYTYPE_ANNOTATION,
-  INNYTYPE_KEYWORD,
-  innytypeOptions,
-} from "../../src/domain/forms/innytype";
+  RELOAD_ANNOTATION,
+  RELOAD_KEYWORD,
+  reloadOptions,
+} from "../../src/domain/forms/reload-keyword";
 import { formModel } from "../../src/domain/forms/form-model";
 import type { JsonSchema } from "../../src/domain/packages/declaration";
 
-const SPACE = { type: "string", title: "Space", innytype: { spaces: true } };
-const TYPE = { type: "string", title: "Type", innytype: { types: { of: "space" } } };
+const SPACE = { type: "string", title: "Space", reload: { spaces: true } };
+const TYPE = { type: "string", title: "Type", reload: { types: { of: "space" } } };
 const CONFIG: JsonSchema = {
   type: "object",
   required: ["space"],
@@ -40,53 +40,53 @@ function declaration(config: unknown): unknown {
   };
 }
 
-describe("innytypeOptions", () => {
+describe("reloadOptions", () => {
   it("reads spaces and types-of-a-sibling", () => {
-    expect(innytypeOptions(SPACE)).toEqual({ source: "spaces" });
-    expect(innytypeOptions(TYPE)).toEqual({ source: "types", of: "space" });
+    expect(reloadOptions(SPACE)).toEqual({ source: "spaces" });
+    expect(reloadOptions(TYPE)).toEqual({ source: "types", of: "space" });
   });
 
   it("reads nothing where nothing this revision defines is declared", () => {
     const cases: JsonSchema[] = [
       { type: "string" },
-      { type: "integer", innytype: { spaces: true } },
-      { type: "string", innytype: true },
-      { type: "string", innytype: { recorders: true } },
-      { type: "string", innytype: { spaces: false } },
-      { type: "string", innytype: { types: { of: "" } } },
-      { type: "string", innytype: { types: "space" } },
-      { type: "string", innytype: { spaces: true, types: { of: "space" } } },
+      { type: "integer", reload: { spaces: true } },
+      { type: "string", reload: true },
+      { type: "string", reload: { recorders: true } },
+      { type: "string", reload: { spaces: false } },
+      { type: "string", reload: { types: { of: "" } } },
+      { type: "string", reload: { types: "space" } },
+      { type: "string", reload: { spaces: true, types: { of: "space" } } },
     ];
     for (const property of cases) {
-      expect(innytypeOptions(property)).toBeNull();
+      expect(reloadOptions(property)).toBeNull();
     }
   });
 
   it("names the one keyword the annotation spends", () => {
-    expect(INNYTYPE_KEYWORD).toBe("innytype");
-    expect(INNYTYPE_ANNOTATION).toEqual({ keyword: "innytype" });
+    expect(RELOAD_KEYWORD).toBe("reload");
+    expect(RELOAD_ANNOTATION).toEqual({ keyword: "reload" });
   });
 });
 
 describe("the form model", () => {
   it("keeps where a text field's options come from, the value still a plain string", () => {
     const [space, type] = formModel(CONFIG).fields;
-    expect(space).toMatchObject({ key: "space", control: "text", innytype: { source: "spaces" } });
+    expect(space).toMatchObject({ key: "space", control: "text", reload: { source: "spaces" } });
     expect(type).toMatchObject({
       key: "type",
       control: "text",
-      innytype: { source: "types", of: "space" },
+      reload: { source: "types", of: "space" },
     });
     expect(formModel({ properties: { plain: { type: "string" } } }).fields[0]).not.toHaveProperty(
-      "innytype",
+      "reload",
     );
   });
 });
 
 describe("validation with the annotation", () => {
   it("is accepted by a strict validator once registered, and refused before", () => {
-    expect(() => new Ajv2020({ strict: true }).compile(CONFIG)).toThrow(/innytype/);
-    const strict = new Ajv2020({ strict: true }).addKeyword(INNYTYPE_ANNOTATION);
+    expect(() => new Ajv2020({ strict: true }).compile(CONFIG)).toThrow(/reload/);
+    const strict = new Ajv2020({ strict: true }).addKeyword(RELOAD_ANNOTATION);
     expect(strict.compile(CONFIG)({ space: "s1", type: "t1" })).toBe(true);
   });
 
@@ -122,7 +122,7 @@ describe("the declaration schema", () => {
 
   it("leaves room for keys a later revision defines, beside the one it requires", () => {
     const later = {
-      properties: { folder: { type: "string", innytype: { spaces: true, folders: true } } },
+      properties: { folder: { type: "string", reload: { spaces: true, folders: true } } },
     };
     expect(validator.declaration(declaration(later))).toEqual([]);
   });
@@ -135,7 +135,7 @@ describe("the declaration schema", () => {
       },
     };
     expect(validator.declaration(declaration(nested))).toEqual([]);
-    const bad = { type: "integer", innytype: { spaces: true } };
+    const bad = { type: "integer", reload: { spaces: true } };
     const refused: [unknown, string][] = [
       [{ group: { type: "object", properties: { p: bad } } }, "/group/properties/p/type"],
       [
@@ -157,26 +157,20 @@ describe("the declaration schema", () => {
 
   it("refuses a malformed annotation, naming the property", () => {
     const refused: [unknown, string][] = [
-      [{ type: "integer", innytype: { spaces: true } }, "/types/0/config/properties/p/type"],
-      [{ innytype: { spaces: true } }, "/types/0/config/properties/p/type"],
+      [{ type: "integer", reload: { spaces: true } }, "/types/0/config/properties/p/type"],
+      [{ reload: { spaces: true } }, "/types/0/config/properties/p/type"],
+      [{ type: "string", reload: { spaces: "yes" } }, "/types/0/config/properties/p/reload/spaces"],
+      [{ type: "string", reload: { types: {} } }, "/types/0/config/properties/p/reload/types/of"],
       [
-        { type: "string", innytype: { spaces: "yes" } },
-        "/types/0/config/properties/p/innytype/spaces",
+        { type: "string", reload: { types: { of: "" } } },
+        "/types/0/config/properties/p/reload/types/of",
       ],
+      [{ type: "string", reload: "spaces" }, "/types/0/config/properties/p/reload"],
+      [{ type: "string", reload: {} }, "/types/0/config/properties/p/reload/spaces"],
+      [{ type: "string", reload: { folders: true } }, "/types/0/config/properties/p/reload"],
       [
-        { type: "string", innytype: { types: {} } },
-        "/types/0/config/properties/p/innytype/types/of",
-      ],
-      [
-        { type: "string", innytype: { types: { of: "" } } },
-        "/types/0/config/properties/p/innytype/types/of",
-      ],
-      [{ type: "string", innytype: "spaces" }, "/types/0/config/properties/p/innytype"],
-      [{ type: "string", innytype: {} }, "/types/0/config/properties/p/innytype/spaces"],
-      [{ type: "string", innytype: { folders: true } }, "/types/0/config/properties/p/innytype"],
-      [
-        { type: "string", innytype: { spaces: true, types: { of: "space" } } },
-        "/types/0/config/properties/p/innytype",
+        { type: "string", reload: { spaces: true, types: { of: "space" } } },
+        "/types/0/config/properties/p/reload",
       ],
     ];
     for (const [property, path] of refused) {

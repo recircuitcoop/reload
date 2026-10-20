@@ -26,7 +26,7 @@ type Result =
   | { ok: false; error: string; status?: number };
 
 type Api = {
-  inny: { app: { submitView(id: string, values: Record<string, unknown>): Promise<Result> } };
+  reload: { app: { submitView(id: string, values: Record<string, unknown>): Promise<Result> } };
 };
 
 function request(port: number, method: string, route: string, body?: unknown): Promise<number> {
@@ -55,7 +55,7 @@ function request(port: number, method: string, route: string, body?: unknown): P
 /** Answer the pending view `id` from the page, as Live's Skip this step does. */
 const submit = (window: Page, id: string, values: Record<string, unknown>): Promise<Result> =>
   window.evaluate(
-    ([view, answer]) => (window as unknown as Api).inny.app.submitView(view, answer),
+    ([view, answer]) => (window as unknown as Api).reload.app.submitView(view, answer),
     [id, values] as const,
   );
 
@@ -96,8 +96,8 @@ const inject = (id: string, target: string, payload: string) => ({
  * node that is one catches nothing.
  */
 function flow(pkg: string, withRecord: boolean): object[] {
-  const ask = `inny-${pkg}-ask`;
-  const record = `inny-${pkg}-record`;
+  const ask = `reload-${pkg}-ask`;
+  const record = `reload-${pkg}-record`;
   const nodes: object[] = [
     { id: "tab1", type: "tab", label: "Views" },
     inject("go-ask", "ask", '{"n":1}'),
@@ -134,8 +134,8 @@ function flow(pkg: string, withRecord: boolean): object[] {
             name: "Rec",
             wires: [["dbg-passed"], ["dbg-again"], []],
           },
-          debug("dbg-passed", "passed run", "inny.run"),
-          debug("dbg-again", "again run", "inny.run"),
+          debug("dbg-passed", "passed run", "reload.run"),
+          debug("dbg-again", "again run", "reload.run"),
         ]
       : []),
   ];
@@ -166,10 +166,12 @@ const presentedFor = (said: () => string, instance: string, again: boolean): Pro
 /** The pop-out pages open now, and the view each answers for, through its own bridge. */
 async function popoutViews(app: ElectronApplication): Promise<string[]> {
   const ids: string[] = [];
-  for (const page of app.windows().filter((each) => each.url().startsWith("inny-view://"))) {
+  for (const page of app.windows().filter((each) => each.url().startsWith("reload-view://"))) {
     ids.push(
       await page.evaluate(async () => {
-        const got = await (window as unknown as { inny: { get(): Promise<Result> } }).inny.get();
+        const got = await (
+          window as unknown as { reload: { get(): Promise<Result> } }
+        ).reload.get();
         const id = got.ok ? got.value?.["id"] : undefined;
         return typeof id === "string" ? id : "";
       }),
@@ -194,7 +196,7 @@ for (const language of ["py", "ts"] as const) {
       expect(await request(port, "POST", "/red/flows", flow(pkg, true))).toBe(204);
       await expect
         .poll(said, { timeout: 20_000 })
-        .toMatch(new RegExp(`\\[inny-${pkg}-record rec\\] ready`));
+        .toMatch(new RegExp(`\\[reload-${pkg}-record rec\\] ready`));
 
       // ── an action view makes the flow wait; a pop-out view opens its window by itself ──
       expect(await request(port, "POST", "/red/inject/go-ask")).toBe(200);
@@ -226,14 +228,14 @@ for (const language of ["py", "ts"] as const) {
       expect(await submit(window, timedId, { answer: "late" })).toMatchObject({ ok: false });
 
       // ── a submission, from the view's own pop-out, continues the flow and closes it ────
-      const popout = app.windows().find((page) => page.url().startsWith("inny-view://"));
+      const popout = app.windows().find((page) => page.url().startsWith("reload-view://"));
       expect(
         await popout?.evaluate(() =>
           (
             window as unknown as {
-              inny: { submit(values: Record<string, unknown>): Promise<Result> };
+              reload: { submit(values: Record<string, unknown>): Promise<Result> };
             }
-          ).inny.submit({ answer: "Ada" }),
+          ).reload.submit({ answer: "Ada" }),
         ),
       ).toEqual({ ok: true, value: null });
       await expect
@@ -253,7 +255,7 @@ for (const language of ["py", "ts"] as const) {
       expect(await request(port, "POST", "/red/inject/go-rec")).toBe(200);
       await captured(
         said,
-        new RegExp(`snapshot (\\S+) recorded from \\[inny-${pkg}-record rec\\]`),
+        new RegExp(`snapshot (\\S+) recorded from \\[reload-${pkg}-record rec\\]`),
       );
       await captured(said, /\[debug:passed run\] \n?'?([0-9a-f-]{36})/);
 

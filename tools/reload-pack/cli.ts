@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// inny-pack (WI-0018-26): the packaging tool a node package author runs to build, sign and
+// reload-pack (WI-0018-26): the packaging tool a node package author runs to build, sign and
 // verify a distributable archive (spec 2.3.5). It never re-implements the app's own judgment
-// of a package: every rule that decides whether InnyTypes would ACCEPT a package -- the
+// of a package: every rule that decides whether Reload would ACCEPT a package -- the
 // declaration schema, the "no install step" rule for a node-kind package, the hash-lock rules
 // for a uv-python one, the file manifest, the content hash -- is imported straight from
 // app/src/domain and run here exactly as the app runs it. Only two things are new, because the
@@ -10,10 +10,10 @@
 //
 // build's last step re-reads the archive it just wrote through the app's own verification
 // path (FsPackageSource, parseFileManifest, verifyFiles, MinisignVerifier) -- the same code
-// `inny-pack verify` runs on any archive -- so a package inny-pack calls built is one the app
+// `reload-pack verify` runs on any archive -- so a package reload-pack calls built is one the app
 // has already, in this run, agreed to accept.
 //
-// Runs as plain Node (type stripping): `node tools/inny-pack/cli.ts <command> ...`.
+// Runs as plain Node (type stripping): `node tools/reload-pack/cli.ts <command> ...`.
 
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -25,6 +25,10 @@ import { AjvSchemaValidator } from "../../app/src/adapters/schema/ajv-validator.
 import { sha256Hex } from "../../app/src/adapters/signature/digest.ts";
 import { MinisignVerifier } from "../../app/src/adapters/signature/minisign.ts";
 import { FsPackageSource } from "../../app/src/adapters/fs/package-source.ts";
+import {
+  OLD_DECLARATION_FILE,
+  oldDeclarationProblem,
+} from "../../app/src/domain/packages/old-names";
 import {
   contentHash,
   DECLARATION_FILE,
@@ -86,7 +90,7 @@ function readPackageFolder(dir: string): Map<string, Uint8Array> {
     }
     if (relative.endsWith(".key")) {
       throw new BuildError(
-        `${relative} looks like an inny-pack signing key; it must never be inside the ` +
+        `${relative} looks like an reload-pack signing key; it must never be inside the ` +
           "package it signs. Keep keys outside the package folder (docs/authors/packaging.md).",
       );
     }
@@ -97,6 +101,9 @@ function readPackageFolder(dir: string): Map<string, Uint8Array> {
     files.set(relative, fs.readFileSync(path.join(dir, relative)));
   }
   if (!files.has(DECLARATION_FILE)) {
+    if (files.has(OLD_DECLARATION_FILE)) {
+      throw new BuildError(`${dir}: ${oldDeclarationProblem(DECLARATION_FILE)}`);
+    }
     throw new BuildError(`${dir} has no ${DECLARATION_FILE}`);
   }
   return files;
@@ -230,11 +237,11 @@ function cmdKeygen(args: string[]): void {
   const { values, positionals } = parseArgs({
     args,
     allowPositionals: true,
-    options: { name: { type: "string", default: "inny-pack" } },
+    options: { name: { type: "string", default: "reload-pack" } },
   });
   const dir = positionals[0];
   if (dir === undefined) {
-    throw new BuildError("usage: inny-pack keygen <dir> [--name <text>]");
+    throw new BuildError("usage: reload-pack keygen <dir> [--name <text>]");
   }
   fs.mkdirSync(dir, { recursive: true });
   const key = generateSigningKey();
@@ -259,7 +266,7 @@ async function cmdBuild(args: string[]): Promise<void> {
   const packageDir = positionals[0];
   if (packageDir === undefined || values.key === undefined) {
     throw new BuildError(
-      "usage: inny-pack build <package-dir> --key <secret-key-file> [--out <archive.tgz>]",
+      "usage: reload-pack build <package-dir> --key <secret-key-file> [--out <archive.tgz>]",
     );
   }
   const files = readPackageFolder(path.resolve(packageDir));
@@ -284,7 +291,7 @@ async function cmdBuild(args: string[]): Promise<void> {
     manifestJson,
     key,
     trustedComment,
-    `signature by inny-pack for ${declaration.package} ${declaration.version}`,
+    `signature by reload-pack for ${declaration.package} ${declaration.version}`,
   );
 
   const archived = new Map(files);
@@ -296,7 +303,7 @@ async function cmdBuild(args: string[]): Promise<void> {
 
   // Self-check: the archive just written must be one the app would accept, verified through
   // the app's own code, not a second copy of the same rules.
-  const publicKey = publicKeyText(key, "inny-pack build's own key");
+  const publicKey = publicKeyText(key, "reload-pack build's own key");
   const report = await verifyArchive(archiveName, publicKey);
   if (report.contentHash !== hash) {
     throw new BuildError(
@@ -318,7 +325,7 @@ async function cmdVerify(args: string[]): Promise<void> {
   });
   const archivePath = positionals[0];
   if (archivePath === undefined || values.key === undefined) {
-    throw new BuildError("usage: inny-pack verify <archive.tgz> --key <public-key-file>");
+    throw new BuildError("usage: reload-pack verify <archive.tgz> --key <public-key-file>");
   }
   const publicKey = fs.readFileSync(values.key, "utf8");
   const report = await verifyArchive(path.resolve(archivePath), publicKey);
@@ -337,7 +344,7 @@ async function main(): Promise<void> {
   } else if (command === "verify") {
     await cmdVerify(rest);
   } else {
-    console.error("usage: inny-pack <keygen|build|verify> ...");
+    console.error("usage: reload-pack <keygen|build|verify> ...");
     process.exitCode = 2;
   }
 }
@@ -355,10 +362,10 @@ const isMain =
 
 if (isMain) {
   main().catch((error: unknown) => {
-    console.error(`inny-pack: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`reload-pack: ${error instanceof Error ? error.message : String(error)}`);
     process.exitCode = 1;
   });
 }
 
-// Re-exported so tools/inny-pack's own tests can drive build/verify without shelling out.
+// Re-exported so tools/reload-pack's own tests can drive build/verify without shelling out.
 export { cmdBuild, cmdKeygen, cmdVerify, verifyArchive };

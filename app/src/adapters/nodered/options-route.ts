@@ -1,4 +1,4 @@
-// The canvas form's dynamic options (plan 0022 §B, D9): `GET /red/inny/options` with
+// The canvas form's dynamic options (plan 0022 §B, D9): `GET /red/reload/options` with
 // `source=spaces`, or `source=types&space=<id>`, answers `{options: [{value, label}]}` or
 // `{refused: {reason, sentence}}`.
 //
@@ -14,7 +14,7 @@ import {
 } from "../../domain/forms/node-options";
 
 /** Where the route sits under the admin root. */
-export const OPTIONS_PATH = "/inny/options";
+export const OPTIONS_PATH = "/reload/options";
 
 export function optionsRoute(
   adminRoot: string,

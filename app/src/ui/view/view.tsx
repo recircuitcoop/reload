@@ -1,5 +1,5 @@
 // The pop-out page (spec 8.5; plan 0022 §M "their page becomes view.tsx with QuestionPopout and
-// the tokens"): one view or snapshot, in the InnyTypes chrome, under the pop-out's own CSP,
+// the tokens"): one view or snapshot, in the Reload chrome, under the pop-out's own CSP,
 // unchanged (domain/views/popout VIEW_CSP). The tokens arrive as tokens.css and the components'
 // classes as app.css, both served beside view.js on the view origin (style-src 'self').
 //
@@ -14,7 +14,7 @@
 //   chrome once the chrome knows what it holds.
 // * Development builds only: `#ark-widgets` draws every Ark UI atom and molecule of the gallery
 //   instead, so the e2e gate can open each under this very CSP (plan 0022 risk 7). esbuild drops
-//   the branch from a production build (INNY_BUILD_MODE, ui/build-mode.d.ts).
+//   the branch from a production build (RELOAD_BUILD_MODE, ui/build-mode.d.ts).
 import { useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
@@ -103,7 +103,7 @@ export function PopoutChrome({
     return (
       <section
         data-component="popout-panel"
-        className="flex w-[var(--inny-size-popout-width)] max-w-full flex-col gap-4 rounded-l bg-surface-panel p-5 shadow-popout"
+        className="flex w-[var(--reload-size-popout-width)] max-w-full flex-col gap-4 rounded-l bg-surface-panel p-5 shadow-popout"
       >
         <Host element={host} />
       </section>
@@ -162,7 +162,7 @@ export function PopoutChrome({
 
 /** Mount the pop-out on its bridge: the chrome with React, the logic with mountViewPage. */
 function mountPopout(frame: HTMLElement, host: HTMLElement, status: HTMLElement): void {
-  const bridge = (window as unknown as { readonly inny: ViewBridge }).inny;
+  const bridge = (window as unknown as { readonly reload: ViewBridge }).reload;
   const state = new ChromeState();
   const controls: Controls = { skip: () => undefined, later: () => undefined };
   const onLoadFailure = watchLoadFailures();
@@ -236,7 +236,7 @@ const frame = document.getElementById("popout");
 const host = document.getElementById("view");
 const status = document.getElementById("status");
 if (frame !== null && host !== null && status !== null) {
-  if (INNY_BUILD_MODE !== "production" && window.location.hash === "#ark-widgets") {
+  if (RELOAD_BUILD_MODE !== "production" && window.location.hash === "#ark-widgets") {
     void import("./ArkWidgetsProbe").then(({ ArkWidgetsProbe }) => {
       host.remove();
       createRoot(frame).render(<ArkWidgetsProbe />);

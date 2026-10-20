@@ -1,7 +1,7 @@
 // The secret store through the real app (WI-0018-06): Node-RED's credential secret is made
 // once, kept by the keychain adapter, handed to every runtime generation in init, and found
 // nowhere on disk in plaintext afterwards. The keychain is Chromium's mock one, so no run
-// touches this user's real keychain (INNYTYPES_MOCK_KEYCHAIN, set by the harness).
+// touches this user's real keychain (RELOAD_MOCK_KEYCHAIN, set by the harness).
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import * as path from "node:path";
@@ -46,12 +46,12 @@ test("the credential secret is made once, reaches every runtime's init, and is n
   try {
     // First launch: the secret is generated and handed to generation 1, and to generation 2
     // after a crash.
-    const first = await launchApp({ ...env, INNYTYPES_LOG_FILE: logFile });
+    const first = await launchApp({ ...env, RELOAD_LOG_FILE: logFile });
     const runtime = await waitForRunning(first.window, "runtime");
     const storage = await first.window.evaluate(() =>
       (
-        window as unknown as { inny: { app: { secretStorage(): Promise<unknown> } } }
-      ).inny.app.secretStorage(),
+        window as unknown as { reload: { app: { secretStorage(): Promise<unknown> } } }
+      ).reload.app.secretStorage(),
     );
     expect(storage).toEqual({ backend: "keychain", reason: null });
 
@@ -73,7 +73,7 @@ test("the credential secret is made once, reaches every runtime's init, and is n
     await expect.poll(() => processesNaming(userData), { timeout: 10_000 }).toEqual([]);
 
     // Second launch: the stored secret is read, not made again.
-    const second = await launchApp({ ...env, INNYTYPES_LOG_FILE: logFile });
+    const second = await launchApp({ ...env, RELOAD_LOG_FILE: logFile });
     await waitForRunning(second.window, "runtime");
     expect(await decryptStored(second.app, ciphertextFile)).toBe(secret);
     await expect

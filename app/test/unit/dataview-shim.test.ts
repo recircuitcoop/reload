@@ -277,7 +277,7 @@ describe("a dataview naming a type by source", () => {
       { space_id: SPACE, type: "page", ids: "full" },
       { space_id: SPACE, type: "ledger_item", ids: "full" },
     ]);
-    // A type the child no longer lists is not converted from any table of InnyTypes' own; the
+    // A type the child no longer lists is not converted from any table of Reload's own; the
     // derived id is then looked up as an object, which Anytype answers 404, and refused.
     const renamed = subject();
     renamed.session.listTypes = () => text({ data: [], total: 0, has_more: false });
@@ -378,7 +378,7 @@ describe("a dataview whose target is not a type or a collection", () => {
         message:
           `ops[0].blocks[1].${member}: "${QUERY_ID}" resolves to a Query object "Costs" (layout "set"), ` +
           `not a type or a collection; a dataview shows a type's or a collection's objects ` +
-          `(refused by InnyTypes, nothing was written)`,
+          `(refused by Reload, nothing was written)`,
       });
       // The good block before it is not written alone either: the whole call is refused.
       expect(session.forwarded()).toEqual([]);
@@ -435,7 +435,7 @@ describe("a dataview whose target is not a type or a collection", () => {
       );
       expect(refusal(answer.body)["message"]).toBe(
         `ops[0].blocks[0].object_id: ${shown} is not a string; object_id must be the object id ` +
-          `of a type or a collection (refused by InnyTypes, nothing was written)`,
+          `of a type or a collection (refused by Reload, nothing was written)`,
       );
       expect(session.calls).toEqual([]);
     },
@@ -457,7 +457,7 @@ describe("a dataview whose target is not a type or a collection", () => {
     const { session, call } = subject();
     const answer = await call("API-patch-object", patch("insert_blocks", dataview({ source })));
     expect(refusal(answer.body)["message"]).toBe(
-      `ops[0].blocks[0].source: ${said} (refused by InnyTypes, nothing was written)`,
+      `ops[0].blocks[0].source: ${said} (refused by Reload, nothing was written)`,
     );
     expect(session.calls).toEqual([]);
   });

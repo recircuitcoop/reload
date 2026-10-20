@@ -1,5 +1,5 @@
 // The facets of a package's row in General (plan 0022 §F; domain/packages/states.ts), each from
-// what InnyTypes verified and when: registration from the running runtime's types, installation
+// what Reload verified and when: registration from the running runtime's types, installation
 // from a content hash re-checked against the recorded one, and the update from the last answer
 // of where the package came from, a recent update's Go back, or the version a Go back left.
 // application/package-board.ts gathers the facts; these turn them into states.
@@ -27,7 +27,7 @@ export function registrationOf(
   if (types === null) {
     return null;
   }
-  const loaded = types.some((type) => type.startsWith(`inny-${name}-`));
+  const loaded = types.some((type) => type.startsWith(`reload-${name}-`));
   return { state: loaded ? "registered" : "not-registered", verifiedAt: at };
 }
 

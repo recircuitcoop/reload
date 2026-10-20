@@ -89,7 +89,7 @@ wheels = [
 ]
 
 [[package]]
-name = "innytypes-node"
+name = "reload-node"
 version = "0.1.0"
 source = { editable = "." }
 

@@ -100,7 +100,7 @@ export async function serveAnytypeCall(
         await service.completePairing(args);
         return { ok: true, value: service.status() };
       default:
-        return { ok: false, error: `the InnyTypes services process does not serve ${op}` };
+        return { ok: false, error: `the Reload services process does not serve ${op}` };
     }
   } catch (error) {
     return { ok: false, error: (error as Error).message };

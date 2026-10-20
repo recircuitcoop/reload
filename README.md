@@ -1,6 +1,6 @@
-# InnyTypes
+# Reload
 
-InnyTypes is a desktop application that turns recordings and other sources into Anytype objects.
+Reload is a desktop application that turns recordings and other sources into Anytype objects.
 You draw each automation as a flow on a canvas: a source starts it (a recorder or a watched
 folder), each step does one piece of work (transcribe, summarise, create an object), and questions
 stop the flow until you answer. The canvas and the engine underneath are an embedded
@@ -12,9 +12,10 @@ vocabulary and the design are in
 [plan 0017](docs/plans/0017-innytypes-as-a-workflow-orchestrator.md) and
 [plan 0018](docs/plans/0018-the-new-application.md).
 
-The current version is **0.3.0**, a pre-release for macOS. It is not signed by Apple, so macOS
-warns on first open. To install it, follow [docs/INSTALL.md](docs/INSTALL.md); the downloads are
-on the [v0.3.0 release](https://github.com/recircuitcoop/InnyTypes/releases/tag/v0.3.0).
+The current version is **0.4.0**, a pre-release for macOS. It is the application that was called
+InnyTypes, renamed. It is not signed by Apple, so macOS warns on first open. To install it, follow
+[docs/INSTALL.md](docs/INSTALL.md); the downloads are on the
+[v0.4.0 release](https://github.com/recircuitcoop/reload/releases/tag/v0.4.0).
 
 ## Run from a checkout (developers)
 
@@ -32,6 +33,12 @@ There is no script that starts the development app on its own. The end-to-end ha
 ```console
 npm run --workspace app test:e2e
 ```
+
+<!-- old-python-app -->
+
+The sections below, up to the licence, describe the old Python application (`src/innytypes`),
+which keeps the name InnyTypes until plan 0026 removes it. Reload's own connection steps are in
+[docs/INSTALL.md](docs/INSTALL.md), section 7.
 
 ## Connect an AI client through MCP
 
@@ -139,6 +146,8 @@ Current release constraints:
 - Release `0.1.0` is documented in [CHANGELOG.md](CHANGELOG.md), but this repository has not yet
   established automated cross-platform CI or a tagged binary-release process.
 
+<!-- /old-python-app -->
+
 ## License
 
-InnyTypes is released under the [MIT License](LICENSE).
+Reload is released under the [MIT License](LICENSE).

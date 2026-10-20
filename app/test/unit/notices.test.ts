@@ -35,7 +35,7 @@ const crashLoop: Notice = {
   kind: "child-stopped",
   subject: "runtime",
   detail:
-    "The InnyTypes runtime stopped unexpectedly 5 times in 2 minutes, so it is no longer " +
+    "The Reload runtime stopped unexpectedly 5 times in 2 minutes, so it is no longer " +
     "restarted. Press Restart to try again.",
 };
 
@@ -84,14 +84,14 @@ describe("compose", () => {
 
   it("says what stopped and what to do about it, adding a full stop only where one is missing", () => {
     expect(compose(crashLoop)).toEqual({
-      title: "InnyTypes stopped restarting the runtime",
+      title: "Reload stopped restarting the runtime",
       body: crashLoop.detail,
     });
     expect(compose({ kind: "node-stopped", subject: "raw", detail: "It exited" }).body).toBe(
       "It exited. Redeploy the flow to let it try again.",
     );
     expect(compose({ kind: "anytype-key-refused", subject: "Anytype" })).toEqual({
-      title: "Anytype refused the InnyTypes key",
+      title: "Anytype refused the Reload key",
       body:
         "An Anytype node's request was refused, so its input failed and was not retried. " +
         "Pair again with Anytype in Settings.",
@@ -99,12 +99,12 @@ describe("compose", () => {
     expect(
       compose({ kind: "endpoint-degraded", subject: "MCP endpoint", detail: "port taken" }),
     ).toEqual({
-      title: "InnyTypes is running without its MCP endpoint",
+      title: "Reload is running without its MCP endpoint",
       body: "port taken. Choose another address in Settings.",
     });
     expect(compose({ kind: "mcp-child-stopped", subject: "Anytype MCP child" }).body).toBe("");
     expect(compose({ kind: "view-waiting", subject: "v1", detail: "Approve?" })).toEqual({
-      title: "InnyTypes is waiting for you",
+      title: "Reload is waiting for you",
       body: "Approve?",
     });
     expect(compose({ kind: "view-waiting", subject: "v1" }).body).toBe("A question waits in Live.");
@@ -116,18 +116,17 @@ describe("compose", () => {
         .title,
     ).toBe("monty 2.0.0 is being held back");
     expect(compose({ kind: "mcp-child-restarted", subject: "Anytype MCP child" }).title).toBe(
-      "InnyTypes restarted the Anytype MCP child",
+      "Reload restarted the Anytype MCP child",
+    );
+    expect(compose({ kind: "core-update-available", subject: "Reload", version: "1.2.3" })).toEqual(
+      {
+        title: "Reload 1.2.3 is ready",
+        body: "It installs the next time you quit Reload.",
+      },
     );
     expect(
-      compose({ kind: "core-update-available", subject: "InnyTypes", version: "1.2.3" }),
-    ).toEqual({
-      title: "InnyTypes 1.2.3 is ready",
-      body: "It installs the next time you quit InnyTypes.",
-    });
-    expect(
-      compose({ kind: "core-update-refused", subject: "InnyTypes", detail: "a tampered yml" })
-        .title,
-    ).toBe("An InnyTypes update was refused");
+      compose({ kind: "core-update-refused", subject: "Reload", detail: "a tampered yml" }).title,
+    ).toBe("A Reload update was refused");
   });
 
   it("tells a notice from one in other words, and checks what crossed a process boundary", () => {
@@ -179,8 +178,8 @@ describe("NoticeBoard: the once-only rule", () => {
     subject.raise(crashLoop);
     subject.raise({ ...crashLoop, subject: "services" });
     expect(shown.map((message) => message.title)).toEqual([
-      "InnyTypes stopped restarting the runtime",
-      "InnyTypes stopped restarting the services",
+      "Reload stopped restarting the runtime",
+      "Reload stopped restarting the services",
     ]);
   });
 
@@ -193,7 +192,7 @@ describe("NoticeBoard: the once-only rule", () => {
     subject.raise(crashLoop);
     subject.raise(crashLoop);
     subject.clear("child-stopped", "runtime");
-    expect(order).toEqual(["write 1", "show InnyTypes stopped restarting the runtime", "write 0"]);
+    expect(order).toEqual(["write 1", "show Reload stopped restarting the runtime", "write 0"]);
     expect(logger.lines.filter((line) => line.includes("notice:"))).toHaveLength(1);
   });
 
@@ -219,7 +218,7 @@ describe("NoticeBoard: the once-only rule", () => {
 
 describe("JsonNoticeFile", () => {
   it("writes every current condition, whole, and replaces the file on the next write", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "inny-notices-"));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "reload-notices-"));
     const file = path.join(dir, "deeper", "notices.json");
     const store = new JsonNoticeFile(file);
     store.write([crashLoop, { kind: "view-waiting", subject: "v1" }]);
@@ -233,7 +232,7 @@ describe("JsonNoticeFile", () => {
   });
 
   it("leaves no scratch file behind when the write fails", () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "inny-notices-"));
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "reload-notices-"));
     // A directory where the file should be: the rename fails.
     const file = path.join(dir, "notices.json");
     fs.mkdirSync(file);

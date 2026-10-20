@@ -38,12 +38,12 @@ describe("electron-builder identifies the app the way the rest of it does (was B
     // BUNDLE_IDENTIFIER, tests/test_bundle.py's D27 check); electron-builder's appId is its
     // direct successor, and adapters/electron/notifier.ts's own comment says so.
     expect(configValue("appId")).toBe(APP_USER_MODEL_ID);
-    expect(APP_USER_MODEL_ID).toBe("it.l1nx.innytypes.helper");
+    expect(APP_USER_MODEL_ID).toBe("it.recircu.reload");
   });
 
   it("productName is the application the user knows, in both the package manifest and electron-builder", () => {
-    expect(configValue("productName")).toBe("InnyTypes");
-    expect(PACKAGE_JSON.productName).toBe("InnyTypes");
+    expect(configValue("productName")).toBe("Reload");
+    expect(PACKAGE_JSON.productName).toBe("Reload");
   });
 
   it("the icon paths point at the committed images, still the ones tools/make_icon.py draws", () => {
@@ -51,11 +51,11 @@ describe("electron-builder identifies the app the way the rest of it does (was B
     // (never at column 0), so each is found scoped to its own section rather than by a bare
     // top-level "icon:" match.
     const macIconMatch = /^mac:[\s\S]*?^\s*icon:\s*"([^"]+)"/m.exec(CONFIG);
-    expect(macIconMatch?.[1]).toBe("../src/innytypes/resources/innytypes.icns");
+    expect(macIconMatch?.[1]).toBe("packaging/icons/reload.icns");
     expect(fs.existsSync(path.resolve(APP_ROOT, macIconMatch?.[1] ?? ""))).toBe(true);
 
     const linuxIconMatch = /^linux:[\s\S]*?^\s*icon:\s*"([^"]+)"/m.exec(CONFIG);
-    expect(linuxIconMatch?.[1]).toBe("../src/innytypes/resources/innytypes.png");
+    expect(linuxIconMatch?.[1]).toBe("packaging/icons/reload.png");
     expect(fs.existsSync(path.resolve(APP_ROOT, linuxIconMatch?.[1] ?? ""))).toBe(true);
   });
 });
@@ -162,7 +162,7 @@ describe("the release build never carries the local, ad-hoc entitlement (WI-0018
     expect(AFTER_PACK).toMatch(/identity\s*===\s*null/);
   });
 
-  it("an ad-hoc build for distribution (INNYTYPES_DISTRIBUTE=1) re-signs with the release plist, never get-task-allow", () => {
+  it("an ad-hoc build for distribution (RELOAD_DISTRIBUTE=1) re-signs with the release plist, never get-task-allow", () => {
     // after-pack.cjs is CommonJS, loaded the way electron-builder itself loads it.
     const { adHocEntitlementsPlist } = createRequire(__filename)(
       path.join(APP_ROOT, "packaging", "after-pack.cjs"),
@@ -170,12 +170,12 @@ describe("the release build never carries the local, ad-hoc entitlement (WI-0018
 
     // Default (local e2e): unchanged, the plist Playwright's CDP needs.
     expect(path.basename(adHocEntitlementsPlist({}))).toBe("local-entitlements.mac.plist");
-    expect(path.basename(adHocEntitlementsPlist({ INNYTYPES_DISTRIBUTE: "0" }))).toBe(
+    expect(path.basename(adHocEntitlementsPlist({ RELOAD_DISTRIBUTE: "0" }))).toBe(
       "local-entitlements.mac.plist",
     );
 
     // Distribution: the release plist, which the test above already proves is free of it.
-    const distributed = adHocEntitlementsPlist({ INNYTYPES_DISTRIBUTE: "1" });
+    const distributed = adHocEntitlementsPlist({ RELOAD_DISTRIBUTE: "1" });
     expect(path.basename(distributed)).toBe("release-entitlements.mac.plist");
     expect(fs.readFileSync(distributed, "utf8")).not.toMatch(GET_TASK_ALLOW);
   });

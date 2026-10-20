@@ -34,7 +34,7 @@ export interface TelemetryWiring extends Pick<
   "setting" | "queue" | "poster" | "machineIdentifier" | "hashIdentifier" | "clock" | "logger"
 > {
   readonly ipc: Pick<IpcMain, "handle">;
-  /** The build's endpoints, as released (package.json's "innytypes"). */
+  /** The build's endpoints, as released (package.json's "reload"). */
   readonly built: Endpoints;
   /** Where development and the e2e gate point the endpoints elsewhere. */
   readonly env: Readonly<Record<string, string | undefined>>;
@@ -58,9 +58,9 @@ export function telemetryEndpoints(
   built: Endpoints,
 ): Endpoints {
   return {
-    glitchtipDsn: env["INNYTYPES_GLITCHTIP_DSN"] ?? built.glitchtipDsn,
-    umamiUrl: env["INNYTYPES_UMAMI_URL"] ?? built.umamiUrl,
-    umamiWebsiteId: env["INNYTYPES_UMAMI_WEBSITE_ID"] ?? built.umamiWebsiteId,
+    glitchtipDsn: env["RELOAD_GLITCHTIP_DSN"] ?? built.glitchtipDsn,
+    umamiUrl: env["RELOAD_UMAMI_URL"] ?? built.umamiUrl,
+    umamiWebsiteId: env["RELOAD_UMAMI_WEBSITE_ID"] ?? built.umamiWebsiteId,
   };
 }
 

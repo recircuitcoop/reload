@@ -17,7 +17,7 @@ export type AnytypeStepState =
   | { readonly kind: "connected"; readonly line: string }
   /** Anytype shows a code: "Anytype is asking for a code. Type it here." with the code field. */
   | { readonly kind: "code"; readonly line: string }
-  /** Anytype is not answering: "Open Anytype, then come back. InnyTypes will notice." */
+  /** Anytype is not answering: "Open Anytype, then come back. Reload will notice." */
   | { readonly kind: "not-running"; readonly line: string }
   /** Not known yet, or Anytype is starting: no line, Connect offered. */
   | { readonly kind: "waiting"; readonly line: null };
@@ -62,7 +62,7 @@ export interface SetupField {
   /** An enum's choices, as text. */
   readonly options: readonly string[];
   /** Options from Anytype (spec 2.4.1): the spaces, or the types of the space in `of`. */
-  readonly innytype:
+  readonly reload:
     { readonly source: "spaces" } | { readonly source: "types"; readonly of: string } | null;
   readonly default: unknown;
 }
@@ -93,15 +93,15 @@ function kindOf(property: Record<string, unknown>): SetupFieldKind | null {
   }
 }
 
-function innytypeOf(property: Record<string, unknown>): SetupField["innytype"] {
-  const annotation = property["innytype"];
+function reloadOf(property: Record<string, unknown>): SetupField["reload"] {
+  const annotation = property["reload"];
   if (!isRecord(annotation) || property["type"] !== "string") {
     return null;
   }
   const types = annotation["types"];
   const of = isRecord(types) && typeof types["of"] === "string" ? types["of"] : "";
   const spaces = annotation["spaces"] === true;
-  // Both at once, or neither, is read as no options (as domain/forms/innytype.ts reads it).
+  // Both at once, or neither, is read as no options (as domain/forms/reload-keyword.ts reads it).
   if (spaces === (of !== "")) {
     return null;
   }
@@ -132,7 +132,7 @@ export function setupFields(schema: Readonly<Record<string, unknown>>): SetupFie
         help: typeof description === "string" && description !== "" ? description : null,
         required: required.has(key),
         options: kind === "enum" ? (property["enum"] as unknown[]).map((each) => String(each)) : [],
-        innytype: innytypeOf(property),
+        reload: reloadOf(property),
         default: property["default"],
       },
     ];

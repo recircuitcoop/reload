@@ -1,6 +1,6 @@
-// The whole of what a pop-out view page can reach (spec 8.5.6): `window.inny`, five calls,
+// The whole of what a pop-out view page can reach (spec 8.5.6): `window.reload`, five calls,
 // none of which takes an id. The shell answers for the one view or snapshot the window was
-// opened for. `setValid` is page-local: it dispatches an `inny-valid` event and makes no IPC
+// opened for. `setValid` is page-local: it dispatches an `reload-valid` event and makes no IPC
 // call. It runs in the sandboxed renderer, which may only require `electron`.
 
 import { contextBridge, ipcRenderer } from "electron";
@@ -19,4 +19,4 @@ const bridge: ViewBridge = {
   },
 };
 
-contextBridge.exposeInMainWorld("inny", bridge);
+contextBridge.exposeInMainWorld("reload", bridge);

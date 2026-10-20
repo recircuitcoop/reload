@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { JsonEventTypeStore, writeDeclaration } from "../../src/adapters/fs/event-type-store";
 import { AjvSchemaValidator } from "../../src/adapters/schema/ajv-validator";
-import { innyPackageOf, refusedTypes } from "../../src/application/deploy-guard";
+import { reloadPackageOf, refusedTypes } from "../../src/application/deploy-guard";
 import { EventTypeService, flowNodesOf, isEventOp } from "../../src/application/event-types";
 import {
   createdSourceHelp,
@@ -270,19 +270,19 @@ describe("the rules of created event types (spec §9)", () => {
       "/data/user-events",
       "/data/user-events",
     ]);
-    expect(userNodeType("alpha", 2)).toBe("inny-user-events-alpha-v2");
+    expect(userNodeType("alpha", 2)).toBe("reload-user-events-alpha-v2");
   });
 
   it("the deploy guard knows user-events types and refuses a deleted one", () => {
-    expect(innyPackageOf("inny-user-events-meeting_note-v1")).toBe("user-events");
-    expect(innyPackageOf("inny-viewts-ask")).toBe("viewts");
+    expect(reloadPackageOf("reload-user-events-meeting_note-v1")).toBe("user-events");
+    expect(reloadPackageOf("reload-viewts-ask")).toBe("viewts");
     const sets = [
-      { id: "node-red/x", module: "node-red", types: ["inny-user-events-ab-v1"], enabled: true },
+      { id: "node-red/x", module: "node-red", types: ["reload-user-events-ab-v1"], enabled: true },
     ];
     const verified = new Set(["user-events"]);
-    expect(refusedTypes(["inny-user-events-ab-v1"], sets, verified)).toEqual([]);
-    expect(refusedTypes(["inny-user-events-ab-v2"], sets, verified)).toEqual([
-      "inny-user-events-ab-v2",
+    expect(refusedTypes(["reload-user-events-ab-v1"], sets, verified)).toEqual([]);
+    expect(refusedTypes(["reload-user-events-ab-v2"], sets, verified)).toEqual([
+      "reload-user-events-ab-v2",
     ]);
   });
 });
@@ -290,7 +290,7 @@ describe("the rules of created event types (spec §9)", () => {
 describe("the event type store", () => {
   let scratch: string;
   beforeEach(() => {
-    scratch = fs.mkdtempSync(path.join(os.tmpdir(), "inny-event-types-"));
+    scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-event-types-"));
   });
   afterEach(() => {
     fs.rmSync(scratch, { recursive: true, force: true });
@@ -337,7 +337,9 @@ describe("the event type store", () => {
   it("writes the user-events declaration into its folder", () => {
     const folder = path.join(scratch, "user-events");
     writeDeclaration(folder, userEventsDeclaration([record("note", 1)], ["{node}", "/x.cjs"]));
-    const written = JSON.parse(fs.readFileSync(path.join(folder, "inny-package.json"), "utf8")) as {
+    const written = JSON.parse(
+      fs.readFileSync(path.join(folder, "reload-package.json"), "utf8"),
+    ) as {
       package: string;
       types: { id: string }[];
     };
@@ -361,7 +363,9 @@ describe("the event type store", () => {
     new JsonEventTypeStore(file).add(record("note", 1));
     const started = new JsonEventTypeStore(file);
     writeDeclaration(folder, userEventsDeclaration(started.list(), ["{node}", "/x.cjs"]));
-    const written = JSON.parse(fs.readFileSync(path.join(folder, "inny-package.json"), "utf8")) as {
+    const written = JSON.parse(
+      fs.readFileSync(path.join(folder, "reload-package.json"), "utf8"),
+    ) as {
       types: { description: string }[];
     };
     expect(written.types.map((t) => t.description)).toEqual([
@@ -393,7 +397,7 @@ function service(scratch: string, deployed: FlowNode[] = []) {
 describe("the runtime's event type service", () => {
   let scratch: string;
   beforeEach(() => {
-    scratch = fs.mkdtempSync(path.join(os.tmpdir(), "inny-event-service-"));
+    scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-event-service-"));
   });
   afterEach(() => {
     fs.rmSync(scratch, { recursive: true, force: true });
@@ -406,13 +410,13 @@ describe("the runtime's event type service", () => {
       await events.call("event.create", { name: "note", label: "Note", schema: NOTE }),
     ).toEqual({
       ok: true,
-      value: { type: "user.note.v1", added: ["inny-user-events-note-v1"], removed: [] },
+      value: { type: "user.note.v1", added: ["reload-user-events-note-v1"], removed: [] },
     });
     const v1 = structuredClone(store.list()[0]);
     const changed = { ...NOTE, required: ["title", "minutes"] };
     expect(await events.call("event.version", { name: "note", schema: changed })).toMatchObject({
       ok: true,
-      value: { type: "user.note.v2", added: ["inny-user-events-note-v2"] },
+      value: { type: "user.note.v2", added: ["reload-user-events-note-v2"] },
     });
     expect(
       await events.call("event.version", { name: "note", schema: changed, label: "N2" }),
@@ -461,7 +465,7 @@ describe("the runtime's event type service", () => {
     expect(store.list()).toHaveLength(2);
     expect(await events.call("event.delete", { type: "user.note.v2", editor: [] })).toEqual({
       ok: true,
-      value: { type: "user.note.v2", added: [], removed: ["inny-user-events-note-v2"] },
+      value: { type: "user.note.v2", added: [], removed: ["reload-user-events-note-v2"] },
     });
     expect(await events.call("event.delete", { type: "user.none.v1" })).toEqual({
       ok: false,

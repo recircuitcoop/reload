@@ -59,9 +59,9 @@ const PACKAGES: ListedPackage[] = [
 
 /** Test servers, so that no test here reports to the endpoints a release is built with. */
 const TEST_ENV = {
-  INNYTYPES_GLITCHTIP_DSN: "https://key@glitchtip.test/1",
-  INNYTYPES_UMAMI_URL: "https://umami.test",
-  INNYTYPES_UMAMI_WEBSITE_ID: "site",
+  RELOAD_GLITCHTIP_DSN: "https://key@glitchtip.test/1",
+  RELOAD_UMAMI_URL: "https://umami.test",
+  RELOAD_UMAMI_WEBSITE_ID: "site",
 };
 
 function wired(
@@ -92,7 +92,7 @@ function wired(
     hashIdentifier: () => "f".repeat(64),
     clock,
     logger: new RecordingLogger(),
-    built: packageJson.innytypes,
+    built: packageJson.reload,
     env,
     appVersion: "1.0.0",
     registry: { redact: (text) => text },
@@ -226,7 +226,7 @@ describe("the shell's telemetry", () => {
   });
 
   it("the build's endpoints are Umami Cloud and no GlitchTip, unless the environment says else", () => {
-    const built = packageJson.innytypes;
+    const built = packageJson.reload;
     expect(telemetryEndpoints({}, built)).toEqual({
       glitchtipDsn: "",
       umamiUrl: "https://cloud.umami.is",

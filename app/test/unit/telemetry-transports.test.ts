@@ -51,7 +51,7 @@ describe("the GlitchTip transport: a Sentry envelope, by hand", () => {
     expect(outgoing.headers).toEqual({
       "Content-Type": "application/x-sentry-envelope",
       "X-Sentry-Auth":
-        "Sentry sentry_version=7, sentry_client=innytypes/9.9.9, sentry_key=publickey123",
+        "Sentry sentry_version=7, sentry_client=reload/9.9.9, sentry_key=publickey123",
     });
     expect(outgoing.body).toBe(renderEnvelope(ERROR, "9.9.9"));
   });
@@ -74,7 +74,7 @@ describe("the GlitchTip transport: a Sentry envelope, by hand", () => {
       timestamp: "2026-09-26T12:00:00.000Z",
       platform: "node",
       level: "error",
-      logger: "innytypes.shell",
+      logger: "reload.shell",
       release: "9.9.9",
       exception: { values: [{ type: "RuntimeCrashed", value: "" }] },
       tags: {
@@ -132,7 +132,7 @@ describe("the Umami transport: a custom event", () => {
     expect(outgoing.url).toBe("https://umami.test/api/send");
     expect(outgoing.headers).toEqual({
       "Content-Type": "application/json",
-      "User-Agent": "innytypes/9.9.9",
+      "User-Agent": "reload/9.9.9",
     });
     expect(JSON.parse(outgoing.body)).toEqual({
       type: "event",

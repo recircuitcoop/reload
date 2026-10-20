@@ -1,4 +1,4 @@
-// The one log file (plan 0018 §3, the row for logs.py): the old app's path, its 2 MiB × 3
+// The one log file (plan 0018 §3, the row for logs.py): the old app's layout, its 2 MiB × 3
 // rotation, and appends that are on disk when they return.
 //
 // Only the shell writes it, so the old handler's defences against a sibling process rolling
@@ -10,13 +10,13 @@ import * as path from "node:path";
 import type { LogFile } from "../../ports/logger";
 
 /** The application, as the per-user directories spell it (logs.py:149). */
-export const APPLICATION_NAME = "innytypes";
-export const LOG_FILENAME = "innytypes.log";
+export const APPLICATION_NAME = "reload";
+export const LOG_FILENAME = "reload.log";
 
 /** Where a person names another file for one run (logs.py:161). */
-export const LOG_PATH_VARIABLE = "INNYTYPES_LOG_FILE";
+export const LOG_PATH_VARIABLE = "RELOAD_LOG_FILE";
 /** How a person sets the verbosity for one run (logs.py:166). */
-export const LOG_LEVEL_VARIABLE = "INNYTYPES_LOG_LEVEL";
+export const LOG_LEVEL_VARIABLE = "RELOAD_LOG_LEVEL";
 
 /** The bound (logs.py:195-196): a machine left running for a month must not fill a disk. */
 export const MAX_LOG_BYTES = 2 * 1024 * 1024;
@@ -30,9 +30,9 @@ export interface LogLocation {
 }
 
 /**
- * platformdirs' `user_log_path("innytypes", appauthor=False) / "innytypes.log"`, which is
- * where the old app writes (logs.py:204-219): `~/Library/Logs/innytypes` on macOS,
- * `$XDG_STATE_HOME/innytypes/log` on Linux, `%LOCALAPPDATA%\innytypes\Logs` on Windows.
+ * Laid out as the old app's platformdirs `user_log_path` (logs.py:204-219), under Reload's own
+ * name since 0.4.0: `~/Library/Logs/reload` on macOS,
+ * `$XDG_STATE_HOME/reload/log` on Linux, `%LOCALAPPDATA%\reload\Logs` on Windows.
  */
 export function defaultLogPath(location: LogLocation): string {
   const { platform, home, env } = location;
@@ -48,7 +48,7 @@ export function defaultLogPath(location: LogLocation): string {
   return path.join(base, APPLICATION_NAME, "log", LOG_FILENAME);
 }
 
-/** The file for this run: INNYTYPES_LOG_FILE when it names one, the old path otherwise. */
+/** The file for this run: RELOAD_LOG_FILE when it names one, the default path otherwise. */
 export function logPath(location: LogLocation): string {
   const named = location.env[LOG_PATH_VARIABLE];
   return named !== undefined && named !== "" ? named : defaultLogPath(location);

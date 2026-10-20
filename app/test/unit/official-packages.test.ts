@@ -1,6 +1,6 @@
 // Setup's package step (plan 0022 §H, D17): it offers only the official packages that ship
 // inside the app, read from the folder beside it. In 0.3.0 that is anytype and folder; monty and
-// innyrize have published no signed archives, so nothing offers them.
+// reload_summarize have published no signed archives, so nothing offers them.
 import fs from "node:fs";
 import * as path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -14,7 +14,7 @@ const REPO = path.resolve(__dirname, "..", "..", "..");
 const SHIPPED_ROOT = path.join(REPO, "packages");
 
 function shippedVersion(name: string): string {
-  const file = path.join(SHIPPED_ROOT, name, "inny-package.json");
+  const file = path.join(SHIPPED_ROOT, name, "reload-package.json");
   return (JSON.parse(fs.readFileSync(file, "utf8")) as { version: string }).version;
 }
 
@@ -27,25 +27,25 @@ describe("the official packages shipped inside the app", () => {
     const store = new DeclaredPackageStore([SHIPPED_ROOT], new RecordingLogger());
     expect(shippedPackages(store)).toEqual([
       {
-        name: "anytype",
-        version: shippedVersion("anytype"),
+        name: "reload_anytype",
+        version: shippedVersion("reload_anytype"),
         line: "files notes, tasks and links in Anytype.",
         official: true,
       },
       {
-        name: "folder",
-        version: shippedVersion("folder"),
+        name: "reload_folder",
+        version: shippedVersion("reload_folder"),
         line: "starts a run for each new file in a folder.",
         official: true,
       },
     ]);
   });
 
-  it("never offers monty or innyrize, which ship no signed archive yet", () => {
+  it("never offers monty or reload_summarize, which ship no signed archive yet", () => {
     const store = new DeclaredPackageStore([SHIPPED_ROOT], new RecordingLogger());
     const names = shippedPackages(store).map((offered) => offered.name);
     expect(names).not.toContain("monty");
-    expect(names).not.toContain("innyrize");
+    expect(names).not.toContain("reload_summarize");
   });
 
   it("has a line for every package bundled beside the app, so none is dropped unseen", () => {
@@ -59,20 +59,20 @@ describe("the official packages shipped inside the app", () => {
     expect(
       shippedPackages(
         source([
-          { name: "anytype", document: { package: "anytype", version: "9.9.9" } },
+          { name: "reload_anytype", document: { package: "reload_anytype", version: "9.9.9" } },
           { name: "monty", document: { package: "monty", version: "1.0.0" } },
           { name: "constructor", document: { version: "1.0.0" } },
-          { name: "anytype", document: { package: "anytype" } },
-          { name: "anytype", document: { package: "anytype", version: 3 } },
-          { name: "anytype", document: null },
-          { name: "anytype", document: "not a declaration" },
+          { name: "reload_anytype", document: { package: "reload_anytype" } },
+          { name: "reload_anytype", document: { package: "reload_anytype", version: 3 } },
+          { name: "reload_anytype", document: null },
+          { name: "reload_anytype", document: "not a declaration" },
         ]),
       ),
     ).toEqual([
       {
-        name: "anytype",
+        name: "reload_anytype",
         version: "9.9.9",
-        line: OFFICIAL_PACKAGE_LINES["anytype"],
+        line: OFFICIAL_PACKAGE_LINES["reload_anytype"],
         official: true,
       },
     ]);
@@ -89,6 +89,8 @@ describe("the official packages shipped inside the app", () => {
   it("is no longer the line of a Setup Packages step: ux-writing has none", () => {
     const writing = fs.readFileSync(path.join(REPO, "docs", "ux", "ux-writing.md"), "utf8");
     expect(writing.split("\n").filter((row) => row.startsWith("| Packages |"))).toEqual([]);
-    expect(writing).not.toContain(`"*anytype*: ${OFFICIAL_PACKAGE_LINES["anytype"] ?? ""}"`);
+    expect(writing).not.toContain(
+      `"*reload_anytype*: ${OFFICIAL_PACKAGE_LINES["reload_anytype"] ?? ""}"`,
+    );
   });
 });

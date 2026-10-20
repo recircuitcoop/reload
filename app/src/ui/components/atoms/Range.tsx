@@ -44,7 +44,7 @@ export function Range({
       onValueChange={(details) => onValueChange?.(details.value[0] ?? value)}
       className={cx(
         "flex w-full flex-col gap-1",
-        state === "disabled" && "opacity-[var(--inny-opacity-disabled)]",
+        state === "disabled" && "opacity-[var(--reload-opacity-disabled)]",
         className,
       )}
     >

@@ -1,6 +1,6 @@
 // Conformance C10 (action view) and C11 (snapshot view) of spec §12.2, against the two SDKs'
-// reference view types: sdk-py's ask/record (Python, innytypes-node) and sdk-ts's ask/record
-// (TypeScript, @innytypes/node). Unlike app/test/conformance/views.test.ts, which runs the
+// reference view types: sdk-py's ask/record (Python, reload-node) and sdk-ts's ask/record
+// (TypeScript, @recircuit/reload-node). Unlike app/test/conformance/views.test.ts, which runs the
 // SAME two tests against hand-rolled view nodes that share no code with any SDK, these run
 // through Node.present/emit/done/error (Python) and present/emit/done/error (TypeScript) --
 // the SDK's own surface, not frames built by hand. C24 (plan 0020) drives the same ask view
@@ -111,7 +111,7 @@ function drawC16Widget(view: unknown): {
     define: (name: string, constructor: new () => DrawnWidget) => defined.set(name, constructor),
   });
   vi.stubGlobal("window", {
-    inny: {
+    reload: {
       setValid: (value: boolean) => valid.push(value),
       draft: (values: unknown) => {
         drafts.push(values);
@@ -168,7 +168,7 @@ class Session {
     this.send({
       t: "start",
       protocol: 2,
-      node: { id: "conformance", type: `inny-sdk${language}-${typeId}`, name: "" },
+      node: { id: "conformance", type: `reload-sdk${language}-${typeId}`, name: "" },
       config: {},
       credentials: {},
       data_dir: "/nonexistent-data-dir",

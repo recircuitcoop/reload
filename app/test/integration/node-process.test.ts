@@ -37,8 +37,8 @@ afterEach(async () => {
 /** Send one input and return its id and recorded delivery. */
 function send(node: NodeProcess, data: unknown, run?: string): [string, RecordingDelivery] {
   const delivery = new RecordingDelivery();
-  const inny = run === undefined ? {} : { inny: { run } };
-  const id = node.input({ payload: data, topic: "test.in.v1", ...inny }, delivery);
+  const reload = run === undefined ? {} : { reload: { run } };
+  const id = node.input({ payload: data, topic: "test.in.v1", ...reload }, delivery);
   return [id ?? "(refused)", delivery];
 }
 
@@ -48,9 +48,9 @@ async function ready(node: RawNode): Promise<void> {
 
 describe("a node process", () => {
   it("is spawned in its package directory with a minimal environment, in its own process group", async () => {
-    process.env["INNY_TEST_SECRET"] = "must-not-reach-a-node";
+    process.env["RELOAD_TEST_SECRET"] = "must-not-reach-a-node";
     const node = raw();
-    delete process.env["INNY_TEST_SECRET"];
+    delete process.env["RELOAD_TEST_SECRET"];
     const [, delivery] = send(node.node, { do: "whoami" });
     await waitFor("done", () => delivery.finished);
 
@@ -64,15 +64,15 @@ describe("a node process", () => {
     // Darwin adds these to every process itself; they were not passed.
     const added = new Set(["__CF_USER_TEXT_ENCODING", "LC_CTYPE"]);
     expect(about.env.filter((name) => !allowed.has(name) && !added.has(name))).toEqual([]);
-    expect(about.env).not.toContain("INNY_TEST_SECRET");
+    expect(about.env).not.toContain("RELOAD_TEST_SECRET");
     expect(about.cwd).toBe(fs.realpathSync(RAW_NODE_DIR));
     expect(about.pgid).toBe(node.node.pid);
     expect(about.data_dir).toBe(node.spec.dataDir);
   });
 
   it("registers every credential with the log redactor before the process can print a line", () => {
-    const node = raw({ credentials: { token: "inny-canary-1", empty: "" } });
-    expect(node.secrets.protected).toEqual(["inny-canary-1"]);
+    const node = raw({ credentials: { token: "reload-canary-1", empty: "" } });
+    expect(node.secrets.protected).toEqual(["reload-canary-1"]);
     expect(node.logger.nodeLines).toEqual([]);
   });
 
@@ -95,11 +95,11 @@ describe("a node process", () => {
     expect(output?.port).toBe("out");
     expect(output?.message.payload).toEqual({ a: 1 });
     expect(output?.message.topic).toBe("rawnode.out.v1");
-    expect(output?.message.inny.run).toBe("run-1");
-    expect(output?.message.inny.cause).toBe(id);
-    const event = output?.message.inny.event;
+    expect(output?.message.reload.run).toBe("run-1");
+    expect(output?.message.reload.cause).toBe(id);
+    const event = output?.message.reload.event;
     expect(event?.specversion).toBe("1.0");
-    expect(event?.source).toBe(`inny://rawnode/raw/${node.spec.identity.id}`);
+    expect(event?.source).toBe(`reload://rawnode/raw/${node.spec.identity.id}`);
     expect(event?.type).toBe("rawnode.out.v1");
     expect(event?.datacontenttype).toBe("application/json");
     expect(event?.id).toMatch(/^[0-9a-f-]{36}$/);
@@ -113,8 +113,8 @@ describe("a node process", () => {
     expect(delivery.outputs).toEqual([]);
     const output = node.host.sent[0];
     expect(output?.message.payload).toBe(7);
-    expect(output?.message.inny.run).toBe(output?.message.inny.event.id);
-    expect(output?.message.inny.cause).toBeUndefined();
+    expect(output?.message.reload.run).toBe(output?.message.reload.event.id);
+    expect(output?.message.reload.cause).toBeUndefined();
   });
 
   it("refuses and logs an emit on an undeclared port", async () => {
@@ -159,7 +159,7 @@ describe("a node process", () => {
     expect(levels).toContain("STDERR: a line on stderr");
     expect(levels).toContain("warn: a log frame");
     expect(node.logger.nodeLines[0]?.source).toEqual({
-      type: "inny-rawnode-raw",
+      type: "reload-rawnode-raw",
       instance: node.spec.identity.id,
     });
     expect(node.host.errors).toEqual(["an error of no input"]);
@@ -402,7 +402,7 @@ describe("an unexpected exit of a node process", () => {
     // Each exit is counted for the crash reports, the last as the one that stopped it.
     expect(node.crashes).toEqual([false, false, false, false, true]);
     expect(compose(node.notifier.notices[0] ?? { kind: "node-stopped", subject: "" }).title).toBe(
-      "InnyTypes stopped restarting the node raw",
+      "Reload stopped restarting the node raw",
     );
     clock.advance(60_000);
     expect(node.node.pid).toBeNull();
@@ -430,7 +430,7 @@ describe("an unexpected exit of a node process", () => {
 
   it("reports a command that cannot be spawned, and retries it like any exit", async () => {
     const clock = new FakeClock();
-    const node = raw({ clock, argv: ["/nonexistent/inny-node"] });
+    const node = raw({ clock, argv: ["/nonexistent/reload-node"] });
     await waitFor("the failure", () => node.logger.has(/spawn failed: .*ENOENT/));
     await waitFor("the exit", () => node.logger.has(/exited unexpectedly \(failed to start\)/));
     clock.advance(1_000);

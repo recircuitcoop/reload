@@ -3,7 +3,7 @@
     "id": "folder-to-anytype",
     "name": "Folder to Anytype",
     "line": "file each new file in Anytype",
-    "packages": ["anytype", "folder"],
+    "packages": ["reload_anytype", "reload_folder"],
     "official": true,
     "starter": true
   },
@@ -11,7 +11,7 @@
     "id": "recordings-to-anytype",
     "name": "Recordings to Anytype",
     "line": "transcribe, summarise, file, approve, send, schedule",
-    "packages": ["anytype", "innyrize", "monty"],
+    "packages": ["reload_anytype", "reload_summarize", "reload_mount"],
     "official": true,
     "starter": false
   },

@@ -188,7 +188,7 @@ export function parseCatalogue(
   if (announced !== CATALOGUE_FORMAT) {
     throw invalid(
       `the catalogue from "${catalogue}" announces format version ${String(announced)}, and ` +
-        `this build reads version ${String(CATALOGUE_FORMAT)}. A newer InnyTypes is what reads it`,
+        `this build reads version ${String(CATALOGUE_FORMAT)}. A newer Reload is what reads it`,
     );
   }
 

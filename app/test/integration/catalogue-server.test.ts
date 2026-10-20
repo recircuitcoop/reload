@@ -110,7 +110,7 @@ afterAll(async () => {
 });
 
 beforeEach(() => {
-  scratch = fs.mkdtempSync(path.join(os.tmpdir(), "inny-catalogue-server-"));
+  scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-catalogue-server-"));
   published.clear();
   asked.length = 0;
   askedInTheClear.length = 0;

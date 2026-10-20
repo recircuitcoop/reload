@@ -159,7 +159,7 @@ function rawColours(text, isCss) {
   }
   if (isCss) {
     // Named colours only as declaration values: every identifier after a `:` up to `;` or `}`.
-    // Identifiers are matched whole, so `var(--inny-color-red-3)` is not `red`.
+    // Identifiers are matched whole, so `var(--reload-color-red-3)` is not `red`.
     for (const declaration of source.matchAll(/:([^;{}]*)/g)) {
       const valueStart = declaration.index + 1;
       for (const word of declaration[1].matchAll(/-?[a-z_][\w-]*/gi)) {

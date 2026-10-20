@@ -19,7 +19,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { AjvSchemaValidator } from "../../src/adapters/schema/ajv-validator";
 import { formModel } from "../../src/domain/forms/form-model";
-import { INNYTYPE_ANNOTATION, innytypeOptions } from "../../src/domain/forms/innytype";
+import { RELOAD_ANNOTATION, reloadOptions } from "../../src/domain/forms/reload-keyword";
 import type { JsonSchema } from "../../src/domain/packages/declaration";
 import { fold, type Run, type RunEvent } from "../../src/domain/runs/run";
 import { stepDoneEvent, stepStatusEvent } from "../../src/domain/runs/step-report";
@@ -66,7 +66,7 @@ function start(reference: ReferenceNode, config: Record<string, unknown> = {}): 
 /** One input of run `runId` through the adapter; its delivery records what came back. */
 function input(raw: RawNode, runId: string, data: object): RecordingDelivery & { id: string } {
   const delivery = new RecordingDelivery();
-  const id = raw.node.input({ payload: data, topic: "t.in.v1", inny: { run: runId } }, delivery);
+  const id = raw.node.input({ payload: data, topic: "t.in.v1", reload: { run: runId } }, delivery);
   if (id === null) {
     throw new Error("the adapter refused the input");
   }
@@ -91,7 +91,7 @@ function runOf(
 
 /** The reference node's one node type, as its package declares it. */
 function declared(reference: ReferenceNode): { declaration: unknown; config: JsonSchema } {
-  const text = fs.readFileSync(path.join(reference.dir, "inny-package.json"), "utf8");
+  const text = fs.readFileSync(path.join(reference.dir, "reload-package.json"), "utf8");
   const declaration = JSON.parse(text) as { types: { kind: string; config: JsonSchema }[] };
   const type = declaration.types.find((candidate) => candidate.kind === "node");
   if (type === undefined) {
@@ -138,7 +138,7 @@ describe("conformance 2.1: the runtime's side", () => {
     const frames = JSON.parse(read("docs/specs/node-protocol-v2.schema.json")) as {
       $defs: { start: { properties: { protocol: unknown } } };
     };
-    const declaration = JSON.parse(read("docs/specs/inny-package.v2.schema.json")) as {
+    const declaration = JSON.parse(read("docs/specs/reload-package.v2.schema.json")) as {
       properties: { protocol: unknown };
     };
     expect(frames.$defs.start.properties.protocol).toEqual({ const: 2 });
@@ -148,8 +148,8 @@ describe("conformance 2.1: the runtime's side", () => {
     );
   });
 
-  it("no x-inny key exists in the specs, the schemas, the SDKs or the app's source", () => {
-    const forbidden = ["x", "inny"].join("-");
+  it("no x-reload key exists in the specs, the schemas, the SDKs or the app's source", () => {
+    const forbidden = ["x", "reload"].join("-");
     const roots = ["docs/specs", "sdk", "app/src"].map((root) => path.join(REPOSITORY, root));
     const offenders: string[] = [];
     for (const file of roots.flatMap((root) => filesUnder(root))) {
@@ -291,7 +291,7 @@ describe.each(REFERENCE_NODES)("conformance 2.1: the $name reference node", (ref
     expect(raw.logger.has(/dropped|cut from/)).toBe(false);
   });
 
-  it("C23 innytype spaces and types: declared, validated as without them, read back for the form", async () => {
+  it("C23 reload spaces and types: declared, validated as without them, read back for the form", async () => {
     const { declaration, config } = declared(reference);
     const validator = new AjvSchemaValidator();
     expect(validator.declaration(declaration)).toEqual([]);
@@ -299,16 +299,16 @@ describe.each(REFERENCE_NODES)("conformance 2.1: the $name reference node", (ref
     expect(validator.check(config, values)).toEqual([]);
     expect(validator.check(config, { space: 5 })).not.toEqual([]);
     expect(
-      new Ajv2020({ strict: true }).addKeyword(INNYTYPE_ANNOTATION).compile(config)(values),
+      new Ajv2020({ strict: true }).addKeyword(RELOAD_ANNOTATION).compile(config)(values),
     ).toBe(true);
 
     const properties = config["properties"] as Record<string, JsonSchema>;
-    expect(innytypeOptions(properties["space"] as JsonSchema)).toEqual({ source: "spaces" });
-    expect(innytypeOptions(properties["type"] as JsonSchema)).toEqual({
+    expect(reloadOptions(properties["space"] as JsonSchema)).toEqual({ source: "spaces" });
+    expect(reloadOptions(properties["type"] as JsonSchema)).toEqual({
       source: "types",
       of: "space",
     });
-    expect(formModel(config).fields.map((field) => [field.key, field.innytype])).toEqual([
+    expect(formModel(config).fields.map((field) => [field.key, field.reload])).toEqual([
       ["space", { source: "spaces" }],
       ["type", { source: "types", of: "space" }],
     ]);

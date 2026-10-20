@@ -1,6 +1,6 @@
 {
   "$schema": "https://www.designtokens.org/schema/",
-  "$description": "InnyTypes design tokens, W3C Design Tokens (DTCG) format. Import into Penpot's Tokens tab (2.6+). Sets: base (raw values), light and dark (semantic aliases). Themes: Light = base+light, Dark = base+dark.",
+  "$description": "Reload design tokens, W3C Design Tokens (DTCG) format. Import into Penpot's Tokens tab (2.6+). Sets: base (raw values), light and dark (semantic aliases). Themes: Light = base+light, Dark = base+dark.",
   "base": {
     "color": {
       "ink": {

@@ -186,11 +186,11 @@ export class TypeRegistration {
       this.#construct(RED, node, config, typeName, loaded);
     };
     // Node-RED calls this with `new`, as the node's constructor.
-    function InnyNode(this: NodeRedNode, config: Message): void {
+    function ReloadNode(this: NodeRedNode, config: Message): void {
       RED.nodes.createNode(this, config);
       construct(this, config);
     }
-    RED.nodes.registerType(typeName, InnyNode, { credentials });
+    RED.nodes.registerType(typeName, ReloadNode, { credentials });
   }
 
   #construct(
@@ -238,7 +238,7 @@ export class TypeRegistration {
         // Recorded before Node-RED delivers it, so the run exists before its first step.
         runs?.emitted({
           flowId,
-          runId: output.message.inny.run,
+          runId: output.message.reload.run,
           type: output.message.topic,
           data: output.message.payload,
         });
@@ -342,7 +342,7 @@ export class TypeRegistration {
           const caused = RED.util.cloneMessage(message);
           caused["payload"] = output.message.payload;
           caused["topic"] = output.message.topic;
-          caused["inny"] = output.message.inny;
+          caused["reload"] = output.message.reload;
           send(onPort(output.index, ports.length, caused));
         },
         done: (error?: Error) => {

@@ -1,10 +1,10 @@
 // The owner-only file adapter of SecretStore (plan 0018 §4.1, WI-0018-06): one file per secret,
 // 0600 in a 0700 directory, the rules of addons/secrets.py:93-109.
 //
-// It is the only way the new application reaches the Anytype key and the MCP proxy token, and
-// it keeps them where the old app kept them, so nobody pairs again and no MCP client configuration
-// breaks at the cutover. The key has a read-only legacy fallback (anytype_mcp/config.py:48):
-// it is read when the canonical file holds nothing, and it is never written.
+// It is the only way Reload reaches the Anytype key and the MCP proxy token, kept in Reload's own
+// owner-only directory; the first start moves them there from where InnyTypes kept them
+// (legacy-move.ts). The key has a read-only legacy fallback (anytype_mcp/config.py:48): it is
+// read when the canonical file holds nothing, and it is never written.
 //
 // A write goes to an owner-only scratch file in the same directory and is renamed over the
 // target, so the secret is never in a file of a wider mode, an interrupted write leaves the old
@@ -39,12 +39,9 @@ export interface SecretLocation {
   readonly env: Readonly<Record<string, string | undefined>>;
 }
 
-/**
- * `~/.config/innytypes` on every platform: addons/secrets.py's CREDENTIALS_DIRECTORY
- * (`Path.home() / ".config" / "innytypes"`), where the key and the proxy token live.
- */
+/** `~/.config/reload` on every platform, where the key and the proxy token live. */
 export function credentialsDirectory(home: string, platform: NodeJS.Platform): string {
-  return pathsFor(platform).join(home, ".config", "innytypes");
+  return pathsFor(platform).join(home, ".config", "reload");
 }
 
 /** The path flavour of `platform`, so a Windows location is spelled right on any host. */
@@ -71,7 +68,7 @@ export function legacyConfigDirectory(location: SecretLocation): string {
   return path.posix.join(base, "innytypes");
 }
 
-/** The Anytype key and the proxy token, at their existing paths (plan 0018 §4.1). */
+/** The Anytype key and the proxy token (plan 0018 §4.1). */
 export function anytypeSecretFiles(location: SecretLocation): SecretFiles {
   const directory = credentialsDirectory(location.home, location.platform);
   const paths = pathsFor(location.platform);
@@ -80,7 +77,7 @@ export function anytypeSecretFiles(location: SecretLocation): SecretFiles {
       file: paths.join(directory, "anytype_api_key"),
       legacy: paths.join(legacyConfigDirectory(location), "anytype_api_key"),
     },
-    // gateway.py:64. The same file, so MCP client configurations keep working after the cutover.
+    // gateway.py:64; MCP client configurations read this file.
     "mcp-proxy-token": { file: paths.join(directory, "mcp_proxy_token") },
   };
 }

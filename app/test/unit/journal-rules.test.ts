@@ -18,7 +18,7 @@ import { admit, DEFAULT_QUEUE, queueSettings } from "../../src/domain/journal/qu
 const MESSAGE = {
   payload: { a: 1 },
   topic: "pkg.thing.v1",
-  inny: { run: "run-1", cause: "in-0" },
+  reload: { run: "run-1", cause: "in-0" },
   _msgid: "m1",
 };
 
@@ -27,7 +27,7 @@ function entry(changes: Partial<JournalEntry> = {}): JournalEntry {
     ...newEntry({
       inputId: "in-1",
       instanceId: "n1",
-      type: "inny-pkg-t",
+      type: "reload-pkg-t",
       message: MESSAGE,
       now: 10,
     }),
@@ -49,7 +49,7 @@ describe("a journal entry (spec 7.1)", () => {
     expect(entry()).toEqual({
       inputId: "in-1",
       instanceId: "n1",
-      type: "inny-pkg-t",
+      type: "reload-pkg-t",
       message: MESSAGE,
       event: { type: "pkg.thing.v1", data: { a: 1 }, run: "run-1" },
       attempts: 1,
@@ -62,19 +62,19 @@ describe("a journal entry (spec 7.1)", () => {
     });
   });
 
-  it("keeps payload, topic, inny and _msgid of the message, and nothing else", () => {
-    const noisy = { ...MESSAGE, _innyReplay: "x", req: {}, extra: 1 };
+  it("keeps payload, topic, reload and _msgid of the message, and nothing else", () => {
+    const noisy = { ...MESSAGE, _reloadReplay: "x", req: {}, extra: 1 };
     expect(Object.keys(journaledMessage(noisy)).sort()).toEqual(
-      ["_msgid", "inny", "payload", "topic"].sort(),
+      ["_msgid", "reload", "payload", "topic"].sort(),
     );
     expect(journaledMessage({ payload: 3 })).toEqual({ payload: 3 });
   });
 
   it("builds the input's event from the topic, the payload and the run", () => {
     expect(eventOf({ payload: 1 })).toEqual({ type: "", data: 1 });
-    expect(eventOf({ payload: 1, topic: 5, inny: "x" })).toEqual({ type: "", data: 1 });
-    expect(eventOf({ payload: 1, topic: "t", inny: { run: 7 } })).toEqual({ type: "t", data: 1 });
-    expect(eventOf({ payload: 1, topic: "t", inny: { run: "r" } })).toEqual({
+    expect(eventOf({ payload: 1, topic: 5, reload: "x" })).toEqual({ type: "", data: 1 });
+    expect(eventOf({ payload: 1, topic: "t", reload: { run: 7 } })).toEqual({ type: "t", data: 1 });
+    expect(eventOf({ payload: 1, topic: "t", reload: { run: "r" } })).toEqual({
       type: "t",
       data: 1,
       run: "r",

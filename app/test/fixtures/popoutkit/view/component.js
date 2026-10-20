@@ -1,5 +1,5 @@
 // A third-party view component (WI-0018-11): the pop-out kit's own custom element, served by
-// the shell on inny-view://popoutkit/ under the pop-out CSP. It stands for code InnyTypes did
+// the shell on reload-view://popoutkit/ under the pop-out CSP. It stands for code Reload did
 // not write, so it tries everything spec 8.5.9 and arch_pivot P10f say a view page cannot do,
 // and draws what happened, for the e2e test to read. It then answers its view through the
 // id-less bridge, like any view page.
@@ -22,9 +22,9 @@ async function probe(view) {
     process: typeof process,
     module: typeof module,
     electron: typeof window.electron,
-    innyKeys: Object.keys(window.inny).sort(),
-    appApi: typeof window.inny.app,
-    getLength: window.inny.get.length,
+    reloadKeys: Object.keys(window.reload).sort(),
+    appApi: typeof window.reload.app,
+    getLength: window.reload.get.length,
   };
   results.fetchRuntime = await outcome(fetch(`http://127.0.0.1:${port}/red/settings`));
   results.fetchFile = await outcome(fetch("file:///etc/hosts"));
@@ -39,14 +39,14 @@ async function probe(view) {
     results.newFunction = error.name;
   }
   const script = document.createElement("script");
-  script.textContent = "window.__innyInlineRan = true;";
+  script.textContent = "window.__reloadInlineRan = true;";
   document.body.append(script);
   await new Promise((resolve) => setTimeout(resolve, 50));
-  results.inlineScript = window.__innyInlineRan === true ? "ran" : "did not run";
+  results.inlineScript = window.__reloadInlineRan === true ? "ran" : "did not run";
   results.windowOpen = window.open("https://example.com/") === null ? "denied" : "opened";
-  results.action = await outcome(window.inny.action("again", {}));
+  results.action = await outcome(window.reload.action("again", {}));
   // The bridge takes no id: asked for another view, it still answers with this window's own.
-  const other = await window.inny.get("someone-else");
+  const other = await window.reload.get("someone-else");
   results.getOwn = other.ok ? other.value.id : `not ok: ${other.error}`;
   return results;
 }
@@ -65,7 +65,7 @@ class PopoutkitProbe extends HTMLElement {
     button.setAttribute("data-testid", "component-submit");
     button.addEventListener("click", () => {
       this.dispatchEvent(
-        new CustomEvent("inny-submit", {
+        new CustomEvent("reload-submit", {
           detail: { answer: "from the component" },
           bubbles: true,
         }),

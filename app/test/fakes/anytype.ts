@@ -257,7 +257,7 @@ function parsed(text: string): unknown {
  * Anytype's local API over real HTTP on a free loopback port, holding objects in memory: the
  * probe, create, update, get and list of objects, and search, in the shapes of the pinned
  * API version's OpenAPI spec. It accepts exactly one key; `refuseEveryKey` makes it answer 401
- * to all. Never the person's Anytype: the packages/anytype nodes are tested against this.
+ * to all. Never the person's Anytype: the packages/reload_anytype nodes are tested against this.
  */
 export class FakeAnytypeServer {
   readonly received: ReceivedRequest[] = [];

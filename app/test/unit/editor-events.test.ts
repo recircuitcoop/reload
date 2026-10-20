@@ -27,7 +27,7 @@ function engine(sets: NodeSet[]) {
 const SETS: NodeSet[] = [
   { id: "node-red/inject", module: "node-red", types: ["inject"], enabled: true },
   { id: "node-red/empty", module: "node-red", types: [], enabled: true },
-  { id: "node-red/late", module: "node-red", types: ["inny-late"], enabled: true },
+  { id: "node-red/late", module: "node-red", types: ["reload-late"], enabled: true },
 ];
 
 describe("editor.nodes", () => {
@@ -40,7 +40,7 @@ describe("editor.nodes", () => {
       value: [
         { id: "node-red/inject", types: ["inject"] },
         { id: "node-red/empty", types: [] },
-        { id: "node-red/late", types: ["inny-late"] },
+        { id: "node-red/late", types: ["reload-late"] },
       ],
     });
   });

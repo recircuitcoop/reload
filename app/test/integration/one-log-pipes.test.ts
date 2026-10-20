@@ -26,7 +26,7 @@ let scratch = "";
 let bundle = "";
 
 beforeAll(() => {
-  scratch = fs.mkdtempSync(path.join(os.tmpdir(), "inny-one-log-"));
+  scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-one-log-"));
   bundle = path.join(scratch, "log-child.cjs");
   buildSync({
     entryPoints: [FIXTURE],
@@ -86,14 +86,14 @@ describe("the one log across a real pipe", () => {
     const burst = text.split("\n").filter((line) => line.includes("burst line"));
     expect(burst).toHaveLength(lines);
     expect(burst.at(-1)).toContain(`burst line ${String(lines - 1)} `);
-    expect(burst.at(-1)).toMatch(/ INFO +\d+ innytypes\.runtime: /);
+    expect(burst.at(-1)).toMatch(/ INFO +\d+ reload\.runtime: /);
   }, 30_000);
 
   it("writes a node's stderr at STDERR, tagged with its type and instance, the credential redacted twice over", async () => {
     const { text } = await runChild(1, path.join(scratch, "node.log"));
     const stderr = text.split("\n").filter((line) => line.includes("the node was started with"));
     expect(stderr).toHaveLength(1);
-    expect(stderr[0]).toMatch(/ STDERR +\d+ innytypes\.node\.fake-node\.n1: the node was started /);
+    expect(stderr[0]).toMatch(/ STDERR +\d+ reload\.node\.fake-node\.n1: the node was started /);
     expect(stderr[0]?.endsWith(`the node was started with ${REDACTED}`)).toBe(true);
     expect(text).not.toContain(CREDENTIAL);
   }, 30_000);
