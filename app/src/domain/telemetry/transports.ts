@@ -42,8 +42,8 @@ export interface Outgoing {
  * never-sent list, so every install reports the same reserved, unresolvable name (RFC 2606).
  */
 export const UMAMI_HOSTNAME = "app.reload.invalid";
-/** The one path Reload ever reports usage from. */
-export const UMAMI_URL_PATH = "/app";
+/** The one path Reload reports usage from: counted on the circu.it site under the reload campaign. */
+export const UMAMI_URL_PATH = "/app?utm_source=reload&utm_medium=app&utm_campaign=reload";
 
 /** The request that carries `report`, for this build's endpoints. Throws when it has none. */
 export function outgoingFor(report: QueuedReport, endpoints: Endpoints, release: string): Outgoing {

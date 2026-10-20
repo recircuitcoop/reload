@@ -139,7 +139,7 @@ describe("the Umami transport: a custom event", () => {
       payload: {
         website: "website-1",
         hostname: UMAMI_HOSTNAME,
-        url: "/app",
+        url: "/app?utm_source=reload&utm_medium=app&utm_campaign=reload",
         name: "usage",
         data: {
           kind: "usage",

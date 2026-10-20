@@ -230,7 +230,7 @@ describe("the shell's telemetry", () => {
     expect(telemetryEndpoints({}, built)).toEqual({
       glitchtipDsn: "",
       umamiUrl: "https://cloud.umami.is",
-      umamiWebsiteId: "84cf224b-98ed-426f-8829-43f872e36cab",
+      umamiWebsiteId: "edce25fe-ad86-4241-b0e1-87f456cc3dfa",
     });
     expect(telemetryEndpoints(TEST_ENV, built)).toEqual({
       glitchtipDsn: "https://key@glitchtip.test/1",
@@ -259,7 +259,7 @@ describe("the shell's telemetry", () => {
       payload: { website: string; name: string };
     };
     expect(body.type).toBe("event");
-    expect(body.payload.website).toBe("84cf224b-98ed-426f-8829-43f872e36cab");
+    expect(body.payload.website).toBe("edce25fe-ad86-4241-b0e1-87f456cc3dfa");
     expect(body.payload.name).toBe("usage");
     // The runtime crashing again is queued, but there is no GlitchTip to send it to.
     world.runtime.publish(status("runtime", "down"));
