@@ -12,7 +12,7 @@ you the first time you open it. Section 4 shows you how to get past that warning
 
 - **macOS 13 Ventura or later.** Reload is built on Electron 44, which needs macOS 13 or later.
 - **The right download for your Mac.** Choose Apple menu › About This Mac. An "Apple M…" chip
-  needs `Reload-0.4.0-arm64.dmg`. An "Intel" processor needs `Reload-0.4.0-x64.dmg`.
+  needs `Reload-0.4.0-arm64.dmg`. An "Intel" processor needs `Reload-0.4.0.dmg`.
 - **Anytype Desktop**, installed in Applications. Everything Anytype-related needs it. Reload
   opens Anytype for you when it starts, or uses the one already open.
 - **Node.js** only if you connect Claude Desktop (section 7.2). Get the LTS version from
@@ -57,8 +57,9 @@ not pair Anytype again. Three things are different afterwards:
 - **Passwords and tokens stored inside your flows must be entered again.** Reload says so in a
   notification when it could not read them. Open each flow that used one and type it again.
 - **InnyTypes itself** stays in Applications until you remove it. Once Reload has opened, drag
-  **InnyTypes** to the Bin. If InnyTypes started at login, turn **Start at login** off in it
-  before you remove it, or remove it from System Settings › General › Login Items.
+  **InnyTypes** from Applications to the Bin, without opening it again. That also removes its
+  login item, so InnyTypes no longer starts when you log in. Reload keeps your **Start at
+  login** choice and starts itself instead.
 
 If Reload says InnyTypes is still running, quit InnyTypes and open Reload again. Nothing is moved
 while it runs.
