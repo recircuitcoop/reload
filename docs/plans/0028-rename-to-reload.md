@@ -163,8 +163,13 @@ branch, merged once. They are kept apart below as the order the work is done and
    titles, notifications, README and live docs, comments, test names. A census script run in
    the gate lists every remaining `inny` occurrence outside an allow-list (the legacy constants,
    history per D5, the old Python app per D6) and fails on any other.
-6. **Outside the repo (WI-0028-06, owner-run with a checklist).** In this order, after 0.4.0 is
-   merged and before it is published:
+6. **Outside the repo (owner-run).** The runbook is
+   [`0028-rename-to-reload.outside.sh`](0028-rename-to-reload.outside.sh): a dry run by
+   default, `--apply` to act after a backup tarball, every step idempotent, tested against a
+   synthetic HOME on 2026-10-20. It covers the folder, Claude Code's memory folders and
+   `~/.claude.json`, the headers helper, Codex, `~/.zshrc`, Claude Desktop, Serena and the code
+   index, and prints the rest (GitHub, DNS, Umami, sibling repos, clean-up). In this order,
+   after 0.4.0 is merged and before it is published:
    - rename the folder `~/git/innytypes` → `~/git/reload` (no loop worktrees open, no makers
      running);
    - re-point the tooling keyed on the folder: Claude Code's memory directory
