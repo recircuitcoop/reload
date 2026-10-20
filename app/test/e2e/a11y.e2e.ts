@@ -155,7 +155,7 @@ async function stop(page: Page, where: string, findings: Finding[], unnamed: str
   unnamed.push(...(await unnamedIconControls(page)).map((control) => `${where} › ${control}`));
 }
 
-/** Welcome, Reports and Connect Anytype (skipped), to Source folder. */
+/** Welcome, Reports, Connect Anytype (skipped) and the example (used), to Source folder. */
 async function toSourceFolder(window: Page, visit?: (where: string) => Promise<void>) {
   const step = window.getByTestId("setup-step");
   await expect(step).toHaveAttribute("data-step", "welcome", { timeout: 20_000 });
@@ -167,6 +167,9 @@ async function toSourceFolder(window: Page, visit?: (where: string) => Promise<v
   await expect(step).toHaveAttribute("data-step", "connect-anytype");
   await visit?.("setup connect anytype");
   await step.getByTestId("setup-anytype-skip").click();
+  await expect(step).toHaveAttribute("data-step", "example", { timeout: 20_000 });
+  await visit?.("setup example");
+  await step.getByTestId("setup-example-use").click();
   await expect(step).toHaveAttribute("data-step", "source-folder", { timeout: 20_000 });
 }
 
@@ -185,7 +188,7 @@ async function toStepForms(app: ElectronApplication, window: Page, scratch: stri
   await expect(window.getByTestId("setup-step")).toHaveAttribute("data-step", "node-forms", {
     timeout: 20_000,
   });
-  await expect(window.getByTestId("setup-field-space_id-text-input")).toBeVisible({
+  await expect(window.getByTestId("setup-field-space_id-select-trigger")).toBeVisible({
     timeout: 15_000,
   });
 }
@@ -452,7 +455,7 @@ test("(c) the keyboard: Setup in tab order, a Flows row's ⋯ menu, a dialog tha
     for (const [at, next, button] of [
       ["welcome", "reports", "setup-continue"],
       ["reports", "connect-anytype", "setup-reports-dont-send"],
-      ["connect-anytype", "source-folder", "setup-anytype-skip"],
+      ["connect-anytype", "example", "setup-anytype-skip"],
     ] as const) {
       await expect(step).toHaveAttribute("data-step", at, { timeout: 20_000 });
       const stops = await tabTo(window, button);

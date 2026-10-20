@@ -1,6 +1,7 @@
 // A step's form choosing its space and type from Anytype, in the real app (plan 0022 §B, D9;
 // WI-0022-09): a fixture type declaring `reload.spaces` and `reload.types.of`, opened on the
-// real canvas. The form says "Reading your spaces…" while the services process reads a fake
+// real canvas; and the shipped File in Anytype step, whose wiring (`reload.advanced`) sits under a
+// closed Advanced disclosure. The form says "Reading your spaces…" while the services process reads a fake
 // Anytype with the run's key, then lists the spaces; choosing one lists its types, and choosing
 // another reads again. What the node keeps is the plain id and key. Not paired, the form shows
 // the sentence instead. The canary key is in no page, no options answer and no log line.
@@ -93,14 +94,18 @@ const optionsOf = (select: Locator): Promise<string[]> =>
 const chosenOf = (select: Locator): Promise<string | undefined> =>
   select.evaluate((element: HTMLSelectElement) => element.selectedOptions[0]?.text);
 
-async function openForm(page: Frame, values: Record<string, string>): Promise<void> {
+async function openForm(
+  page: Frame,
+  values: Record<string, string>,
+  type: string = RAW,
+): Promise<void> {
   await page.evaluate(
-    ([type, given]) => {
+    ([named, given]) => {
       const RED = (window as unknown as { RED: EditorRed }).RED;
-      RED.view.importNodes([{ id: "o1", type, x: 200, y: 100, ...given }]);
+      RED.view.importNodes([{ id: "o1", type: named, x: 200, y: 100, ...given }]);
       RED.editor.edit(RED.nodes.node("o1"));
     },
-    [RAW, values] as const,
+    [type, values] as const,
   );
 }
 
@@ -248,6 +253,79 @@ test("not paired, a step's form says how to pair and keeps what the step stored"
     await expect(space).toBeDisabled();
     // Anytype was asked for no list: there is no key to ask with.
     expect(anytype.received.filter((request) => request.url.includes("offset="))).toEqual([]);
+    await quit(app);
+  } finally {
+    await cleanUp(launched, scratch);
+    await anytype.close();
+  }
+});
+
+test("the File in Anytype step on the canvas: Space and Save as, its wiring under Advanced", async () => {
+  test.setTimeout(120_000);
+  const { scratch, env, canaryKey } = scratchDirectories();
+  const anytype = new FakeAnytypeServer(canaryKey);
+  anytype.spaces = [{ id: "sp-work", name: "Work" }];
+  anytype.types.set("sp-work", [{ key: "page", name: "Page" }]);
+  const url = await anytype.start();
+  const launched: ElectronApplication[] = [];
+  try {
+    const { app, window } = await launch(env, scratch, url);
+    launched.push(app);
+    const port = Number((await waitForRunning(window, "runtime")).port);
+    await waitForRunning(window, "services");
+    const { frame, page } = await editorOf(window, port);
+    const FILE = "reload-reload_anytype-create-object";
+    await openForm(page, { space_id: "sp-work", api_base_url: "http://127.0.0.1:9" }, FILE);
+    const form = frame.getByTestId(`reload-form-${FILE}`);
+    const advanced = form.getByTestId("reload-advanced");
+
+    // Space and Save as in view, by name; the wiring folded under Advanced, closed.
+    await expect
+      .poll(() => chosenOf(form.getByTestId("reload-field-space_id")), {
+        timeout: 15_000,
+      })
+      .toBe("Work");
+    await expect
+      .poll(() => chosenOf(form.getByTestId("reload-field-type_key")), {
+        timeout: 15_000,
+      })
+      .toBe("Page");
+    const labelOf = (key: string) =>
+      form.evaluate(
+        (element, wanted) =>
+          element.querySelector(`[data-reload-key="${wanted}"] > label`)?.textContent.trim(),
+        key,
+      );
+    expect([await labelOf("space_id"), await labelOf("type_key")]).toEqual(["Space *", "Save as"]);
+    expect(await advanced.evaluate((details: HTMLDetailsElement) => details.open)).toBe(false);
+    for (const key of ["name_field", "body_field", "api_base_url"]) {
+      await expect(advanced.getByTestId(`reload-field-${key}`)).toHaveCount(1);
+      await expect(advanced.getByTestId(`reload-field-${key}`)).toBeHidden();
+    }
+    await expect(advanced.getByTestId("reload-field-space_id")).toHaveCount(0);
+    // Opened, as a click on its summary opens it.
+    await advanced.evaluate((details: HTMLDetailsElement) => {
+      details.open = true;
+    });
+    await expect(advanced.getByTestId("reload-field-api_base_url")).toHaveValue(
+      "http://127.0.0.1:9",
+    );
+    await expect(advanced.getByTestId("reload-field-name_field")).toHaveValue("/name");
+
+    // Saved, the folded fields are kept like any other.
+    await advanced.getByTestId("reload-field-body_field").fill("/text");
+    await frame.locator("#node-dialog-ok").dispatchEvent("click");
+    const kept = await page.evaluate(() => {
+      const node = (window as unknown as { RED: EditorRed }).RED.nodes.node("o1") as Record<
+        string,
+        unknown
+      >;
+      return [node["space_id"], node["body_field"], node["api_base_url"]];
+    });
+    expect(kept).toEqual(["sp-work", "/text", "http://127.0.0.1:9"]);
+    await page.evaluate(() => {
+      (window as unknown as { RED: EditorRed }).RED.nodes.dirty(false);
+    });
     await quit(app);
   } finally {
     await cleanUp(launched, scratch);
