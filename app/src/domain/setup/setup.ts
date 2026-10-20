@@ -1,39 +1,49 @@
 // Setup, the first-run walkthrough (plan 0022 §H, ux-writing "The first run (Setup)", owner
-// decisions 1 and 8 of 2026-10-02).
+// decisions 1 and 8 of 2026-10-02; owner, 2026-10-20: the example is elective, with a Skip).
 //
-// The steps, in order: Welcome, Reports, Connect Anytype, Source folder (the folder the starter
-// flow watches), one form per step of the starter flow, and Ready. There is no packages step (the
-// packages are set up on their own) and no starter choice (the starter flow is always installed);
-// "I'll build my own" is one of Ready's closing choices. There is no recorder step.
+// The steps, in order: Welcome, Reports, Connect Anytype, Start with an example?, Source folder
+// (the folder the example, the starter flow, watches), one form per step of the starter flow, and
+// Ready. There is no packages step (the packages are set up on their own) and no recorder step.
+//
+// * The example is a choice (`example`): "use" walks Source folder and the starter's forms;
+//   "skip" goes straight to Ready, with no starter. Skip is offered on the choice and on every
+//   screen of the example's own (Source folder, its forms); a starter already installed is then
+//   forgotten here, and the shell removes it. Back from Source folder returns to the choice.
 //
 // * The state is written at every step (`setup {step, completed}` in settings), so a quit resumes
 //   at the same step: `resume` reads it back, and starts afresh only when it cannot trust it.
-// * The starter flow is installed once, when Setup reaches Source folder; its id and its form
+// * The starter flow is installed once, when the example is chosen; its id and its form
 //   count are recorded then (`withStarter`), at whatever step the install finishes, so a quit
 //   never installs it twice. Source folder does not go on until it is recorded
 //   (`waitsForStarter`); it then goes on to the starter's first form, or to Ready when it has
 //   none.
 // * Setup completes when Ready's closing choice is made: Open Live, or I'll build my own (plan
-//   0022 §H). Try with a sample is not one: Setup stays on Ready, so Open Live can follow it.
+//   0022 §H); with the example skipped, Go to Flows. Try with a sample is not one: Setup stays on
+//   Ready, so Open Live can follow it.
 //   Once completed it never shows again: every move on a completed setup returns it unchanged,
 //   and `shouldShowSetup` is false.
 // * A 0.2.1 user never sees Setup: `setupForExistingInstall` marks it completed when flows exist
 //   or the reports question was already answered.
 
 export type SetupStep =
-  "welcome" | "reports" | "connect-anytype" | "source-folder" | "node-forms" | "ready";
+  "welcome" | "reports" | "connect-anytype" | "example" | "source-folder" | "node-forms" | "ready";
 
 export const SETUP_STEPS: readonly SetupStep[] = [
   "welcome",
   "reports",
   "connect-anytype",
+  "example",
   "source-folder",
   "node-forms",
   "ready",
 ];
 
+/** Start with an example?: not answered yet (null), Use the example, or Skip. */
+export type ExampleChoice = "use" | "skip" | null;
+
 export interface SetupState {
   readonly step: SetupStep;
+  readonly example: ExampleChoice;
   /** Which of the starter flow's step forms is shown, from 0; 0 outside node-forms. */
   readonly formIndex: number;
   /** How many step forms the installed starter flow has; 0 until it is installed. */
@@ -46,6 +56,7 @@ export interface SetupState {
 /** Where a new installation starts. */
 export const FIRST_SETUP: SetupState = {
   step: "welcome",
+  example: null,
   formIndex: 0,
   formCount: 0,
   starterFlowId: null,
@@ -56,7 +67,7 @@ export const FIRST_SETUP: SetupState = {
 const LINEAR_NEXT: Partial<Record<SetupStep, SetupStep>> = {
   welcome: "reports",
   reports: "connect-anytype",
-  "connect-anytype": "source-folder",
+  "connect-anytype": "example",
 };
 
 /** Setup is shown until it completes, and never after. */
@@ -66,8 +77,9 @@ export function shouldShowSetup(state: SetupState): boolean {
 
 /**
  * Continue (or the step's own button that moves on: Get started, Send reports / Don't send,
- * Connect / Skip for now, the folder chosen). Source folder goes on to the starter's first form,
- * or to Ready when it has none; Ready moves on only through `finish`.
+ * Connect / Skip for now, the folder chosen). The example's choice moves on only through
+ * `useExample` or `skipExample`; Source folder goes on to the starter's first form, or to Ready
+ * when it has none; Ready moves on only through `finish`.
  */
 export function next(state: SetupState): SetupState {
   if (state.completed) {
@@ -92,10 +104,16 @@ export function next(state: SetupState): SetupState {
   return following === undefined ? state : { ...state, step: following };
 }
 
-/** Back, where the step offers it: never on Welcome, and never on Ready (the flow is on). */
+/**
+ * Back, where the step offers it: never on Welcome, and never on Ready with the example (the
+ * flow is on). Ready without it goes back to the choice.
+ */
 export function back(state: SetupState): SetupState {
-  if (state.completed || state.step === "welcome" || state.step === "ready") {
+  if (state.completed || state.step === "welcome") {
     return state;
+  }
+  if (state.step === "ready") {
+    return state.example === "skip" ? { ...state, step: "example" } : state;
   }
   if (state.step === "node-forms") {
     return state.formIndex > 0
@@ -104,6 +122,33 @@ export function back(state: SetupState): SetupState {
   }
   const index = SETUP_STEPS.indexOf(state.step);
   return { ...state, step: SETUP_STEPS[index - 1] ?? state.step };
+}
+
+/** Use the example, on its choice: on to Source folder, where the starter is installed. */
+export function useExample(state: SetupState): SetupState {
+  if (state.completed || state.step !== "example") {
+    return state;
+  }
+  return { ...state, example: "use", step: "source-folder" };
+}
+
+/**
+ * Skip, on the choice or on any screen of the example's own: straight to Ready, with no starter.
+ * A starter already recorded is forgotten here; removing the flow itself is the shell's.
+ */
+export function skipExample(state: SetupState): SetupState {
+  const offered = ["example", "source-folder", "node-forms"].includes(state.step);
+  if (state.completed || !offered) {
+    return state;
+  }
+  return {
+    ...state,
+    example: "skip",
+    step: "ready",
+    formIndex: 0,
+    formCount: 0,
+    starterFlowId: null,
+  };
 }
 
 /** Whether Back is offered on this step. */
@@ -117,7 +162,7 @@ export function canGoBack(state: SetupState): boolean {
  * not a finite number (NaN, Infinity) as none.
  */
 export function withStarterForms(state: SetupState, formCount: number): SetupState {
-  if (state.completed || state.step === "ready") {
+  if (state.completed || state.step === "ready" || state.example !== "use") {
     return state;
   }
   const forms = Number.isFinite(formCount) ? Math.max(0, Math.floor(formCount)) : 0;
@@ -127,10 +172,11 @@ export function withStarterForms(state: SetupState, formCount: number): SetupSta
 /**
  * The starter flow, installed: its id, and its step forms (`withStarterForms`, before Ready).
  * Recorded at whatever step the install finished, so it is never installed again; never once
- * Setup is completed, never over a starter already recorded, and never an empty id.
+ * Setup is completed, never over a starter already recorded, never an empty id, and never once
+ * the example is no longer chosen (an install that finished after Skip).
  */
 export function withStarter(state: SetupState, flowId: string, formCount: number): SetupState {
-  if (state.completed || state.starterFlowId !== null || flowId === "") {
+  if (state.completed || state.starterFlowId !== null || flowId === "" || state.example !== "use") {
     return state;
   }
   return { ...withStarterForms(state, formCount), starterFlowId: flowId };
@@ -141,16 +187,20 @@ export function waitsForStarter(state: SetupState): boolean {
   return !state.completed && state.step === "source-folder" && state.starterFlowId === null;
 }
 
-/** Whether Setup has reached the steps that need the starter flow, and it is not installed yet. */
+/**
+ * Whether the example is chosen, Setup has reached the steps that need the starter flow, and it
+ * is not installed yet.
+ */
 export function needsStarter(state: SetupState): boolean {
   return (
     !state.completed &&
+    state.example === "use" &&
     state.starterFlowId === null &&
     SETUP_STEPS.indexOf(state.step) >= SETUP_STEPS.indexOf("source-folder")
   );
 }
 
-/** Ready's closing choice, "Open Live" or "I'll build my own": completed. */
+/** Ready's closing choice, "Open Live", "I'll build my own" or "Go to Flows": completed. */
 export function finish(state: SetupState): SetupState {
   if (state.completed || state.step !== "ready") {
     return state;
@@ -175,6 +225,17 @@ function isStep(value: unknown): value is SetupStep {
   return SETUP_STEPS.some((step) => step === value);
 }
 
+/**
+ * The example's choice read back. A state saved before the choice existed walked the example on
+ * every step from Source folder on, so such a step without one reads as "use".
+ */
+function exampleOf(value: unknown, step: SetupStep): ExampleChoice {
+  if (value === "use" || value === "skip") {
+    return value;
+  }
+  return SETUP_STEPS.indexOf(step) >= SETUP_STEPS.indexOf("source-folder") ? "use" : null;
+}
+
 function isCount(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 0;
 }
@@ -193,19 +254,32 @@ export function resume(saved: unknown): SetupState {
   const flowId = record["starterFlowId"];
   const starterFlowId = typeof flowId === "string" && flowId !== "" ? flowId : null;
   if (completed === true) {
-    return { ...FIRST_SETUP, step: isStep(step) ? step : "ready", starterFlowId, completed: true };
+    const at = isStep(step) ? step : "ready";
+    return {
+      ...FIRST_SETUP,
+      step: at,
+      example: exampleOf(record["example"], at),
+      starterFlowId,
+      completed: true,
+    };
   }
   if (!isStep(step)) {
     return FIRST_SETUP;
+  }
+  const example = exampleOf(record["example"], step);
+  if (example === "skip" && (step === "source-folder" || step === "node-forms")) {
+    // The example's own screens with the example skipped: Ready, as Skip left it.
+    return skipExample({ ...FIRST_SETUP, step });
   }
   const index = isCount(formIndex) ? formIndex : 0;
   const count = isCount(formCount) ? formCount : 0;
   if (step === "node-forms" && index >= count) {
     // A form that no longer exists: back to the step before the forms.
-    return { ...FIRST_SETUP, step: "source-folder", formCount: count, starterFlowId };
+    return { ...FIRST_SETUP, step: "source-folder", example, formCount: count, starterFlowId };
   }
   return {
     step,
+    example,
     formIndex: step === "node-forms" ? index : 0,
     formCount: count,
     starterFlowId,

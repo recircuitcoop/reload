@@ -4,7 +4,6 @@ import fs from "node:fs";
 import * as path from "node:path";
 import { describe, expect, it } from "vitest";
 import * as flows from "../../src/application/flows";
-import { ADVANCED_LABEL } from "../../src/domain/forms/form-model";
 import * as options from "../../src/domain/forms/node-options";
 import { plural, sentence, STRINGS, t, type StringKey } from "../../src/ui/strings";
 
@@ -162,6 +161,9 @@ const NOT_A_LINE: ReadonlySet<string> = new Set([
   "Tuesday",
   "Tuesday 14:20",
   "Delete 3 runs? …",
+  // A step's own field labels: the package's words (packages/reload_anytype), not the app's.
+  "Space",
+  "Save as",
   // Composed by ui/words.ts from several keys; the wording fixture holds each sentence.
   "*2026-09-27 client call* · 48 min",
   "Copying from BOYA…",
@@ -272,7 +274,6 @@ describe("the words the runtime gives the canvas are the same", () => {
     expect(STRINGS["form.unavailable"]).toBe(options.UNAVAILABLE_SENTENCE);
     expect(STRINGS["form.readingSpaces"]).toBe(options.READING_SPACES);
     expect(STRINGS["form.readingTypes"]).toBe(options.READING_TYPES);
-    expect(STRINGS["form.advanced"]).toBe(ADVANCED_LABEL);
   });
 });
 

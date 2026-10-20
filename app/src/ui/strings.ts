@@ -14,8 +14,8 @@
 //   `general.aiApps.setup` (the endpoint's URL, in the command Copy setup copies) and
 //   `packages.fromFolder.caption` (the folder a package came from).
 //
-// The Setup walkthrough is Welcome → Reports → Connect Anytype → Source folder → the starter's
-// step forms → Ready (owner decisions 1 and 8, 2026-10-02).
+// The Setup walkthrough is Welcome → Reports → Connect Anytype → Start with an example? → Source
+// folder → the starter's step forms → Ready (owner decisions 1 and 8, 2026-10-02; 2026-10-20).
 //
 // Lines ux-writing does not give, decided by WI-0022-10 and marked `// decided`: the first tab's
 // name, the between-steps lines, the unchecked and going-back update states, a check that failed
@@ -61,12 +61,12 @@ export const STRINGS = {
   "setup.anytype.connected.other": "Connected. Found {n} spaces.",
   "setup.continue": "Continue",
   "setup.back": "Back",
-  // Owner decisions 1 and 8: no "Choose your packages" step (packages are set up on their own)
-  // and no "Start with a simple flow?" choice (the starter is always installed). Removed keys:
-  // setup.packages.title, .body, .anytype, .monty, .reload_summarize; setup.starter.title, .body,
-  // .install, .own. "I'll build my own" moved to Ready (setup.ready.own).
-  // Source folder: the folder the starter flow watches. The folder's name, chosen, shows in full
-  // under the button: it is the person's own folder, not a line.
+  "setup.example.title": "Start with an example?",
+  "setup.example.body":
+    "The example files every new file in a folder you choose as a page in Anytype. You can change it or delete it later in Configuration › Flows.",
+  "setup.example.use": "Use the example",
+  "setup.example.skip": "Skip the example",
+  // Source folder: the chosen folder's name shows in full under the button (the person's own).
   "setup.folder.title": "Source folder",
   "setup.folder.body": "Choose the folder Reload watches. Every new file in it starts your flow.",
   "setup.folder.choose": "Choose a folder…",
@@ -78,10 +78,12 @@ export const STRINGS = {
   "setup.ready.sample": "Try with a sample",
   "setup.ready.openLive": "Open Live",
   "setup.ready.own": "I'll build my own",
+  "setup.ready.none.body": "Reload is set up. Build your first flow in Configuration › Flows.",
   // The Setup sidebar's labels, in order; the step forms share "Steps".
   "setup.nav.welcome": "Welcome",
   "setup.nav.reports": "Reports",
   "setup.nav.anytype": "Anytype",
+  "setup.nav.example": "Example",
   "setup.nav.folder": "Source folder",
   "setup.nav.steps": "Steps",
   "setup.nav.ready": "Ready",
@@ -317,7 +319,6 @@ export const STRINGS = {
   "history.refused.notReached": "This run never reached that step.",
   "form.readingSpaces": "Reading your spaces…",
   "form.readingTypes": "Reading the space's types…",
-  "form.advanced": "Advanced",
   "form.notPaired": "Pair with Anytype in Configuration › General to choose a space.",
   "form.unreachable": "Open Anytype, then come back.",
   "form.unavailable": "Couldn't read from Anytype. Open this step's form again.",

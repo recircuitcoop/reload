@@ -48,10 +48,14 @@ own setup asks only for what Reload itself owns; anything a node package owns (t
 monty's source) is asked in that package's node form, during the starter flow's forms or later on
 the canvas (owner, 2026-10-02).
 
-There is no package step and no starter choice (owner, 2026-10-02: *"change setup steps to
-automatically setup the right plugins and go through the configuration step at setup time"*). The
-packages that ship inside the app (anytype and folder in 0.3.0) are set up on their own while the
-walkthrough runs, and the starter flow is always installed.
+There is no package step (owner, 2026-10-02: *"change setup steps to automatically setup the
+right plugins and go through the configuration step at setup time"*). The packages that ship
+inside the app (anytype and folder in 0.3.0) are set up on their own while the walkthrough runs.
+The example (the starter flow) is elective (owner, 2026-10-20: *"installing a simple example flow
+is ELECTIVE and you are missing a skip button"*): after Connect Anytype, **Start with an
+example?** offers **Use the example** and **Skip the example**, and every screen of the
+example's own (steps 4 and 5) offers Skip the example too. Skip goes to Ready with no flow; a
+starter already installed is removed.
 
 1. **Welcome:** one sentence on what Reload does, in the owner's terms: *records → transcript →
    summaries → Anytype → next steps*. **Get started.**

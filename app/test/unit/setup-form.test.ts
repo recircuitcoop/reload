@@ -1,6 +1,8 @@
 // ui/setup-form.ts (plan 0022 §H, ux-writing "The first run (Setup)"): the Connect Anytype step's
 // line, a step form read from its schema, what Continue sends, a refusal's problems by field, and
 // a line whose names are drawn in italics. No DOM: SetupScreen and SetupForm only draw these.
+import fs from "node:fs";
+import * as path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { AnytypeStatus } from "../../src/ui/contract";
 import {
@@ -64,6 +66,7 @@ const SCHEMA = {
     rows: { type: "array", items: { type: "object" } },
     group: { type: "object" },
     odd: { type: "string", reload: { spaces: true, types: { of: "x" } } },
+    from: { type: "string", default: "/name", reload: { advanced: true } },
     broken: 7,
   },
 };
@@ -81,7 +84,10 @@ describe("a step's form", () => {
       ["loud", "boolean"],
       ["mode", "enum"],
       ["odd", "text"],
+      ["from", "text"],
     ]);
+    expect(fields.filter((field) => field.advanced).map((field) => field.key)).toEqual(["from"]);
+    expect(fields[9]?.reload).toBeNull();
     expect(fields[0]).toMatchObject({
       label: "Space",
       required: true,
@@ -116,6 +122,7 @@ describe("a step's form", () => {
       loud: true,
       mode: "",
       odd: "",
+      from: "/name",
     });
   });
 
@@ -135,8 +142,36 @@ describe("a step's form", () => {
       count: 3,
       ratio: "about half",
       loud: false,
+      // Not drawn in Setup, but sent as it was, so saving never clears it.
+      from: "/name",
     });
     expect(valuesOf(fields, {})).toEqual({});
+  });
+
+  it("the example's File in Anytype step: Space by name and Save as, nothing else", () => {
+    const declared = JSON.parse(
+      fs.readFileSync(
+        path.join(import.meta.dirname, "../../../packages/reload_anytype/reload-package.json"),
+        "utf8",
+      ),
+    ) as { types: { id: string; config: Record<string, unknown> }[] };
+    const config = declared.types.find((type) => type.id === "create-object")?.config ?? {};
+    const fields = setupFields(config);
+    const shown = fields.filter((field) => !field.advanced);
+    expect(shown.map((field) => [field.key, field.label, field.reload])).toEqual([
+      ["space_id", "Space", { source: "spaces" }],
+      ["type_key", "Save as", { source: "types", of: "space_id" }],
+    ]);
+    expect(shown[1]?.help).toBe("What each new file becomes in Anytype.");
+    // The wiring is never shown, and is saved as the step holds it.
+    const draft = { ...draftOf(fields, { api_base_url: "http://127.0.0.1:9" }), space_id: "sp-1" };
+    expect(valuesOf(fields, draft)).toEqual({
+      space_id: "sp-1",
+      type_key: "page",
+      name_field: "/name",
+      body_field: "/body",
+      api_base_url: "http://127.0.0.1:9",
+    });
   });
 
   it("names the fields a refusal found wrong", () => {

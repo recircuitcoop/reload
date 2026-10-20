@@ -131,7 +131,7 @@ open Live.
 |---|---|---|
 | Run card | State: Copying, Running, Waiting, Failed, Done, Resumed. Done also: Notes, Warnings, Both | Panel fill, radius m, raised shadow, 16 padding. Title body-large semibold; step line body 14 with the step name in bold; progress under it when running; result lines when done; buttons per `ux-writing.md`. **One card per source event, per flow** (owner, 2026-10-02): a board lists one card for every event its source fired, newest first; cards are never merged. The Done state carries a badge row under the title: the Done pill, then, only when present, a "2 notes" pill (Off colour, text.secondary) and a "1 warning" pill (Waiting colour); pressing one expands the card to list the lines with their step names. |
 | Empty state | Area: Flows, Live without a flow, Live with nothing running, Empty tab | One sentence body 14 secondary, one Secondary button where `ux-writing.md` gives one, centred, 48 top margin. |
-| Sidebar (surface navigation) | Mode: Setup, Main | 200 wide, canvas fill, the status pill at the bottom. Main: two Nav items, Live and Configuration; Live's badge counts what waits for you. Setup: no Nav items, only the step list of the walkthrough, six entries: Welcome, Reports, Anytype, Source folder, Steps (the starter's step forms, one entry), Ready (owner, 2026-10-02); it is never shown after the first run. |
+| Sidebar (surface navigation) | Mode: Setup, Main | 200 wide, canvas fill, the status pill at the bottom. Main: two Nav items, Live and Configuration; Live's badge counts what waits for you. Setup: no Nav items, only the step list of the walkthrough, seven entries: Welcome, Reports, Anytype, Example, Source folder, Steps (the starter's step forms, one entry), Ready (owner, 2026-10-02 and 2026-10-20; Source folder and Steps are left out once the example is skipped); it is never shown after the first run. |
 | Tab strip | | 40 high, hairline line below; each tab a label body 14 medium, the active one with a 2px accent underline. Used by Configuration (Flows, General) and by the Board. |
 | Dialog | Kind: Neutral, Warning, Destructive | 440 wide, panel fill, radius l (owner, 2026-10-02: the same as a pop-out), popout shadow, `surface.scrim` behind; title 20, body 14, Dialog buttons. Warning and Destructive tint the title's icon only. |
 | Runtime banner | State: Restarting, Down | Full width under the top bar, waiting-soft fill (Restarting) or failed-soft (Down); Restart is Primary. |
@@ -218,11 +218,12 @@ anytype, monty (the recorder) and reload_summarize. That is a roadmap fact.
 
 ## Screens (the deliverable)
 
-- **Setup:** the walkthrough screens (Welcome, Reports, Connect Anytype, Source folder, one of
-  the starter's node forms with "Step n of N", Ready with Try with a sample, Open Live and the
-  secondary "I'll build my own"). There is no package step: the packages that ship inside the app
-  are set up on their own; and no starter choice: the starter is always installed (owner,
-  2026-10-02). There is no recorder step: a recorder is a source a node package (monty) provides,
+- **Setup:** the walkthrough screens (Welcome, Reports, Connect Anytype, Start with an example?,
+  Source folder, one of the starter's node forms with "Step n of N", Ready with Try with a
+  sample, Open Live and the secondary "I'll build my own", and Ready without the example). There
+  is no package step: the packages that ship inside the app are set up on their own (owner,
+  2026-10-02). The example is elective, and each of its own screens offers Skip the example
+  (owner, 2026-10-20). There is no recorder step: a recorder is a source a node package (monty) provides,
   so asking for it belongs to that package's node form, never to Reload's own setup (owner,
   2026-10-02). The Source folder step configures the first-party folder source (D18).
 - **Configuration › Flows:** the list (with a row's ⋯ menu open), the canvas frame, and Run

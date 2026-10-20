@@ -1,14 +1,15 @@
 // Setup, the first-run walkthrough (plan 0022 §H, ux-writing "The first run (Setup)"): Welcome,
-// Reports, Connect Anytype, Source folder, the starter flow's node forms, Ready, one screen at a
-// time beside the Setup sidebar. There is no package step and no starter choice: the shipped
-// packages are there on their own, and the shell installs the starter flow once Setup reaches
-// Source folder (shell/setup-starter.ts). Every move goes through setSetupStep, so a quit
-// resumes where it was.
+// Reports, Connect Anytype, Start with an example?, Source folder, the starter flow's node forms,
+// Ready, one screen at a time beside the Setup sidebar. There is no package step: the shipped
+// packages are there on their own. The example is elective (owner, 2026-10-20): Use the example
+// has the shell install the starter flow (shell/setup-starter.ts); Skip, there or on any screen
+// of the example's own, goes to Ready with no flow. Every move goes through setSetupStep, so a
+// quit resumes where it was.
 //
-// Ready's choices: Try with a sample (the bundled sample copied into the chosen folder; Setup
-// stays on Ready so the person can then open Live), Open Live (completes Setup and opens the
-// starter's board) and I'll build my own, secondary (completes Setup and opens Flows, the starter
-// kept).
+// Ready's choices with the example: Try with a sample (the bundled sample copied into the chosen
+// folder; Setup stays on Ready so the person can then open Live), Open Live (completes Setup and
+// opens the starter's board) and I'll build my own, secondary (completes Setup and opens Flows,
+// the starter kept). Without it: Go to Flows (completes Setup), and Back to the choice.
 import { useEffect, useState, type ReactNode } from "react";
 import type { AppApi } from "../contract";
 import type { Refusal } from "../answer";
@@ -22,7 +23,14 @@ import { SetupStep } from "../components/organisms/SetupStep";
 import { Sidebar } from "../components/organisms/Sidebar";
 import { WindowSetup } from "../components/templates/WindowSetup";
 import { folderName } from "../general";
-import { routeHash, SETUP_NAV, setupNavIndex, type Route, type SetupNavEntry } from "../routes";
+import {
+  routeHash,
+  SETUP_NAV,
+  setupNav,
+  setupNavIndex,
+  type Route,
+  type SetupNavEntry,
+} from "../routes";
 import { anytypeStep, markedParts } from "../setup-form";
 import { useFlows, useSetup, useStores } from "../store";
 import { t, type PlainKey } from "../strings";
@@ -36,6 +44,7 @@ const SETUP_NAV_LABEL: Readonly<Record<SetupNavEntry, PlainKey>> = {
   welcome: "setup.nav.welcome",
   reports: "setup.nav.reports",
   anytype: "setup.nav.anytype",
+  example: "setup.nav.example",
   folder: "setup.nav.folder",
   steps: "setup.nav.steps",
   ready: "setup.nav.ready",
@@ -82,8 +91,10 @@ export function SetupScreen({
         <Sidebar
           mode="setup"
           label={t("nav.setup")}
-          steps={SETUP_NAV.map((entry) => t(SETUP_NAV_LABEL[entry]))}
-          current={state === null ? 0 : setupNavIndex(state.step)}
+          steps={(state === null ? SETUP_NAV : setupNav(state)).map((entry) =>
+            t(SETUP_NAV_LABEL[entry]),
+          )}
+          current={state === null ? 0 : setupNavIndex(state)}
           status={pill}
         />
       }
@@ -120,13 +131,50 @@ function Step(props: StepProps) {
       return <ReportsStep {...props} />;
     case "connect-anytype":
       return <AnytypeStep {...props} />;
+    case "example":
+      return <ExampleStep {...props} />;
     case "source-folder":
       return <FolderStep {...props} />;
     case "node-forms":
       return <FormsStep {...props} />;
     case "ready":
-      return <ReadyStep {...props} />;
+      return state.example === "use" ? (
+        <ReadyStep {...props} />
+      ) : (
+        <ReadyWithoutExample {...props} />
+      );
   }
+}
+
+/** Start with an example?: only Use the example installs the starter flow. */
+function ExampleStep({ move }: StepProps) {
+  return (
+    <SetupStep
+      title={t("setup.example.title")}
+      body={t("setup.example.body")}
+      actions={
+        <>
+          <Button kind="quiet" data-testid="setup-back" onClick={() => void move({ kind: "back" })}>
+            {t("setup.back")}
+          </Button>
+          <Button
+            kind="secondary"
+            data-testid="setup-example-skip"
+            onClick={() => void move({ kind: "skipExample" })}
+          >
+            {t("setup.example.skip")}
+          </Button>
+          <Button
+            kind="primary"
+            data-testid="setup-example-use"
+            onClick={() => void move({ kind: "useExample" })}
+          >
+            {t("setup.example.use")}
+          </Button>
+        </>
+      }
+    />
+  );
 }
 
 function ReportsStep({ api, move, say }: StepProps) {
@@ -361,9 +409,11 @@ function FolderStep({ api, state, move, say }: StepProps) {
       title={t("setup.folder.title")}
       body={t("setup.folder.body")}
       backLabel={t("setup.back")}
+      skipLabel={t("setup.example.skip")}
       continueLabel={t("setup.continue")}
       continueDisabled={starter === null || folder === ""}
       onBack={() => void move({ kind: "back" })}
+      onSkip={() => void move({ kind: "skipExample" })}
       onContinue={() => void move({ kind: "next" })}
     >
       <div className="flex flex-col items-start gap-2">
@@ -402,6 +452,7 @@ function FormsStep({ api, state, move }: StepProps) {
       count={state.formCount}
       onBack={() => void move({ kind: "back" })}
       onSaved={() => void move({ kind: "next" })}
+      onSkip={() => void move({ kind: "skipExample" })}
     />
   );
 }
@@ -458,6 +509,34 @@ function ReadyStep({ api, state, move, say }: StepProps) {
             onClick={trySample}
           >
             {t("setup.ready.sample")}
+          </Button>
+        </>
+      }
+    />
+  );
+}
+
+/** Ready with the example skipped: no flow, so only Flows to go to, or Back to the choice. */
+function ReadyWithoutExample({ move }: StepProps) {
+  return (
+    <SetupStep
+      title={t("setup.ready.title")}
+      body={t("setup.ready.none.body")}
+      actions={
+        <>
+          <Button kind="quiet" data-testid="setup-back" onClick={() => void move({ kind: "back" })}>
+            {t("setup.back")}
+          </Button>
+          <Button
+            kind="primary"
+            data-testid="setup-ready-flows"
+            onClick={() => {
+              void move({ kind: "finish" }).then((moved) => {
+                if (moved) window.location.hash = routeHash({ screen: "flows" });
+              });
+            }}
+          >
+            {t("live.empty.goToFlows")}
           </Button>
         </>
       }

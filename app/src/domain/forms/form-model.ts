@@ -56,7 +56,10 @@ export interface Field {
   readonly fields?: readonly Field[];
 }
 
-/** docs/ux/ux-writing.md, "A step's form": the disclosure that holds the advanced fields. */
+/**
+ * docs/ux/ux-writing.md, "A step's form": the disclosure that holds the advanced fields. Only
+ * the canvas draws it (Setup never shows an advanced field), so it is not in ui/strings.ts.
+ */
 export const ADVANCED_LABEL = "Advanced";
 
 export interface FormModel {

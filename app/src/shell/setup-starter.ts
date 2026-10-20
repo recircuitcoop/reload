@@ -1,8 +1,10 @@
-// Setup's starter flow (plan 0022 §H, D18, D19): what Setup does to the flow it always installs.
+// Setup's starter flow (plan 0022 §H, D18, D19): what Setup does to the example flow.
 //
-// * Installed once, when Setup reaches Source folder: `flow.fromTemplate` with the one template
-//   marked `starter`, its id and its step forms then kept in Setup's state, so a quit never
-//   installs it twice. The shipped packages (anytype, folder) need no step of their own: they are
+// * Installed once, when the person chooses Use the example: `flow.fromTemplate` with the one
+//   template marked `starter`, its id and its step forms then kept in Setup's state, so a quit
+//   never installs it twice.
+// * Removed (`flow.delete`) when the person skips the example after it was installed: nothing
+//   half set up is left in Configuration › Flows. The shipped packages (anytype, folder) need no step of their own: they are
 //   found beside the app and their types are in the runtime before Setup starts.
 // * Source folder: the shell's own folder chooser, and the chosen folder written into the
 //   starter's source (its `folder` setting) with `flow.node.configure`.
@@ -152,6 +154,16 @@ export class SetupStarter {
     return configured.ok ? { ok: true, value: { folder } } : configured;
   }
 
+  /** Skip the example, after its install: the starter flow deleted; whether it is gone. */
+  async remove(flowId: string): Promise<boolean> {
+    const removed = await this.#write<unknown>("flow.delete", { id: flowId });
+    if (removed.ok || removed.refused.reason === "gone") {
+      this.#deps.logger.info(`Setup removed the starter flow ${flowId}: the example was skipped`);
+      return true;
+    }
+    return false;
+  }
+
   /** Switch the starter on, once its health is Ready; whether it is on now. */
   async switchOnWhenReady(flowId: string): Promise<boolean> {
     const { logger } = this.#deps;
@@ -176,7 +188,7 @@ export class SetupStarter {
    * person's: the write is asked again until it has loaded, rather than refused to them.
    */
   async #write<T>(
-    op: "flow.fromTemplate" | "flow.node.configure" | "flow.setOn",
+    op: "flow.fromTemplate" | "flow.node.configure" | "flow.setOn" | "flow.delete",
     args: Readonly<Record<string, unknown>>,
   ): Promise<Answer<T>> {
     const { runtime, editor, logger } = this.#deps;

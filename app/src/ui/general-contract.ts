@@ -57,13 +57,16 @@ export interface BoardChanged {
 
 /**
  * A move through Setup (plan 0022 §H, owner decisions 1 and 8): Continue (or the step's own
- * button that moves on), Back, the starter flow's form count once it is installed, and Ready's
- * closing choice (Open Live, I'll build my own). The shell applies it with
- * domain/setup and stores the state, so a quit resumes at the same step.
+ * button that moves on), Back, Use the example and Skip (or Skip the example), the starter
+ * flow's form count once it is installed, and Ready's closing choice (Open Live, I'll build my
+ * own, Go to Flows). The shell applies it with domain/setup and stores the state, so a quit
+ * resumes at the same step.
  */
 export type SetupMove =
   | { readonly kind: "next" }
   | { readonly kind: "back" }
+  | { readonly kind: "useExample" }
+  | { readonly kind: "skipExample" }
   | { readonly kind: "starterForms"; readonly formCount: number }
   | { readonly kind: "finish" };
 

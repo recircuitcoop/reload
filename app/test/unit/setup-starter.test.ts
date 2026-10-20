@@ -1,5 +1,6 @@
 // Setup's starter flow in the shell (plan 0022 §H, D18, D19; shell/setup.ts, shell/setup-starter.ts):
-// installed once when Setup reaches Source folder, the chosen folder written into its source,
+// installed once when the example is chosen, removed when it is skipped after that, never
+// installed when it is skipped on its choice, the chosen folder written into its source,
 // switched on at Ready only once it is set up, and Try with a sample copying the bundled sample
 // into the folder once the folder source says it has scanned it (its own status, through the
 // runtime's node.status). A fake runtime answers the flow ops.
@@ -86,18 +87,25 @@ function harness() {
       flow.on = true;
       return { ok: true, value: { id: STARTER, on: true } };
     },
+    "flow.delete": () => {
+      flow.installed = false;
+      return { ok: true, value: { id: STARTER } };
+    },
   };
   let down = false;
+  /** An op held until its promise settles: an answer that takes its time. */
+  const held: Record<string, Promise<void>> = {};
   const runtime = {
     call: (op: string, args: unknown): Promise<CallResult> => {
       calls.push([op, (args ?? {}) as Record<string, unknown>]);
-      if (down) return Promise.resolve({ ok: false, code: "down", error: "down" });
-      return Promise.resolve(
-        answers[op]?.((args ?? {}) as Record<string, unknown>) ?? {
-          ok: false,
-          error: `no ${op}`,
-        },
-      );
+      const answer = (): CallResult =>
+        down
+          ? { ok: false, code: "down", error: "down" }
+          : (answers[op]?.((args ?? {}) as Record<string, unknown>) ?? {
+              ok: false,
+              error: `no ${op}`,
+            });
+      return held[op]?.then(answer) ?? Promise.resolve(answer());
     },
   };
   let handler: ((event: unknown, call: unknown) => Promise<unknown>) | undefined;
@@ -181,27 +189,91 @@ function harness() {
     sleeps,
     loadingFor,
     answers,
+    held,
   };
 }
 
-/** Continue from Welcome to Source folder. */
-async function toSourceFolder(h: ReturnType<typeof harness>) {
+/** Continue from Welcome to the example's choice. */
+async function toExample(h: ReturnType<typeof harness>) {
   for (let pressed = 0; pressed < 3; pressed += 1) {
     await h.call("setup.move", { kind: "next" });
   }
   await h.settle();
 }
 
+/** Continue from Welcome to Source folder, the example chosen. */
+async function toSourceFolder(h: ReturnType<typeof harness>) {
+  await toExample(h);
+  await h.call("setup.move", { kind: "useExample" });
+  await h.settle();
+}
+
+const installsOf = (h: ReturnType<typeof harness>) =>
+  h.calls.filter(([op]) => op === "flow.fromTemplate");
+
+describe("the example, skipped", () => {
+  it("on its choice: no flow is ever installed, and Setup is on Ready without one", async () => {
+    const h = harness();
+    await toExample(h);
+    expect(await h.call("setup.move", { kind: "skipExample" })).toMatchObject({
+      ok: true,
+      value: { step: "ready", example: "skip", starterFlowId: null },
+    });
+    for (let read = 0; read < 3; read += 1) {
+      await h.call("setup.get");
+      await h.settle();
+    }
+    expect(installsOf(h)).toEqual([]);
+    expect(h.flow.installed).toBe(false);
+    expect(await h.call("setup.move", { kind: "finish" })).toMatchObject({
+      value: { completed: true },
+    });
+    expect(h.calls.filter(([op]) => op === "flow.setOn" || op === "flow.delete")).toEqual([]);
+  });
+
+  it("on Source folder, after its install: the starter is removed", async () => {
+    const h = harness();
+    await toSourceFolder(h);
+    expect(h.flow.installed).toBe(true);
+    expect(await h.call("setup.move", { kind: "skipExample" })).toMatchObject({
+      value: { step: "ready", example: "skip", starterFlowId: null },
+    });
+    expect(h.calls.filter(([op]) => op === "flow.delete")).toEqual([
+      ["flow.delete", { id: STARTER, canvasDirty: false }],
+    ]);
+    expect(h.flow.installed).toBe(false);
+  });
+
+  it("while its install is under way: the flow it made is removed, never recorded", async () => {
+    const h = harness();
+    await toExample(h);
+    // The install starts with Use the example; Skip comes before it has made the flow.
+    let answer: () => void = () => undefined;
+    h.held["flow.fromTemplate"] = new Promise((resolve) => {
+      answer = resolve;
+    });
+    await h.call("setup.move", { kind: "useExample" });
+    await h.settle();
+    expect(installsOf(h)).toHaveLength(1);
+    await h.call("setup.move", { kind: "skipExample" });
+    expect(h.calls.filter(([op]) => op === "flow.delete")).toEqual([]);
+    answer();
+    await h.settle();
+    await h.settle();
+    expect(h.calls.filter(([op]) => op === "flow.delete")).toHaveLength(1);
+    expect(installsOf(h)).toHaveLength(1);
+    expect(h.flow.installed).toBe(false);
+    expect(h.stored["setup"]).toMatchObject({ example: "skip", starterFlowId: null });
+  });
+});
+
 describe("the starter flow, installed by Setup", () => {
-  it("is installed once Setup reaches Source folder, never before, and only once", async () => {
+  it("is installed once the example is chosen, never before, and only once", async () => {
     const h = harness();
     await h.call("setup.get");
-    for (let pressed = 0; pressed < 2; pressed += 1) {
-      await h.call("setup.move", { kind: "next" });
-    }
-    await h.settle();
-    expect(h.calls.filter(([op]) => op === "flow.fromTemplate")).toEqual([]);
-    await h.call("setup.move", { kind: "next" });
+    await toExample(h);
+    expect(installsOf(h)).toEqual([]);
+    await h.call("setup.move", { kind: "useExample" });
     await h.settle();
     // A burst of reads while it installs, and reads after: one install.
     await Promise.all([h.call("setup.get"), h.call("setup.get"), h.call("setup.get")]);

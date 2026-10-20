@@ -169,8 +169,16 @@ export function settleRoute(route: Route | null, setup: SetupState): Route {
   return route;
 }
 
-/** The Setup sidebar's six entries, in order (design-system "Sidebar", owner 2026-10-02). */
-export const SETUP_NAV = ["welcome", "reports", "anytype", "folder", "steps", "ready"] as const;
+/** The Setup sidebar's entries, in order (design-system "Sidebar", owner 2026-10-02). */
+export const SETUP_NAV = [
+  "welcome",
+  "reports",
+  "anytype",
+  "example",
+  "folder",
+  "steps",
+  "ready",
+] as const;
 export type SetupNavEntry = (typeof SETUP_NAV)[number];
 
 /** Which Setup sidebar entry a step is; the starter's step forms share "Steps". */
@@ -178,12 +186,20 @@ const SETUP_NAV_OF: Readonly<Record<SetupStep, SetupNavEntry>> = {
   welcome: "welcome",
   reports: "reports",
   "connect-anytype": "anytype",
+  example: "example",
   "source-folder": "folder",
   "node-forms": "steps",
   ready: "ready",
 };
 
-/** The Setup sidebar's current entry for a step, from 0. */
-export function setupNavIndex(step: SetupStep): number {
-  return SETUP_NAV.indexOf(SETUP_NAV_OF[step]);
+/** The Setup sidebar's entries for where Setup is: the example's own left out once skipped. */
+export function setupNav(state: Pick<SetupState, "example">): SetupNavEntry[] {
+  return SETUP_NAV.filter(
+    (entry) => state.example !== "skip" || (entry !== "folder" && entry !== "steps"),
+  );
+}
+
+/** The Setup sidebar's current entry for where Setup is, from 0. */
+export function setupNavIndex(state: Pick<SetupState, "step" | "example">): number {
+  return setupNav(state).indexOf(SETUP_NAV_OF[state.step]);
 }

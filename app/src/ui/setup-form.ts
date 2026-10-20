@@ -64,6 +64,8 @@ export interface SetupField {
   /** Options from Anytype (spec 2.4.1): the spaces, or the types of the space in `of`. */
   readonly reload:
     { readonly source: "spaces" } | { readonly source: "types"; readonly of: string } | null;
+  /** `reload.advanced` (spec 2.4.1): never drawn in Setup, but its value is sent back as it is. */
+  readonly advanced: boolean;
   readonly default: unknown;
 }
 
@@ -108,7 +110,10 @@ function reloadOf(property: Record<string, unknown>): SetupField["reload"] {
   return spaces ? { source: "spaces" } : { source: "types", of };
 }
 
-/** The fields Setup draws for a step's schema, in the order it declares its properties. */
+/**
+ * The fields of a step's form, in the order its schema declares its properties. Setup draws the
+ * ones not `advanced`; every one is sent back (`valuesOf`), so a hidden one keeps its value.
+ */
 export function setupFields(schema: Readonly<Record<string, unknown>>): SetupField[] {
   const properties = isRecord(schema["properties"]) ? schema["properties"] : {};
   const required = new Set(
@@ -133,6 +138,7 @@ export function setupFields(schema: Readonly<Record<string, unknown>>): SetupFie
         required: required.has(key),
         options: kind === "enum" ? (property["enum"] as unknown[]).map((each) => String(each)) : [],
         reload: reloadOf(property),
+        advanced: isRecord(property["reload"]) && property["reload"]["advanced"] === true,
         default: property["default"],
       },
     ];

@@ -9,6 +9,7 @@ import {
   routeHash,
   settleRoute,
   SETUP_NAV,
+  setupNav,
   setupNavIndex,
   surfaceOf,
   type Route,
@@ -28,6 +29,7 @@ const SECTION_M: readonly (readonly [string, Route])[] = [
 
 const setupAt = (step: SetupState["step"], completed = false): SetupState => ({
   step,
+  example: null,
   formIndex: 0,
   formCount: 0,
   starterFlowId: null,
@@ -124,12 +126,40 @@ describe("the window opens on Setup until completed, then Live", () => {
 });
 
 describe("the Setup sidebar", () => {
-  it("lists Welcome, Reports, Anytype, Source folder, Steps and Ready, and marks the step shown", () => {
-    expect(SETUP_NAV).toEqual(["welcome", "reports", "anytype", "folder", "steps", "ready"]);
-    expect(
-      (
-        ["welcome", "reports", "connect-anytype", "source-folder", "node-forms", "ready"] as const
-      ).map(setupNavIndex),
-    ).toEqual([0, 1, 2, 3, 4, 5]);
+  it("lists Welcome, Reports, Anytype, Example, Source folder, Steps and Ready, and marks the step shown", () => {
+    expect(SETUP_NAV).toEqual([
+      "welcome",
+      "reports",
+      "anytype",
+      "example",
+      "folder",
+      "steps",
+      "ready",
+    ]);
+    const steps = [
+      "welcome",
+      "reports",
+      "connect-anytype",
+      "example",
+      "source-folder",
+      "node-forms",
+      "ready",
+    ] as const;
+    expect(steps.map((step) => setupNavIndex({ step, example: "use" }))).toEqual([
+      0, 1, 2, 3, 4, 5, 6,
+    ]);
+    expect(setupNav({ example: null })).toEqual(SETUP_NAV);
+  });
+
+  it("leaves Source folder and Steps out once the example is skipped", () => {
+    expect(setupNav({ example: "skip" })).toEqual([
+      "welcome",
+      "reports",
+      "anytype",
+      "example",
+      "ready",
+    ]);
+    expect(setupNavIndex({ step: "ready", example: "skip" })).toBe(4);
+    expect(setupNavIndex({ step: "example", example: "skip" })).toBe(3);
   });
 });

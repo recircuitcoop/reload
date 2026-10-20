@@ -3,9 +3,11 @@
 // and Try with a sample. The state lives in shell-settings.json and is written at every move, so a
 // quit resumes at the same step; domain/setup decides every move and judges what is read back.
 //
-// The starter flow (shell/setup-starter.ts) is installed once Setup reaches Source folder, in the
+// The starter flow (shell/setup-starter.ts) is installed once the example is chosen, in the
 // background: a read or a move that finds it needed starts the install (one at a time), and its
 // id and form count are stored and pushed once it is made, at whatever step Setup is on by then.
+// Skip the example removes a starter already recorded; an install that finishes after Skip is
+// not recorded, and its flow is removed too.
 // Continue on Source folder is refused until it is. An install adopts a flow already made from
 // the starter template, so one that was made but whose answer was lost is never made twice. A runtime not up yet fails the
 // install; the next read starts it again. Moving into Ready switches the starter on once its
@@ -28,6 +30,8 @@ import {
   next,
   resume,
   setupForExistingInstall,
+  skipExample,
+  useExample,
   waitsForStarter,
   withStarter,
   withStarterForms,
@@ -86,6 +90,10 @@ export function applyMove(state: SetupState, move: Readonly<Record<string, unkno
       return back(state);
     case "finish":
       return finish(state);
+    case "useExample":
+      return useExample(state);
+    case "skipExample":
+      return skipExample(state);
     case "starterForms": {
       const forms = move["formCount"];
       return typeof forms === "number" ? withStarterForms(state, forms) : state;
@@ -137,7 +145,13 @@ export function wireSetup(deps: SetupDeps): void {
     }
     // Recorded on the state as it is now: the person may have moved meanwhile.
     const { flowId, formCount } = installed.value;
-    store(withStarter(current(), flowId, formCount));
+    const now = current();
+    if (now.example === "skip") {
+      // Skipped while it was being installed: not kept.
+      await starter.remove(flowId);
+      return;
+    }
+    store(withStarter(now, flowId, formCount));
   };
   /** The state, with the starter's install started when Setup needs it and none is under way. */
   const withStarterStarted = (state: SetupState): SetupState => {
@@ -160,6 +174,10 @@ export function wireSetup(deps: SetupDeps): void {
       return refused("loading", "flows.refused.loading");
     }
     const after = store(applyMove(before, args));
+    if (before.starterFlowId !== null && after.example === "skip") {
+      // Skip the example after its install: the starter is removed, never left half set up.
+      await starter.remove(before.starterFlowId);
+    }
     if (after.step === "ready" && before.step !== "ready" && after.starterFlowId !== null) {
       // Ready says the flow is on: switched on here, once its health is Ready.
       await starter.switchOnWhenReady(after.starterFlowId);

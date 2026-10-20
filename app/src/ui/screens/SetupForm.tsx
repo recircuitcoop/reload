@@ -1,8 +1,10 @@
 // Setup's node forms (plan 0022 §H, ux-writing "Node forms"): one screen per step of the starter
 // flow after its source, in wire order, titled "Set up: *step name*" with "Step n of N." over
-// it. The step's own form is read with nodeForm and saved with configureNode, the same calls the
-// canvas's forms use; a field whose options come from Anytype (`reload`) lists them through
-// nodeOptions. Continue saves, and moves on only once the step is saved.
+// it, and what the step does (its package's description) under the title. The step's own form is
+// read with nodeForm and saved with configureNode, the same calls the canvas's forms use; a field
+// whose options come from Anytype (`reload`) lists them through nodeOptions, and a field marked
+// advanced is not drawn (its value is saved as it was). Continue saves, and moves on only once
+// the step is saved; Skip the example leaves the example's screens.
 import { useEffect, useState } from "react";
 import type { AppApi } from "../contract";
 import type { Answer, Refusal } from "../answer";
@@ -55,9 +57,12 @@ export interface SetupFormProps {
   readonly onBack: () => void;
   /** The step is saved: on to the next form, or Ready. */
   readonly onSaved: () => void;
+  /** Skip the example: no form saved. */
+  readonly onSkip: () => void;
 }
 
-export function SetupForm({ api, flowId, step, index, count, onBack, onSaved }: SetupFormProps) {
+export function SetupForm(props: SetupFormProps) {
+  const { api, flowId, step, index, count, onBack, onSaved, onSkip } = props;
   const [form, setForm] = useState<Answer<NodeForm> | null>(null);
   const [draft, setDraft] = useState<Draft>({});
   const [refusal, setRefusal] = useState<Refusal | null>(null);
@@ -90,25 +95,32 @@ export function SetupForm({ api, flowId, step, index, count, onBack, onSaved }: 
       progress={t("setup.form.progress", { step: index + 1, of: count })}
       title={<Marked parts={title} />}
       label={plainOf(title)}
+      {...(form?.ok === true && form.value.description !== null
+        ? { body: form.value.description }
+        : {})}
       backLabel={t("setup.back")}
+      skipLabel={t("setup.example.skip")}
       continueLabel={t("setup.continue")}
       continueDisabled={form?.ok !== true}
       onBack={onBack}
+      onSkip={onSkip}
       onContinue={save}
     >
       <div data-testid="setup-form" data-node={step.id} className="flex flex-col gap-4">
-        {fields.map((field) => (
-          <SetupFormField
-            key={field.key}
-            api={api}
-            field={field}
-            draft={draft}
-            problem={problems[field.key]}
-            onChange={(value) => {
-              setDraft((before) => ({ ...before, [field.key]: value }));
-            }}
-          />
-        ))}
+        {fields
+          .filter((field) => !field.advanced)
+          .map((field) => (
+            <SetupFormField
+              key={field.key}
+              api={api}
+              field={field}
+              draft={draft}
+              problem={problems[field.key]}
+              onChange={(value) => {
+                setDraft((before) => ({ ...before, [field.key]: value }));
+              }}
+            />
+          ))}
         {form?.ok === false ? (
           <InlineMessage kind="failed">{wordRefusal(form.refused)}</InlineMessage>
         ) : null}
@@ -231,6 +243,7 @@ function AnytypeSelect({ api, field, draft, onChange }: Omit<FieldProps, "proble
       <Select
         label={field.label}
         hideLabel
+        testId={`setup-field-${field.key}-select`}
         state={options?.ok === true ? "default" : "disabled"}
         options={choices}
         value={value === "" ? null : value}

@@ -514,7 +514,14 @@ describe("AppApi v2 calls, through the shell to its processes", () => {
     }));
     expect(await h.api.setup()).toEqual({
       ok: true,
-      value: { step: "welcome", formIndex: 0, formCount: 0, starterFlowId: null, completed: false },
+      value: {
+        step: "welcome",
+        example: null,
+        formIndex: 0,
+        formCount: 0,
+        starterFlowId: null,
+        completed: false,
+      },
     });
     expect((await h.api.setSetupStep({ kind: "next" })).ok).toBe(true);
     expect(h.settings.stored["setup"]).toMatchObject({ step: "reports" });
@@ -522,6 +529,9 @@ describe("AppApi v2 calls, through the shell to its processes", () => {
       value: { step: "welcome" },
     });
     for (let pressed = 0; pressed < 3; pressed += 1) await h.api.setSetupStep({ kind: "next" });
+    expect(await h.api.setSetupStep({ kind: "useExample" })).toMatchObject({
+      value: { step: "source-folder", example: "use" },
+    });
     // Source folder: the shell installs the starter in the background and records it.
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(await h.api.setup()).toMatchObject({

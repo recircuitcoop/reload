@@ -80,13 +80,20 @@ The status indicator, top right, is one word: **Running**, **Restarting…**, **
 
 ## The first run (Setup)
 
-Shown once, in this order: Welcome, Reports, Connect Anytype, Source folder, the starter's step
-forms, Ready. After Ready, Setup never shows again (owner, 2026-10-02).
+Shown once, in this order: Welcome, Reports, Connect Anytype, Start with an example?, Source
+folder, the starter's step forms, Ready. After Ready, Setup never shows again (owner, 2026-10-02).
 
-There is no package step and no starter choice. The packages that ship inside the app (anytype
-and folder in 0.3.0, D17 and D18) are set up on their own while Setup runs. The starter flow is
-always installed: it watches a folder and files each new file in Anytype. Setup walks its step
-forms at setup time, so the flow is set up by the time Ready shows.
+There is no package step. The packages that ship inside the app (anytype and folder in 0.3.0, D17
+and D18) are set up on their own while Setup runs. The example (the starter flow) is elective
+(owner, 2026-10-20): it watches a folder and files each new file in Anytype. Only **Use the
+example** installs it; Setup then walks its step forms, so the flow is set up by the time Ready
+shows. **Skip the example** goes straight to Ready, with no flow. Every screen of the example's
+own (Source folder, its step forms) offers it too; a starter already installed is then
+removed, so nothing half set up is left in Configuration › Flows.
+
+A step form shows the step's own description under its title, and only the fields a person
+decides (for the example: **Space**, a list of the spaces by name, and **Save as**, the types of
+that space). The fields the package marks advanced are never shown in Setup.
 
 | Screen | Title | Body | Buttons |
 |---|---|---|---|
@@ -94,16 +101,19 @@ forms at setup time, so the flow is set up by the time Ready shows.
 | Reports | **Help improve Reload?** | "Send usage counts, under a machine id that carries no name. Never your recordings, transcripts or notes. You can change this in Configuration › General." | Send reports · Don't send |
 | Anytype | **Connect Anytype** | Running: "Anytype is asking for a code. Type it here." Not running: "Open Anytype, then come back. Reload will notice." | Connect · Skip for now |
 | Anytype, done | | "Connected. Found 8 spaces." | Continue |
-| Source folder | **Source folder** | "Choose the folder Reload watches. Every new file in it starts your flow." After choosing: the folder's name, in full, under the button. | Choose a folder… · Continue |
-| Node forms | **Set up: *step name*** (one per step of the starter) | The step's own form. Progress: "Step 1 of 2." | Continue · Back |
+| Example | **Start with an example?** | "The example files every new file in a folder you choose as a page in Anytype. You can change it or delete it later in Configuration › Flows." | Back · Skip the example · Use the example |
+| Source folder | **Source folder** | "Choose the folder Reload watches. Every new file in it starts your flow." After choosing: the folder's name, in full, under the button. | Choose a folder… · Back · Skip the example · Continue |
+| Node forms | **Set up: *step name*** (one per step of the starter) | The step's description, then its form. Progress: "Step 1 of 2." | Back · Skip the example · Continue |
 | Ready | **Ready** | "Your flow is on. Drop a file in *folder* to start. Or try it now with a 10-second sample." | Try with a sample · Open Live · I'll build my own (secondary) |
+| Ready, example skipped | **Ready** | "Reload is set up. Build your first flow in Configuration › Flows." | Back · Go to Flows |
 
 "I'll build my own" closes Setup and opens Configuration › Flows, with **New flow** in view. The
 starter stays installed; the person can switch it off or delete it there.
 
 **The Setup sidebar** lists the steps by these labels, in order: **Welcome** · **Reports** ·
-**Anytype** · **Source folder** · **Steps** · **Ready**. The node forms share the one entry
-**Steps**; its progress is the "Step n of N" line on the screen, not the sidebar.
+**Anytype** · **Example** · **Source folder** · **Steps** · **Ready**. The node forms share the
+one entry **Steps**; its progress is the "Step n of N" line on the screen, not the sidebar. With
+the example skipped, **Source folder** and **Steps** are not listed.
 
 ## Live: the board
 
@@ -248,7 +258,7 @@ a run is found again, read, and re-run (owner, 2026-10-02).
 - A step's form, placed on the canvas: its choices of space and type are read from Anytype as the
   form opens: "Reading your spaces…", then the list. Not paired: "Pair with Anytype in
   Configuration › General to choose a space." The fields a package marks advanced (where a step
-  reads a value from, the address it calls) sit under a closed **Advanced** disclosure; Setup
+  reads a value from, the address it calls) sit under a closed Advanced disclosure; Setup
   never shows them.
 
 ## Configuration › General

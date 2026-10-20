@@ -1,7 +1,8 @@
 // Setup step (Penpot 04 Organisms › setup-step). One screen of the first-run walkthrough in a
 // 560 centred column: "Step n of N" (caption), the title (page 26), the body (14), the step's
-// form, then Back (Quiet) and Continue (Primary). A step with choices of its own (Reports' Send
-// reports · Don't send, Ready's three) passes them as `actions` in place of Back and Continue.
+// form, then Back (Quiet), a way out of the series when it has one (Secondary: "Skip the
+// example") and Continue (Primary). A step with choices of its own (Reports' Send reports · Don't
+// send, Ready's three) passes them as `actions` in place of these.
 import type { MouseEventHandler, ReactNode } from "react";
 import { Button } from "../atoms/Button";
 import { cx, variantAttributes } from "../variant";
@@ -20,6 +21,9 @@ export interface SetupStepProps {
   /** Absent on the first screen, which has nothing to go back to. */
   readonly backLabel?: string;
   readonly continueLabel?: string;
+  /** Leaves the series of screens this step is one of; absent when there is none. */
+  readonly skipLabel?: string;
+  readonly onSkip?: MouseEventHandler<HTMLButtonElement>;
   /** Continue is offered but cannot be pressed yet (the folder is not chosen). */
   readonly continueDisabled?: boolean;
   readonly onBack?: MouseEventHandler<HTMLButtonElement>;
@@ -37,6 +41,8 @@ export function SetupStep({
   children,
   backLabel,
   continueLabel,
+  skipLabel,
+  onSkip,
   continueDisabled = false,
   onBack,
   onContinue,
@@ -70,6 +76,15 @@ export function SetupStep({
                 {...(onBack === undefined ? {} : { onClick: onBack })}
               >
                 {backLabel}
+              </Button>
+            )}
+            {skipLabel === undefined ? null : (
+              <Button
+                kind="secondary"
+                data-testid="setup-skip"
+                {...(onSkip === undefined ? {} : { onClick: onSkip })}
+              >
+                {skipLabel}
               </Button>
             )}
             {continueLabel === undefined ? null : (
