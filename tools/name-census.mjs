@@ -55,19 +55,38 @@ const ALLOWED_AREAS = [
   [/^tools\/name-census\.mjs$/, "this census"],
 ];
 
-/** Spans allowed anywhere: they name the old Python app or the old bundle identifier. */
-const ALLOWED_SPANS = [
-  /it\.l1nx\.innytypes\.helper/g,
-  /src\/innytypes\b/g,
-  /"src", "innytypes"/g,
-  /innytypes\.(?:anytype_mcp|addons|helper|children|events|host|resources|config)\b[\w.]*/g,
-  /InnyTypesHelper|innytypes-helper/g,
-  /[Oo]ld InnyTypes helper/g,
-  /user_(?:config|data|runtime|log)_path\("innytypes"/g,
-];
-
-/** Lines allowed in one file, by what they contain, and why. */
+/**
+ * Spans allowed in one file, and why: each is taken out of a line before the line is judged, so
+ * anything else on it still counts.
+ */
 const ALLOWED_LINES = [
+  [
+    "app/src/domain/notices/notices.ts",
+    [/old InnyTypes helper/],
+    "names the old Python helper whose lock it reports",
+  ],
+  [
+    "app/src/services/main.ts",
+    [/old InnyTypes helper/],
+    "names the old Python helper whose lock it reports",
+  ],
+  ["app/test/unit/anytype-pins.test.ts", [/"src", "innytypes"/], "the old Python app's file"],
+  [
+    "docs/loop/SKILL.md",
+    [
+      /src\/innytypes\//,
+      /innytypes\.anytype_mcp/,
+      /InnyTypesHelper/,
+      /`innytypes`/,
+      /innytypes\.listener-failed\.v1/,
+      /innytypes addons install/,
+      /\.config\/innytypes\//,
+    ],
+    "describes the old Python app's architecture until plan 0026",
+  ],
+  ["docs/loop/inbox/WI-0026-01-cutover.yaml", [/src\/innytypes/], "deletes the old Python app"],
+  ["docs/loop/verify.sh", [/src\/innytypes/], "gates the old Python app"],
+  ["package.json", [/innytypes\.anytype_mcp/], "the old Python app launches the pinned server"],
   [
     "app/src/adapters/fs/owner-only-files.ts",
     [/"innytypes"/, /\/innytypes/, /\\innytypes/, /user_config_path/, /InnyTypes kept/],
@@ -134,10 +153,13 @@ for (const file of [...new Set(files)].sort()) {
   text.split("\n").forEach((line, index) => {
     if (line.trim() === SECTION_START) inSection = true;
     if (line.trim() === SECTION_END) inSection = false;
-    if (inSection || !INNY.test(line) || lines.some((pattern) => pattern.test(line))) {
+    if (inSection || !INNY.test(line)) {
       return;
     }
-    const rest = ALLOWED_SPANS.reduce((left, span) => left.replace(span, ""), line);
+    const rest = lines.reduce(
+      (left, span) => left.replace(new RegExp(span.source, `${span.flags.replace("g", "")}g`), ""),
+      line,
+    );
     if (INNY.test(rest)) {
       found.push(`${file}:${String(index + 1)}: ${line.trim().slice(0, 140)}`);
     }
