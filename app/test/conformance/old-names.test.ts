@@ -48,7 +48,7 @@ describe("a package still written for InnyTypes is refused, naming the new names
   it("a declaration that uses the old keyword is refused, naming reload", () => {
     const old = declaration();
     const types = old["types"] as Record<string, unknown>[];
-    const first = types[0] as { config?: { properties?: Record<string, unknown> } };
+    const first = types[0] as { config?: Record<string, unknown> };
     first.config = {
       type: "object",
       properties: { space: { type: "string", [OLD_KEYWORD]: { spaces: true } } },

@@ -119,7 +119,7 @@ if (userData !== undefined && userData !== "") {
 }
 // The e2e gate's hooks (never set in an ordinary run, and never on in an installed build).
 const e2eHooks = e2eHooksOn({ packaged: app.isPackaged, env: process.env });
-// The first start of Reload over Reload 0.3.0 (plan 0028 step 1), before the single-instance
+// The first start of Reload over a 0.3.0 installation (plan 0028 step 1), before the single-instance
 // lock; never a start on an empty directory while the old data is still where it was.
 const firstStart = firstStartIn(app, e2eHooks, process.env);
 if (firstStart.problem !== null) {

@@ -34,7 +34,7 @@ export interface MigrationWiring {
   readonly notices: NoticeBoard;
   readonly logger: Logger;
   /**
-   * What this start moved from Reload 0.3.0 (adapters/fs/legacy-move.ts; empty: nothing), and
+   * What this start moved from a 0.3.0 installation (adapters/fs/legacy-move.ts; empty: nothing), and
    * whether that included its userData, whose login item is then registered anew.
    */
   readonly firstStart: { readonly moved: readonly string[]; readonly movedUserData: boolean };
@@ -60,7 +60,7 @@ export function wireMigration(deps: MigrationWiring): void {
     }
   }
 
-  // Reload 0.3.0's switch moved with its settings, but its login item is registered under the
+  // 0.3.0's switch moved with its settings, but its login item is registered under the
   // old identifier: register Reload's, and only then remove the old one, by the same rule.
   const reRegister = deps.firstStart.movedUserData && deps.launchAtLogin.status().on;
   if ((report !== null && report.launchAtLoginWanted) || reRegister) {

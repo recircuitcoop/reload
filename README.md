@@ -9,12 +9,13 @@ stop the flow until you answer. The canvas and the engine underneath are an embe
 It also serves the official Anytype MCP tools to AI apps on the same machine, so Claude, Codex and
 other assistants can read and write your Anytype through one loopback address and one token. The
 vocabulary and the design are in
-[plan 0017](docs/plans/0017-reload-as-a-workflow-orchestrator.md) and
+[plan 0017](docs/plans/0017-innytypes-as-a-workflow-orchestrator.md) and
 [plan 0018](docs/plans/0018-the-new-application.md).
 
-The current version is **0.3.0**, a pre-release for macOS. It is not signed by Apple, so macOS
-warns on first open. To install it, follow [docs/INSTALL.md](docs/INSTALL.md); the downloads are
-on the [v0.3.0 release](https://github.com/recircuitcoop/reload/releases/tag/v0.3.0).
+The current version is **0.4.0**, a pre-release for macOS. It is the application that was called
+InnyTypes, renamed. It is not signed by Apple, so macOS warns on first open. To install it, follow
+[docs/INSTALL.md](docs/INSTALL.md); the downloads are on the
+[v0.4.0 release](https://github.com/recircuitcoop/reload/releases/tag/v0.4.0).
 
 ## Run from a checkout (developers)
 
@@ -93,7 +94,7 @@ policy, and settings schema. Event kinds are public APIs named `<addon-id>.<name
 a payload requires a new versioned kind. Settings are data, not widgets, so the host can validate,
 store, and draw the same declaration on every platform.
 
-See [plan 0001](docs/plans/0001-reload-host.md) for the host contract and
+See [plan 0001](docs/plans/0001-innytypes-host.md) for the host contract and
 [the project Loop pack](docs/loop/SKILL.md) for the invariants contributors must preserve.
 
 ## Development and verification

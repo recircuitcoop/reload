@@ -1,7 +1,7 @@
 {
   "name": "@reload/app",
   "productName": "Reload",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "description": "The new Reload application: the shell, the runtime and the services process (plan 0018).",
   "license": "MIT",

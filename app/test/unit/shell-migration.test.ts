@@ -233,7 +233,7 @@ describe("wireMigration", () => {
     expect(call("reload:legacy-packages")).toEqual([]);
   });
 
-  it("after Reload 0.3.0's userData moved, registers the new login item, removes the old one and records the move", () => {
+  it("after 0.3.0's userData moved, registers the new login item, removes the old one and records the move", () => {
     const settings = memorySettings();
     settings.writeLaunchAtLogin(true); // 0.3.0's switch, moved with its settings
     const { item: legacyLoginItem, removed } = fakeLegacyLoginItem(true);
