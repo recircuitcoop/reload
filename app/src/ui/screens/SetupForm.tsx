@@ -244,6 +244,8 @@ function AnytypeSelect({ api, field, draft, onChange }: Omit<FieldProps, "proble
         label={field.label}
         hideLabel
         testId={`setup-field-${field.key}-select`}
+        // Nothing chosen yet still says what the field wants (ux-writing's "Choose…").
+        placeholder={t("question.choose")}
         state={options?.ok === true ? "default" : "disabled"}
         options={choices}
         value={value === "" ? null : value}
