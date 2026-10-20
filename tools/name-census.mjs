@@ -24,6 +24,7 @@ const ALLOWED_AREAS = [
   [/^CHANGELOG\.md$/, "history: entries before 0.4.0, and 0.4.0's own note of what was renamed"],
   [/^docs\/log\.md$/, "history: the durable loop log"],
   [/^docs\/arch_pivot\.md$/, "history: the plan 0017 spike report"],
+  [/^docs\/ux\/heuristic-evaluation\.md$/, "history: a dated evaluation of InnyTypes"],
   // The old Python app, which plan 0026 deletes rather than renames.
   [/^src\/innytypes\//, "the old Python app"],
   [/^src\/helper\//, "the old Python app"],

@@ -1,4 +1,4 @@
-# Reload — Heuristic Evaluation (current build, 30 screenshots, 2026-09-27)
+# InnyTypes — Heuristic Evaluation (current build, 30 screenshots, 2026-09-27)
 
 Scope: Nielsen's 10 usability heuristics applied to the 30 screenshots in `ux-capture/shots/`,
 read against the intended product in plan 0017 (sources, nodes, views, flows; action views that
@@ -86,7 +86,7 @@ Direction: while the runtime is restarting to pick up the new type, say so ("Res
 this type…") instead of showing the stale empty-state copy next to the success line.
 
 **[Moderate] Cancelling a job doesn't change the job's own listed status.**
-Screens: 18, 19. After pressing Cancel, the job entry ("reload-popoutkit-slow (slow1), attempt 1,
+Screens: 18, 19. After pressing Cancel, the job entry ("inny-popoutkit-slow (slow1), attempt 1,
 since …") is left exactly as it was; a separate, unrelated-looking line, "Cancel sent.", is
 appended below it.
 Why it hurts: "sent" is not "cancelled" — the person can't tell from this screen whether the job
@@ -147,7 +147,7 @@ nav — even before real styling exists, position/borders/grouping can do this.
 
 **[Moderate] The same running thing is identified two different ways on two different pages.**
 Screens: 11 vs 18. The canvas calls it "Probe"; the Jobs page calls the same running work
-"reload-popoutkit-slow (slow1)". Nothing ties the two names together for the person reading Jobs.
+"inny-popoutkit-slow (slow1)". Nothing ties the two names together for the person reading Jobs.
 Why it hurts: a person trying to find "the folder-watch flow" in Jobs has no way to match it to
 what they see on the canvas.
 Direction: carry the node's canvas label through to every other screen that refers to it.
@@ -165,7 +165,7 @@ which sounds final.
 Direction: rename or split the control so "close, still pending" and "discard this request" (if
 that even exists) are never the same word.
 
-**[Moderate] "Quit Reload" sits in the main navigation row with no separation from ordinary pages.**
+**[Moderate] "Quit InnyTypes" sits in the main navigation row with no separation from ordinary pages.**
 Screen: 02 (present on every screen). It is one button among eight, styled identically to
 "Editor" or "Jobs."
 Why it hurts: quitting a desktop app that runs long jobs and holds pending actions is not a
@@ -176,7 +176,7 @@ corner control).
 ### 9 — Help users recognize, diagnose, and recover from errors
 
 **[Moderate] The crash banner appears above a UI that is otherwise frozen mid-action.**
-Screen: 30. "The Reload runtime stopped unexpectedly 5 times in 2 minutes… Press Restart to
+Screen: 30. "The InnyTypes runtime stopped unexpectedly 5 times in 2 minutes… Press Restart to
 try again" is correct and readable, but it sits above the exact same stacked "Node added to
 palette" tooltips and half-open node-edit form that were on screen before the crash.
 Why it hurts: the person gets a clear message about the runtime, but the rest of the window looks
@@ -207,7 +207,7 @@ Screens: 03–07. Expected at this build stage; noted so it isn't lost once the 
 ## Information architecture, as it is today
 
 Top-level nav (present, identically styled, on every screen): **Editor · Inbox · Snapshots ·
-Events · Jobs · Packages · Settings · Quit Reload**.
+Events · Jobs · Packages · Settings · Quit InnyTypes**.
 
 | Item | Holds | Altitude |
 |---|---|---|
@@ -218,7 +218,7 @@ Events · Jobs · Packages · Settings · Quit Reload**.
 | Jobs | Currently-running node processes, with cancel | System/runtime concept |
 | Packages | Installed node packages, catalogue, install-from-file | System/runtime concept |
 | Settings | Secrets, MCP endpoint, Anytype pairing, launch at login, telemetry | Configuration |
-| Quit Reload | Exits the app | Action, mis-scaled as nav |
+| Quit InnyTypes | Exits the app | Action, mis-scaled as nav |
 
 **It is organised by system parts, not by user tasks.** Four of the seven real destinations
 (Editor, Events, Jobs, Packages) are runtime/architecture concepts straight out of the plan's own
