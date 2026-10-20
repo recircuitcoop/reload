@@ -195,7 +195,7 @@ export function parseDeclaration(
       ],
     };
   }
-  // A package still written for InnyTypes is refused naming the new keyword (plan 0028 D3).
+  // A package still written for the old contract is refused naming the new keyword (plan 0028 D3).
   const oldKeyword = oldKeywordAt(value);
   if (oldKeyword !== null) {
     return { ok: false, problems: [oldKeywordProblem(oldKeyword, "reload")] };

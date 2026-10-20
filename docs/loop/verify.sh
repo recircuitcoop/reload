@@ -96,6 +96,9 @@ if [ "$mode" = "quick" ]; then
   echo "== quick: ruff (old Python app) =="
   $UV run --no-sync ruff check src tests
 
+  echo "== quick: name census (tools/name-census.mjs, plan 0028) =="
+  node tools/name-census.mjs
+
   if [ "$py" = 1 ]; then
     echo "== quick: ruff format --check =="
     $UV run --no-sync ruff format --check src tests
@@ -152,6 +155,11 @@ if [ "$mode" = "quick" ]; then
   echo "gate: GREEN"
   exit 0
 fi
+
+# The name census (plan 0028): no old name outside its allow-list, in any path or file. First,
+# because it takes a second and needs nothing installed.
+echo "== name census (tools/name-census.mjs, plan 0028) =="
+node tools/name-census.mjs
 
 echo "== uv sync --frozen =="
 $UV sync --frozen

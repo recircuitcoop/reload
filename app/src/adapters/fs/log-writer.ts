@@ -1,4 +1,4 @@
-// The one log file (plan 0018 §3, the row for logs.py): the old app's path, its 2 MiB × 3
+// The one log file (plan 0018 §3, the row for logs.py): the old app's layout, its 2 MiB × 3
 // rotation, and appends that are on disk when they return.
 //
 // Only the shell writes it, so the old handler's defences against a sibling process rolling
@@ -30,8 +30,8 @@ export interface LogLocation {
 }
 
 /**
- * platformdirs' `user_log_path("innytypes", appauthor=False) / "reload.log"`, which is
- * where the old app writes (logs.py:204-219): `~/Library/Logs/reload` on macOS,
+ * Laid out as the old app's platformdirs `user_log_path` (logs.py:204-219), under Reload's own
+ * name since 0.4.0: `~/Library/Logs/reload` on macOS,
  * `$XDG_STATE_HOME/reload/log` on Linux, `%LOCALAPPDATA%\reload\Logs` on Windows.
  */
 export function defaultLogPath(location: LogLocation): string {
@@ -48,7 +48,7 @@ export function defaultLogPath(location: LogLocation): string {
   return path.join(base, APPLICATION_NAME, "log", LOG_FILENAME);
 }
 
-/** The file for this run: RELOAD_LOG_FILE when it names one, the old path otherwise. */
+/** The file for this run: RELOAD_LOG_FILE when it names one, the default path otherwise. */
 export function logPath(location: LogLocation): string {
   const named = location.env[LOG_PATH_VARIABLE];
   return named !== undefined && named !== "" ? named : defaultLogPath(location);
