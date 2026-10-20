@@ -34,9 +34,15 @@ There is no script that starts the development app on its own. The end-to-end ha
 npm run --workspace app test:e2e
 ```
 
+<!-- old-python-app -->
+
+The sections below, up to the licence, describe the old Python application (`src/innytypes`),
+which keeps the name InnyTypes until plan 0026 removes it. Reload's own connection steps are in
+[docs/INSTALL.md](docs/INSTALL.md), section 7.
+
 ## Connect an AI client through MCP
 
-While Reload is running, it exposes its supervised Anytype tools to independent AI clients at:
+While InnyTypes is running, it exposes its supervised Anytype tools to independent AI clients at:
 
 ```text
 http://127.0.0.1:31010/mcp
@@ -45,47 +51,47 @@ http://127.0.0.1:31010/mcp
 The application's **Anytype** panel shows the address this installation is actually configured
 with on its **MCP endpoint** row, with `available` or `degraded` beside it; that row is the one to
 copy from. Clients connect with MCP Streamable HTTP and a bearer token stored at
-`~/.config/reload/mcp_proxy_token`; this proxy token is separate from the Anytype API key.
-Reload and the AI client keep independent lifecycles—neither launches or stops the other.
+`~/.config/innytypes/mcp_proxy_token`; this proxy token is separate from the Anytype API key.
+InnyTypes and the AI client keep independent lifecycles—neither launches or stops the other.
 
-The address is a stored setting, and a stored value is what Reload serves. Put another port
-in the `[mcp]` section of `~/.config/reload/config.toml`, then use it in every client URL;
-`host` selects another numeric loopback address, and Reload refuses LAN, public, wildcard, and
-hostname binds. `RELOAD_MCP_HOST` and `RELOAD_MCP_PORT` are the default for a machine that
+The address is a stored setting, and a stored value is what InnyTypes serves. Put another port
+in the `[mcp]` section of `~/.config/innytypes/config.toml`, then use it in every client URL;
+`host` selects another numeric loopback address, and InnyTypes refuses LAN, public, wildcard, and
+hostname binds. `INNYTYPES_MCP_HOST` and `INNYTYPES_MCP_PORT` are the default for a machine that
 has never been configured: they select the address only while nothing is stored, and are ignored
 once it is. Port `31009` is Anytype's REST API and is not an MCP endpoint.
 
-See [Connect an independent MCP client to Reload](docs/anytype-mcp-connection.md) for Codex
+See [Connect an independent MCP client to InnyTypes](docs/anytype-mcp-connection.md) for Codex
 configuration, generic MCP client setup, architecture patterns, security, and troubleshooting.
 
 ## Command-line overview
 
 ```console
-reload addons install <name>==<version>  # or a local source/wheel path
-reload addons list
-reload addons outdated
-reload addons update <id>               # or --all
-reload addons enable <id>
-reload addons disable <id>
-reload addons pin <id>
-reload addons unpin <id>
-reload addons remove <id>
+innytypes addons install <name>==<version>  # or a local source/wheel path
+innytypes addons list
+innytypes addons outdated
+innytypes addons update <id>               # or --all
+innytypes addons enable <id>
+innytypes addons disable <id>
+innytypes addons pin <id>
+innytypes addons unpin <id>
+innytypes addons remove <id>
 
-reload helper status
-reload helper release <id>
-reload telemetry status
-reload telemetry show
-reload telemetry on                     # or off
-reload quit                             # add --force for a hung application
+innytypes helper status
+innytypes helper release <id>
+innytypes telemetry status
+innytypes telemetry show
+innytypes telemetry on                     # or off
+innytypes quit                             # add --force for a hung application
 ```
 
-Installation is always explicit. In particular, `reload up` never mutates an addon
-environment. Use `reload <command> --help` for the complete options and platform-specific
+Installation is always explicit. In particular, `innytypes up` never mutates an addon
+environment. Use `innytypes <command> --help` for the complete options and platform-specific
 default paths.
 
 ## Addon architecture
 
-The dependency direction is intentional: **addons depend on Reload; Reload never depends
+The dependency direction is intentional: **addons depend on InnyTypes; InnyTypes never depends
 on an addon**. The host does not import addon code. It reads the manifest recorded at install
 time, resolves addon dependencies, and starts each addon in its own process and environment.
 
@@ -136,9 +142,11 @@ Current release constraints:
 - The Windows implementation is covered by tests, but a Windows package still needs a native
   build and package-level verification.
 - Addon installation from a bundled application still needs the bundle to carry a wheel of the
-  matching Reload version; source-checkout installation already works.
+  matching InnyTypes version; source-checkout installation already works.
 - Release `0.1.0` is documented in [CHANGELOG.md](CHANGELOG.md), but this repository has not yet
   established automated cross-platform CI or a tagged binary-release process.
+
+<!-- /old-python-app -->
 
 ## License
 

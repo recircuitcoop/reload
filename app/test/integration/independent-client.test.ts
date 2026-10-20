@@ -323,7 +323,10 @@ describe("the documentation", () => {
   it("calls the stored setting the way to choose the endpoint, in both documents", () => {
     for (const document of DOCUMENTS) {
       const prose = flattened(document);
-      expect(prose, document).toMatch(/stored setting.{0,80}stored value is what Reload serves/i);
+      // These documents still describe the old Python app until plan 0026, under its name.
+      expect(prose, document).toMatch(
+        /stored setting.{0,80}stored value is what (Reload|InnyTypes) serves/i,
+      );
       expect(prose, document).toContain("[mcp]");
     }
   });
@@ -333,7 +336,9 @@ describe("the documentation", () => {
       /never been configured|nothing is stored|is ignored|are ignored|only while nothing/i;
     for (const document of DOCUMENTS) {
       const prose = flattened(document);
-      const mentions = [...prose.matchAll(/RELOAD_MCP_(HOST|PORT)/g)].map((m) => m.index);
+      const mentions = [...prose.matchAll(/(RELOAD|INNYTYPES)_MCP_(HOST|PORT)/g)].map(
+        (m) => m.index,
+      );
       expect(mentions.length, document).toBeGreaterThan(0);
       for (const position of mentions) {
         const window = prose.slice(Math.max(0, position - 400), position + 400);

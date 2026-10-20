@@ -1,8 +1,8 @@
-# Connect an independent MCP client to Reload
+# Connect an independent MCP client to InnyTypes
 
-Reload makes the official Anytype MCP tools available to any local client that supports
+InnyTypes makes the official Anytype MCP tools available to any local client that supports
 [MCP Streamable HTTP](https://modelcontextprotocol.io/specification/latest/basic/transports#streamable-http).
-The client and Reload remain independent processes: either may start, stop, or restart without
+The client and InnyTypes remain independent processes: either may start, stop, or restart without
 managing the other's lifecycle.
 
 ## Find the endpoint and token
@@ -13,7 +13,7 @@ The default endpoint is:
 http://127.0.0.1:31010/mcp
 ```
 
-The Reload application shows the address **this installation is configured with** in its
+The InnyTypes application shows the address **this installation is configured with** in its
 **Anytype** panel, on the **MCP endpoint** row, together with the word `available` or `degraded`
 and — when it is degraded — the reason. Copy the URL from that row rather than from this page:
 if the address has been configured at all, the row shows the configured one and this page's
@@ -26,15 +26,15 @@ behind `available` is an unauthenticated request that carries no token.
 Every request requires the proxy bearer token stored at:
 
 ```text
-~/.config/reload/mcp_proxy_token
+~/.config/innytypes/mcp_proxy_token
 ```
 
-Reload creates this file on first use with owner-only permissions and reuses the token across
+InnyTypes creates this file on first use with owner-only permissions and reuses the token across
 restarts. This is not the Anytype API key: the Anytype key stays on the private side of the proxy
 and is never sent by an MCP client.
 
 Do not use `http://127.0.0.1:31009`. Port `31009` is Anytype's REST API, not an MCP transport, and
-using it would bypass the Reload-owned MCP child.
+using it would bypass the InnyTypes-owned MCP child.
 
 ## What is public and what is not
 
@@ -44,20 +44,20 @@ The **public contract** is the loopback Streamable HTTP endpoint above: a URL an
 nothing else. It is the only supported way for any client to reach the Anytype tools, and it is
 stable.
 
-The **child's stdio pipes are private internal transport**. Reload starts exactly one
+The **child's stdio pipes are private internal transport**. InnyTypes starts exactly one
 `@anyproto/anytype-mcp` process and speaks MCP to it over its own stdin and stdout; those pipes
-belong to the Reload host and no other process can attach to them. They are an implementation
+belong to the InnyTypes host and no other process can attach to them. They are an implementation
 detail, they are not addressable, and they may change without notice. Do not configure any client
 with a `command` that launches that child: a second child would compete with the first for the
-same Anytype state, and it would not be the one Reload supervises.
+same Anytype state, and it would not be the one InnyTypes supervises.
 
 ## Configure the address
 
-The address is a **stored setting**, and a stored value is what Reload serves.
+The address is a **stored setting**, and a stored value is what InnyTypes serves.
 
 ### From the application (no terminal, no restart)
 
-Open the Reload window and go to the **Anytype** panel. Under the **MCP endpoint** row are two
+Open the InnyTypes window and go to the **Anytype** panel. Under the **MCP endpoint** row are two
 editable fields, **MCP address** and **MCP port**, and one button:
 
 1. Type the address and port you want.
@@ -69,7 +69,7 @@ the endpoint you already had carries on. A change it can serve takes effect imme
 is restarted, the Anytype child keeps running, and its validated session is untouched.
 
 When the address really moved, the panel says so: **clients configured with the old address will
-not reach Reload until they are pointed at this one.** Update every client URL before using
+not reach InnyTypes until they are pointed at this one.** Update every client URL before using
 them again. The panel also names the address now being served, which is the host's own answer and
 the one to copy into a client.
 
@@ -78,7 +78,7 @@ too, so a machine that is configured twice says which of the two is in force.
 
 ### From the settings file
 
-The same setting lives in the `[mcp]` section of `~/.config/reload/config.toml`:
+The same setting lives in the `[mcp]` section of `~/.config/innytypes/config.toml`:
 
 ```toml
 [mcp]
@@ -94,9 +94,9 @@ port = 32010
 
 Either key may be left out. They stand alone, so storing a port leaves the address unconfigured.
 
-A change made in this file by hand takes effect at the next start of Reload; a change made in
+A change made in this file by hand takes effect at the next start of InnyTypes; a change made in
 the panel takes effect at once. Either way, change every client URL to match. The port is
-deliberately stable: if another process already owns it, Reload reports a degraded MCP service
+deliberately stable: if another process already owns it, InnyTypes reports a degraded MCP service
 instead of choosing a random fallback port.
 
 For IPv6 loopback, enclose the host in brackets in client URLs:
@@ -107,7 +107,7 @@ http://[::1]:31010/mcp
 
 ### The environment variables, and when they still apply
 
-`RELOAD_MCP_HOST` and `RELOAD_MCP_PORT` are the **default for a machine that has never been
+`INNYTYPES_MCP_HOST` and `INNYTYPES_MCP_PORT` are the **default for a machine that has never been
 configured**, and nothing more. They select the address only while nothing is stored for that key;
 once `[mcp]` holds one, the stored value is served and the variable is ignored. Deleting the
 stored key hands the choice back to the variable.
@@ -116,7 +116,7 @@ They remain useful when running the host from a checkout, where there is a comma
 them on:
 
 ```console
-RELOAD_MCP_PORT=32010 uv run --no-sync reload up
+INNYTYPES_MCP_PORT=32010 uv run --no-sync innytypes up
 ```
 
 The application this project ships is started by clicking an icon and cannot be given a variable
@@ -127,24 +127,24 @@ at all, which is why the stored setting — not the variable — is the way to c
 Load the proxy token into the environment that starts Codex:
 
 ```bash
-export RELOAD_MCP_PROXY_TOKEN="$(< ~/.config/reload/mcp_proxy_token)"
+export INNYTYPES_MCP_PROXY_TOKEN="$(< ~/.config/innytypes/mcp_proxy_token)"
 ```
 
 Then add this URL-based server to `~/.codex/config.toml`:
 
 ```toml
-[mcp_servers.reload_anytype]
+[mcp_servers.innytypes_anytype]
 url = "http://127.0.0.1:31010/mcp"
-bearer_token_env_var = "RELOAD_MCP_PROXY_TOKEN"
+bearer_token_env_var = "INNYTYPES_MCP_PROXY_TOKEN"
 required = false
 ```
 
 Use your configured host or port in `url` if you changed either one. Do not add `command` or
-`args`: those fields configure a client-managed stdio child, while Reload exposes an
+`args`: those fields configure a client-managed stdio child, while InnyTypes exposes an
 independently running TCP service.
 
-With `required = false`, Codex may start while Reload is stopped. The server will be unavailable
-until Reload starts; reconnect or start a later Codex session to initialize the connection.
+With `required = false`, Codex may start while InnyTypes is stopped. The server will be unavailable
+until InnyTypes starts; reconnect or start a later Codex session to initialize the connection.
 
 ## Configure another MCP client
 
@@ -155,15 +155,15 @@ Use an MCP SDK or a client with Streamable HTTP support and provide:
 | Transport | MCP Streamable HTTP |
 | URL | `http://127.0.0.1:31010/mcp` or the configured loopback URL |
 | Authentication | `Authorization: Bearer <proxy-token>` |
-| Secret source | `~/.config/reload/mcp_proxy_token` |
+| Secret source | `~/.config/innytypes/mcp_proxy_token` |
 
-The client must perform the normal MCP initialization before listing or calling tools. Reload
+The client must perform the normal MCP initialization before listing or calling tools. InnyTypes
 supports the MCP `initialize`, `notifications/initialized`, `ping`, `tools/list`, and `tools/call`
 flow on this endpoint. Treat the endpoint as MCP, rather than constructing application-specific
 JSON requests around it.
 
 Keep the token in the backend or native process that owns the MCP client. A browser frontend
-should call your backend, not read the token or call Reload directly. Reload rejects foreign
+should call your backend, not read the token or call InnyTypes directly. InnyTypes rejects foreign
 browser origins as part of its loopback boundary.
 
 ## Fit it into an AI architecture
@@ -176,9 +176,9 @@ The same endpoint works in several local arrangements:
 - A multi-agent system can centralize the connection in its coordinator instead of copying the
   bearer token into every worker.
 
-In all cases, the architecture owns its clients, retries, and reconnect policy. Reload owns the
+In all cases, the architecture owns its clients, retries, and reconnect policy. InnyTypes owns the
 single `@anyproto/anytype-mcp` child and its Anytype connection. Do not configure an agent to
-launch that stdio child itself, and do not make Reload launch the agent. This separation lets
+launch that stdio child itself, and do not make InnyTypes launch the agent. This separation lets
 either side restart independently and prevents multiple children from competing for the same
 Anytype state.
 
@@ -191,8 +191,8 @@ Anytype state.
 - The proxy token and Anytype API key serve different trust boundaries. Never substitute one for
   the other.
 
-To rotate the proxy token, stop Reload, deliberately remove the
-`~/.config/reload/mcp_proxy_token` file, and start Reload to create a new one. Then update or
+To rotate the proxy token, stop InnyTypes, deliberately remove the
+`~/.config/innytypes/mcp_proxy_token` file, and start InnyTypes to create a new one. Then update or
 restart every client that reads the token. There is currently no separate token-rotation command.
 
 ## Verify it by hand (manual smoke)
@@ -211,7 +211,7 @@ accepts it. Run this once per release on a machine that has Anytype, Node and Co
 > client, and this procedure is the only thing that settles it. If step 5 fails, capture the exact
 > Codex error before changing anything — it tells you which of the three assumptions is wrong.
 
-### 1. Start Reload on its own
+### 1. Start InnyTypes on its own
 
 In one terminal, with nothing else running:
 
@@ -221,7 +221,7 @@ uv run --no-sync innytypes-helper
 
 Leave it running. Do not start Codex from it, and do not pass it any client configuration.
 
-### 2. Confirm exactly one Anytype MCP child exists, owned by Reload
+### 2. Confirm exactly one Anytype MCP child exists, owned by InnyTypes
 
 In a second terminal:
 
@@ -230,15 +230,15 @@ pgrep -af "anytype-mcp"
 ```
 
 Expect **exactly one** line, naming `@anyproto/anytype-mcp` at the pinned version. Then confirm
-Reload owns it — take the PID from the line above as `<CHILD_PID>`:
+InnyTypes owns it — take the PID from the line above as `<CHILD_PID>`:
 
 ```console
 ps -o pid,ppid,command -p <CHILD_PID>
 ps -o pid,ppid,command -p $(ps -o ppid= -p <CHILD_PID> | tr -d ' ')
 ```
 
-The child's parent must be the Reload **host** process (an `reload` / `--reload-host`
-command line), and that host's parent must be the Reload **helper**. On Linux the whole tree is
+The child's parent must be the InnyTypes **host** process (an `innytypes` / `--innytypes-host`
+command line), and that host's parent must be the InnyTypes **helper**. On Linux the whole tree is
 easier to read at once:
 
 ```console
@@ -247,7 +247,7 @@ pstree -ap $(pgrep -f innytypes-helper | head -1)
 
 ### 3. Confirm the application agrees
 
-Open the Reload window, go to the **Anytype** panel, and read the **MCP endpoint** row. It must
+Open the InnyTypes window, go to the **Anytype** panel, and read the **MCP endpoint** row. It must
 show an address and the word `available`. Note the address — it is the one to configure, whatever
 this document's default says. Confirm neither credential appears anywhere in the window.
 
@@ -256,27 +256,27 @@ this document's default says. Confirm neither credential appears anywhere in the
 Still in the second terminal, with `<URL>` set to the address the window showed:
 
 ```console
-export RELOAD_MCP_PROXY_TOKEN="$(< ~/.config/reload/mcp_proxy_token)"
+export INNYTYPES_MCP_PROXY_TOKEN="$(< ~/.config/innytypes/mcp_proxy_token)"
 curl -sS -X POST "<URL>" \
-  -H "Authorization: Bearer $RELOAD_MCP_PROXY_TOKEN" \
+  -H "Authorization: Bearer $INNYTYPES_MCP_PROXY_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
 
-Expect a JSON-RPC result listing the Anytype tools. If this fails, the problem is Reload, not
+Expect a JSON-RPC result listing the Anytype tools. If this fails, the problem is InnyTypes, not
 Codex, and there is no point continuing.
 
 ### 5. Start Codex separately and call a tool through the endpoint
 
-In a **third** terminal — a separate process, started by you, with no relationship to Reload:
+In a **third** terminal — a separate process, started by you, with no relationship to InnyTypes:
 
 ```console
-export RELOAD_MCP_PROXY_TOKEN="$(< ~/.config/reload/mcp_proxy_token)"
+export INNYTYPES_MCP_PROXY_TOKEN="$(< ~/.config/innytypes/mcp_proxy_token)"
 codex mcp list
 codex
 ```
 
-`codex mcp list` must show `reload_anytype` as configured and reachable. Then, inside the Codex
+`codex mcp list` must show `innytypes_anytype` as configured and reachable. Then, inside the Codex
 session, ask it to list the Anytype tools and to call one read-only tool (for example, search for
 an object). Both must succeed.
 
@@ -289,25 +289,25 @@ pgrep -af "anytype-mcp"
 ```
 
 There must still be **exactly one** `@anyproto/anytype-mcp` process, still parented to the
-Reload host. A second one means a client launched its own child, which this plan forbids.
+InnyTypes host. A second one means a client launched its own child, which this plan forbids.
 Then confirm the separation in both directions:
 
 ```console
-pgrep -af codex          # no codex process may be a child of reload
-pgrep -af reload      # no reload process may be a child of codex
+pgrep -af codex          # no codex process may be a child of innytypes
+pgrep -af innytypes      # no innytypes process may be a child of codex
 ```
 
 ### 7. Confirm either side can stop without the other
 
-Quit Codex. The Reload window must still show the endpoint as `available`, and the child must
-still be the same single process. Then quit Reload (`reload quit`), start Codex again, and
-confirm it reports the server as unavailable rather than hanging or crashing. Start Reload
+Quit Codex. The InnyTypes window must still show the endpoint as `available`, and the child must
+still be the same single process. Then quit InnyTypes (`innytypes quit`), start Codex again, and
+confirm it reports the server as unavailable rather than hanging or crashing. Start InnyTypes
 again and open a **new** Codex session: it must initialize against the endpoint with no
 intervention.
 
 ### What to record
 
-Write down, for the release: the Reload version, the Codex version, the address used, whether
+Write down, for the release: the InnyTypes version, the Codex version, the address used, whether
 step 5 succeeded, and — if it did not — the verbatim Codex error. The three assumptions in the box
 above are what that error is read against.
 
@@ -321,7 +321,7 @@ against the endpoint.
 **Nobody has run this procedure yet.** It was written with slice 04 and is unclaimed until a
 release records the result under *What to record* below.
 
-### 1. Take port 31010 before Reload can have it
+### 1. Take port 31010 before InnyTypes can have it
 
 In one terminal, occupy the default port and leave it occupied:
 
@@ -335,10 +335,10 @@ Confirm it is held:
 lsof -nP -iTCP:31010 -sTCP:LISTEN
 ```
 
-### 2. Start Reload and see it degrade
+### 2. Start InnyTypes and see it degrade
 
 In a second terminal, start from the unconfigured state — no `[mcp]` section in
-`~/.config/reload/config.toml`, and neither `RELOAD_MCP_HOST` nor `RELOAD_MCP_PORT`
+`~/.config/innytypes/config.toml`, and neither `INNYTYPES_MCP_HOST` nor `INNYTYPES_MCP_PORT`
 set. The variables are only the default while nothing is stored, and this step wants the
 documented default of `127.0.0.1:31010`:
 
@@ -363,7 +363,7 @@ LAN address, and with port `70000`; each must be refused where it is wrong and c
 Then confirm nothing was written:
 
 ```console
-cat ~/.config/reload/config.toml   # no [mcp] section
+cat ~/.config/innytypes/config.toml   # no [mcp] section
 ```
 
 ### 4. Move the endpoint, with no terminal and no restart
@@ -378,9 +378,9 @@ move the endpoint**. Expect, without the application restarting:
 Confirm the move really happened, and that the old port is still the other program's:
 
 ```console
-lsof -nP -iTCP:32010 -sTCP:LISTEN     # Reload's host
+lsof -nP -iTCP:32010 -sTCP:LISTEN     # InnyTypes' host
 lsof -nP -iTCP:31010 -sTCP:LISTEN     # still the terminal from step 1
-grep -A2 '^\[mcp\]' ~/.config/reload/config.toml
+grep -A2 '^\[mcp\]' ~/.config/innytypes/config.toml
 ```
 
 Confirm the Anytype child was not restarted — take its PID before step 4 and compare:
@@ -389,14 +389,14 @@ Confirm the Anytype child was not restarted — take its PID before step 4 and c
 pgrep -af "anytype-mcp"
 ```
 
-It must be **the same single PID**, still parented to the Reload host.
+It must be **the same single PID**, still parented to the InnyTypes host.
 
 ### 5. Reach the same child through the new URL
 
 ```console
-export RELOAD_MCP_PROXY_TOKEN="$(< ~/.config/reload/mcp_proxy_token)"
+export INNYTYPES_MCP_PROXY_TOKEN="$(< ~/.config/innytypes/mcp_proxy_token)"
 curl -sS -X POST "http://127.0.0.1:32010/mcp" \
-  -H "Authorization: Bearer $RELOAD_MCP_PROXY_TOKEN" \
+  -H "Authorization: Bearer $INNYTYPES_MCP_PROXY_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
@@ -409,7 +409,7 @@ exactly one child and it is still the same PID: a rebind restarts nothing.
 
 ```console
 curl -sS -X POST "http://127.0.0.1:31010/mcp" \
-  -H "Authorization: Bearer $RELOAD_MCP_PROXY_TOKEN" \
+  -H "Authorization: Bearer $INNYTYPES_MCP_PROXY_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
@@ -420,11 +420,11 @@ else is there.
 
 ### 7. Confirm the stored value beats the environment, and says so
 
-A variable selects the address only while nothing is stored for that key. Quit Reload
-(`reload quit`), then start it with the old variable set:
+A variable selects the address only while nothing is stored for that key. Quit InnyTypes
+(`innytypes quit`), then start it with the old variable set:
 
 ```console
-RELOAD_MCP_PORT=31010 uv run --no-sync innytypes-helper
+INNYTYPES_MCP_PORT=31010 uv run --no-sync innytypes-helper
 ```
 
 The panel must still show `32010` — the stored value wins — and must say that the variable
@@ -432,7 +432,7 @@ is set and is ignored.
 
 ### What to record
 
-For the release: the Reload version, whether step 4 moved the endpoint without a restart,
+For the release: the InnyTypes version, whether step 4 moved the endpoint without a restart,
 whether the Anytype child's PID survived it, whether every refusal in step 3 left `config.toml`
 untouched, and the verbatim text of anything that did not match.
 
@@ -447,7 +447,7 @@ Every acceptance bullet of plan 0007, across all four slices, and the named test
 
 | Acceptance bullet | Proof |
 | --- | --- |
-| Starting Reload with a fake reachable Anytype and a fake MCP child spawns exactly one pinned child, completes the stdio handshake, validates the surface, and opens the configured loopback endpoint | `tests/test_mcp_host_integration.py::test_a_key_and_a_reachable_api_spawn_exactly_one_mcp_child`, `tests/test_anytype_mcp_session.py::test_starting_the_supervisor_spawns_one_child_and_hands_it_the_handshake_in_order`, `tests/test_mcp_host_integration.py::test_no_listener_exists_before_child_validation_can_succeed` |
+| Starting InnyTypes with a fake reachable Anytype and a fake MCP child spawns exactly one pinned child, completes the stdio handshake, validates the surface, and opens the configured loopback endpoint | `tests/test_mcp_host_integration.py::test_a_key_and_a_reachable_api_spawn_exactly_one_mcp_child`, `tests/test_anytype_mcp_session.py::test_starting_the_supervisor_spawns_one_child_and_hands_it_the_handshake_in_order`, `tests/test_mcp_host_integration.py::test_no_listener_exists_before_child_validation_can_succeed` |
 | An independently created Streamable HTTP MCP client initializes, lists tools and calls one through the already-running child; neither side launches or supervises the other | `tests/test_anytype_mcp_gateway.py::test_independent_http_client_lists_and_calls_tools`, `tests/test_independent_client_connection.py::test_a_host_that_starts_later_serves_a_fresh_client_with_no_handoff`, `tests/test_independent_client_connection.py::test_no_source_file_launches_configures_or_supervises_a_client` |
 | The service binds only the configured loopback address and port, refuses wildcard/non-loopback binds, and degrades cleanly on a port collision | `tests/test_anytype_mcp_gateway.py::test_gateway_refuses_every_non_numeric_non_loopback_bind`, `::test_each_accepted_loopback_address_actually_serves_the_endpoint`, `::test_port_collision_is_named_and_never_moves_to_another_port`, `tests/test_mcp_host_integration.py::test_a_configured_port_collision_degrades_only_the_mcp_service` |
 | Missing or incorrect bearer authentication is refused before request parsing; the Anytype API key is absent from HTTP requests, responses, URLs, errors and logs | `tests/test_anytype_mcp_gateway.py::test_authentication_is_checked_before_the_body`, `::test_rotating_the_proxy_token_refuses_the_value_it_replaced`, `::test_the_anytype_api_key_reaches_no_request_response_url_error_or_log` |
@@ -455,7 +455,7 @@ Every acceptance bullet of plan 0007, across all four slices, and the named test
 | Missing key, unreachable Anytype, dead child, malformed or oversized HTTP/MCP request, timeout and a full concurrency bound each have a refusal or degradation test | `tests/test_mcp_host_integration.py::test_a_missing_key_is_reported_and_the_host_still_runs`, `::test_an_unreachable_anytype_is_reported_and_the_host_still_runs`, `tests/test_anytype_mcp_gateway.py::test_unavailable_child_is_an_mcp_error_not_a_second_child`, `::test_a_body_that_is_not_an_mcp_request_is_refused_as_json_rpc`, `::test_a_body_at_the_bound_is_served_and_one_byte_over_it_is_refused`, `::test_a_body_that_never_arrives_times_out_and_gives_its_slot_back`, `::test_the_concurrency_bound_admits_its_full_count_and_refuses_the_next`, `tests/test_anytype_mcp_session.py::test_a_dead_child_fails_every_pending_call` |
 | Host shutdown closes the port and the child without an orphan; a helper-requested restart exposes tools again only after a fresh handshake and validation | `tests/test_mcp_host_integration.py::test_shutdown_closes_the_listener_before_it_stops_the_child`, `::test_a_helper_requested_restart_restores_tools_only_after_a_fresh_validation`, `tests/test_anytype_mcp_gateway.py::test_shutdown_closes_the_listener_and_leaves_no_thread_or_bound_port_behind` |
 | Documentation provides a Codex URL configuration using Streamable HTTP and bearer-token authentication, with no stdio command and no direct port 31009 access | `tests/test_independent_client_connection.py::test_the_documented_client_configuration_launches_nothing`, `::test_the_documentation_never_configures_a_client_for_the_anytype_rest_port` |
-| A manual smoke test starts Reload and Codex separately, confirms Codex reaches the endpoint, and confirms the process tree contains one Anytype MCP child | **manual smoke** — *Verify it by hand*, steps 1, 2, 5 and 6. Nothing automated covers it: it needs a real Codex, a real Node and a running Anytype, none of which the gate may require. |
+| A manual smoke test starts InnyTypes and Codex separately, confirms Codex reaches the endpoint, and confirms the process tree contains one Anytype MCP child | **manual smoke** — *Verify it by hand*, steps 1, 2, 5 and 6. Nothing automated covers it: it needs a real Codex, a real Node and a running Anytype, none of which the gate may require. |
 | `docs/loop/verify.sh` exits zero and prints `gate: GREEN` without Node, Anytype, a real credential or a real user port | the gate itself; every listener in the suite binds a kernel-assigned port (`tests/test_anytype_mcp_gateway.py::free_port`) and every credential in it is a literal marked `fake` (`tests/test_no_secrets.py`) |
 
 ### WI-0007-04, *Acceptance*
@@ -465,9 +465,9 @@ Every acceptance bullet of plan 0007, across all four slices, and the named test
 | The Anytype section shows the configured MCP URL and available/degraded state, including port-collision and unavailable-child reasons, without either credential | `tests/test_independent_client_connection.py::test_the_window_shows_the_configured_address_and_not_the_default_port`, `::test_a_served_address_reads_available`, `::test_an_address_nothing_is_serving_reads_degraded_and_names_it`, `::test_an_address_another_program_holds_reads_as_a_collision`, `::test_a_stopped_child_is_the_reason_the_endpoint_is_degraded`, `::test_a_running_child_behind_a_taken_address_is_still_degraded`, `::test_a_configuration_the_host_would_refuse_shows_no_address_and_the_refusal`, `::test_the_window_never_shows_either_credential`, `tests/test_toolkit_desktop.py::test_the_endpoint_row_names_the_configured_address_and_calls_it_available`, `::test_the_endpoint_row_says_degraded_and_prints_the_reason`, `::test_no_endpoint_row_is_drawn_when_there_is_no_configured_address` |
 | Documentation configures Codex with an `mcp_servers` entry containing the loopback URL and `bearer_token_env_var`, matching official Codex Streamable HTTP configuration; no `command` or `args` | `tests/test_independent_client_connection.py::test_the_documented_client_configuration_launches_nothing` |
 | Starting either program is not required to start the other; source tests assert neither package contains process launch or supervision logic for the other | `tests/test_independent_client_connection.py::test_no_source_file_launches_configures_or_supervises_a_client`, `::test_no_source_file_reaches_for_a_client_configuration_file`, `::test_the_documented_client_configuration_launches_nothing`; **manual smoke** for the running pair, steps 1, 5 and 7 |
-| When Reload is absent the client sees an ordinary unavailable HTTP MCP server; when it starts later, a new connection initializes with no process handoff, inherited descriptor or connector command | `tests/test_independent_client_connection.py::test_an_absent_host_is_an_ordinary_refused_connection`, `::test_a_host_that_starts_later_serves_a_fresh_client_with_no_handoff`, `::test_the_service_answers_a_second_client_on_a_connection_of_its_own`; **manual smoke** for Codex itself, step 7 |
+| When InnyTypes is absent the client sees an ordinary unavailable HTTP MCP server; when it starts later, a new connection initializes with no process handoff, inherited descriptor or connector command | `tests/test_independent_client_connection.py::test_an_absent_host_is_an_ordinary_refused_connection`, `::test_a_host_that_starts_later_serves_a_fresh_client_with_no_handoff`, `::test_the_service_answers_a_second_client_on_a_connection_of_its_own`; **manual smoke** for Codex itself, step 7 |
 | Documentation never recommends direct Anytype port 31009 and explains that child stdio is private internal transport while the public contract is loopback Streamable HTTP | `tests/test_independent_client_connection.py::test_the_documentation_never_configures_a_client_for_the_anytype_rest_port`; the explanation is *Fit it into an AI architecture* and *Security boundary* above |
-| An optional manual smoke starts both separately, lists and calls an Anytype tool through the endpoint, and proves exactly one `@anyproto/anytype-mcp` child owned by Reload | **manual smoke** — *Verify it by hand*, all seven steps |
+| An optional manual smoke starts both separately, lists and calls an Anytype tool through the endpoint, and proves exactly one `@anyproto/anytype-mcp` child owned by InnyTypes | **manual smoke** — *Verify it by hand*, all seven steps |
 | Plan 0007 acceptance is mapped to named tests or the smoke procedure; plans 0002 and 0007 and code docstrings agree; `docs/loop/verify.sh` exits zero without Node, Anytype or Codex | this section; the gate |
 
 ### WI-0008-04, *Acceptance*
@@ -490,9 +490,9 @@ Beside the bullets above, `tests/test_window_wiring.py::test_the_assembled_appli
 
 | Symptom | Likely cause and action |
 | --- | --- |
-| Connection refused | Reload is stopped, or the client URL has the wrong host or port. Start Reload and compare the URL with the **MCP endpoint** row in its **Anytype** panel. |
-| `401 Unauthorized` | The bearer token is missing or stale. Reload `~/.config/reload/mcp_proxy_token` into the client environment. |
+| Connection refused | InnyTypes is stopped, or the client URL has the wrong host or port. Start InnyTypes and compare the URL with the **MCP endpoint** row in its **Anytype** panel. |
+| `401 Unauthorized` | The bearer token is missing or stale. Reload `~/.config/innytypes/mcp_proxy_token` into the client environment. |
 | `403 Forbidden` | The HTTP `Host` or browser `Origin` does not match the configured loopback endpoint. Connect to the exact URL from a native or backend MCP client. |
 | MCP service is degraded at startup | The configured port may already be occupied or the address is invalid. Free the port, or change the port in the **Anytype** panel and press **Save and move the endpoint** — no restart is needed. Editing `[mcp]` by hand works too and takes effect at the next start. |
 | MCP error says the child is unavailable | Check that Anytype is running, the Anytype API key is configured, and the Anytype MCP child reports as running in the application. |
-| Port `31009` answers but MCP does not work | That is Anytype's REST API. Change the client to the Reload endpoint, normally port `31010` with path `/mcp`. |
+| Port `31009` answers but MCP does not work | That is Anytype's REST API. Change the client to the InnyTypes endpoint, normally port `31010` with path `/mcp`. |

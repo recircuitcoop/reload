@@ -32,6 +32,10 @@ const ALLOWED_AREAS = [
   [/^uv\.lock$/, "the old Python app's lock"],
   [/^tools\/parity\//, "tooling over the old Python app's suite"],
   [/^tools\/make_icon\.py$/, "draws the old Python app's icons (tests/test_bundle.py)"],
+  [
+    /^docs\/anytype-mcp-connection\.md$/,
+    "the old Python app's connection guide (its tests read it)",
+  ],
   // Legacy constants: the paths and identifiers InnyTypes and the old app used.
   [/^app\/src\/adapters\/fs\/legacy-[a-z-]+\.ts$/, "legacy paths of the old installation"],
   [/^app\/src\/adapters\/electron\/legacy-login-item[a-z-]*\.ts$/, "the old login items"],
@@ -81,7 +85,19 @@ const ALLOWED_LINES = [
     [/InnyTypes/, /docs\/plans\/00\d\d-innytypes/],
     "the old name, once, and links to plans",
   ],
+  [
+    "app/test/integration/independent-client.test.ts",
+    [/INNYTYPES\)_MCP/, /InnyTypes\)/],
+    "reads the old Python app's connection guide",
+  ],
 ];
+
+/**
+ * A part of a document between these two markers describes the old Python app (README.md's
+ * second half, until plan 0026 rewrites it), and keeps its names.
+ */
+const SECTION_START = "<!-- old-python-app -->";
+const SECTION_END = "<!-- /old-python-app -->";
 
 const files = execFileSync(
   "git",
@@ -113,8 +129,11 @@ for (const file of [...new Set(files)].sort()) {
     continue;
   }
   const lines = ALLOWED_LINES.find(([name]) => name === file)?.[1] ?? [];
+  let inSection = false;
   text.split("\n").forEach((line, index) => {
-    if (!INNY.test(line) || lines.some((pattern) => pattern.test(line))) {
+    if (line.trim() === SECTION_START) inSection = true;
+    if (line.trim() === SECTION_END) inSection = false;
+    if (inSection || !INNY.test(line) || lines.some((pattern) => pattern.test(line))) {
       return;
     }
     const rest = ALLOWED_SPANS.reduce((left, span) => left.replace(span, ""), line);
