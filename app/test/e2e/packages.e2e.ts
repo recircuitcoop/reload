@@ -736,7 +736,7 @@ test("no state without checked-when", async () => {
     const rows = general.getByTestId(/^package-row-/);
     // The shipped packages and the one installed, each with its verified facts.
     // The shipped packages pass their check against this build's manifest.
-    for (const shipped of ["anytype", "folder"]) {
+    for (const shipped of ["reload_anytype", "reload_folder"]) {
       await expect(packageRow(general, shipped)).toContainText(STRINGS["packages.installed"], {
         timeout: 30_000,
       });

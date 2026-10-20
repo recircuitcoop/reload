@@ -253,7 +253,7 @@ const PACKAGE_ROWS: readonly {
   },
   {
     state: "failed-check",
-    name: "anytype",
+    name: "reload_anytype",
     version: "1.0",
     facets: [
       ["off", "Not registered"],
@@ -331,7 +331,7 @@ export function SamplePackageRow({ row }: { readonly row: (typeof PACKAGE_ROWS)[
       state={row.state}
       name={row.name}
       version={row.version}
-      publisher={row.name === "anytype" ? "by Reload" : "by l1nx"}
+      publisher={row.name === "reload_anytype" ? "by Reload" : "by l1nx"}
       {...(row.captions === undefined ? {} : { captions: row.captions })}
       facets={row.facets.map(([state, label]) => ({ state, label, checked: CHECKED }))}
       actions={row.actions.map(([kind, label]) => (
