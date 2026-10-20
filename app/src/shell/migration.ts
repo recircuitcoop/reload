@@ -37,7 +37,12 @@ export interface MigrationWiring {
    * What this start moved from a 0.3.0 installation (adapters/fs/legacy-move.ts; empty: nothing), and
    * whether that included its userData, whose login item is then registered anew.
    */
-  readonly firstStart: { readonly moved: readonly string[]; readonly movedUserData: boolean };
+  readonly firstStart: {
+    readonly moved: readonly string[];
+    readonly movedUserData: boolean;
+    /** Said once: both folders held data, and the old one was left where it was. */
+    readonly leftAlone: string | null;
+  };
 }
 
 export function wireMigration(deps: MigrationWiring): void {
@@ -78,6 +83,13 @@ export function wireMigration(deps: MigrationWiring): void {
     }
   }
 
+  if (deps.firstStart.leftAlone !== null) {
+    deps.notices.raise({
+      kind: "old-data-left",
+      subject: LEGACY_SUBJECT,
+      detail: deps.firstStart.leftAlone,
+    });
+  }
   raiseLegacyPackagesNotice(deps.legacyPackages, deps.notices);
 
   deps.ipc.handle(IPC.legacyPackages, (): readonly string[] => deps.legacyPackages.list());

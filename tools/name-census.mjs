@@ -46,6 +46,7 @@ const ALLOWED_AREAS = [
   // Their tests, which must spell what they check.
   [/^app\/test\/unit\/legacy-(move|adapters)\.test\.ts$/, "tests of the legacy paths"],
   [/^app\/test\/conformance\/old-names\.test\.ts$/, "the conformance test of the old-name refusal"],
+  [/^app\/test\/integration\/legacy-journal\.test\.ts$/, "a 0.3.0 journal, renamed by the move"],
   [/^app\/test\/e2e\/(first-start|migration)\.e2e\.ts$/, "e2e over a fixture old installation"],
   [
     /^app\/test\/fixtures\/minisign\/python-helper-vectors\.json$/,

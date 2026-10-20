@@ -16,6 +16,8 @@ before you open Reload, and remove InnyTypes once Reload has opened. See
   and remove its old `innytypes` entry.
 - **Credentials stored inside flows must be entered again.** Reload cannot read the key that
   protected them under the old name, so it makes a new one and says so once in a notification.
+- **Function code in your flows that reads `msg.inny`** must be changed to `msg.reload` by hand:
+  the field a step's message carries is renamed, and Reload does not rewrite code you wrote.
 - **For package authors:** the declaration file is now `reload-package.json`, the schema keyword
   is `reload`, the view schemes are `reload-app:` and `reload-view:`, the design tokens are
   `--reload-*`, the SDKs are `@recircuit/reload-node` (npm) and `reload-node` (PyPI, import

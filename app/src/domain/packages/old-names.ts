@@ -36,6 +36,61 @@ export function oldKeywordAt(value: unknown, at = ""): string | null {
   return null;
 }
 
+// ── what 0.3.0 stored under the old names, renamed once by the first-start move (plan 0028) ──
+
+/** Packages renamed with the app: a stored `inny-<package>-<id>` names the new package. */
+export const RENAMED_PACKAGES: Readonly<Record<string, string>> = {
+  anytype: "reload_anytype",
+  folder: "reload_folder",
+  innyrize: "reload_summarize",
+  monty: "reload_mount",
+};
+
+const OLD_TYPE = /^inny-([a-z][a-z0-9_]{1,39})-(.+)$/;
+const OLD_SOURCE = /^inny:\/\/([^/]+)\//;
+
+/** One stored node type under its new name (`reload-<package>-<id>`); any other type as it is. */
+export function renamedNodeType(type: string): string {
+  const match = OLD_TYPE.exec(type);
+  if (match === null) {
+    return type;
+  }
+  const [, pkg = "", rest = ""] = match;
+  return `reload-${RENAMED_PACKAGES[pkg] ?? pkg}-${rest}`;
+}
+
+/** An envelope source `inny://<package>/<type>/<id>` under the new scheme and package name. */
+function renamedSource(value: unknown): unknown {
+  if (typeof value === "string") {
+    return value.replace(
+      OLD_SOURCE,
+      (_all, pkg: string) => `reload://${RENAMED_PACKAGES[pkg] ?? pkg}/`,
+    );
+  }
+  if (Array.isArray(value)) {
+    return value.map(renamedSource);
+  }
+  if (typeof value === "object" && value !== null) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, child]) => [key, renamedSource(child)]),
+    );
+  }
+  return value;
+}
+
+/**
+ * A journaled message as 0.4.0 reads it: its `inny` envelope (spec 5.1) under `reload`, with the
+ * sources inside it renamed. The payload is the person's data and is never touched. A message
+ * with no old envelope is returned as it is.
+ */
+export function renamedMessage(message: unknown): unknown {
+  if (typeof message !== "object" || message === null || !("inny" in message)) {
+    return message;
+  }
+  const { inny, ...rest } = message as Record<string, unknown>;
+  return { ...rest, reload: renamedSource(inny) };
+}
+
 /** Why a declaration that still uses the old keyword is refused. */
 export function oldKeywordProblem(where: string, newKeyword: string): string {
   return (

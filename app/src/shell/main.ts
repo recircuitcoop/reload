@@ -48,7 +48,8 @@ import { FsPackageRoots } from "../adapters/fs/package-roots";
 import { FsPackageSource } from "../adapters/fs/package-source";
 import { legacyConfigPath, readTextFileOrNull } from "../adapters/fs/legacy-config";
 import { JsonLegacyImportReportStore } from "../adapters/fs/legacy-import-report";
-import { firstStartIn, setAsideFlowCredentials } from "../adapters/fs/legacy-move";
+import { firstStartIn } from "../adapters/fs/legacy-move";
+import { rewriteLegacyJournal } from "../adapters/sqlite/legacy-journal";
 import { FsLegacyPackageEnvironments, legacyAddonsRoot } from "../adapters/fs/legacy-packages";
 import { JsonNoticeFile, NOTICES_FILENAME } from "../adapters/fs/notice-file";
 import { JsonSettingsStore } from "../adapters/fs/settings-store";
@@ -74,7 +75,7 @@ import { ElectronUpdaterInstaller } from "../adapters/update/electron-updater-in
 import { AnytypeApp } from "../application/anytype-app";
 import { OneLog } from "../application/one-log";
 import { linkPeers } from "../application/peer-link";
-import { openSecretStore, readOrReplace } from "../application/secrets";
+import { credentialSecretOf, openSecretStore } from "../application/secrets";
 import { QuitFlow } from "../application/quit";
 import { printCanary } from "../application/source-log";
 import { Supervisor } from "../application/supervisor";
@@ -119,13 +120,10 @@ if (userData !== undefined && userData !== "") {
 }
 // The e2e gate's hooks (never set in an ordinary run, and never on in an installed build).
 const e2eHooks = e2eHooksOn({ packaged: app.isPackaged, env: process.env });
-// The first start of Reload over a 0.3.0 installation (plan 0028 step 1), before the single-instance
-// lock; never a start on an empty directory while the old data is still where it was.
-const firstStart = firstStartIn(app, e2eHooks, process.env);
-if (firstStart.problem !== null) {
-  dialog.showErrorBox("Reload did not start", firstStart.problem);
-  app.exit(1);
-}
+// The first start over a 0.3.0 installation (plan 0028 step 1), before the single-instance lock;
+// never a start on an empty directory while the old data is still where it was. Failures are shown.
+const firstStart = firstStartIn(app, e2eHooks, process.env, rewriteLegacyJournal, dialog);
+if (firstStart.problem !== null) app.exit(1);
 // The gate runs with hidden windows (§6, e2e stage), so a run never steals focus.
 const hiddenWindows = process.env["RELOAD_HIDDEN_WINDOWS"] === "1";
 
@@ -328,14 +326,13 @@ async function start(): Promise<void> {
     firstStart,
   });
   ipcMain.handle(IPC.secretStorage, (): Contract.SecretStorageStatus => secretStorage);
-  // Kept once made, the same for every runtime; one the keychain cannot decrypt is replaced (0028).
-  const newSecret = () => randomBytes(32).toString("hex");
-  const credential = readOrReplace(secrets.store, "node-red-credential-secret", newSecret, logger);
-  if (credential.replaced) {
-    setAsideFlowCredentials(userDir);
+  // Kept once made, the same for every runtime. One the keychain cannot decrypt stops the start
+  // rather than orphan every credential, except on the move's own start (plan 0028, answer 1).
+  const replace = firstStart.credentialReplacement(() => {
     notices.raise({ kind: "credentials-reset", subject: "flows" });
-  }
-  const credentialSecret = credential.value;
+  });
+  const newSecret = () => randomBytes(32).toString("hex");
+  const credentialSecret = credentialSecretOf(secrets.store, newSecret, { logger, replace });
   // The Anytype key and proxy token, located once here (os.homedir()) through WI-0018-06's file adapter; init hands the paths on.
   const anytypeSecrets = anytypeSecretFiles(legacyLocation);
   logger.info(

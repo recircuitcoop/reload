@@ -103,22 +103,45 @@ export function readOrCreate(store: SecretStore, name: SecretName, generate: () 
   return created;
 }
 
+/** What the start that moved a 0.3.0 installation may do with an unreadable credential secret. */
+export interface CredentialReplacement {
+  /** Set aside the credentials the old secret protected; never overwrites an earlier set-aside. */
+  readonly setAside: () => unknown;
+  /** Tell the person, once, that they must enter them again. */
+  readonly notify: () => void;
+  /** Record that this one chance was used, whatever happened. */
+  readonly done: () => void;
+}
+
 /**
- * readOrCreate, except that a stored secret that cannot be read is replaced by a new one rather
- * than stopping the start (plan 0028, owner answer 1): `replaced` says so, for the notice.
+ * Node-RED's credential secret. One the store cannot read stops the start (readOrCreate throws)
+ * rather than orphan every credential, except when `replace` is given: only on the start that
+ * moved a 0.3.0 installation (plan 0028, owner answer 1) is it replaced by a new one, the old
+ * credentials set aside, and the person told.
  */
-export function readOrReplace(
+export function credentialSecretOf(
   store: SecretStore,
-  name: SecretName,
   generate: () => string,
-  logger: Logger,
-): { readonly value: string; readonly replaced: boolean } {
-  try {
-    return { value: readOrCreate(store, name, generate), replaced: false };
-  } catch (error) {
-    logger.warn(`the stored ${name} could not be read, so a new one is made: ${String(error)}`);
-    const created = generate().trim();
-    store.write(name, created);
-    return { value: created, replaced: true };
+  options: { readonly logger: Logger; readonly replace: CredentialReplacement | null },
+): string {
+  const name: SecretName = "node-red-credential-secret";
+  const { replace } = options;
+  if (replace === null) {
+    return readOrCreate(store, name, generate);
   }
+  let value: string;
+  try {
+    value = readOrCreate(store, name, generate);
+  } catch (error) {
+    options.logger.warn(
+      `the stored ${name} could not be read, so a new one is made: ${String(error)}`,
+    );
+    value = generate().trim();
+    replace.setAside();
+    store.write(name, value);
+    replace.notify();
+  }
+  // Recorded only once a secret is in place: a write that failed leaves the chance for the next start.
+  replace.done();
+  return value;
 }

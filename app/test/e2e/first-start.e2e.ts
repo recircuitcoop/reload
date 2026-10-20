@@ -73,7 +73,19 @@ test("the first start over InnyTypes 0.3.0 keeps its flows, settings and Anytype
   write(path.join(legacy, "node-red", "generated", "inny-anytype-create-object.js"), "throw 1;\n");
   const port = Number(base.env["RELOAD_MCP_PORT"]);
   write(path.join(legacy, "settings.json"), JSON.stringify({ mcp: { port } }));
-  write(path.join(legacy, "shell-settings.json"), JSON.stringify({ telemetry: false }));
+  write(
+    path.join(legacy, "shell-settings.json"),
+    JSON.stringify({
+      telemetry: false,
+      // 0.3.0's install record: kept, Reload would offer to "go back" to 0.3.0.
+      appUpdate: {
+        lastVersion: "0.3.0",
+        lastCheckedAt: null,
+        previous: "0.2.1",
+        goingBackTo: null,
+      },
+    }),
+  );
   write(
     path.join(legacy, "legacy-import-report.json"),
     JSON.stringify({
@@ -150,7 +162,18 @@ test("the first start over InnyTypes 0.3.0 keeps its flows, settings and Anytype
         timeout: 15_000,
       })
       .toContain("Enter the credentials in your flows again");
-    expect(fs.existsSync(path.join(userData, "node-red", "flows_cred.unreadable.json"))).toBe(true);
+    const setAside = fs
+      .readdirSync(path.join(userData, "node-red"))
+      .filter((name) => name.startsWith("flows_cred.unreadable-"));
+    expect(setAside).toHaveLength(1);
+
+    // The install record starts at Reload's own version: nothing to go back to.
+    const shellSettings = JSON.parse(
+      fs.readFileSync(path.join(userData, "shell-settings.json"), "utf8"),
+    ) as { telemetry: boolean; appUpdate?: { lastVersion: string; previous: string | null } };
+    expect(shellSettings.telemetry).toBe(false);
+    expect(shellSettings.appUpdate?.lastVersion ?? "none").not.toBe("0.3.0");
+    expect(shellSettings.appUpdate?.previous ?? null).toBeNull();
 
     // The move is in the import report, and the import itself did not run again.
     const report = JSON.parse(

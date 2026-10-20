@@ -44,6 +44,8 @@ export type NoticeKind =
   | "endpoint-blocked-by-legacy-helper"
   /** The stored Node-RED credential secret could not be read, so a new one was made (plan 0028). */
   | "credentials-reset"
+  /** Both Reload and the app it was renamed from held data; the old data was left (plan 0028). */
+  | "old-data-left"
   /** A run started (plan 0022 §I, ux-writing "Notifications"); stops after five good runs. */
   | "run-started"
   /** A run finished: what the flow did. */
@@ -67,6 +69,7 @@ export const NOTICE_KINDS: readonly NoticeKind[] = [
   "legacy-packages-found",
   "endpoint-blocked-by-legacy-helper",
   "credentials-reset",
+  "old-data-left",
   "run-started",
   "run-done",
   "run-failed",
@@ -234,6 +237,8 @@ function composeWords(notice: Notice): Message {
           "Open each flow that used a password or token and enter it again.",
         ),
       };
+    case "old-data-left":
+      return { title: "Reload kept its own data", body: sentences(detail) };
     case "run-started":
     case "run-done":
     case "run-failed":

@@ -28,7 +28,7 @@ class MemoryReportStore implements LegacyImportReportStore {
   readonly moved: string[] = [];
 }
 
-const NOTHING_MOVED = { moved: [], movedUserData: false };
+const NOTHING_MOVED = { moved: [], movedUserData: false, leftAlone: null };
 
 function memorySettings(): ShellSettings {
   let telemetry: TelemetryAnswer = "unset";
@@ -261,7 +261,7 @@ describe("wireMigration", () => {
       legacyPackages: { list: () => [], deleteAll: () => undefined },
       notices,
       logger,
-      firstStart: { moved: ["userData: a -> b"], movedUserData: true },
+      firstStart: { moved: ["userData: a -> b"], movedUserData: true, leftAlone: null },
     });
     expect(registrations).toBe(1);
     expect(removed).toEqual([true]);
