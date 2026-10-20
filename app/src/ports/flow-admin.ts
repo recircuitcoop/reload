@@ -93,5 +93,7 @@ export interface FlowNodeType {
   readonly kind: Kind;
   readonly view?: "action" | "snapshot";
   readonly label: string;
+  /** What the step does, in the package's words; absent when it declares none. */
+  readonly description?: string;
   readonly config: JsonSchema;
 }

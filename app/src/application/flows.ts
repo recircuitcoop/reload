@@ -275,6 +275,7 @@ export class FlowAdmin {
       type: node.type,
       package: type.package,
       stepName: stepName(node, type),
+      description: type.description ?? null,
       schema: type.config,
       values: configOf(type.config, node),
       secretsSet: [...(await this.#deps.engine.secretsSet(node))].sort(),

@@ -20,6 +20,8 @@ export interface NodeForm {
   /** The package the step comes from, shown small under the step's name. */
   readonly package: string;
   readonly stepName: string;
+  /** What the step does, as its package declares it; null when it declares nothing. */
+  readonly description: string | null;
   readonly schema: Readonly<Record<string, unknown>>;
   readonly values: Readonly<Record<string, unknown>>;
   /** The secret fields that hold a value; their values never reach the page. */

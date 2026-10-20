@@ -56,6 +56,7 @@ const TYPES: Record<string, FlowNodeType> = {
     package: "pkg",
     kind: "node",
     label: "File",
+    description: "Files each item in a space.",
     config: {
       type: "object",
       required: ["space"],
@@ -767,13 +768,16 @@ describe("flow.node.form and flow.node.configure", () => {
         type: "reload-pkg-step",
         package: "pkg",
         stepName: "File",
+        description: "Files each item in a space.",
         schema: TYPES["reload-pkg-step"]?.config,
         values: { space: "sp1" },
         secretsSet: [],
       },
     });
     const secretive = await h.call("flow.node.form", { flowId: "rec", nodeId: "t" });
-    expect(secretive).toMatchObject({ value: { values: { label: "x" }, secretsSet: ["token"] } });
+    expect(secretive).toMatchObject({
+      value: { values: { label: "x" }, secretsSet: ["token"], description: null },
+    });
   });
 
   it("refuses a node gone from the flow, or one of Node-RED's own", async () => {

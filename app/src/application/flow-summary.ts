@@ -184,6 +184,7 @@ export function flowNodeTypeOf(loaded: LoadedType): FlowNodeType {
     kind: type.kind,
     ...(type.view === undefined ? {} : { view: type.view }),
     label: type.label,
+    ...(type.description === undefined ? {} : { description: type.description }),
     config: type.config,
   };
 }
