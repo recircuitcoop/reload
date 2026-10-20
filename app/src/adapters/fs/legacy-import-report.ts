@@ -19,6 +19,21 @@ export class JsonLegacyImportReportStore implements LegacyImportReportStore {
     return fs.existsSync(this.#file);
   }
 
+  recordMove(moved: readonly string[]): void {
+    let report: LegacyImportReport = {
+      importedAt: new Date().toISOString(),
+      launchAtLoginWanted: false,
+      imported: [],
+      ignored: [],
+    };
+    try {
+      report = JSON.parse(fs.readFileSync(this.#file, "utf8")) as LegacyImportReport;
+    } catch {
+      // No report yet, or one that cannot be read: the move is recorded in a new one.
+    }
+    this.write({ ...report, moved: [...(report.moved ?? []), ...moved] });
+  }
+
   write(report: LegacyImportReport): void {
     const scratch = `${this.#file}.${String(process.pid)}.tmp`;
     fs.mkdirSync(path.dirname(this.#file), { recursive: true });

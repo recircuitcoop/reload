@@ -21,6 +21,7 @@ import {
   NO_KEYCHAIN_REASON,
   openSecretStore,
   readOrCreate,
+  readOrReplace,
   registering,
   type KeychainFacts,
 } from "../../src/application/secrets";
@@ -334,5 +335,22 @@ describe("readOrCreate: the credential secret is generated once", () => {
       KeychainError,
     );
     expect(ciphertexts.writes).toEqual([]);
+  });
+});
+
+describe("readOrReplace: an unreadable credential secret is replaced, never a stopped start", () => {
+  it("makes and stores a new secret when the stored one cannot be decrypted, and says so", () => {
+    const ciphertexts = new MemoryStore();
+    ciphertexts.values.set("node-red-credential-secret", "bm90LWEtYmxvYg==");
+    const store = new KeychainSecretStore(new FakeSafeStorage(), ciphertexts);
+    const logger = new RecordingLogger();
+    const result = readOrReplace(store, "node-red-credential-secret", () => SECRET, logger);
+    expect(result).toEqual({ value: SECRET, replaced: true });
+    expect(ciphertexts.writes).toHaveLength(1);
+    // The next start reads the new one: nothing is replaced twice.
+    expect(readOrReplace(store, "node-red-credential-secret", () => "other", logger)).toEqual({
+      value: SECRET,
+      replaced: false,
+    });
   });
 });

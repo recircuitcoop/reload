@@ -42,6 +42,8 @@ export type NoticeKind =
   | "legacy-packages-found"
   /** The MCP endpoint could not open because the old helper still holds its lock (WI-0018-25). */
   | "endpoint-blocked-by-legacy-helper"
+  /** The stored Node-RED credential secret could not be read, so a new one was made (plan 0028). */
+  | "credentials-reset"
   /** A run started (plan 0022 §I, ux-writing "Notifications"); stops after five good runs. */
   | "run-started"
   /** A run finished: what the flow did. */
@@ -64,6 +66,7 @@ export const NOTICE_KINDS: readonly NoticeKind[] = [
   "core-crash-loop",
   "legacy-packages-found",
   "endpoint-blocked-by-legacy-helper",
+  "credentials-reset",
   "run-started",
   "run-done",
   "run-failed",
@@ -221,6 +224,14 @@ function composeWords(notice: Notice): Message {
         body: sentences(
           "The old InnyTypes helper is still running and holds its lock",
           "Quit it, then press Restart on the services process.",
+        ),
+      };
+    case "credentials-reset":
+      return {
+        title: "Enter the credentials in your flows again",
+        body: sentences(
+          "Reload could not read the key that protected them, so it made a new one",
+          "Open each flow that used a password or token and enter it again.",
         ),
       };
     case "run-started":

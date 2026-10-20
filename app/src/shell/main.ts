@@ -48,6 +48,7 @@ import { FsPackageRoots } from "../adapters/fs/package-roots";
 import { FsPackageSource } from "../adapters/fs/package-source";
 import { legacyConfigPath, readTextFileOrNull } from "../adapters/fs/legacy-config";
 import { JsonLegacyImportReportStore } from "../adapters/fs/legacy-import-report";
+import { firstStartIn, setAsideFlowCredentials } from "../adapters/fs/legacy-move";
 import { FsLegacyPackageEnvironments, legacyAddonsRoot } from "../adapters/fs/legacy-packages";
 import { JsonNoticeFile, NOTICES_FILENAME } from "../adapters/fs/notice-file";
 import { JsonSettingsStore } from "../adapters/fs/settings-store";
@@ -73,7 +74,7 @@ import { ElectronUpdaterInstaller } from "../adapters/update/electron-updater-in
 import { AnytypeApp } from "../application/anytype-app";
 import { OneLog } from "../application/one-log";
 import { linkPeers } from "../application/peer-link";
-import { openSecretStore, readOrCreate } from "../application/secrets";
+import { openSecretStore, readOrReplace } from "../application/secrets";
 import { QuitFlow } from "../application/quit";
 import { printCanary } from "../application/source-log";
 import { Supervisor } from "../application/supervisor";
@@ -110,15 +111,21 @@ import { AppWindow } from "./window";
 import { runShell } from "./lifecycle";
 import { wireChildCalls } from "./child-calls";
 
-// The e2e gate runs the real app against a temporary userData directory, so no test ever
-// touches this user's own. Set before `ready`, which is when Electron starts using it, and
-// before the single-instance lock, which lives in it.
+// The e2e gate runs the real app against a temporary userData directory, so no test ever touches
+// this user's own. Set before `ready` and before the single-instance lock, which lives in it.
 const userData = process.env["INNYTYPES_USER_DATA"];
 if (userData !== undefined && userData !== "") {
   app.setPath("userData", userData);
 }
 // The e2e gate's hooks (never set in an ordinary run, and never on in an installed build).
 const e2eHooks = e2eHooksOn({ packaged: app.isPackaged, env: process.env });
+// The first start of Reload over InnyTypes 0.3.0 (plan 0028 step 1), before the single-instance
+// lock; never a start on an empty directory while the old data is still where it was.
+const firstStart = firstStartIn(app, e2eHooks, process.env);
+if (firstStart.problem !== null) {
+  dialog.showErrorBox("Reload did not start", firstStart.problem);
+  app.exit(1);
+}
 // The gate runs with hidden windows (§6, e2e stage), so a run never steals focus.
 const hiddenWindows = process.env["INNYTYPES_HIDDEN_WINDOWS"] === "1";
 
@@ -306,28 +313,31 @@ async function start(): Promise<void> {
   const legacyLocation = { platform: process.platform, home: os.homedir(), env: process.env };
   wireMigration({
     ipc: ipcMain,
-    readLegacyConfig: () => readTextFileOrNull(legacyConfigPath(legacyLocation)),
+    readLegacyConfig: () =>
+      readTextFileOrNull(firstStart.relocate(legacyConfigPath(legacyLocation))),
     reportStore: new JsonLegacyImportReportStore(userDir),
     shellSettings: new JsonSettingsStore(path.join(userDir, "shell-settings.json")),
     mcpSettings: new JsonSettingsStore(path.join(userDir, "settings.json")),
     launchAtLogin,
     legacyLoginItem: chooseLegacyLoginItem(process.platform, os.homedir(), xdg),
-    legacyPackages: new FsLegacyPackageEnvironments(legacyAddonsRoot(legacyLocation)),
+    legacyPackages: new FsLegacyPackageEnvironments(
+      firstStart.relocate(legacyAddonsRoot(legacyLocation)),
+    ),
     notices,
     logger,
+    firstStart,
   });
   ipcMain.handle(IPC.secretStorage, (): Contract.SecretStorageStatus => secretStorage);
-  // Generated once and kept; every runtime generation is handed the same one in `init`. A
-  // keychain that cannot decrypt it stops the start rather than orphan every credential.
-  const credentialSecret = readOrCreate(secrets.store, "node-red-credential-secret", () =>
-    randomBytes(32).toString("hex"),
-  );
+  // Kept once made, the same for every runtime; one the keychain cannot decrypt is replaced (0028).
+  const newSecret = () => randomBytes(32).toString("hex");
+  const credential = readOrReplace(secrets.store, "node-red-credential-secret", newSecret, logger);
+  if (credential.replaced) {
+    setAsideFlowCredentials(userDir);
+    notices.raise({ kind: "credentials-reset", subject: "flows" });
+  }
+  const credentialSecret = credential.value;
   // The Anytype key and proxy token, located once here (os.homedir()) through WI-0018-06's file adapter; init hands the paths on.
-  const anytypeSecrets = anytypeSecretFiles({
-    platform: process.platform,
-    home: os.homedir(),
-    env: process.env,
-  });
+  const anytypeSecrets = anytypeSecretFiles(legacyLocation);
   logger.info(
     `the Anytype key is kept in ${anytypeSecrets["anytype-api-key"]?.file ?? "(nowhere)"}`,
   );
@@ -576,13 +586,15 @@ async function start(): Promise<void> {
 }
 
 // ── single instance; a quit, by the window or a signal, goes through the one QuitFlow ─────
-runShell({
-  app,
-  signals: process,
-  quitFlow,
-  bringForward,
-  windowOpen: () => appWindow.current !== null,
-  started: () => supervisors.size > 0,
-  start,
-  logger,
-});
+if (firstStart.problem === null) {
+  runShell({
+    app,
+    signals: process,
+    quitFlow,
+    bringForward,
+    windowOpen: () => appWindow.current !== null,
+    started: () => supervisors.size > 0,
+    start,
+    logger,
+  });
+}

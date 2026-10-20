@@ -22,7 +22,13 @@ class MemoryReportStore implements LegacyImportReportStore {
   write(report: LegacyImportReport): void {
     this.#written = report;
   }
+  recordMove(moved: readonly string[]): void {
+    this.moved.push(...moved);
+  }
+  readonly moved: string[] = [];
 }
+
+const NOTHING_MOVED = { moved: [], movedUserData: false };
 
 function memorySettings(): ShellSettings {
   let telemetry: TelemetryAnswer = "unset";
@@ -114,6 +120,7 @@ describe("wireMigration", () => {
       legacyPackages: { list: () => [], deleteAll: () => undefined },
       notices,
       logger,
+      firstStart: NOTHING_MOVED,
     });
     expect(settings.readLaunchAtLogin()).toBe(true);
     expect(removed).toEqual([true]);
@@ -141,6 +148,7 @@ describe("wireMigration", () => {
       legacyPackages: { list: () => [], deleteAll: () => undefined },
       notices,
       logger,
+      firstStart: NOTHING_MOVED,
     });
     expect(settings.readLaunchAtLogin()).toBe(false);
     expect(removed).toEqual([]);
@@ -172,6 +180,7 @@ describe("wireMigration", () => {
       legacyPackages: { list: () => [], deleteAll: () => undefined },
       notices,
       logger,
+      firstStart: NOTHING_MOVED,
     };
     wireMigration(deps);
     wireMigration(deps);
@@ -213,6 +222,7 @@ describe("wireMigration", () => {
       legacyPackages,
       notices,
       logger,
+      firstStart: NOTHING_MOVED,
     });
     expect(raised).toContain("InnyTypes found plugin environments from the old installation");
     expect(deleted).toBe(false);
@@ -221,5 +231,40 @@ describe("wireMigration", () => {
     expect(call("inny:delete-legacy-packages")).toEqual(["monty", "innyrize"]);
     expect(deleted).toBe(true);
     expect(call("inny:legacy-packages")).toEqual([]);
+  });
+
+  it("after InnyTypes 0.3.0's userData moved, registers the new login item, removes the old one and records the move", () => {
+    const settings = memorySettings();
+    settings.writeLaunchAtLogin(true); // 0.3.0's switch, moved with its settings
+    const { item: legacyLoginItem, removed } = fakeLegacyLoginItem(true);
+    const logger = new RecordingLogger();
+    let registrations = 0;
+    const loginItem: LoginItem = {
+      register: () => {
+        registrations += 1;
+      },
+      unregister: () => undefined,
+    };
+    const launchAtLogin = new LaunchAtLogin({ item: loginItem, setting: settings, logger });
+    const notices = new NoticeBoard({ deliver: () => undefined, store: null, logger });
+    const reportStore = new MemoryReportStore();
+    reportStore.write({ importedAt: "x", launchAtLoginWanted: false, imported: [], ignored: [] });
+    const { ipc } = fakeIpc();
+    wireMigration({
+      ipc,
+      readLegacyConfig: () => OLD_CONFIG,
+      reportStore,
+      shellSettings: settings,
+      mcpSettings: settings,
+      launchAtLogin,
+      legacyLoginItem,
+      legacyPackages: { list: () => [], deleteAll: () => undefined },
+      notices,
+      logger,
+      firstStart: { moved: ["userData: a -> b"], movedUserData: true },
+    });
+    expect(registrations).toBe(1);
+    expect(removed).toEqual([true]);
+    expect(reportStore.moved).toEqual(["userData: a -> b"]);
   });
 });

@@ -102,3 +102,23 @@ export function readOrCreate(store: SecretStore, name: SecretName, generate: () 
   store.write(name, created);
   return created;
 }
+
+/**
+ * readOrCreate, except that a stored secret that cannot be read is replaced by a new one rather
+ * than stopping the start (plan 0028, owner answer 1): `replaced` says so, for the notice.
+ */
+export function readOrReplace(
+  store: SecretStore,
+  name: SecretName,
+  generate: () => string,
+  logger: Logger,
+): { readonly value: string; readonly replaced: boolean } {
+  try {
+    return { value: readOrCreate(store, name, generate), replaced: false };
+  } catch (error) {
+    logger.warn(`the stored ${name} could not be read, so a new one is made: ${String(error)}`);
+    const created = generate().trim();
+    store.write(name, created);
+    return { value: created, replaced: true };
+  }
+}
