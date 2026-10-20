@@ -1,4 +1,4 @@
-// InnyTypes' own update calls (plan 0022 §G, D4), without Electron: the install record at start,
+// Reload's own update calls (plan 0022 §G, D4), without Electron: the install record at start,
 // Go back verified then installed at quit, a refused Go back that installs nothing, the crash-loop
 // offer (one notice, never applied), Check now, the "Check automatically" switch and Release notes.
 import type { IpcMain } from "electron";
@@ -88,7 +88,7 @@ function goBackAnswers(
   return asked;
 }
 
-describe("InnyTypes' own update calls", () => {
+describe("Reload's own update calls", () => {
   it("the first start on a new version records the previous release and offers Go back for seven days", async () => {
     const h = afterUpdate();
     expect(h.stored["appUpdate"]).toEqual({
@@ -132,7 +132,7 @@ describe("InnyTypes' own update calls", () => {
     expect(view?.goBack).toBeNull();
   });
 
-  it("a tampered old release is refused: nothing is installed, InnyTypes does not quit", async () => {
+  it("a tampered old release is refused: nothing is installed, Reload does not quit", async () => {
     const h = afterUpdate();
     goBackAnswers(h, { ok: false, error: "Refused." }, [
       { kind: "failed", reason: "safety-check" },
@@ -165,14 +165,14 @@ describe("InnyTypes' own update calls", () => {
     h.runtimeIs("down-for-good");
     h.runtimeIs("down-for-good");
     expect(h.notifier.notices).toEqual([
-      { kind: "core-crash-loop", subject: "InnyTypes", version: OLD },
+      { kind: "core-crash-loop", subject: "Reload", version: OLD },
     ]);
     expect((await h.call("update.state")).value?.goBack?.because).toBe("crash-loop");
     expect(asked).toEqual([]);
     expect(h.quits).toEqual([]);
     // Going back clears the notice.
     await h.call("update.goBack");
-    expect(h.notifier.cleared).toContain("core-crash-loop InnyTypes");
+    expect(h.notifier.cleared).toContain("core-crash-loop Reload");
   });
 
   it("a crash loop later than ten minutes, or with nothing to go back to, offers nothing", () => {

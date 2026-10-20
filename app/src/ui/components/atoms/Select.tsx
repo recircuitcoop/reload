@@ -69,7 +69,7 @@ export function Select({
           {...(testId === undefined ? {} : { "data-testid": `${testId}-trigger` })}
           className={fieldBoxClass(
             state,
-            "h-[var(--inny-size-control)] items-center gap-2 px-3 text-left",
+            "h-[var(--reload-size-control)] items-center gap-2 px-3 text-left",
           )}
         >
           <ArkSelect.ValueText

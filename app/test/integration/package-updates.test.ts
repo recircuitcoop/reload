@@ -65,7 +65,7 @@ let settings: JsonSettingsStore;
 let clock: FakeClock;
 
 beforeEach(() => {
-  base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "inny-update-")));
+  base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-update-")));
   roots = new FsPackageRoots(path.join(base, "node-packages"));
   logger = new RecordingLogger();
   signer = new Signer();
@@ -106,7 +106,7 @@ function declaration(name: string, version: string): string {
 }
 
 const packageFiles = (name: string, version: string, body = "// v\n"): Files => ({
-  "inny-package.json": declaration(name, version),
+  "reload-package.json": declaration(name, version),
   "node.js": `process.stdout.write('')\n${body}`,
 });
 
@@ -378,7 +378,7 @@ describe("the version check", () => {
     fs.writeFileSync(recordFile, JSON.stringify(record));
     await updates.check();
     expect((await line(installer, updates, "pinger"))?.update?.detail).toContain(
-      "installed before InnyTypes recorded where from",
+      "installed before Reload recorded where from",
     );
     expect(await updates.apply("pinger", "person")).toMatchObject({ ok: false });
   });
@@ -517,11 +517,11 @@ describe("applying an update", () => {
     const { updates } = await installed("pinger", "0.1.0");
     publish("pinger", "0.2.0");
     await updates.check();
-    readiness = () => Promise.reject(new Error("the InnyTypes runtime is still starting"));
+    readiness = () => Promise.reject(new Error("the Reload runtime is still starting"));
     expect(await drive(updates.apply("pinger", "person"))).toMatchObject({
       ok: false,
       error: expect.stringContaining(
-        "the runtime could not say which instances are ready: the InnyTypes runtime is still starting",
+        "the runtime could not say which instances are ready: the Reload runtime is still starting",
       ) as unknown,
     });
   });
@@ -706,7 +706,7 @@ describe("a path install (plan 0013)", () => {
     const where = folder("0.1.0", "");
     const { installer, updates } = setUp();
     await installer.installFromFile(where, true);
-    fs.writeFileSync(path.join(where, "inny-package.json"), declaration("other", "0.1.0"));
+    fs.writeFileSync(path.join(where, "reload-package.json"), declaration("other", "0.1.0"));
     await updates.check();
     expect((await line(installer, updates, "monty"))?.update?.detail).toBe(
       `${where} now declares other, not monty`,

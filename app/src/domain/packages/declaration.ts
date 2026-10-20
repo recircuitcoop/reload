@@ -1,4 +1,4 @@
-// The node package declaration, `inny-package.json` (spec §2), as the runtime holds it once
+// The node package declaration, `reload-package.json` (spec §2), as the runtime holds it once
 // it has been parsed and refused or accepted (plan 0018 §3, the addons/manifest.py row).
 //
 // Like the old manifest it refuses and never warns: a declaration that breaks any rule is not
@@ -9,6 +9,8 @@
 // Pure: no I/O, no library.
 
 /** The one protocol version this runtime implements (spec 1.2). */
+import { oldKeywordAt, oldKeywordProblem } from "./old-names";
+
 export const PROTOCOL = 2;
 
 /** Spec 2.4: output ports that would shadow a Node-RED message field. */
@@ -193,6 +195,11 @@ export function parseDeclaration(
       ],
     };
   }
+  // A package still written for InnyTypes is refused naming the new keyword (plan 0028 D3).
+  const oldKeyword = oldKeywordAt(value);
+  if (oldKeyword !== null) {
+    return { ok: false, problems: [oldKeywordProblem(oldKeyword, "reload")] };
+  }
   const schemaProblems = check(value);
   if (schemaProblems.length > 0) {
     return { ok: false, problems: schemaProblems.map(said) };
@@ -208,7 +215,7 @@ export function parseDeclaration(
 
 /** The Node-RED type name, derived and never declared (spec 2.1.4). */
 export function nodeTypeName(packageName: string, typeId: string): string {
-  return `inny-${packageName}-${typeId}`;
+  return `reload-${packageName}-${typeId}`;
 }
 
 /**

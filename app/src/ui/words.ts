@@ -1,5 +1,5 @@
 // The domain's structured values in words (plan 0022 §O): the run card's lines, a flow's health
-// and last run, Setup's progress, the status pill, InnyTypes' own update line, a package row's
+// and last run, Setup's progress, the status pill, Reload's own update line, a package row's
 // state words and its refusals. Every sentence is a ui/strings.ts line; nothing here spells one.
 //
 // The UI imports the domain's types only (app/.dependency-cruiser.cjs), so a value made by the
@@ -286,7 +286,7 @@ export function wordBanner(
 export const wordBoardError = (reason: BoardErrorReason): string | undefined =>
   reason === "last-tab" ? t("board.lastTab") : undefined;
 
-// ── InnyTypes' own update ────────────────────────────────────────────────────────────────────
+// ── Reload's own update ────────────────────────────────────────────────────────────────────
 
 export function wordUpdateState(state: UpdateState, now: Date): string {
   switch (state.kind) {
@@ -366,7 +366,7 @@ export function wordPackageUpdate(update: PackageUpdate, now: Date): string {
   }
 }
 
-/** "checked today 09:14": when InnyTypes last verified a row's state. */
+/** "checked today 09:14": when Reload last verified a row's state. */
 export const wordChecked = (at: Date, now: Date) =>
   t("packages.checked", {
     when: t("packages.checkedAt", { day: dayOf(at, now), time: clockTime(at) }),

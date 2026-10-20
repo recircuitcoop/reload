@@ -2,13 +2,13 @@
 
 Written 2026-09-27, after `strategy-brief.md`, `interaction-design.md` and `ux-writing.md`. Status:
 draft for the owner; revised 2026-09-28 for the three surfaces (Setup, Configuration, Live). The
-tokens are in `tokens/innytypes.tokens.json` (W3C Design Tokens format,
+tokens are in `tokens/reload.tokens.json` (W3C Design Tokens format,
 importable into Penpot's Tokens tab). The Penpot file is built from this document, following the
 `penpot-atomic-design` skill's build order and page plan.
 
 ## Direction
 
-InnyTypes is an assistant that runs in the background and steps forward only to ask or to report.
+Reload is an assistant that runs in the background and steps forward only to ask or to report.
 Its look follows that: **quiet surfaces, one accent, colour reserved for state.** It sits beside
 Anytype, so its register is Anytype's, calm and note-like, rather than a developer tool's or a
 SaaS dashboard's; it keeps its own identity through the accent and the type, so a person always
@@ -19,7 +19,7 @@ off-white with a faint cool-green bias, and the accent is a deep evergreen, whic
 and settled rather than urgent. Blue, amber, red and green are **state colours only** (running,
 waiting for you, failed, done); they never decorate.
 
-The direction is "Anytype's register, InnyTypes' own accent."
+The direction is "Anytype's register, Reload's own accent."
 
 ## Foundations (the tokens)
 
@@ -135,11 +135,11 @@ open Live.
 | Tab strip | | 40 high, hairline line below; each tab a label body 14 medium, the active one with a 2px accent underline. Used by Configuration (Flows, General) and by the Board. |
 | Dialog | Kind: Neutral, Warning, Destructive | 440 wide, panel fill, radius l (owner, 2026-10-02: the same as a pop-out), popout shadow, `surface.scrim` behind; title 20, body 14, Dialog buttons. Warning and Destructive tint the title's icon only. |
 | Runtime banner | State: Restarting, Down | Full width under the top bar, waiting-soft fill (Restarting) or failed-soft (Down); Restart is Primary. |
-| Question pop-out | Form: Yes, No, Widget | 440 wide window; title 20, subtitle caption secondary, Fields, buttons Continue (Primary), Later, Skip this step (Quiet). Widget: the package's own widget in place of the Fields (the reorder example), under the same chrome (plan 0021). Only the chrome is InnyTypes'. The title and every field are the view node's own `present.content`, drawn through the contract below; "Who is speaker 2?" with its Listen control ("Listen to speaker 2") is innyrize's content shown as a sample, never an InnyTypes form. |
+| Question pop-out | Form: Yes, No, Widget | 440 wide window; title 20, subtitle caption secondary, Fields, buttons Continue (Primary), Later, Skip this step (Quiet). Widget: the package's own widget in place of the Fields (the reorder example), under the same chrome (plan 0021). Only the chrome is Reload's. The title and every field are the view node's own `present.content`, drawn through the contract below; "Who is speaker 2?" with its Listen control ("Listen to speaker 2") is reload_summarize's content shown as a sample, never a Reload form. |
 | Configuration › Flows list | | List rows: name, Switch, "Last run", health pill, Edit, Run history, and a ⋯ Icon button opening the Menu (Rename, Duplicate, Export flow…, divider, Delete flow in danger); New flow (Primary, menu: From a template, Blank canvas) above. Delete flow opens the Destructive dialog (owner, 2026-10-02). |
 | Run history | State: Rows, Selected, Empty, Filtered-empty | A Configuration screen per flow: title "Run history" + flow name + "← Flows" link; caption on retention; filter row (Segmented control All · Waiting · Failed · Done, a Select "Last 7 days", a Search field); a table (Table rows: checkbox, When, Event, Took, State pill, Notes pills, ⋯ Icon button) with a failed row's sentence under it in state.failed; Selected shows the bar "3 runs selected · Re-run · Delete · Clear selection" (accent-soft, 48 high) above the table; the row ⋯ Menu: Open result, Re-run, Re-run from… ›, Open in Anytype, divider, Delete run (danger). Re-run is the runtime replaying the journaled event; run history is a view over the journal, the board a filter of it. |
-| Configuration › General section | Section: Anytype, Recorders and folders, AI apps, Start at login, Updates, Reports, Packages, Advanced | Title 20, one-line state in secondary, then Fields; 24 between sections. **Updates** is InnyTypes' own update status (owner, 2026-10-02): the state sentence from `ux-writing.md` with a Progress when downloading, Check now (Secondary), Quit and update (Primary when ready), Go back to the previous version (Quiet, with a dialog), the "Check automatically" Switch, a Release notes Link. **Packages** holds a Package row per package (below) under "Add a package…" (Secondary, menu: From the catalogue · From a folder on this Mac…). |
-| Package row | State: Registered, Not registered, Installing, Verifying, Failed check, Update available, Updating, Updated (rollback offered), From a folder | 64 high (two lines), 16 side padding, hairline divider. Line 1: name body-medium, version mono, "by publisher" caption. Line 2: up to three Status pills with their words ("Registered"/"Not registered", "Installed"/"Not installed"/"Installing · 60%"/"Verifying…"/"Failed its check", "Up to date"/"Update to 0.4 available"/"Updating…"/"Updated to 0.4 on Tuesday") each with a "checked when" caption, plus "Unsigned" and "From a folder: path" captions where they apply. Actions right-aligned, 8 gap: Register/Unregister (Quiet), Install/Remove (Secondary), Update or Check for changes (Primary when available) or Go back (Quiet). A row never shows a state InnyTypes has not verified. |
+| Configuration › General section | Section: Anytype, Recorders and folders, AI apps, Start at login, Updates, Reports, Packages, Advanced | Title 20, one-line state in secondary, then Fields; 24 between sections. **Updates** is Reload's own update status (owner, 2026-10-02): the state sentence from `ux-writing.md` with a Progress when downloading, Check now (Secondary), Quit and update (Primary when ready), Go back to the previous version (Quiet, with a dialog), the "Check automatically" Switch, a Release notes Link. **Packages** holds a Package row per package (below) under "Add a package…" (Secondary, menu: From the catalogue · From a folder on this Mac…). |
+| Package row | State: Registered, Not registered, Installing, Verifying, Failed check, Update available, Updating, Updated (rollback offered), From a folder | 64 high (two lines), 16 side padding, hairline divider. Line 1: name body-medium, version mono, "by publisher" caption. Line 2: up to three Status pills with their words ("Registered"/"Not registered", "Installed"/"Not installed"/"Installing · 60%"/"Verifying…"/"Failed its check", "Up to date"/"Update to 0.4 available"/"Updating…"/"Updated to 0.4 on Tuesday") each with a "checked when" caption, plus "Unsigned" and "From a folder: path" captions where they apply. Actions right-aligned, 8 gap: Register/Unregister (Quiet), Install/Remove (Secondary), Update or Check for changes (Primary when available) or Go back (Quiet). A row never shows a state Reload has not verified. |
 | Board | Mode: Viewing, Edit layout | Tab strip above; below it the active tab's Slots on a 12-column grid, 16 gaps. The flow picker and Edit layout (Secondary) sit right of the tabs. Edit layout adds the Edit-layout bar and a dashed hairline outline on each Slot. |
 | Slot | Kind: Card, Question, Result. Size: S, M, L. Hidden: Yes, No | Holds one view node's content: Card is a Run card, Question is the question inline (same fields as the Question pop-out, a Listen control included), Result is Result lines. S spans 4 columns, M 6, L 12. Hidden shows only in Edit layout, at 40% opacity with a "Hidden" pill, and is inert: its content takes no focus and no clicks, so nothing dimmed can be operated (a11y, 2026-10-02); it is not drawn in Viewing. The on-screen word for a slot is "place". |
 | Edit-layout bar | | Full width under the Tab strip, accent-soft fill, 48 high: the one-line instruction in body 14, then Add tab (Quiet), Hidden (n) (Quiet, opens the hidden list), Done (Primary). |
@@ -148,20 +148,20 @@ open Live.
 
 ## The contract: what a package can declare
 
-Decided with the owner on 2026-10-01. InnyTypes owns the transport, the journal, the inbox,
+Decided with the owner on 2026-10-01. Reload owns the transport, the journal, the inbox,
 notifications, the pop-out sandbox and the *rendering* of a view. A node package owns the
-*content*: a view node sends `present {content}` (node protocol v2 §8) and InnyTypes draws it
-from a fixed vocabulary. Nothing in InnyTypes knows what a speaker, a summary or an invoice is.
+*content*: a view node sends `present {content}` (node protocol v2 §8) and Reload draws it
+from a fixed vocabulary. Nothing in Reload knows what a speaker, a summary or an invoice is.
 That is the guarantee that the application is not locked to one kind of flow: whatever a node
-declares inside the vocabulary, InnyTypes can draw; anything outside it is drawn by the
-package's own widget, in the pop-up, inside InnyTypes' chrome.
+declares inside the vocabulary, Reload can draw; anything outside it is drawn by the
+package's own widget, in the pop-up, inside Reload's chrome.
 
 The design system shows this contract as its own set of components, one per content kind and,
 for `form`, one per JSON Schema shape, each mapped to the atom that renders it. This table is the
 spec for a Penpot page `04b Contract` (or a section of `05 Templates`) and for
 `app/src/ui/view/render.ts`, which must agree with it.
 
-| Declared by the node | Drawn by InnyTypes as |
+| Declared by the node | Drawn by Reload as |
 |---|---|
 | `title` | title 20 |
 | `text` | body 14, preformatted |
@@ -178,7 +178,7 @@ spec for a Penpot page `04b Contract` (or a section of `05 Templates`) and for
 | `media` image (`data:image/…` or a package-origin file) | an image |
 | `media` audio `{kind: "audio", src, label?}` (`data:audio/…` or a package-origin file) | a **Listen** control (below; spec §8.1.4, plan 0020) |
 | `anytype` `{objectId, spaceId, name?}` | a Link that Anytype opens |
-| `component` `{element}` | the package's own web component, in the sandboxed frame with the token variables and InnyTypes' chrome; worked example: reorder |
+| `component` `{element}` | the package's own web component, in the sandboxed frame with the token variables and Reload's chrome; worked example: reorder |
 | snapshot `actions` | Secondary buttons; a disabled one carries its reason as a Tooltip |
 
 **Sample data proves the genericity.** Every organism and screen uses content from at least
@@ -200,11 +200,11 @@ sentence "This sample plays in the view's own window.", never as a button that c
 sample over the bound (768 KiB) is drawn as the sentence "the sample is too large to show; keep
 it under 768 KB" and the rest of the view presents. In `04 Organisms` the Question pop-out and
 the Question slot show it as package content: "Listen to speaker 2" under the title of "Who is
-speaker 2?", the package's words, drawn by InnyTypes. `app/test/e2e/app-pages.e2e.ts` "a view
+speaker 2?", the package's words, drawn by Reload. `app/test/e2e/app-pages.e2e.ts` "a view
 plays a sound" proves it in the real app, in a pop-out and inline.
 
 What is narrow today is the catalogue, not the contract: the node packages that exist are
-anytype, monty (the recorder) and innyrize. That is a roadmap fact.
+anytype, monty (the recorder) and reload_summarize. That is a roadmap fact.
 
 ## Templates
 
@@ -223,7 +223,7 @@ anytype, monty (the recorder) and innyrize. That is a roadmap fact.
   secondary "I'll build my own"). There is no package step: the packages that ship inside the app
   are set up on their own; and no starter choice: the starter is always installed (owner,
   2026-10-02). There is no recorder step: a recorder is a source a node package (monty) provides,
-  so asking for it belongs to that package's node form, never to InnyTypes' own setup (owner,
+  so asking for it belongs to that package's node form, never to Reload's own setup (owner,
   2026-10-02). The Source folder step configures the first-party folder source (D18).
 - **Configuration › Flows:** the list (with a row's ⋯ menu open), the canvas frame, and Run
   history (rows with one failed and one selected).
@@ -239,7 +239,7 @@ Each in light and dark.
 
 ## Penpot file plan
 
-Two files: **InnyTypes Design System** (the library) and **InnyTypes App** (the screens), the
+Two files: **Reload Design System** (the library) and **Reload App** (the screens), the
 second linked to the first.
 
 | # | Page | Holds |

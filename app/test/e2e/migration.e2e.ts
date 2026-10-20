@@ -35,21 +35,21 @@ const endpoint = (window: Page): Promise<EndpointStatus> =>
   window.evaluate(async () => {
     try {
       return await (
-        window as unknown as { inny: { app: { mcpEndpoint(): Promise<EndpointStatus> } } }
-      ).inny.app.mcpEndpoint();
+        window as unknown as { reload: { app: { mcpEndpoint(): Promise<EndpointStatus> } } }
+      ).reload.app.mcpEndpoint();
     } catch (error) {
       return { served: null, problem: String(error) };
     }
   });
 
-/** Forces a restart regardless of state (the e2e hooks, INNYTYPES_E2E_HOOKS=1, exposed on the
+/** Forces a restart regardless of state (the e2e hooks, RELOAD_E2E_HOOKS=1, exposed on the
  * shell's own globalThis, so this runs in the main process via app.evaluate): the public Restart
  * button only works from down-for-good, and the services process here never crashed. */
 const restartServices = (app: ElectronApplication) =>
   app.evaluate(() =>
     (
-      globalThis as unknown as { innytypesE2E: { restart(child: string, reason: string): boolean } }
-    ).innytypesE2E.restart("services", "types"),
+      globalThis as unknown as { reloadE2E: { restart(child: string, reason: string): boolean } }
+    ).reloadE2E.restart("services", "types"),
   );
 
 /** One JSON-RPC call, the way an existing Codex configuration makes it. */
@@ -110,9 +110,9 @@ async function scratchWithLegacyLocation() {
     XDG_CONFIG_HOME: path.join(base.scratch, ".config"),
     XDG_DATA_HOME: path.join(base.scratch, ".local", "share"),
     XDG_RUNTIME_DIR: path.join(base.scratch, ".runtime"),
-    INNYTYPES_E2E_HOOKS: "1",
+    RELOAD_E2E_HOOKS: "1",
     ANYTYPE_API_BASE_URL: anytype.url,
-    INNYTYPES_TEST_ANYTYPE: JSON.stringify({
+    RELOAD_TEST_ANYTYPE: JSON.stringify({
       entry: path.join(FAKE, "server.mjs"),
       args: ["--mode=canary"],
       surface: fakeSurface(base.scratch),
@@ -124,7 +124,7 @@ async function scratchWithLegacyLocation() {
 
 test("an existing Codex configuration (token and port) keeps working after the cutover", async () => {
   const { scratch, env, location, anytype } = await scratchWithLegacyLocation();
-  const fixturePort = Number(env["INNYTYPES_MCP_PORT"]);
+  const fixturePort = Number(env["RELOAD_MCP_PORT"]);
 
   // ── the fixture old install ────────────────────────────────────────────────────────────
   const configFile = legacyConfigPath(location);

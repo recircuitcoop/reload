@@ -67,7 +67,7 @@ export type SetupMove =
   | { readonly kind: "starterForms"; readonly formCount: number }
   | { readonly kind: "finish" };
 
-/** InnyTypes' own update (plan 0022 §G): the machine's state and the Go back offer. */
+/** Reload's own update (plan 0022 §G): the machine's state and the Go back offer. */
 export interface UpdateView {
   readonly state: UpdateState;
   /** Go back, while it is offered (seven days after an update); null otherwise. */
@@ -114,7 +114,7 @@ export type PackagesChanged = {
 /** One package row in General (plan 0022 §F): its verified facets, publisher and actions. */
 export interface PackageView {
   readonly package: Package;
-  /** Who vouches for it ("by InnyTypes"); null for a folder nobody signed. */
+  /** Who vouches for it ("by Reload"); null for a folder nobody signed. */
   readonly publisher: string | null;
   /** The row's buttons, from domain/packages/states.ts `rowActions`, judged when listed. */
   readonly actions: RowActions;

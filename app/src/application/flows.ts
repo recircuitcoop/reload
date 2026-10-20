@@ -96,7 +96,7 @@ export interface FlowAdminDeps {
   readonly cancelInputs: (flowId: string) => number;
   readonly meta: FlowMetaStore;
   readonly templates: TemplateSource;
-  /** A node type InnyTypes generated; undefined for Node-RED's own. */
+  /** A node type Reload generated; undefined for Node-RED's own. */
   readonly nodeType: (type: string) => FlowNodeType | undefined;
   readonly validator: SchemaValidator;
   readonly clock: Clock;
@@ -265,7 +265,7 @@ export class FlowAdmin {
     return { name: flow.label, nodes: withoutCredentials([tab, ...flow.nodes, ...flow.configs]) };
   }
 
-  /** `flow.node.form`: the step's config schema, `innytype` annotations left for the caller. */
+  /** `flow.node.form`: the step's config schema, `reload` annotations left for the caller. */
   async #form(flowId: string, nodeId: string) {
     const flow = await this.#flow(flowId);
     const { node, type } = this.#step(flow, nodeId);
@@ -449,7 +449,7 @@ export class FlowAdmin {
   }
 
   /**
-   * `flow.node.configure`: the values checked against the step's schema (ajv, the `innytype`
+   * `flow.node.configure`: the values checked against the step's schema (ajv, the `reload`
    * keyword an annotation), then the tab updated and that tab deployed. A secret left empty
    * keeps the one set.
    */

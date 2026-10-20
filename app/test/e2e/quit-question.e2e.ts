@@ -42,7 +42,7 @@ function editorPage(window: Page, port: string) {
 async function launched(
   env: Record<string, string>,
 ): Promise<RunningApp & { port: string; unloadGuards: string[]; shell: ChildProcess }> {
-  const running = await launchApp({ ...env, INNYTYPES_E2E_HOOKS: "1" });
+  const running = await launchApp({ ...env, RELOAD_E2E_HOOKS: "1" });
   // Held since launch: once the app has exited, the driver no longer hands its process out.
   const shell = shellOf(running.app);
   const unloadGuards: string[] = [];
@@ -89,7 +89,7 @@ async function editAndMark(window: Page, port: string): Promise<void> {
 /** Put a mark on the editor's page only: a reload loses it. */
 async function mark(window: Page, port: string): Promise<void> {
   await editorPage(window, port).evaluate(() => {
-    (window as unknown as { innyMark: string }).innyMark = "this page was never reloaded";
+    (window as unknown as { reloadMark: string }).reloadMark = "this page was never reloaded";
   });
 }
 
@@ -98,7 +98,7 @@ function editorState(window: Page, port: string) {
   return editorPage(window, port).evaluate((id) => {
     const RED = (window as unknown as { RED: EditorRed }).RED;
     return {
-      mark: (window as unknown as { innyMark?: string }).innyMark ?? null,
+      mark: (window as unknown as { reloadMark?: string }).reloadMark ?? null,
       dirty: RED.nodes.dirty(),
       edit: RED.nodes.node(id) !== undefined && RED.nodes.node(id) !== null,
     };
@@ -138,11 +138,11 @@ async function expectCleanQuit(shell: ChildProcess, userData: string, said: () =
       message: `the app did not exit; it last said:\n${said().slice(-3000)}`,
     })
     .toBe(0);
-  const stopping = said().indexOf("innytypes.runtime: runtime stopping (quit)");
+  const stopping = said().indexOf("reload.runtime: runtime stopping (quit)");
   expect(stopping).toBeGreaterThanOrEqual(0);
   // Node-RED's own line, said by RED.stop() as it stops the flows, after the quit's stop (a
   // deploy says it too, before).
-  expect(said().slice(stopping)).toMatch(/innytypes\.node-red: Stopped flows/);
+  expect(said().slice(stopping)).toMatch(/reload\.node-red: Stopped flows/);
   expect(said()).toContain("quit complete");
   await expect.poll(() => processesNaming(userData), { timeout: 10_000 }).toEqual([]);
 }

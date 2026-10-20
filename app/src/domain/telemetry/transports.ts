@@ -41,8 +41,8 @@ export interface Outgoing {
  * The host name Umami is told. Umami's event API wants one, and the machine's own is on the
  * never-sent list, so every install reports the same reserved, unresolvable name (RFC 2606).
  */
-export const UMAMI_HOSTNAME = "app.innytypes.invalid";
-/** The one path InnyTypes ever reports usage from. */
+export const UMAMI_HOSTNAME = "app.reload.invalid";
+/** The one path Reload ever reports usage from. */
 export const UMAMI_URL_PATH = "/app";
 
 /** The request that carries `report`, for this build's endpoints. Throws when it has none. */
@@ -118,7 +118,7 @@ export function renderEnvelope(report: QueuedReport, release: string): string {
     timestamp: at,
     platform: "node",
     level: "error",
-    logger: "innytypes.shell",
+    logger: "reload.shell",
     release,
     exception: {
       values: [{ type: text(payload["exception_type"], "Error"), value: "" }],
@@ -140,7 +140,7 @@ function glitchtipRequest(report: QueuedReport, dsn: string, release: string): O
     headers: {
       "Content-Type": "application/x-sentry-envelope",
       "X-Sentry-Auth":
-        `Sentry sentry_version=7, sentry_client=innytypes/${release}, ` + `sentry_key=${publicKey}`,
+        `Sentry sentry_version=7, sentry_client=reload/${release}, ` + `sentry_key=${publicKey}`,
     },
     body: renderEnvelope(report, release),
   };
@@ -186,7 +186,7 @@ function umamiRequest(report: QueuedReport, endpoints: Endpoints, release: strin
     headers: {
       "Content-Type": "application/json",
       // Umami refuses a request with no User-Agent. This one names the app and nothing else.
-      "User-Agent": `innytypes/${release}`,
+      "User-Agent": `reload/${release}`,
     },
     body: renderUmami(report, endpoints.umamiWebsiteId),
   };

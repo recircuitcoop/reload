@@ -13,8 +13,8 @@
       "config": {
         "type": "object",
         "properties": {
-          "space": { "type": "string", "title": "Space", "innytype": { "spaces": true } },
-          "type": { "type": "string", "title": "Type", "innytype": { "types": { "of": "space" } } }
+          "space": { "type": "string", "title": "Space", "reload": { "spaces": true } },
+          "type": { "type": "string", "title": "Type", "reload": { "types": { "of": "space" } } }
         }
       },
       "outputs": [{ "port": "out", "event": "rawnode.out.v1" }]

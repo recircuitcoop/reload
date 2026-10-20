@@ -66,7 +66,7 @@ const isObject = (value: unknown): value is Json =>
 
 /**
  * `value` with every string in it, keys included, redacted; but for the `blob` of file
- * contents InnyTypes built from Anytype's bytes, which is left whole (D5). A `blob` the child
+ * contents Reload built from Anytype's bytes, which is left whole (D5). A `blob` the child
  * wrote is redacted like any other string.
  */
 function redacted(value: unknown, redact: (text: string) => string): unknown {
@@ -96,13 +96,13 @@ const error = (id: unknown, code: number, message: string): Json => ({
 });
 
 /**
- * A dataview InnyTypes refused, answered the way the child answers a refusal Anytype wrote
+ * A dataview Reload refused, answered the way the child answers a refusal Anytype wrote
  * (a tool result whose text is Anytype's error object), so a client reads both alike.
  */
 function validationFailed(refusal: DataviewRefusal): Json {
   const message =
     `${refusal.path}.${refusal.member}: ${JSON.stringify(refusal.value)} ${refusal.reason} ` +
-    `(refused by InnyTypes, nothing was written)`;
+    `(refused by Reload, nothing was written)`;
   const text = JSON.stringify({ object: "error", status: 400, code: "validation_failed", message });
   return { content: [{ type: "text", text }], isError: true };
 }
@@ -179,7 +179,7 @@ async function dispatch(
         protocolVersion: MCP_PROTOCOL_VERSION,
         // `resources` because a download answers an embedded resource, readable by its uri.
         capabilities: { tools: {}, resources: {} },
-        serverInfo: { name: "innytypes-anytype", version: "1" },
+        serverInfo: { name: "reload-anytype", version: "1" },
       }),
     };
   }

@@ -1,4 +1,4 @@
-# The TypeScript SDK: `@innytypes/node`
+# The TypeScript SDK: `@recircuit/reload-node`
 
 Source: `sdk/ts/src/node.ts`. No runtime dependencies — a package built on it ships one
 bundled file that runs as it is (no `npm install` step ever runs against an installed
@@ -7,16 +7,16 @@ package, spec §2.3.3).
 ## Install and bundle
 
 During development, import it directly: `import { start, run, emit, ... } from
-"@innytypes/node"` resolves to `sdk/ts/src/node.ts` inside this workspace. To publish, bundle
-your entry point with everything inlined — `inny-pack build` does this for you with esbuild
-(`docs/authors/packaging.md`); `packages/anytype` (the first-party Anytype nodes) is the
+"@recircuit/reload-node"` resolves to `sdk/ts/src/node.ts` inside this workspace. To publish, bundle
+your entry point with everything inlined — `reload-pack build` does this for you with esbuild
+(`docs/authors/packaging.md`); `packages/reload_anytype` (the first-party Anytype nodes) is the
 existing example of the same bundling, `esbuild src/main.ts --bundle --platform=node
 --target=node22 --format=cjs --outfile=dist/main.cjs`.
 
 ## The functions
 
 ```ts
-import { start, run, emit, done, error, status, log, present, snapshot } from "@innytypes/node";
+import { start, run, emit, done, error, status, log, present, snapshot } from "@recircuit/reload-node";
 
 const info = await start(); // reads and checks the start frame; nothing is sent before this
 info.node; // { id, type, name }
@@ -76,22 +76,22 @@ an explicit `close` (having sent `closed` and exited 0) or at end-of-input (spec
 - **`declarePorts()` makes an undeclared `emit()` throw immediately** (C5), instead of
   reaching a runtime that would refuse and log it later.
 - **`anytypeKey()`** (used by the first-party Anytype nodes, not part of the general
-  contract) reads InnyTypes' own pairing key from the file the runtime names in
-  `INNYTYPES_ANYTYPE_KEY_FILE`, registers it with the redactor, and returns `null` when there
+  contract) reads Reload's own pairing key from the file the runtime names in
+  `RELOAD_ANYTYPE_KEY_FILE`, registers it with the redactor, and returns `null` when there
   is none yet. A third-party package has no use for it unless it specifically talks to the
-  Anytype API the way InnyTypes' own nodes do.
+  Anytype API the way Reload's own nodes do.
 
 ## A widget: `defineView`
 
 An action view can be drawn by your package's own widget, in the pop-up only (spec §8.5.6,
 plan 0021). The widget is a plain web component in your package's one `view/component.js`;
-InnyTypes draws the title and **Continue** · **Later** · **Skip this step** around it, and the
-widget draws only its body. Write it with `defineView` from `@innytypes/node/view`, and bundle
+Reload draws the title and **Continue** · **Later** · **Skip this step** around it, and the
+widget draws only its body. Write it with `defineView` from `@recircuit/reload-node/view`, and bundle
 it into `view/component.js` (`esbuild src/view.ts --bundle --format=iife
 --outfile=view/component.js`); it has no imports of its own.
 
 ```ts
-import { defineView } from "@innytypes/node/view";
+import { defineView } from "@recircuit/reload-node/view";
 
 defineView<{ items: string[] }, { order: string[] }>("mypkg-order", {
   render: (context) => {
@@ -105,7 +105,7 @@ defineView<{ items: string[] }, { order: string[] }>("mypkg-order", {
 
 The node presents it with `present(id, { title, component: { element: "mypkg-order", props
 }, form })`; the `form` is drawn instead when the widget can't be. Declare the type's `props`
-and `answer` schemas (spec §2.4): `inny-pack build` refuses one that does not compile, and a
+and `answer` schemas (spec §2.4): `reload-pack build` refuses one that does not compile, and a
 type with `props` but no `view/component.js`. **Treat an answer as input**: it is any JSON your
 `answer` schema allows, and reaches your `action` handler as the widget sent it.
 

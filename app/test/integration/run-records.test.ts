@@ -24,7 +24,7 @@ const opened: SqliteJournal[] = [];
 const dirs: string[] = [];
 
 function scratchFile(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "inny-runs-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "reload-runs-"));
   dirs.push(dir);
   return path.join(dir, "journal.sqlite");
 }
@@ -47,8 +47,8 @@ function entry(
     inputId,
     instanceId,
     flowId,
-    type: "inny-pkg-t",
-    message: { payload, topic: "pkg.t.v1", inny: { run }, _msgid: `m-${inputId}` },
+    type: "reload-pkg-t",
+    message: { payload, topic: "pkg.t.v1", reload: { run }, _msgid: `m-${inputId}` },
     now,
   });
 }
@@ -217,14 +217,14 @@ describe("a crash between journal and record is impossible", () => {
         message: JSON.stringify({
           payload: { id: "small" },
           topic: "pkg.t.v1",
-          inny: { run: "r1" },
+          reload: { run: "r1" },
           _msgid: "m-small",
         }),
       },
     ]);
     // A re-run reads them back by step position, null where none was kept (plan 0022 §E).
     expect(journal.keptInputs("r1")).toEqual([
-      { payload: { id: "small" }, topic: "pkg.t.v1", inny: { run: "r1" }, _msgid: "m-small" },
+      { payload: { id: "small" }, topic: "pkg.t.v1", reload: { run: "r1" }, _msgid: "m-small" },
     ]);
     expect(journal.keptInputs("r2")).toEqual([null]);
     expect(journal.keptInputs("none")).toEqual([]);
@@ -276,16 +276,16 @@ describe("additive migration (0.2.1 fixture database)", () => {
     const sent = newEntry({
       inputId: "in-sent",
       instanceId: "n1",
-      type: "inny-pkg-t",
-      message: { payload: 1, topic: "pkg.t.v1", inny: { run: "run-a" } },
+      type: "reload-pkg-t",
+      message: { payload: 1, topic: "pkg.t.v1", reload: { run: "run-a" } },
       now: 10,
     });
     const waiting = presented(
       newEntry({
         inputId: "in-wait",
         instanceId: "v1",
-        type: "inny-pkg-ask",
-        message: { payload: 2, topic: "pkg.t.v1", inny: { run: "run-b" } },
+        type: "reload-pkg-ask",
+        message: { payload: 2, topic: "pkg.t.v1", reload: { run: "run-b" } },
         now: 20,
       }),
       { title: "Which project?" },
@@ -751,14 +751,14 @@ describe("a run is done only when nothing is left for it (the verifier's refutat
       queue: { ...DEFAULT_QUEUE, bound: 1, policy: "hold" },
       instanceId: "B",
       flowId: "tab1",
-      type: "inny-pkg-t",
+      type: "reload-pkg-t",
       label: "Upload",
       newId: () => `b-${String((n += 1))}`,
       log: () => undefined,
       held: runs,
     });
     const delivery = { send: () => undefined, done: () => undefined };
-    const message = (run: string) => ({ payload: 1, topic: "t", inny: { run } });
+    const message = (run: string) => ({ payload: 1, topic: "t", reload: { run } });
     runs.emitted({ flowId: "tab1", runId: "busy", type: "rec", data: {} });
     runs.emitted({ flowId: "tab1", runId: "waits", type: "rec", data: {} });
     node.admit(message("busy"), delivery, 0); // in hand

@@ -113,7 +113,7 @@ export class StdioMcpSession implements McpSession {
     await this.request("initialize", {
       protocolVersion: MCP_PROTOCOL_VERSION,
       capabilities: {},
-      clientInfo: { name: "innytypes-services", version: "1" },
+      clientInfo: { name: "reload-services", version: "1" },
     });
     this.notify("notifications/initialized");
     const result = await this.request("tools/list");

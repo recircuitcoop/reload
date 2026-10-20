@@ -26,7 +26,7 @@ let scratch = "";
 let worker = "";
 
 beforeAll(() => {
-  scratch = fs.mkdtempSync(path.join(os.tmpdir(), "inny-journal-kill-"));
+  scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-journal-kill-"));
   worker = path.join(scratch, "worker.cjs");
   buildSync({
     entryPoints: [path.join(HERE, "..", "fixtures", "journal-worker", "worker.ts")],

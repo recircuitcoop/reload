@@ -11,12 +11,12 @@ import * as path from "node:path";
 import { expect, test, type ElectronApplication, type Page } from "@playwright/test";
 import { cleanUp, launchApp, quit, scratchDirectories, waitForRunning } from "./app-harness";
 
-const SOURCE = "inny-livekit-recorder";
+const SOURCE = "reload-livekit-recorder";
 const FLOW = "runs-tab";
 
 /** What the page's AppApi offers, as far as this spec calls it. */
-interface Inny {
-  inny: {
+interface Reload {
+  reload: {
     app: {
       runs(query: object): Promise<{ ok: boolean; value?: unknown; refused?: unknown }>;
       onRuns(listener: (changed: { flowId: string }) => void): void;
@@ -52,7 +52,7 @@ function deploy(port: number, nodes: object[]): Promise<number> {
 async function runsOf(window: Page, limit = 50, cursor?: string) {
   const answer = await window.evaluate(
     ({ flowId, limit, cursor }) =>
-      (window as unknown as Inny).inny.app.runs({
+      (window as unknown as Reload).reload.app.runs({
         flowId,
         limit,
         ...(cursor === undefined ? {} : { cursor }),
@@ -93,11 +93,11 @@ test("a source's event starts a run in its flow: run.list grows and onRuns fires
 
     // The page listens for the runs signal, as Live will.
     await window.evaluate(() => {
-      const page = window as unknown as Inny;
+      const page = window as unknown as Reload;
       page.heardRuns = [];
-      page.inny.app.onRuns((changed) => page.heardRuns?.push(changed));
+      page.reload.app.onRuns((changed) => page.heardRuns?.push(changed));
     });
-    const heard = () => window.evaluate(() => (window as unknown as Inny).heardRuns ?? []);
+    const heard = () => window.evaluate(() => (window as unknown as Reload).heardRuns ?? []);
     expect((await runsOf(window)).runs).toEqual([]);
 
     // A recording: one run, in the source's flow, named by its recording; then done.

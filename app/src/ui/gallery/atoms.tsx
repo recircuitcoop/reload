@@ -262,7 +262,7 @@ export function AtomsPage() {
         </Cell>
         <Cell of="code" width={320}>
           <Code kind="block">
-            {'"mcpServers": {\n  "innytypes": {\n    "url": "http://127.0.0.1:31010/mcp"\n  }\n}'}
+            {'"mcpServers": {\n  "reload": {\n    "url": "http://127.0.0.1:31010/mcp"\n  }\n}'}
           </Code>
         </Cell>
       </Group>

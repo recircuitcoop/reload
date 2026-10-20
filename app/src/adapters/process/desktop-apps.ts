@@ -5,7 +5,7 @@
 //   table: the path is what the table reports, and a bare name would match any process called
 //   that. A process that merely names the path as an argument (`grep …/Anytype`) is not it.
 // * Started detached, in a process group of its own, with no pipes: it is a desktop app, not a
-//   child, and must never be taken down by a signal meant for InnyTypes' own group.
+//   child, and must never be taken down by a signal meant for Reload's own group.
 // * Quit through the handle the start returned: SIGTERM, then SIGKILL after the grace period.
 //   There is no quit by pid: an app this application did not start has no handle to quit.
 
@@ -99,7 +99,7 @@ export class ProcessTableApps implements DesktopApps {
     const child = spawn(executable, [], { detached: true, stdio: "ignore" });
     // A spawn that fails says so as an event; unheard, it would take the shell down with it.
     child.on("error", () => undefined);
-    // A desktop app is not held open by InnyTypes' event loop.
+    // A desktop app is not held open by Reload's event loop.
     child.unref();
     if (child.pid === undefined) {
       throw new Error(`${executable} could not be started`);

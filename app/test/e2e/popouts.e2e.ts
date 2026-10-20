@@ -1,4 +1,4 @@
-// The pop-outs (WI-0018-11), in the real app: on inny-view:// in the inny-views partition, with
+// The pop-outs (WI-0018-11), in the real app: on reload-view:// in the reload-views partition, with
 // the exact webPreferences, CSP and id-less bridge of spec 8.5, every P10f probe run from inside a
 // live pop-out AND from inside a third-party component; two at once; closing without submitting,
 // the question still waiting on Live; placement remembered when Live's Answer opens it again; a
@@ -103,7 +103,7 @@ function flow(port: number): object[] {
     inject("go-a", "ask-a", '{"n":1}'),
     {
       id: "ask-a",
-      type: "inny-popoutkit-ask",
+      type: "reload-popoutkit-ask",
       z: "tab1",
       window: "popout",
       show: "rich",
@@ -112,7 +112,7 @@ function flow(port: number): object[] {
     inject("go-b", "ask-b", '{"n":2}'),
     {
       id: "ask-b",
-      type: "inny-popoutkit-ask",
+      type: "reload-popoutkit-ask",
       z: "tab1",
       window: "popout",
       show: "rich",
@@ -121,7 +121,7 @@ function flow(port: number): object[] {
     inject("go-c", "ask-c", JSON.stringify({ port })),
     {
       id: "ask-c",
-      type: "inny-popoutkit-ask",
+      type: "reload-popoutkit-ask",
       z: "tab1",
       window: "popout",
       show: "component",
@@ -130,7 +130,7 @@ function flow(port: number): object[] {
     inject("go-i", "ask-i", '{"n":9}'),
     {
       id: "ask-i",
-      type: "inny-popoutkit-ask",
+      type: "reload-popoutkit-ask",
       z: "tab1",
       window: "inline",
       show: "rich",
@@ -139,13 +139,13 @@ function flow(port: number): object[] {
     inject("go-rec", "rec", '{"n":4}'),
     {
       id: "rec",
-      type: "inny-popoutkit-record",
+      type: "reload-popoutkit-record",
       z: "tab1",
       name: "Rec",
       wires: [[], ["dbg-again"]],
     },
     inject("go-slow", "slow", '{"n":5}'),
-    { id: "slow", type: "inny-popoutkit-slow", z: "tab1", wires: [[]] },
+    { id: "slow", type: "reload-popoutkit-slow", z: "tab1", wires: [[]] },
     {
       id: "catch",
       type: "catch",
@@ -175,7 +175,7 @@ async function answerOnLive(window: Page): Promise<void> {
 
 /** The pop-out pages open now. */
 const popoutPages = (app: ElectronApplication): Page[] =>
-  app.windows().filter((page) => page.url().startsWith("inny-view://"));
+  app.windows().filter((page) => page.url().startsWith("reload-view://"));
 
 /** Skip this step in a pop-out's chrome, which asks once (ux-writing "Questions"): Skip. */
 async function skipConfirmed(page: Page): Promise<void> {
@@ -190,15 +190,15 @@ async function skipConfirmed(page: Page): Promise<void> {
 /** The pop-outs the shell holds now, by `view:<id>` / `snapshot:<id>` (e2e hook). */
 const popoutKeys = (app: ElectronApplication): Promise<string[]> =>
   app.evaluate(() =>
-    (globalThis as unknown as { innytypesE2E: { popouts(): string[] } }).innytypesE2E.popouts(),
+    (globalThis as unknown as { reloadE2E: { popouts(): string[] } }).reloadE2E.popouts(),
   );
 
 /** The view id a pop-out page answers for, asked through its own bridge. */
 const idOf = (page: Page): Promise<string> =>
   page.evaluate(async () => {
     const got = await (
-      window as unknown as { inny: { get(): Promise<{ ok: boolean; value?: { id: string } }> } }
-    ).inny.get();
+      window as unknown as { reload: { get(): Promise<{ ok: boolean; value?: { id: string } }> } }
+    ).reload.get();
     return got.ok ? (got.value?.id ?? "") : "";
   });
 
@@ -233,7 +233,7 @@ async function windowFacts(app: ElectronApplication, url: string) {
       preferences: (
         window.webContents as unknown as { getLastWebPreferences(): Record<string, unknown> }
       ).getLastWebPreferences(),
-      partitioned: window.webContents.session === session.fromPartition("inny-views"),
+      partitioned: window.webContents.session === session.fromPartition("reload-views"),
       bounds: window.getBounds(),
     };
   }, url);
@@ -255,22 +255,22 @@ const probeSource = (port: number): string => `(async () => {
     process: typeof process,
     module: typeof module,
     electron: typeof window.electron,
-    innyKeys: Object.keys(window.inny).sort(),
-    appApi: typeof window.inny.app,
-    getLength: window.inny.get.length,
+    reloadKeys: Object.keys(window.reload).sort(),
+    appApi: typeof window.reload.app,
+    getLength: window.reload.get.length,
   };
   results.fetchRuntime = await outcome(fetch("http://127.0.0.1:${String(port)}/red/settings"));
   results.fetchFile = await outcome(fetch("file:///etc/hosts"));
   try { results.eval = String(eval("1+1")); } catch (error) { results.eval = error.name; }
   try { results.newFunction = String(new Function("return 2")()); } catch (error) { results.newFunction = error.name; }
   const script = document.createElement("script");
-  script.textContent = "window.__innyInlineRan = true;";
+  script.textContent = "window.__reloadInlineRan = true;";
   document.body.append(script);
   await new Promise((resolve) => setTimeout(resolve, 50));
-  results.inlineScript = window.__innyInlineRan === true ? "ran" : "did not run";
+  results.inlineScript = window.__reloadInlineRan === true ? "ran" : "did not run";
   results.windowOpen = window.open("https://example.com/") === null ? "denied" : "opened";
-  results.action = await outcome(window.inny.action("again", {}));
-  const other = await window.inny.get("someone-else");
+  results.action = await outcome(window.reload.action("again", {}));
+  const other = await window.reload.get("someone-else");
   results.getOwn = other.ok ? other.value.id : "not ok: " + other.error;
   return results;
 })()`;
@@ -284,11 +284,11 @@ async function probe(
   return app.evaluate(
     async ({ BrowserWindow }, [wanted, source]) => {
       for (const window of BrowserWindow.getAllWindows()) {
-        if (!window.webContents.getURL().startsWith("inny-view://")) {
+        if (!window.webContents.getURL().startsWith("reload-view://")) {
           continue;
         }
         const own = (await window.webContents.executeJavaScript(
-          "window.inny.get().then((got) => (got.ok ? got.value.id : ''))",
+          "window.reload.get().then((got) => (got.ok ? got.value.id : ''))",
         )) as string;
         if (own === wanted) {
           return (await window.webContents.executeJavaScript(source)) as Record<string, unknown>;
@@ -308,7 +308,7 @@ function sandboxed(id: string) {
     module: "undefined",
     electron: "undefined",
     // The five-call bridge (spec 8.5.6), and nothing else.
-    innyKeys: ["action", "draft", "get", "setValid", "submit"],
+    reloadKeys: ["action", "draft", "get", "setValid", "submit"],
     appApi: "undefined",
     getLength: 0,
     fetchRuntime: expect.stringMatching(/^refused: /),
@@ -327,14 +327,14 @@ test("pop-outs: sandboxed exactly, every P10f probe from inside a pop-out and a 
   const { scratch, userData, env } = scratchDirectories();
   const launched: ElectronApplication[] = [];
   try {
-    const { app, window, output } = await launchApp({ ...env, INNYTYPES_E2E_HOOKS: "1" });
+    const { app, window, output } = await launchApp({ ...env, RELOAD_E2E_HOOKS: "1" });
     launched.push(app);
     const said = () => output.join("");
-    const notices = () => said().match(/notice: InnyTypes is waiting for you/g)?.length ?? 0;
+    const notices = () => said().match(/notice: Reload is waiting for you/g)?.length ?? 0;
     let runtime = await waitForRunning(window, "runtime");
     const port = Number(runtime.port);
     expect(await request(port, "POST", "/red/flows", flow(port))).toBe(204);
-    await expect.poll(said, { timeout: 20_000 }).toMatch(/\[inny-popoutkit-slow slow\] ready/);
+    await expect.poll(said, { timeout: 20_000 }).toMatch(/\[reload-popoutkit-slow slow\] ready/);
 
     // ── a first presentation opens its pop-out by itself ────────────────────────────────
     expect(await request(port, "POST", "/red/inject/go-a")).toBe(200);
@@ -343,25 +343,25 @@ test("pop-outs: sandboxed exactly, every P10f probe from inside a pop-out and a 
     const idA = await idOf(a);
     expect(await popoutKeys(app)).toEqual([`view:${idA}`]);
     await expect.poll(notices).toBe(1);
-    expect(a.url()).toBe("inny-view://app/view.html");
+    expect(a.url()).toBe("reload-view://app/view.html");
 
-    // ── served by the shell, in the inny-views partition, with the exact webPreferences ─
+    // ── served by the shell, in the reload-views partition, with the exact webPreferences ─
     const facts = await windowFacts(app, a.url());
     expect(facts?.partitioned).toBe(true);
     expect(facts?.preferences).toMatchObject(WEB_PREFERENCES);
     // ── the CSP, as a response header of every file the page is made of ───────────────
     const headers = await app.evaluate(async ({ session }) => {
-      const views = session.fromPartition("inny-views");
+      const views = session.fromPartition("reload-views");
       const csp: Record<string, string | null> = {};
       for (const url of [
-        "inny-view://app/view.html",
-        "inny-view://app/view.js",
-        "inny-view://app/tokens.css",
-        "inny-view://app/view-kit.css",
-        "inny-view://popoutkit/view.html",
-        "inny-view://popoutkit/component.js",
-        "inny-view://popoutkit/tokens.css",
-        "inny-view://popoutkit/view-kit.css",
+        "reload-view://app/view.html",
+        "reload-view://app/view.js",
+        "reload-view://app/tokens.css",
+        "reload-view://app/view-kit.css",
+        "reload-view://popoutkit/view.html",
+        "reload-view://popoutkit/component.js",
+        "reload-view://popoutkit/tokens.css",
+        "reload-view://popoutkit/view-kit.css",
       ]) {
         const response = await views.fetch(url);
         csp[url] = response.ok ? response.headers.get("content-security-policy") : null;
@@ -406,7 +406,7 @@ test("pop-outs: sandboxed exactly, every P10f probe from inside a pop-out and a 
     const placed = { x: 123, y: 145, width: 611, height: 503 };
     await app.evaluate(({ BrowserWindow }, bounds) => {
       const window = BrowserWindow.getAllWindows().find((w) =>
-        w.webContents.getURL().startsWith("inny-view://"),
+        w.webContents.getURL().startsWith("reload-view://"),
       );
       window?.setBounds(bounds);
       window?.close();
@@ -420,7 +420,7 @@ test("pop-outs: sandboxed exactly, every P10f probe from inside a pop-out and a 
     const remembered = JSON.parse(
       fs.readFileSync(path.join(userData, "popout-placements.json"), "utf8"),
     ) as Record<string, unknown>;
-    expect(remembered["view:inny-popoutkit-ask"]).toEqual(placed);
+    expect(remembered["view:reload-popoutkit-ask"]).toEqual(placed);
 
     // ── Live's Answer re-opens it where its type was left ───────────────────────────────
     await answerOnLive(window);
@@ -431,12 +431,12 @@ test("pop-outs: sandboxed exactly, every P10f probe from inside a pop-out and a 
     expect(await request(port, "POST", "/red/inject/go-c")).toBe(200);
     await expect
       .poll(
-        () => popoutPages(app).some((page) => page.url().startsWith("inny-view://popoutkit/")),
+        () => popoutPages(app).some((page) => page.url().startsWith("reload-view://popoutkit/")),
         { timeout: 15_000 },
       )
       .toBe(true);
     const c = popoutPages(app).find(
-      (page) => page.url() === "inny-view://popoutkit/view.html",
+      (page) => page.url() === "reload-view://popoutkit/view.html",
     ) as Page;
     const idC = await idOf(c);
     const cFacts = await windowFacts(app, c.url());
@@ -498,7 +498,7 @@ function soundFlow(): object[] {
     inject("go-sp", "ask-sp", '{"label":"Listen to the tone"}'),
     {
       id: "ask-sp",
-      type: "inny-popoutkit-ask",
+      type: "reload-popoutkit-ask",
       z: "tab1",
       window: "popout",
       show: "sound",
@@ -507,7 +507,7 @@ function soundFlow(): object[] {
     inject("go-si", "ask-si", "{}"),
     {
       id: "ask-si",
-      type: "inny-popoutkit-ask",
+      type: "reload-popoutkit-ask",
       z: "tab1",
       window: "inline",
       show: "sound",
@@ -585,14 +585,14 @@ test("a view plays a sound", async () => {
   const { scratch, userData, env } = scratchDirectories();
   const launched: ElectronApplication[] = [];
   try {
-    const { app, window, output } = await launchApp({ ...env, INNYTYPES_E2E_HOOKS: "1" });
+    const { app, window, output } = await launchApp({ ...env, RELOAD_E2E_HOOKS: "1" });
     launched.push(app);
     const said = () => output.join("");
     const runtime = await waitForRunning(window, "runtime");
     const port = Number(runtime.port);
     expect(await request(port, "POST", "/red/flows", soundFlow())).toBe(204);
-    await expect.poll(said, { timeout: 20_000 }).toMatch(/\[inny-popoutkit-ask ask-sp\] ready/);
-    await expect.poll(said, { timeout: 20_000 }).toMatch(/\[inny-popoutkit-ask ask-si\] ready/);
+    await expect.poll(said, { timeout: 20_000 }).toMatch(/\[reload-popoutkit-ask ask-sp\] ready/);
+    await expect.poll(said, { timeout: 20_000 }).toMatch(/\[reload-popoutkit-ask ask-si\] ready/);
 
     // ── in the pop-out: a Listen control with the package's label, and it plays once ─────
     expect(await request(port, "POST", "/red/inject/go-sp")).toBe(200);
@@ -630,7 +630,7 @@ function widgetFlow(): object[] {
     inject("go-r", "reorder", "{}"),
     {
       id: "reorder",
-      type: "inny-widgetkit-reorder",
+      type: "reload-widgetkit-reorder",
       z: "tab1",
       window: "inline",
       wires: [["dbg-answered"]],
@@ -638,7 +638,7 @@ function widgetFlow(): object[] {
     inject("go-m", "missing", "{}"),
     {
       id: "missing",
-      type: "inny-widgetkit-missing",
+      type: "reload-widgetkit-missing",
       z: "tab1",
       window: "inline",
       show: "missing",
@@ -647,7 +647,7 @@ function widgetFlow(): object[] {
     inject("go-x", "crash", "{}"),
     {
       id: "crash",
-      type: "inny-widgetkit-missing",
+      type: "reload-widgetkit-missing",
       z: "tab1",
       window: "inline",
       show: "crash",
@@ -656,7 +656,7 @@ function widgetFlow(): object[] {
     inject("go-b", "bare", "{}"),
     {
       id: "bare",
-      type: "inny-widgetkit-missing",
+      type: "reload-widgetkit-missing",
       z: "tab1",
       window: "inline",
       show: "bare",
@@ -681,7 +681,7 @@ async function widgetPopout(app: ElectronApplication, port: number, go: string):
   expect(await request(port, "POST", `/red/inject/${go}`)).toBe(200);
   await expect.poll(() => popoutPages(app).length, { timeout: 15_000 }).toBe(1);
   const page = popoutPages(app)[0] as Page;
-  expect(page.url()).toBe("inny-view://widgetkit/view.html");
+  expect(page.url()).toBe("reload-view://widgetkit/view.html");
   return page;
 }
 
@@ -690,7 +690,7 @@ test("widget views", async () => {
   const { scratch, userData, env } = scratchDirectories();
   const launched: ElectronApplication[] = [];
   try {
-    const { app, window, output } = await launchApp({ ...env, INNYTYPES_E2E_HOOKS: "1" });
+    const { app, window, output } = await launchApp({ ...env, RELOAD_E2E_HOOKS: "1" });
     launched.push(app);
     const said = () => output.join("");
     const caught = () => said().match(/\[debug:caught\]/g)?.length ?? 0;
@@ -700,7 +700,7 @@ test("widget views", async () => {
     for (const id of ["reorder", "missing", "crash", "bare"]) {
       await expect
         .poll(said, { timeout: 20_000 })
-        .toMatch(new RegExp(`\\[inny-widgetkit-(reorder|missing) ${id}\\] ready`));
+        .toMatch(new RegExp(`\\[reload-widgetkit-(reorder|missing) ${id}\\] ready`));
     }
 
     // ── pop-up only: an inline instance's widget opens in its pop-up by itself ───────────
@@ -714,13 +714,13 @@ test("widget views", async () => {
     expect(await popoutKeys(app)).toEqual([`view:${idR}`]);
     await expect(window.getByTestId("view-form")).toHaveCount(0);
 
-    // ── the tokens in the sandbox: the widget looks like InnyTypes ─────────────────────
+    // ── the tokens in the sandbox: the widget looks like Reload ─────────────────────
     await expect(r.getByTestId("reorder-row-0")).toContainText("Ada");
     const styled = await r.evaluate(() => {
       const row = document.querySelector('[data-testid="reorder-row-0"]') as HTMLElement;
       return {
         canvas: getComputedStyle(document.documentElement)
-          .getPropertyValue("--inny-surface-canvas")
+          .getPropertyValue("--reload-surface-canvas")
           .trim(),
         body: getComputedStyle(document.body).backgroundColor,
         rowRadius: getComputedStyle(row).borderTopLeftRadius,
@@ -831,7 +831,7 @@ test("Preview a view…", async () => {
   const { scratch, userData, env } = scratchDirectories();
   const launched: ElectronApplication[] = [];
   try {
-    const { app, window, output } = await launchApp({ ...env, INNYTYPES_E2E_HOOKS: "1" });
+    const { app, window, output } = await launchApp({ ...env, RELOAD_E2E_HOOKS: "1" });
     launched.push(app);
     const said = () => output.join("");
     await waitForRunning(window, "runtime");
@@ -851,7 +851,7 @@ test("Preview a view…", async () => {
     await expect.poll(() => popoutPages(app).length, { timeout: 15_000 }).toBe(1);
     const p = popoutPages(app)[0] as Page;
     // The real sandbox, on the package's own origin, under the pop-out CSP.
-    expect(p.url()).toBe("inny-view://widgetkit/view.html");
+    expect(p.url()).toBe("reload-view://widgetkit/view.html");
     expect(await popoutKeys(app)).toEqual(["preview:widgetkit-reorder"]);
     // Drawn with the type's sample props (its `props` examples), not the node's own list.
     await expect(p.getByTestId("question-popout")).toContainText("Reorder (widget kit)");

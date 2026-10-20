@@ -9,7 +9,7 @@
 // id carries the package's name (`package-row-<name>`), and each fact is `package-facet`; a fact
 // with its own test id carries it on its words, and its reason on the reason beside it.
 //
-// A row never shows a state InnyTypes has not verified: every pill comes with when it was
+// A row never shows a state Reload has not verified: every pill comes with when it was
 // checked (domain/packages/states.ts carries a verifiedAt on each), and the caller words both.
 import type { ReactNode } from "react";
 import { StatusPill, type StatusPillState } from "../atoms/StatusPill";
@@ -45,7 +45,7 @@ export interface PackageRowProps {
   readonly version: string;
   /** "by l1nx". */
   readonly publisher: string;
-  /** "From a folder: ~/packages/innyrize", "Unsigned". */
+  /** "From a folder: ~/packages/reload_summarize", "Unsigned". */
   readonly captions?: readonly string[];
   /** At most three. */
   readonly facets: readonly PackageFacet[];

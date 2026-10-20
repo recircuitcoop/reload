@@ -97,7 +97,7 @@ function runtime(journal: MemoryJournal) {
   started.push(raw);
   service.attach(INSTANCE, {
     node: raw.node,
-    type: "inny-rawnode-raw",
+    type: "reload-rawnode-raw",
     package: "rawnode",
     label: "Rank",
     window: "popout",

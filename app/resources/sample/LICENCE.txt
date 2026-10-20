@@ -1,6 +1,6 @@
 sample-10s.wav
 
-Generated for InnyTypes, from nothing but a formula: a 10-second tone sweeping from 220 Hz to
+Generated for Reload, from nothing but a formula: a 10-second tone sweeping from 220 Hz to
 880 Hz, 16 kHz mono 16-bit PCM. No recording, voice or third-party material is in it.
 
     ffmpeg -f lavfi -i "aevalsrc=0.25*sin(2*PI*(220*t+33*t*t)):s=16000:d=10" \
@@ -9,6 +9,6 @@ Generated for InnyTypes, from nothing but a formula: a 10-second tone sweeping f
 Released under CC0 1.0 Universal (public domain dedication):
 https://creativecommons.org/publicdomain/zero/1.0/
 
-To the extent possible under law, the InnyTypes authors have waived all copyright and related
+To the extent possible under law, the Reload authors have waived all copyright and related
 or neighboring rights to sample-10s.wav. You may copy, modify and distribute it, even for
 commercial purposes, all without asking permission.

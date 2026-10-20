@@ -21,7 +21,7 @@ function probeInRealHome(): string {
   if (home === undefined) {
     throw new Error("the guard knows no real home");
   }
-  return path.join(home, `.innytypes-home-guard-probe-${String(process.pid)}`);
+  return path.join(home, `.reload-home-guard-probe-${String(process.pid)}`);
 }
 
 describe("the scratch home", () => {
@@ -33,12 +33,12 @@ describe("the scratch home", () => {
   });
 
   it("reports a file a test left in it, then empties it", () => {
-    mkdirSync(path.join(SANDBOX_HOME, ".config", "innytypes"), { recursive: true });
-    writeFileSync(path.join(SANDBOX_HOME, ".config", "innytypes", "settings.json"), "{}");
+    mkdirSync(path.join(SANDBOX_HOME, ".config", "reload"), { recursive: true });
+    writeFileSync(path.join(SANDBOX_HOME, ".config", "reload", "settings.json"), "{}");
 
     const leaks = collectLeaks();
 
-    expect(leaks).toContain(`written: ~/${path.join(".config", "innytypes", "settings.json")}`);
+    expect(leaks).toContain(`written: ~/${path.join(".config", "reload", "settings.json")}`);
     expect(fs.readdirSync(SANDBOX_HOME)).toEqual([]);
   });
 });
@@ -92,7 +92,7 @@ describe("the real home", () => {
   });
 
   it("leaves the temp directory writable", () => {
-    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "inny-guard-"));
+    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-guard-"));
     writeFileSync(path.join(scratch, "file"), "x");
     fs.rmSync(scratch, { recursive: true });
 

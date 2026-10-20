@@ -183,7 +183,7 @@ function AnytypeStep({ api, move }: StepProps) {
   const shown = anytypeStep(anytype.status, anytype.spaces, pairingFailed);
   const noKey = anytype.status?.state === "no-key" && !anytype.status.pairing;
   // Not paired yet: Anytype is asked for a code as the step opens, and again while it does not
-  // answer (InnyTypes notices once it is open).
+  // answer (Reload notices once it is open).
   useEffect(() => {
     if (!noKey) {
       return;

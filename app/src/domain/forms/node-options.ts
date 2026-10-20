@@ -1,7 +1,7 @@
 // A step's dynamic options (plan 0022 §B, decision D9): what a form asks for when a property
-// declares `innytype.spaces` or `innytype.types.of`, and what it is answered.
+// declares `reload.spaces` or `reload.types.of`, and what it is answered.
 //
-// One shape for every hop: the canvas form's admin route `/red/inny/options`, Setup's
+// One shape for every hop: the canvas form's admin route `/red/reload/options`, Setup's
 // `AppApi.nodeOptions`, and the runtime's resolver (application/node-options.ts), which asks the
 // services process over the direct peer channel. The answer carries ids and names only; the
 // Anytype key never leaves the services process.

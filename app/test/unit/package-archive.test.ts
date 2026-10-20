@@ -17,7 +17,7 @@ const sha256 = (bytes: Uint8Array): string => createHash("sha256").update(bytes)
 const text = (value: string): Uint8Array => new TextEncoder().encode(value);
 
 const FILES = new Map([
-  ["inny-package.json", text("{}")],
+  ["reload-package.json", text("{}")],
   ["node.py", text("print('hi')\n")],
   ["lib/util.py", text("X = 1\n")],
 ]);
@@ -52,7 +52,7 @@ describe("pathProblem", () => {
 describe("parseFileManifest", () => {
   it("reads every file and its hash", () => {
     const manifest = parseFileManifest(listing(FILES));
-    expect([...manifest.keys()].sort()).toEqual(["inny-package.json", "lib/util.py", "node.py"]);
+    expect([...manifest.keys()].sort()).toEqual(["lib/util.py", "node.py", "reload-package.json"]);
   });
 
   it.each([
@@ -64,8 +64,12 @@ describe("parseFileManifest", () => {
       JSON.stringify({ files: { "files.json": "a".repeat(64) } }),
       "cannot list itself",
     ],
-    ["a bad hash", JSON.stringify({ files: { "inny-package.json": "abc" } }), "64 lowercase hex"],
-    ["no declaration", JSON.stringify({ files: { "a.py": "a".repeat(64) } }), "does not list inny"],
+    ["a bad hash", JSON.stringify({ files: { "reload-package.json": "abc" } }), "64 lowercase hex"],
+    [
+      "no declaration",
+      JSON.stringify({ files: { "a.py": "a".repeat(64) } }),
+      "does not list reload",
+    ],
   ])("refuses %s", (_what, document, reason) => {
     const refusal = refusedWith(() => parseFileManifest(text(document)));
     expect(refusal.reason).toBe("files");
@@ -107,7 +111,7 @@ describe("verifyFiles", () => {
 describe("contentHash", () => {
   it("is the sha256 of the sorted sha256sum lines of the files", () => {
     const manifest = manifestOf(FILES, sha256);
-    const lines = ["inny-package.json", "lib/util.py", "node.py"]
+    const lines = ["lib/util.py", "node.py", "reload-package.json"]
       .map((file) => `${manifest.get(file) ?? ""}  ${file}\n`)
       .join("");
     expect(contentHash(manifest, sha256)).toBe(sha256(text(lines)));

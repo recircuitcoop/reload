@@ -4,7 +4,7 @@
 // spec drives.
 //
 // Needs a build already on disk (`npm run package:mac` from app/), so it never runs as part of
-// the ordinary gate: every test here is skipped unless INNYTYPES_PACKAGED_APP names the .app
+// the ordinary gate: every test here is skipped unless RELOAD_PACKAGED_APP names the .app
 // (macOS) built for this machine's arch. A machine proof (WI-0018-28) sets it; nobody else's
 // gate run is affected by its absence.
 import fs from "node:fs";
@@ -19,11 +19,11 @@ const FAKE_MCP = path.join(APP_ROOT, "test", "fixtures", "fake-mcp");
 
 /** The .app electron-builder produced (macOS only; the other platforms have no bundle path
  * this uniform, and are proven by WI-0018-29's own machine instead). */
-const PACKAGED_APP = process.env["INNYTYPES_PACKAGED_APP"];
+const PACKAGED_APP = process.env["RELOAD_PACKAGED_APP"];
 
 test.skip(
   PACKAGED_APP === undefined || PACKAGED_APP === "",
-  "INNYTYPES_PACKAGED_APP names no packaged .app; this spec proves an actual build, not the " +
+  "RELOAD_PACKAGED_APP names no packaged .app; this spec proves an actual build, not the " +
     "dev bundle, so it is skipped rather than faked (run `npm run package:mac` first)",
 );
 
@@ -43,7 +43,7 @@ function executablePathOf(appPath: string): string {
 }
 
 function scratch(): { home: string; userData: string; env: Record<string, string> } {
-  const home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "inny-pkg-e2e-")));
+  const home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-pkg-e2e-")));
   const userData = path.join(home, "user-data");
   // Every other e2e spec's scratchDirectories() (app-harness.ts) spreads process.env too: a
   // packaged app launched with only these five variables (no PATH, no display/session vars)
@@ -57,9 +57,9 @@ function scratch(): { home: string; userData: string; env: Record<string, string
     env: {
       ...Object.fromEntries(inherited),
       HOME: home,
-      INNYTYPES_USER_DATA: userData,
-      INNYTYPES_HIDDEN_WINDOWS: "1",
-      INNYTYPES_MOCK_KEYCHAIN: "1",
+      RELOAD_USER_DATA: userData,
+      RELOAD_HIDDEN_WINDOWS: "1",
+      RELOAD_MOCK_KEYCHAIN: "1",
       ANYTYPE_API_BASE_URL: "http://127.0.0.1:9",
     },
   };
@@ -80,32 +80,32 @@ test("the fuses are set: RunAsNode and NodeCliInspect off, OnlyLoadAppFromAsar a
 test("an installed build trusts only its built-in update key and repo and catalogue, and has no e2e hooks", async () => {
   const appPath = PACKAGED_APP as string;
   const { home, userData, env } = scratch();
-  // What this build was released with (app/package.json's "innytypes", which the package was
+  // What this build was released with (app/package.json's "reload", which the package was
   // built from): nothing in the environment below may change it.
   const built = (
     JSON.parse(fs.readFileSync(path.join(APP_ROOT, "package.json"), "utf8")) as {
-      innytypes: {
+      reload: {
         updateRepo: string;
         updatePublicKey: string | null;
         catalogueUrl: string;
         catalogueKey: string | null;
       };
     }
-  ).innytypes;
+  ).reload;
   const hostile = {
-    INNYTYPES_UPDATE_KEY: "untrusted RWQ-a-key-this-build-never-shipped",
-    INNYTYPES_UPDATE_REPO: "someone-else/innytypes",
-    INNYTYPES_TEST_UPDATE_RELEASES: "https://127.0.0.1:9/releases",
-    INNYTYPES_CATALOGUE_URL: "https://127.0.0.1:9/a-catalogue-this-build-never-shipped",
-    INNYTYPES_CATALOGUE_KEY: "untrusted RWQ-a-catalogue-key-this-build-never-shipped",
-    INNYTYPES_E2E_HOOKS: "1",
+    RELOAD_UPDATE_KEY: "untrusted RWQ-a-key-this-build-never-shipped",
+    RELOAD_UPDATE_REPO: "someone-else/reload",
+    RELOAD_TEST_UPDATE_RELEASES: "https://127.0.0.1:9/releases",
+    RELOAD_CATALOGUE_URL: "https://127.0.0.1:9/a-catalogue-this-build-never-shipped",
+    RELOAD_CATALOGUE_KEY: "untrusted RWQ-a-catalogue-key-this-build-never-shipped",
+    RELOAD_E2E_HOOKS: "1",
   };
   try {
     // The one log's file, read from disk: the line is written before the window opens.
-    const logFile = path.join(home, "innytypes.log");
+    const logFile = path.join(home, "reload.log");
     const app = await launchTracked({
       executablePath: executablePathOf(appPath),
-      env: { ...env, ...hostile, INNYTYPES_LOG_FILE: logFile },
+      env: { ...env, ...hostile, RELOAD_LOG_FILE: logFile },
     });
     const window = await app.firstWindow();
     await expect(window.getByTestId("frame")).toBeVisible({ timeout: 20_000 });
@@ -118,13 +118,13 @@ test("an installed build trusts only its built-in update key and repo and catalo
     const log = readLog();
     expect(log).toContain(pinnedCatalogue);
     for (const [name, value] of Object.entries(hostile)) {
-      if (name !== "INNYTYPES_E2E_HOOKS") {
+      if (name !== "RELOAD_E2E_HOOKS") {
         expect(log).not.toContain(value);
       }
     }
-    // INNYTYPES_E2E_HOOKS=1 exposed nothing on the main process.
+    // RELOAD_E2E_HOOKS=1 exposed nothing on the main process.
     expect(
-      await app.evaluate(() => typeof (globalThis as Record<string, unknown>)["innytypesE2E"]),
+      await app.evaluate(() => typeof (globalThis as Record<string, unknown>)["reloadE2E"]),
     ).toBe("undefined");
 
     const exited = exitOf(app);
@@ -178,7 +178,7 @@ test("the Anytype MCP child runs on the bundled Node, not Electron acting as nod
       executablePath: executablePathOf(appPath),
       env: {
         ...env,
-        INNYTYPES_TEST_ANYTYPE: JSON.stringify({
+        RELOAD_TEST_ANYTYPE: JSON.stringify({
           entry: path.join(FAKE_MCP, "server.mjs"),
           args: ["--mode=normal"],
         }),

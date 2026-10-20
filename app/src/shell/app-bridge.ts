@@ -1,5 +1,5 @@
 // AppApi over the renderer's IPC (plan 0018 §2.4): what the preload exposes as
-// `window.inny.app`. Built here, apart from the preload, so the contract tests can exercise
+// `window.reload.app`. Built here, apart from the preload, so the contract tests can exercise
 // every method against a recording IPC with no DOM and no Electron.
 
 import type { IpcRenderer } from "electron";

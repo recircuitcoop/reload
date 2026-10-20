@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""The Python SDK reference node (WI-0018-26): built on innytypes-node
-(sdk/python/src/innytypes_node), not a raw hand-rolled speaker of the protocol like
+"""The Python SDK reference node (WI-0018-26): built on reload-node
+(sdk/python/src/reload_node), not a raw hand-rolled speaker of the protocol like
 app/test/fixtures/raw-node/node.py. Same purpose: give the conformance suite
 (app/test/conformance/sdk-node.test.ts, sdk-views.test.ts) something to run C1-C14 against
 that is built the way a real author would build it -- through the SDK, not around it.
@@ -31,7 +31,7 @@ _SDK_SRC = os.path.join(
 )
 sys.path.insert(0, _SDK_SRC)
 
-from innytypes_node import Component, MediaItem, Node  # noqa: E402
+from reload_node import Component, MediaItem, Node  # noqa: E402
 
 
 def sized_value(input_id: str, size: int) -> str:

@@ -65,8 +65,8 @@ export function nodeRedSettings(input: NodeRedSettingsInput): Record<string, unk
       modules: { allowInstall: false, allowList: [], denyList: ["*"] },
     },
     editorTheme: {
-      page: { title: "InnyTypes" },
-      header: { title: "InnyTypes" },
+      page: { title: "Reload" },
+      header: { title: "Reload" },
       projects: { enabled: false },
       tours: false,
       multiplayer: { enabled: false },

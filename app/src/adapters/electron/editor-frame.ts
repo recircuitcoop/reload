@@ -1,6 +1,6 @@
 // The Node-RED editor in the app window's frame, reached from the shell (WI-0018-12).
 //
-// The app page (inny-app://) and the editor (http://127.0.0.1:<port>/red/) are different
+// The app page (reload-app://) and the editor (http://127.0.0.1:<port>/red/) are different
 // origins, so the page cannot read the editor's `RED`. The shell can: Electron runs a script in
 // any frame of its own windows (WebFrameMain.executeJavaScript). What is read is the editor's
 // client registry, its canvas's nodes and `RED.nodes.dirty()`, editor client code (arch_pivot

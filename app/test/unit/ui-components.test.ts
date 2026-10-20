@@ -65,7 +65,7 @@ describe("the field box", () => {
     expect(error).toContain("border-failed");
     expect(error).not.toContain("border-surface-line");
     expect(fieldBoxClass("filled").split(" ")).toContain("border-surface-line");
-    expect(fieldBoxClass("disabled")).toContain("opacity-[var(--inny-opacity-disabled)]");
+    expect(fieldBoxClass("disabled")).toContain("opacity-[var(--reload-opacity-disabled)]");
     expect(fieldBoxClass("default")).not.toContain("opacity-");
   });
 

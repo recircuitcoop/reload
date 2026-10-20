@@ -1,4 +1,4 @@
-wing: innytypes
+wing: reload
 rooms:
 - name: scripts
   description: Files from tools/

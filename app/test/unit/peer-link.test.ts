@@ -135,7 +135,7 @@ describe("the key over the channel", () => {
     const registry = new SecretRegistry();
     const written: string[] = [];
     const runtimeLog = sourceLog({
-      name: "innytypes.runtime",
+      name: "reload.runtime",
       pid: 1,
       write: (text) => written.push(text),
       now: () => 0,

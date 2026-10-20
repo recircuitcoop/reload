@@ -1,15 +1,15 @@
 // The generated types' forms, inside the Node-RED editor (spec 2.5, WI-0018-09).
 //
 // Bundled on its own for the browser (`npm run build:editor`) and written once into the
-// generated folder as inny-forms.html, which Node-RED puts in the editor page with every node
-// definition. Each generated type calls `window.InnyForms` from its oneditprepare, oneditsave
+// generated folder as reload-forms.html, which Node-RED puts in the editor page with every node
+// definition. Each generated type calls `window.ReloadForms` from its oneditprepare, oneditsave
 // and property validators. It draws the form model of domain/forms (text, number, integer,
 // checkbox, select, nested groups and tables whose rows are added, removed and reordered),
 // marks the required fields, and validates the node with ajv before it can be deployed
 // cleanly: a node whose values the schema refuses is shown invalid, with the reason.
 //
-// A string property whose options come from Anytype (`innytype.spaces`, `innytype.types.of`;
-// plan 0022 §B) is a select filled from the admin route /red/inny/options as the form opens:
+// A string property whose options come from Anytype (`reload.spaces`, `reload.types.of`;
+// plan 0022 §B) is a select filled from the admin route /red/reload/options as the form opens:
 // "Reading your spaces…", then the names, each storing its plain id or key. A types select reads
 // its sibling space and reads again when that changes; with no space it is empty and disabled.
 // Not paired, the sentence shows in place of the options, and the stored value stays.
@@ -23,7 +23,7 @@
 import { Ajv2020, type ValidateFunction } from "ajv/dist/2020.js";
 
 import { coerceObject } from "../../domain/forms/coerce";
-import { INNYTYPE_ANNOTATION } from "../../domain/forms/innytype";
+import { RELOAD_ANNOTATION } from "../../domain/forms/reload-keyword";
 import {
   addRow,
   dynamicSelect,
@@ -53,14 +53,14 @@ interface Registered {
   readonly validate: ValidateFunction;
 }
 
-// `innytype` (spec 2.4.1) is a known annotation: it never changes what validates.
-const ajv = new Ajv2020({ allErrors: true, strict: false }).addKeyword(INNYTYPE_ANNOTATION);
+// `reload` (spec 2.4.1) is a known annotation: it never changes what validates.
+const ajv = new Ajv2020({ allErrors: true, strict: false }).addKeyword(RELOAD_ANNOTATION);
 const types = new Map<string, Registered>();
 
 function registered(type: string): Registered {
   const found = types.get(type);
   if (found === undefined) {
-    throw new Error(`InnyTypes: no form is defined for ${type}`);
+    throw new Error(`Reload: no form is defined for ${type}`);
   }
   return found;
 }
@@ -125,10 +125,10 @@ function element<K extends keyof HTMLElementTagNameMap>(
 
 /** A field's label; a required one is marked with an asterisk and a class. */
 function labelFor(field: Field, path: string): HTMLLabelElement {
-  const label = element("label", { for: `inny-input-${path}` }, field.label);
+  const label = element("label", { for: `reload-input-${path}` }, field.label);
   if (field.required) {
-    label.classList.add("inny-required");
-    label.setAttribute("data-testid", "inny-required");
+    label.classList.add("reload-required");
+    label.setAttribute("data-testid", "reload-required");
     label.append(element("span", { "aria-hidden": "true" }, " *"));
   }
   return label;
@@ -143,11 +143,11 @@ function textOf(value: unknown): string {
 
 /** One scalar control, holding `value`. */
 function scalar(field: Field, path: string, value: unknown): HTMLElement {
-  const id = `inny-input-${path}`;
-  const common = { id, "data-inny-field": path, "data-testid": `inny-field-${path}` };
-  if (field.innytype !== undefined) {
+  const id = `reload-input-${path}`;
+  const common = { id, "data-reload-field": path, "data-testid": `reload-field-${path}` };
+  if (field.reload !== undefined) {
     // Filled by wireOptions once its row, and its sibling's, are in the form.
-    const select = element("select", { ...common, "data-inny-options": field.innytype.source });
+    const select = element("select", { ...common, "data-reload-options": field.reload.source });
     select.style.width = "70%";
     showSelect(select, dynamicSelect(field, typeof value === "string" ? value : "", LOADING));
     return select;
@@ -194,10 +194,10 @@ function draw(container: HTMLElement, fields: readonly Field[], values: Values, 
     }
     const path = prefix === "" ? field.key : `${prefix}.${field.key}`;
     const value = values[field.key] ?? field.default;
-    const row = element("div", { class: "form-row", "data-inny-key": field.key });
+    const row = element("div", { class: "form-row", "data-reload-key": field.key });
     row.append(labelFor(field, path));
     if (field.control === "group") {
-      const group = element("fieldset", { "data-inny-group": path });
+      const group = element("fieldset", { "data-reload-group": path });
       draw(group, field.fields ?? [], isRecord(value) ? value : {}, path);
       row.append(group);
     } else if (field.control === "table") {
@@ -205,12 +205,12 @@ function draw(container: HTMLElement, fields: readonly Field[], values: Values, 
     } else {
       row.append(scalar(field, path, value));
     }
-    if (field.innytype !== undefined) {
+    if (field.reload !== undefined) {
       row.append(
         element("div", {
-          class: "form-tips inny-options-note",
-          "data-inny-note": path,
-          "data-testid": `inny-note-${path}`,
+          class: "form-tips reload-options-note",
+          "data-reload-note": path,
+          "data-testid": `reload-note-${path}`,
         }),
       );
     }
@@ -233,7 +233,7 @@ function showSelect(select: HTMLSelectElement, model: DynamicSelect): void {
   );
   select.value = model.value;
   select.disabled = model.disabled;
-  const note = select.parentElement?.querySelector<HTMLElement>("[data-inny-note]");
+  const note = select.parentElement?.querySelector<HTMLElement>("[data-reload-note]");
   if (note !== null && note !== undefined) {
     note.textContent = model.sentence ?? "";
     note.hidden = model.sentence === null;
@@ -248,7 +248,7 @@ async function fetchOptions(query: OptionsQuery): Promise<OptionsAnswer> {
       : new URLSearchParams({ source: "types", space: query.spaceId });
   try {
     // Relative to the editor's own /red/: the same origin, behind the same Host check.
-    const response = await fetch(`inny/options?${search.toString()}`, { cache: "no-store" });
+    const response = await fetch(`reload/options?${search.toString()}`, { cache: "no-store" });
     return parseOptionsAnswer(await response.json()) ?? refusal("unavailable");
   } catch {
     return refusal("unavailable");
@@ -257,7 +257,7 @@ async function fetchOptions(query: OptionsQuery): Promise<OptionsAnswer> {
 
 /** The control of `key`'s row directly under `container`, when it has one. */
 function controlOf(container: Element, key: string): Element | null {
-  return own(container, "data-inny-key", key)?.children[1] ?? null;
+  return own(container, "data-reload-key", key)?.children[1] ?? null;
 }
 
 /**
@@ -267,12 +267,12 @@ function controlOf(container: Element, key: string): Element | null {
 function wireOptions(container: Element, fields: readonly Field[]): void {
   for (const field of fields) {
     const select = controlOf(container, field.key);
-    const innytype = field.innytype;
-    if (innytype === undefined || !(select instanceof HTMLSelectElement)) {
+    const reload = field.reload;
+    if (reload === undefined || !(select instanceof HTMLSelectElement)) {
       continue;
     }
     // A types select's space: the sibling `of` names, read live at each refresh.
-    const of = innytype.source === "types" ? innytype.of : null;
+    const of = reload.source === "types" ? reload.of : null;
     const sibling = of === null ? null : controlOf(container, of);
     let asked = 0;
     const refresh = (keepUnlisted: boolean): void => {
@@ -308,24 +308,28 @@ function wireOptions(container: Element, fields: readonly Field[]): void {
 function table(field: Field, path: string, rows: readonly Values[]): HTMLElement {
   const columns = field.fields ?? [];
   const holder = element("div", {
-    class: "inny-table",
-    "data-inny-table": path,
-    "data-testid": `inny-table-${path}`,
+    class: "reload-table",
+    "data-reload-table": path,
+    "data-testid": `reload-table-${path}`,
   });
   const redraw = (next: readonly Values[]): void => {
     holder.replaceChildren();
     next.forEach((row, index) => {
       const rowPath = `${path}.${String(index)}`;
       const line = element("div", {
-        class: "inny-row",
-        "data-inny-row": rowPath,
-        "data-testid": `inny-row-${rowPath}`,
+        class: "reload-row",
+        "data-reload-row": rowPath,
+        "data-testid": `reload-row-${rowPath}`,
       });
       draw(line, columns, row, rowPath);
       const button = (action: string, text: string, change: () => Values[]): void => {
         const pressed = element(
           "button",
-          { type: "button", "data-inny-action": action, "data-testid": `inny-action-${action}` },
+          {
+            type: "button",
+            "data-reload-action": action,
+            "data-testid": `reload-action-${action}`,
+          },
           text,
         );
         pressed.addEventListener("click", () => {
@@ -340,7 +344,7 @@ function table(field: Field, path: string, rows: readonly Values[]): HTMLElement
     });
     const add = element(
       "button",
-      { type: "button", "data-inny-action": "add", "data-testid": "inny-action-add" },
+      { type: "button", "data-reload-action": "add", "data-testid": "reload-action-add" },
       "Add row",
     );
     add.addEventListener("click", () => {
@@ -366,7 +370,7 @@ function own(parent: Element, attribute: string, value: string): Element | null 
 function read(container: Element, fields: readonly Field[]): Values {
   const values: Values = {};
   for (const field of fields) {
-    const row = own(container, "data-inny-key", field.key);
+    const row = own(container, "data-reload-key", field.key);
     if (row === null) {
       continue;
     }
@@ -386,15 +390,15 @@ function read(container: Element, fields: readonly Field[]): Values {
 
 function readRows(holder: Element, columns: readonly Field[]): Values[] {
   return [...holder.children]
-    .filter((child) => child.hasAttribute("data-inny-row"))
+    .filter((child) => child.hasAttribute("data-reload-row"))
     .map((line) => read(line, columns));
 }
 
 /** The form container of the open edit dialog for `type`. */
 function containerOf(type: string): HTMLElement {
-  const found = document.querySelector<HTMLElement>(`.inny-form[data-inny-type="${type}"]`);
+  const found = document.querySelector<HTMLElement>(`.reload-form[data-reload-type="${type}"]`);
   if (found === null) {
-    throw new Error(`InnyTypes: the edit dialog of ${type} has no form container`);
+    throw new Error(`Reload: the edit dialog of ${type} has no form container`);
   }
   return found;
 }
@@ -416,18 +420,18 @@ function save(type: string, node: Values): void {
 
 declare global {
   interface Window {
-    InnyForms?: {
+    ReloadForms?: {
       define: typeof define;
       validate: typeof validate;
       prepare: typeof prepare;
       save: typeof save;
     };
     /** Definitions Node-RED put in the page before this code: defined now. */
-    InnyFormsPending?: [string, JsonSchema][];
+    ReloadFormsPending?: [string, JsonSchema][];
   }
 }
 
-window.InnyForms = { define, validate, prepare, save };
-for (const [type, schema] of window.InnyFormsPending ?? []) {
+window.ReloadForms = { define, validate, prepare, save };
+for (const [type, schema] of window.ReloadFormsPending ?? []) {
   define(type, schema);
 }

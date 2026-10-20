@@ -23,7 +23,7 @@ for (let n = Number(from); ; n += 1) {
   const entry = newEntry({
     inputId: id,
     instanceId: `i${String(n % 5)}`,
-    type: "inny-kill-test",
+    type: "reload-kill-test",
     message: { payload: { n, pad: "x".repeat(n % 300) }, topic: "kill.t.v1", _msgid: id },
     now: n,
   });

@@ -45,7 +45,7 @@ const ICON: Record<DialogKind, { name: IconName; className: string }> = {
  * colour is a style, not a class: Tailwind cannot tell a bare var() is a colour, and the
  * `color:` hint that would tell it is refused by the token check.
  */
-const SCRIM_STYLE = { backgroundColor: "var(--inny-color-ink-0)" } as const;
+const SCRIM_STYLE = { backgroundColor: "var(--reload-color-ink-0)" } as const;
 
 export function Dialog({
   kind,
@@ -75,14 +75,14 @@ export function Dialog({
       }}
     >
       <ArkDialog.Backdrop
-        className={cx(place, "inset-0 opacity-[var(--inny-opacity-scrim)]")}
+        className={cx(place, "inset-0 opacity-[var(--reload-opacity-scrim)]")}
         style={SCRIM_STYLE}
       />
       <ArkDialog.Positioner className={cx(place, "inset-0 flex items-center justify-center p-4")}>
         <ArkDialog.Content
           {...variantAttributes("dialog", { kind }, testId)}
           className={cx(
-            "flex w-[var(--inny-size-popout-width)] max-w-full flex-col gap-5 rounded-l bg-surface-panel p-5 shadow-popout outline-none",
+            "flex w-[var(--reload-size-popout-width)] max-w-full flex-col gap-5 rounded-l bg-surface-panel p-5 shadow-popout outline-none",
             className,
           )}
         >

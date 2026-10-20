@@ -72,14 +72,14 @@ async function services(mode: string, registry: SecretRegistry, port: number) {
     entry: FAKE,
     args: [`--mode=${mode}`],
     clock: systemClock,
-    logger: log("innytypes.services", process.pid),
+    logger: log("reload.services", process.pid),
     expected: FAKE_SURFACE,
     stopDeadlineMs: 2_000,
   });
   const child: McpChild = launcher.launch(
     childEnvironment(ANYTYPE_KEY, "http://127.0.0.1:9"),
     (pid, line) => {
-      log("innytypes.anytype-mcp", pid).warn(line);
+      log("reload.anytype-mcp", pid).warn(line);
     },
   );
   running.push(child);
@@ -91,7 +91,7 @@ async function services(mode: string, registry: SecretRegistry, port: number) {
       served: () => ({ session: child.session, tools }),
       redact: (text) => registry.redact(text),
       clock: systemClock,
-      logger: log("innytypes.services", process.pid),
+      logger: log("reload.services", process.pid),
       files: unpairedFiles(logger),
     }),
     logger,
@@ -122,7 +122,7 @@ async function client(url: string, wire: string[] = []) {
 }
 
 describe("an independent Streamable HTTP client", () => {
-  it("finds nothing while InnyTypes is absent: an ordinary refused connection", async () => {
+  it("finds nothing while Reload is absent: an ordinary refused connection", async () => {
     const port = await freePort();
     const failure = await fetch(`http://127.0.0.1:${String(port)}${MCP_PATH}`, {
       method: "POST",
@@ -137,7 +137,7 @@ describe("an independent Streamable HTTP client", () => {
     // A client that found the address refused a moment ago...
     const early = await fetch(url, { method: "POST", body: "{}" }).catch((error: unknown) => error);
     expect(early).toBeInstanceOf(Error);
-    // ...and InnyTypes, which starts later on its own.
+    // ...and Reload, which starts later on its own.
     await services("normal", new SecretRegistry(), port);
 
     // From here on, every way this process can start another one fails the test.
@@ -222,7 +222,7 @@ describe("the application's source", () => {
     expect(lines.filter((line) => /codex/i.test(line))).toEqual([
       expect.stringMatching(/^ {4}"Claude, Codex and other apps can use your Anytype through/),
       '  "general.aiApps.app": "Codex", // decided',
-      '    "codex mcp add innytypes --url {url} --bearer-token-env-var INNYTYPES_MCP_TOKEN", // decided',
+      '    "codex mcp add reload --url {url} --bearer-token-env-var RELOAD_MCP_TOKEN", // decided',
     ]);
   });
 
@@ -323,9 +323,7 @@ describe("the documentation", () => {
   it("calls the stored setting the way to choose the endpoint, in both documents", () => {
     for (const document of DOCUMENTS) {
       const prose = flattened(document);
-      expect(prose, document).toMatch(
-        /stored setting.{0,80}stored value is what InnyTypes serves/i,
-      );
+      expect(prose, document).toMatch(/stored setting.{0,80}stored value is what Reload serves/i);
       expect(prose, document).toContain("[mcp]");
     }
   });
@@ -335,7 +333,7 @@ describe("the documentation", () => {
       /never been configured|nothing is stored|is ignored|are ignored|only while nothing/i;
     for (const document of DOCUMENTS) {
       const prose = flattened(document);
-      const mentions = [...prose.matchAll(/INNYTYPES_MCP_(HOST|PORT)/g)].map((m) => m.index);
+      const mentions = [...prose.matchAll(/RELOAD_MCP_(HOST|PORT)/g)].map((m) => m.index);
       expect(mentions.length, document).toBeGreaterThan(0);
       for (const position of mentions) {
         const window = prose.slice(Math.max(0, position - 400), position + 400);

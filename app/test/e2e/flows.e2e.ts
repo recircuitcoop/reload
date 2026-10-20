@@ -22,8 +22,8 @@ import {
   waitForRunning,
 } from "./app-harness";
 
-const TICKER = "inny-everycontrol-ticker";
-const PROBE = "inny-everycontrol-probe";
+const TICKER = "reload-everycontrol-ticker";
+const PROBE = "reload-everycontrol-probe";
 const FLOW = "flows-e2e";
 const SECRET = "s3cret-flows-e2e-41d7";
 const SECOND_SECRET = "second-flows-e2e-8c03";
@@ -61,8 +61,8 @@ const FLOW_NODES = [
 type Answer = { ok: boolean; value?: unknown; refused?: { reason: string; sentence: string } };
 
 /** What the page's AppApi offers, as far as this spec calls it. */
-interface Inny {
-  inny: {
+interface Reload {
+  reload: {
     app: {
       flows(): Promise<Answer>;
       templates(): Promise<Answer>;
@@ -124,11 +124,11 @@ async function deployedTabs(port: number): Promise<{ id: string; disabled?: bool
 }
 
 const app = (window: Page) => ({
-  call: (name: keyof Inny["inny"]["app"], ...args: unknown[]) =>
+  call: (name: keyof Reload["reload"]["app"], ...args: unknown[]) =>
     window.evaluate(
       ({ name, args }) =>
         (
-          (window as unknown as Inny).inny.app[name] as unknown as (
+          (window as unknown as Reload).reload.app[name] as unknown as (
             ...a: unknown[]
           ) => Promise<Answer>
         )(...args),
@@ -170,9 +170,9 @@ test("(a) the list, a flow switched off and on by its tab's flag, and its health
   try {
     const { app: electronApp, window, port } = await withProbeFlow(apps, env);
     await window.evaluate(() => {
-      const page = window as unknown as Inny;
+      const page = window as unknown as Reload;
       page.heardFlows = 0;
-      page.inny.app.onFlows(() => {
+      page.reload.app.onFlows(() => {
         page.heardFlows = (page.heardFlows ?? 0) + 1;
       });
     });
@@ -196,7 +196,7 @@ test("(a) the list, a flow switched off and on by its tab's flag, and its health
     expect((await flowOf(window, FLOW))?.on).toBe(false);
     expect((await deployedTabs(port)).find((tab) => tab.id === FLOW)?.disabled).toBe(true);
     await expect
-      .poll(() => window.evaluate(() => (window as unknown as Inny).heardFlows ?? 0))
+      .poll(() => window.evaluate(() => (window as unknown as Reload).heardFlows ?? 0))
       .toBeGreaterThan(0);
 
     expect(await app(window).call("setFlowOn", FLOW, true)).toEqual({
@@ -254,8 +254,8 @@ test("(a) the list, a flow switched off and on by its tab's flag, and its health
       const nodeOf = (type: string) => tab.nodes.find((node) => node.type === type)?.id ?? "";
       return {
         id,
-        watchId: nodeOf("inny-folder-watch"),
-        fileId: nodeOf("inny-anytype-create-object"),
+        watchId: nodeOf("reload-reload_folder-watch"),
+        fileId: nodeOf("reload-reload_anytype-create-object"),
       };
     };
 
@@ -429,8 +429,8 @@ test("(d) a template that fails the deploy guard is refused, and no tab is added
     const fixture = path.join(APP, "test", "fixtures", "templates-guard");
     const running = await launchApp({
       ...env,
-      INNYTYPES_E2E_HOOKS: "1",
-      INNYTYPES_TEMPLATES_DIR: fixture,
+      RELOAD_E2E_HOOKS: "1",
+      RELOAD_TEMPLATES_DIR: fixture,
     });
     apps.push(running.app);
     const { window } = running;

@@ -30,7 +30,7 @@ describe("EditorFrame.palette", () => {
     const scripts: string[] = [];
     const editor = new EditorFrame({
       frames: () => [
-        frameAnswering(() => Promise.resolve("not the editor"), "inny-app://app/index.html"),
+        frameAnswering(() => Promise.resolve("not the editor"), "reload-app://app/index.html"),
         frameAnswering((script) => {
           scripts.push(script);
           return Promise.resolve(palette);
@@ -100,7 +100,7 @@ describe("EditorFrame.loaded", () => {
     expect(new EditorFrame({ frames: () => [hung], editorUrl: () => URL, clock }).loaded()).toBe(
       true,
     );
-    const other = frameAnswering(() => Promise.resolve(null), "inny-app://app/index.html");
+    const other = frameAnswering(() => Promise.resolve(null), "reload-app://app/index.html");
     expect(new EditorFrame({ frames: () => [other], editorUrl: () => URL, clock }).loaded()).toBe(
       false,
     );

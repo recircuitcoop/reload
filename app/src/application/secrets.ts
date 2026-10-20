@@ -31,11 +31,11 @@ export interface KeychainFacts {
 }
 
 export const NO_KEYCHAIN_REASON =
-  "no system keychain is available, so InnyTypes keeps its secrets in owner-only files " +
+  "no system keychain is available, so Reload keeps its secrets in owner-only files " +
   "(0600, in a 0700 directory) instead";
 
 export const BASIC_TEXT_REASON =
-  "no keyring was found (Electron's safeStorage backend is basic_text), so InnyTypes keeps " +
+  "no keyring was found (Electron's safeStorage backend is basic_text), so Reload keeps " +
   "its secrets in owner-only files (0600, in a 0700 directory) instead";
 
 export function chooseSecretStorage(facts: KeychainFacts): SecretStorageStatus {

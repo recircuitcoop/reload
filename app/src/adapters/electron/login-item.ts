@@ -38,8 +38,8 @@ export class ElectronLoginItem implements LoginItem {
       const status = answer.status === undefined ? "" : ` (${answer.status})`;
       throw new LoginItemError(
         on
-          ? `the operating system did not register InnyTypes to start at login${status}`
-          : `the operating system still starts InnyTypes at login${status}`,
+          ? `the operating system did not register Reload to start at login${status}`
+          : `the operating system still starts Reload at login${status}`,
       );
     }
   }

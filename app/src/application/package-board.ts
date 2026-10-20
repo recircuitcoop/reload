@@ -1,5 +1,5 @@
 // Configuration › General's Packages (plan 0022 §F; owner decisions D5 and D6; plan 0013): every
-// package as its row knows it, each facet a state InnyTypes verified and when, and the row's
+// package as its row knows it, each facet a state Reload verified and when, and the row's
 // actions. It reuses what already does the work: the installer, the remover, the update check
 // and its Apply (application/install-package.ts, remove-package.ts, update-package.ts), and the
 // one-at-a-time rule they share. What it adds is the person's side of §F:
@@ -63,8 +63,8 @@ import { keepSevenDays } from "./kept-copies";
 import { shippedCheck, type ShippedManifest } from "./shipped-manifest";
 import type { PackageUpdates } from "./update-package";
 
-/** Who publishes what InnyTypes ships, and its official catalogue's packages. */
-export const OWN_PUBLISHER = "InnyTypes";
+/** Who publishes what Reload ships, and its official catalogue's packages. */
+export const OWN_PUBLISHER = "Reload";
 
 export interface PackageBoardPorts {
   readonly roots: PackageRoots;
@@ -392,7 +392,7 @@ export class PackageBoard {
 
   /**
    * Install again a package whose copy failed its check, from where it came from. A shipped
-   * one is not: reinstalling InnyTypes restores it.
+   * one is not: reinstalling Reload restores it.
    */
   async reinstall(name: string): Promise<BoardOutcome> {
     if (this.#ports.one.busy()) {

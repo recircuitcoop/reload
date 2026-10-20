@@ -66,9 +66,9 @@ export function unwrapMintedBody(tool: McpTool, params: Json): UnwrapOutcome {
     return {
       kind: "refused",
       message:
-        `${name}: body member ${named} is also an argument of the tool; InnyTypes sends the ` +
+        `${name}: body member ${named} is also an argument of the tool; Reload sends the ` +
         `body flat (the pinned child would send it wrapped), so it cannot be told apart ` +
-        `(refused by InnyTypes, nothing was forwarded)`,
+        `(refused by Reload, nothing was forwarded)`,
     };
   }
   return { kind: "forward", params: { ...params, arguments: { ...rest, ...body } } };

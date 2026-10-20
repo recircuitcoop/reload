@@ -87,7 +87,7 @@ describe("the embedded Node-RED", () => {
   const asked: OptionsQuery[] = [];
 
   beforeAll(async () => {
-    scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "inny-red-")));
+    scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-red-")));
     const userDir = path.join(scratch, "node-red");
     const generatedDir = path.join(userDir, "generated");
     fs.mkdirSync(generatedDir, { recursive: true });
@@ -155,7 +155,7 @@ describe("the embedded Node-RED", () => {
     expect(refused.status).toBe(400);
     expect(JSON.parse(refused.text)).toEqual({
       code: "unknown_types",
-      message: "Not installed in InnyTypes: exec",
+      message: "Not installed in Reload: exec",
     });
     const accepted = await send(port, {
       method: "POST",
@@ -197,20 +197,20 @@ describe("the embedded Node-RED", () => {
     expect(status).toBe(403);
   });
 
-  it("answers the canvas form's options at /red/inny/options, behind the same Host check", async () => {
-    const spaces = await send(port, { path: "/red/inny/options?source=spaces" });
+  it("answers the canvas form's options at /red/reload/options, behind the same Host check", async () => {
+    const spaces = await send(port, { path: "/red/reload/options?source=spaces" });
     expect(spaces.status).toBe(200);
     expect(JSON.parse(spaces.text)).toEqual({ options: [{ value: "sp1", label: "Work" }] });
-    const types = await send(port, { path: "/red/inny/options?source=types&space=sp%2F1" });
+    const types = await send(port, { path: "/red/reload/options?source=types&space=sp%2F1" });
     expect(types.status).toBe(200);
     expect(asked).toEqual([{ source: "spaces" }, { source: "types", spaceId: "sp/1" }]);
     // A types query with no space, and an unknown source, are refused unasked.
     for (const query of ["source=types", "source=folders", ""]) {
-      expect((await send(port, { path: `/red/inny/options?${query}` })).status).toBe(400);
+      expect((await send(port, { path: `/red/reload/options?${query}` })).status).toBe(400);
     }
     // A foreign Host: a page some other site served cannot read the person's spaces.
     const foreign = await send(port, {
-      path: "/red/inny/options?source=spaces",
+      path: "/red/reload/options?source=spaces",
       host: `evil.example:${String(port)}`,
     });
     expect(foreign.status).toBe(403);

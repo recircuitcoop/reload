@@ -113,13 +113,13 @@ import { wireChildCalls } from "./child-calls";
 
 // The e2e gate runs the real app against a temporary userData directory, so no test ever touches
 // this user's own. Set before `ready` and before the single-instance lock, which lives in it.
-const userData = process.env["INNYTYPES_USER_DATA"];
+const userData = process.env["RELOAD_USER_DATA"];
 if (userData !== undefined && userData !== "") {
   app.setPath("userData", userData);
 }
 // The e2e gate's hooks (never set in an ordinary run, and never on in an installed build).
 const e2eHooks = e2eHooksOn({ packaged: app.isPackaged, env: process.env });
-// The first start of Reload over InnyTypes 0.3.0 (plan 0028 step 1), before the single-instance
+// The first start of Reload over Reload 0.3.0 (plan 0028 step 1), before the single-instance
 // lock; never a start on an empty directory while the old data is still where it was.
 const firstStart = firstStartIn(app, e2eHooks, process.env);
 if (firstStart.problem !== null) {
@@ -127,7 +127,7 @@ if (firstStart.problem !== null) {
   app.exit(1);
 }
 // The gate runs with hidden windows (§6, e2e stage), so a run never steals focus.
-const hiddenWindows = process.env["INNYTYPES_HIDDEN_WINDOWS"] === "1";
+const hiddenWindows = process.env["RELOAD_HIDDEN_WINDOWS"] === "1";
 
 // The app pages and the pop-outs are served by the shell on schemes of its own (§2.2), which
 // must be privileged before Electron is ready.
@@ -144,7 +144,7 @@ const PACKAGE_ROOTS = [
 /** Bundled runtimes (WI-0018-23); null (dev, e2e) falls back to SystemRuntimeLocator. */
 const RUNTIMES_DIR = app.isPackaged ? path.join(process.resourcesPath, RUNTIMES_DIRNAME) : null;
 // The e2e gate must not touch this user's keychain: Chromium's mock keychain (macOS) encrypts with a fixed key held in memory, so safeStorage never writes a plaintext.
-if (process.env["INNYTYPES_MOCK_KEYCHAIN"] === "1") {
+if (process.env["RELOAD_MOCK_KEYCHAIN"] === "1") {
   app.commandLine.appendSwitch("use-mock-keychain");
 }
 
@@ -172,7 +172,7 @@ const oneLog = new OneLog({
   echo: (line) => process.stderr.write(line),
   now: () => Date.now(),
 });
-const logger = oneLog.logger("innytypes.shell", process.pid);
+const logger = oneLog.logger("reload.shell", process.pid);
 oneLog.announce({
   role: "shell",
   pid: process.pid,
@@ -185,11 +185,11 @@ logger.info(`this process's HOME is ${process.env["HOME"] ?? "(unset)"}`);
 const supervisors = new Map<ChildName, Supervisor>();
 // Windows raises a toast only under the id the shortcuts carry (WI-0018-21).
 setAppUserModelId(app, process.platform);
-// The Anytype desktop app (§4.1 point 6): INNYTYPES_ANYTYPE_APP names it ("none": not used),
-// else the installed one, for the installed InnyTypes only — never a dev or e2e run.
+// The Anytype desktop app (§4.1 point 6): RELOAD_ANYTYPE_APP names it ("none": not used),
+// else the installed one, for the installed Reload only — never a dev or e2e run.
 const anytypeApp = new AnytypeApp({
   apps: new ProcessTableApps(process.platform),
-  executable: anytypeAppPath(process.env["INNYTYPES_ANYTYPE_APP"], () =>
+  executable: anytypeAppPath(process.env["RELOAD_ANYTYPE_APP"], () =>
     app.isPackaged
       ? anytypeExecutable(process.platform, os.homedir(), process.env["LOCALAPPDATA"])
       : null,
@@ -236,7 +236,7 @@ const quitFlow = new QuitFlow({
   stopChildren: async () => {
     await Promise.all([
       ...[...supervisors.values()].map((supervisor) => supervisor.stop()),
-      // Quit only if InnyTypes started it (launcher.py:986); an adopted Anytype keeps running.
+      // Quit only if Reload started it (launcher.py:986); an adopted Anytype keeps running.
       anytypeApp.quitIfOurs(),
     ]);
   },
@@ -278,8 +278,8 @@ async function start(): Promise<void> {
   const secretStorage: Contract.SecretStorageStatus = secrets.status;
   // ── desktop (WI-0018-21): notices told once, and launch at login (shell/desktop.ts) ───────
   // The login item: the e2e gate's autostart directory, else none for a non-installed run (it refuses), else Linux's autostart entry or Electron's login item.
-  const autostart = e2eHooks ? process.env["INNYTYPES_TEST_AUTOSTART_DIR"] : undefined;
-  const entry = { executable: process.env["APPIMAGE"] ?? process.execPath, icon: "innytypes" };
+  const autostart = e2eHooks ? process.env["RELOAD_TEST_AUTOSTART_DIR"] : undefined;
+  const entry = { executable: process.env["APPIMAGE"] ?? process.execPath, icon: "reload" };
   const xdg = autostartDirectory(process.env["XDG_CONFIG_HOME"], os.homedir());
   // A notification's click opens Live on its flow; each button runs its own run's binding.
   const handlers = noticeHandlers({
@@ -352,7 +352,7 @@ async function start(): Promise<void> {
   for (const child of CHILD_NAMES) {
     const fork: ForkSpec = {
       modulePath: path.join(__dirname, "..", child, "main.cjs"),
-      serviceName: `InnyTypes ${child}`,
+      serviceName: `Reload ${child}`,
       env: childEnvironment(child, {
         home: os.homedir(),
         env: process.env,
@@ -398,14 +398,14 @@ async function start(): Promise<void> {
   const packageRoots = new FsPackageRoots(packageBase);
   const shippedStore = new DeclaredPackageStore(PACKAGE_ROOTS, logger);
   const packageStore = new InstalledPackageStore(shippedStore, packageRoots, logger);
-  const testCa = process.env["INNYTYPES_TEST_CATALOGUE_CA"];
+  const testCa = process.env["RELOAD_TEST_CATALOGUE_CA"];
   const uvCacheDir = path.join(packageBase, "uv");
   // The e2e gate's local HTTPS server's certificate, only with the e2e hooks on; shared below.
   const httpsClient = new HttpsClient(e2eHooks && testCa !== undefined ? { ca: testCa } : {});
   const catalogue = catalogueSource({
     packaged: app.isPackaged,
     env: process.env,
-    built: packageJson.innytypes,
+    built: packageJson.reload,
   });
   // Said once, so the packaged smoke can prove an installed build's environment changes neither.
   logger.info(
@@ -420,7 +420,7 @@ async function start(): Promise<void> {
     logger,
     userDir,
     shippedStore,
-    // A release's build settings (WI-0018-23): package.json's "innytypes"; INNYTYPES_CATALOGUE_URL/_KEY override it outside an installed build only.
+    // A release's build settings (WI-0018-23): package.json's "reload"; RELOAD_CATALOGUE_URL/_KEY override it outside an installed build only.
     ...catalogue,
     http: httpsClient,
     catalogueCache: new FileCatalogueCache(path.join(userDir, "catalogues")),
@@ -466,9 +466,9 @@ async function start(): Promise<void> {
   const source = updateSource({
     packaged: app.isPackaged,
     env: process.env,
-    built: packageJson.innytypes,
+    built: packageJson.reload,
   });
-  const updateChannel = process.env["INNYTYPES_UPDATE_CHANNEL"] ?? "latest";
+  const updateChannel = process.env["RELOAD_UPDATE_CHANNEL"] ?? "latest";
   const releases = releaseUrls(source.releases);
   // Said once, so the packaged smoke can prove an installed build's environment changes neither.
   logger.info(`update: releases from ${source.releases}, key ${source.publicKey ?? "(none)"}`);
@@ -547,7 +547,7 @@ async function start(): Promise<void> {
     logger,
   );
   // ── telemetry (WI-0018-22): nothing is queued, sent or even identified before the answer ──
-  const testMachineId = e2eHooks ? process.env["INNYTYPES_TEST_MACHINE_ID"] : undefined;
+  const testMachineId = e2eHooks ? process.env["RELOAD_TEST_MACHINE_ID"] : undefined;
   wireTelemetry({
     ipc: ipcMain,
     setting: new JsonSettingsStore(path.join(userDir, "shell-settings.json")),
@@ -556,7 +556,7 @@ async function start(): Promise<void> {
     machineIdentifier: () =>
       testMachineId ?? machineId.osMachineIdentifier(machineId.systemSeams(process.platform)),
     hashIdentifier: machineId.machineIdHash,
-    built: packageJson.innytypes,
+    built: packageJson.reload,
     env: process.env,
     appVersion: app.getVersion(),
     registry: secretRegistry,

@@ -42,7 +42,7 @@ export function GeneralSection({
       aria-labelledby={titleId}
       className={cx(
         "flex w-full flex-col gap-3",
-        section !== "packages" && "max-w-[var(--inny-size-reading-width)]",
+        section !== "packages" && "max-w-[var(--reload-size-reading-width)]",
         className,
       )}
     >

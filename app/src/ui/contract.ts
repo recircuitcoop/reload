@@ -1,5 +1,5 @@
 // AppApi: the ONLY surface the app window may use (plan 0018 §2.4), exposed through the
-// preload bridge as `window.inny.app`. Plan 0022 §N's calls are AppApiV2 (app-api-v2.ts); the
+// preload bridge as `window.reload.app`. Plan 0022 §N's calls are AppApiV2 (app-api-v2.ts); the
 // members spelled out here are the older ones the redesigned screens still use. Every call
 // travels over IPC to the shell, and on over the channel to a child: never HTTP (spec 10.1).
 //
@@ -120,7 +120,7 @@ export interface McpEndpointStatus {
   readonly saved: string | null;
   /** Any part of the saved address came from the stored setting. */
   readonly stored: boolean;
-  /** INNYTYPES_MCP_HOST or INNYTYPES_MCP_PORT set and ignored, because a stored value wins. */
+  /** RELOAD_MCP_HOST or RELOAD_MCP_PORT set and ignored, because a stored value wins. */
   readonly ignoredVariables: readonly string[];
   /** Why nothing is served, or why saved and served differ; null when they agree. */
   readonly problem: string | null;
@@ -245,7 +245,7 @@ export interface AppApi extends AppApiV2 {
 }
 
 /**
- * A pop-out page's whole reach, as `window.inny` (spec 8.5.6). No call takes an id: the shell
+ * A pop-out page's whole reach, as `window.reload` (spec 8.5.6). No call takes an id: the shell
  * answers for the one view or snapshot the window was opened for.
  */
 export interface ViewBridge {
@@ -257,9 +257,9 @@ export interface ViewBridge {
   action(actionId: string, values: Readonly<Record<string, unknown>>): Promise<ViewResult>;
   /** Action views only: keep the person's unfinished answer; never sent (spec 8.1.6). */
   draft(values: Readonly<Record<string, unknown>>): Promise<ViewResult>;
-  /** Page-local: enable (or disable) Continue, by an `inny-valid` event; no IPC call. */
+  /** Page-local: enable (or disable) Continue, by an `reload-valid` event; no IPC call. */
   setValid(valid: boolean): void;
 }
 
 /** The event `setValid` dispatches on the page's `window`; its `detail` is the boolean. */
-export const VALID_EVENT = "inny-valid";
+export const VALID_EVENT = "reload-valid";

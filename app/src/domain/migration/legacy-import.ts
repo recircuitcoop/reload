@@ -108,7 +108,7 @@ export function buildLegacyImportPlan(document: TomlTable): LegacyImportPlan {
     ignored.push({
       key: "logging",
       reason:
-        "verbosity is set by the INNYTYPES_LOG_LEVEL environment variable now, not a stored setting",
+        "verbosity is set by the RELOAD_LOG_LEVEL environment variable now, not a stored setting",
     });
   }
 

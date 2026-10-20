@@ -76,7 +76,7 @@ export function DateField({
       <DatePicker.Control
         className={fieldBoxClass(
           open ? "focus" : "default",
-          "h-[var(--inny-size-control)] items-center gap-2 px-3",
+          "h-[var(--reload-size-control)] items-center gap-2 px-3",
         )}
       >
         <DatePicker.Input placeholder={placeholder} className={cx(FIELD_TEXT_CLASS, "h-full")} />

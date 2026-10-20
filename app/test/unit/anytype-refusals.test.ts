@@ -84,8 +84,8 @@ function end(node: NodeProcess, fake: FakeProcess, error?: Error): (Error | unde
 describe("the pair-again notice", () => {
   it("is raised once for refusals across instances, and again only after an Anytype input succeeded", () => {
     const { processes, notifier, launcher } = setUp();
-    const first = launcher.start(spec("anytype"), {} as never);
-    const second = launcher.start(spec("anytype"), {} as never);
+    const first = launcher.start(spec("reload_anytype"), {} as never);
+    const second = launcher.start(spec("reload_anytype"), {} as never);
     const [one, two] = processes as [FakeProcess, FakeProcess];
     const refused = new Error(PAIR_AGAIN_MESSAGE);
 
@@ -108,7 +108,7 @@ describe("the pair-again notice", () => {
 
   it("passes a step's report and its status line on untouched (protocol 2.1)", () => {
     const { processes, launcher } = setUp();
-    const node = launcher.start(spec("anytype"), {} as never);
+    const node = launcher.start(spec("reload_anytype"), {} as never);
     const fake = processes[0] as FakeProcess;
     const outcomes: unknown[] = [];
     const statuses: unknown[] = [];
@@ -140,7 +140,7 @@ describe("the pair-again notice", () => {
 
   it("leaves everything else of the process as it is", async () => {
     const { processes, launcher } = setUp();
-    const node = launcher.start(spec("anytype"), {} as never);
+    const node = launcher.start(spec("reload_anytype"), {} as never);
     const fake = processes[0] as FakeProcess;
     expect(node.pid).toBe(42);
     node.cancel("i1");

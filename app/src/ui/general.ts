@@ -199,8 +199,8 @@ export const retentionLine = (days: number | null) =>
 
 // ── Recorders and folders ────────────────────────────────────────────────────────────────────
 
-/** The shipped folder source's Node-RED type (packages/folder, D18): data, never shown. */
-export const FOLDER_SOURCE_TYPE = "inny-folder-watch";
+/** The shipped folder source's Node-RED type (packages/reload_folder, D18): data, never shown. */
+export const FOLDER_SOURCE_TYPE = "reload-reload_folder-watch";
 
 /** A folder source step of a flow: where to read its folder, and whether its flow is on. */
 export interface FolderStep {

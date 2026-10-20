@@ -10,13 +10,13 @@ import {
 const VALID = [
   "version: 1.2.3",
   "files:",
-  "  - url: InnyTypes-1.2.3-arm64-mac.zip",
+  "  - url: Reload-1.2.3-arm64-mac.zip",
   "    sha512: abc123==",
   "    size: 12345",
-  "  - url: InnyTypes-1.2.3-x64-mac.zip",
+  "  - url: Reload-1.2.3-x64-mac.zip",
   "    sha512: def456==",
   "    size: 12399",
-  "path: InnyTypes-1.2.3-arm64-mac.zip",
+  "path: Reload-1.2.3-arm64-mac.zip",
   "sha512: abc123==",
   "releaseDate: '2026-09-27T00:00:00.000Z'",
   "",
@@ -34,8 +34,8 @@ describe("parseReleaseMetadata", () => {
     const metadata = parseReleaseMetadata(VALID);
     expect(metadata.version).toBe("1.2.3");
     expect(metadata.files).toEqual([
-      { url: "InnyTypes-1.2.3-arm64-mac.zip", sha512: "abc123==", size: 12345 },
-      { url: "InnyTypes-1.2.3-x64-mac.zip", sha512: "def456==", size: 12399 },
+      { url: "Reload-1.2.3-arm64-mac.zip", sha512: "abc123==", size: 12345 },
+      { url: "Reload-1.2.3-x64-mac.zip", sha512: "def456==", size: 12399 },
     ]);
   });
 
@@ -43,7 +43,7 @@ describe("parseReleaseMetadata", () => {
     const text = [
       "version: 2.0.0",
       "files:",
-      "  - url: InnyTypes-2.0.0-linux.AppImage",
+      "  - url: Reload-2.0.0-linux.AppImage",
       "    sha512: xyz==",
       "    size: 999",
       "releaseDate: '2026-01-01T00:00:00.000Z'",
@@ -123,12 +123,12 @@ describe("pickReleaseFile", () => {
   const files = parseReleaseMetadata(VALID).files;
 
   it("picks the file matching this machine's arch", () => {
-    expect(pickReleaseFile(files, "arm64").url).toBe("InnyTypes-1.2.3-arm64-mac.zip");
-    expect(pickReleaseFile(files, "x64").url).toBe("InnyTypes-1.2.3-x64-mac.zip");
+    expect(pickReleaseFile(files, "arm64").url).toBe("Reload-1.2.3-arm64-mac.zip");
+    expect(pickReleaseFile(files, "x64").url).toBe("Reload-1.2.3-x64-mac.zip");
   });
 
   it("picks the one file when there is only one, regardless of its name", () => {
-    const one = [{ url: "InnyTypes-1.2.3-linux.AppImage", sha512: "x", size: 1 }];
+    const one = [{ url: "Reload-1.2.3-linux.AppImage", sha512: "x", size: 1 }];
     expect(pickReleaseFile(one, "arm64")).toBe(one[0]);
   });
 

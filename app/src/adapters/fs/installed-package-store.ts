@@ -10,6 +10,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { OLD_DECLARATION_FILE, oldDeclarationProblem } from "../../domain/packages/old-names";
 import type { Logger } from "../../ports/logger";
 import type { PackageRoots } from "../../ports/package-roots";
 import type { PackageStore } from "../../ports/package-store";
@@ -67,7 +68,12 @@ export class InstalledPackageStore implements PackageStore {
       try {
         document = JSON.parse(fs.readFileSync(path.join(folder.packageDir, DECLARATION), "utf8"));
       } catch (error) {
-        this.#warnOnce(`installed package ${record.package} cannot be read: ${String(error)}`);
+        const old = fs.existsSync(path.join(folder.packageDir, OLD_DECLARATION_FILE));
+        this.#warnOnce(
+          old
+            ? `installed package ${record.package} is refused: ${oldDeclarationProblem(DECLARATION)}`
+            : `installed package ${record.package} cannot be read: ${String(error)}`,
+        );
         continue;
       }
       found.set(record.package, {

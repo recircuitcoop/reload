@@ -1,5 +1,5 @@
 // The Anytype desktop app against the real process table (WI-0018-21), with a fake app binary
-// in a scratch directory: started if absent, adopted if running, quit only if InnyTypes started
+// in a scratch directory: started if absent, adopted if running, quit only if Reload started
 // it. Nothing here can reach this user's Anytype: the only executable named is the fake's.
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -37,7 +37,9 @@ async function until<T>(what: string, probe: () => T | null, timeoutMs = 10_000)
 }
 
 function scratchApp(): string {
-  return fakeAnytypeApp(fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "inny-anytype-"))));
+  return fakeAnytypeApp(
+    fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-reload_anytype-"))),
+  );
 }
 
 describe("ProcessTableApps and AnytypeApp, with a fake Anytype", () => {
@@ -75,7 +77,7 @@ describe("ProcessTableApps and AnytypeApp, with a fake Anytype", () => {
   }, 30_000);
 
   it("a quit ends an app that ignores SIGTERM, after the grace period", async () => {
-    const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "inny-anytype-")));
+    const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-reload_anytype-")));
     const executable = path.join(dir, "stubborn-anytype");
     fs.writeFileSync(
       executable,

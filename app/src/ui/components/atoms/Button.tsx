@@ -105,9 +105,11 @@ export function Button({
       className={cx(
         "inline-flex shrink-0 items-center justify-center gap-2 rounded-s px-3 font-sans text-body font-medium leading-tight whitespace-nowrap",
         "transition-[opacity,background-color,border-color] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus",
-        size === "large" ? "h-[var(--inny-size-control-large)]" : "h-[var(--inny-size-control)]",
+        size === "large"
+          ? "h-[var(--reload-size-control-large)]"
+          : "h-[var(--reload-size-control)]",
         lookOf(kind, state),
-        state === "disabled" && "cursor-not-allowed opacity-[var(--inny-opacity-disabled)]",
+        state === "disabled" && "cursor-not-allowed opacity-[var(--reload-opacity-disabled)]",
         state === "loading" && "cursor-progress",
         className,
       )}

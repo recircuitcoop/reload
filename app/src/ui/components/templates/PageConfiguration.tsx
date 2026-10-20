@@ -8,7 +8,7 @@ import { cx, variantAttributes } from "../variant";
 
 export interface PageConfigurationProps {
   readonly sidebar: ReactNode;
-  /** The Runtime banner, full width above the tabs, when InnyTypes is restarting or down. */
+  /** The Runtime banner, full width above the tabs, when Reload is restarting or down. */
   readonly banner?: ReactNode;
   /** The Tab strip, Flows and General. */
   readonly tabs: ReactNode;

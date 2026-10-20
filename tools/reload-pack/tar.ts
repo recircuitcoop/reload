@@ -1,4 +1,4 @@
-// A minimal USTAR writer for inny-pack (WI-0018-26), the counterpart of the app's own minimal
+// A minimal USTAR writer for reload-pack (WI-0018-26), the counterpart of the app's own minimal
 // tar READER (app/src/adapters/fs/package-source.ts's readTar): no dependency, and no more
 // format than a package archive needs. Regular files only (a package holds regular files,
 // domain/packages/archive.ts's pathProblem already refuses anything else by path), USTAR

@@ -35,8 +35,8 @@ interface Board {
   layout: { flowId: string; tabs: { id: string; name: string; order: number }[]; slots: Slot[] };
   fresh: string[];
 }
-type Inny = {
-  inny: {
+type Reload = {
+  reload: {
     app: {
       board(flowId: string): Promise<{ ok: boolean; value?: Board }>;
       completeSetup(): Promise<{ ok: boolean }>;
@@ -69,14 +69,14 @@ function flowNodes(stage: 0 | 1 | 2): object[] {
     },
     {
       id: "speakers",
-      type: "inny-viewts-ask",
+      type: "reload-viewts-ask",
       z: FLOW,
       name: "Name the speakers",
       wires: [["filed"], []],
     },
     {
       id: "filed",
-      type: "inny-viewts-record",
+      type: "reload-viewts-record",
       z: FLOW,
       name: "Filed",
       wires: [stage >= 1 ? ["approve"] : []],
@@ -85,7 +85,7 @@ function flowNodes(stage: 0 | 1 | 2): object[] {
       ? [
           {
             id: "approve",
-            type: "inny-viewts-ask",
+            type: "reload-viewts-ask",
             z: FLOW,
             name: "Approve sending",
             wires: [stage >= 2 ? ["archived"] : [], []],
@@ -93,7 +93,7 @@ function flowNodes(stage: 0 | 1 | 2): object[] {
         ]
       : []),
     ...(stage >= 2
-      ? [{ id: "archived", type: "inny-viewts-record", z: FLOW, name: "Archived", wires: [[]] }]
+      ? [{ id: "archived", type: "reload-viewts-record", z: FLOW, name: "Archived", wires: [[]] }]
       : []),
   ];
   return [
@@ -128,7 +128,7 @@ function deploy(port: number, nodes: object[]): Promise<number> {
 /** The board as the shell answers it now. */
 async function boardOf(window: Page): Promise<Board> {
   const answer = await window.evaluate(
-    (flowId) => (window as unknown as Inny).inny.app.board(flowId),
+    (flowId) => (window as unknown as Reload).reload.app.board(flowId),
     FLOW,
   );
   expect(answer.ok).toBe(true);
@@ -176,7 +176,7 @@ async function launchOnBoard(apps: ElectronApplication[], env: Record<string, st
   const { window } = running;
   const port = Number((await waitForRunning(window, "runtime")).port);
   expect(
-    (await window.evaluate(() => (window as unknown as Inny).inny.app.completeSetup())).ok,
+    (await window.evaluate(() => (window as unknown as Reload).reload.app.completeSetup())).ok,
   ).toBe(true);
   expect(await deploy(port, flowNodes(0))).toBe(204);
   await openBoard(window);
@@ -617,9 +617,9 @@ test("the new tab's name takes the cursor once, and a later board change never m
       (flowId) =>
         (
           window as unknown as {
-            inny: { app: { saveBoard(f: string, c: object): Promise<unknown> } };
+            reload: { app: { saveBoard(f: string, c: object): Promise<unknown> } };
           }
-        ).inny.app.saveBoard(flowId, { kind: "size", viewNodeId: "filed", size: "S" }),
+        ).reload.app.saveBoard(flowId, { kind: "size", viewNodeId: "filed", size: "S" }),
       FLOW,
     );
     await expect.poll(() => placeOf(window, "filed")).toBe("tab-1:2 S");
@@ -689,8 +689,8 @@ test("a refused read keeps the board and Edit layout, with the refusal above the
 
     // The board's read is refused: the bar and the places stay, the refusal is said above.
     for (const [call, changed] of [
-      ["inny:board-call", "inny:board-changed"],
-      ["inny:flow-call", "inny:flows-changed"],
+      ["reload:board-call", "reload:board-changed"],
+      ["reload:flow-call", "reload:flows-changed"],
     ] as const) {
       await refuseChannel(app, call, true);
       await push(app, changed);
@@ -727,12 +727,12 @@ test("a refused move never gives the focus back later", async () => {
     await expect(bar(window)).toBeVisible();
 
     // Move later while the shell refuses the board's calls: nothing moves, and it says why.
-    await refuseChannel(app, "inny:board-call", true);
+    await refuseChannel(app, "reload:board-call", true);
     await choose(window, "Name the speakers", "later", STRINGS["board.moveLater"]);
     await expect(board(window).getByTestId("live-problem")).toHaveText(
       STRINGS["refused.restarting"],
     );
-    await refuseChannel(app, "inny:board-call", false);
+    await refuseChannel(app, "reload:board-call", false);
     expect(await placeOf(window, "speakers")).toBe("tab-1:1 M");
 
     // The person leaves the focus nowhere; an unrelated change arrives and is drawn.
@@ -743,12 +743,12 @@ test("a refused move never gives the focus back later", async () => {
       (flowId) =>
         (
           window as unknown as {
-            inny: { app: { saveBoard(f: string, c: object): Promise<unknown> } };
+            reload: { app: { saveBoard(f: string, c: object): Promise<unknown> } };
           }
-        ).inny.app.saveBoard(flowId, { kind: "size", viewNodeId: "filed", size: "S" }),
+        ).reload.app.saveBoard(flowId, { kind: "size", viewNodeId: "filed", size: "S" }),
       FLOW,
     );
-    await push(app, "inny:board-changed");
+    await push(app, "reload:board-changed");
     await expect(place(window, "Filed")).toHaveAttribute("data-variant", /size=s/);
     // The refused move's ⋯ button did not take the focus back: it is still nowhere.
     expect(await window.evaluate(() => document.activeElement === document.body)).toBe(true);
@@ -778,7 +778,7 @@ function runsFlow(folder: string, question: boolean): object[] {
     { id: RUNS_FLOW, type: "tab", label: RUNS_FLOW_NAME },
     {
       id: "rec",
-      type: "inny-livekit-recorder",
+      type: "reload-livekit-recorder",
       z: RUNS_FLOW,
       name: "Recorder",
       folder,
@@ -787,7 +787,7 @@ function runsFlow(folder: string, question: boolean): object[] {
     },
     {
       id: "copy",
-      type: "inny-livekit-copy",
+      type: "reload-livekit-copy",
       z: RUNS_FLOW,
       name: "Copy",
       folder,
@@ -796,7 +796,7 @@ function runsFlow(folder: string, question: boolean): object[] {
     },
     {
       id: "work",
-      type: "inny-livekit-work",
+      type: "reload-livekit-work",
       z: RUNS_FLOW,
       name: "Transcribe",
       folder,
@@ -807,7 +807,7 @@ function runsFlow(folder: string, question: boolean): object[] {
       ? [
           {
             id: "speakers",
-            type: "inny-viewts-ask",
+            type: "reload-viewts-ask",
             z: RUNS_FLOW,
             name: "Name the speakers",
             ...at(5),
@@ -815,7 +815,7 @@ function runsFlow(folder: string, question: boolean): object[] {
           },
           {
             id: "filed",
-            type: "inny-viewts-record",
+            type: "reload-viewts-record",
             z: RUNS_FLOW,
             name: "Filed",
             ...at(6),
@@ -833,25 +833,25 @@ interface Delivered {
   actions?: { label: string; kind: string; flowId: string; runId: string; viewId?: string }[];
 }
 interface Hooks {
-  innytypesE2E: {
+  reloadE2E: {
     notices: { list(): Delivered[]; press(index: number, button: number): boolean };
     badge(): number;
     popouts(): string[];
   };
 }
 const delivered = (app: ElectronApplication): Promise<Delivered[]> =>
-  app.evaluate(() => (globalThis as unknown as Hooks).innytypesE2E.notices.list());
+  app.evaluate(() => (globalThis as unknown as Hooks).reloadE2E.notices.list());
 const pressNotice = (app: ElectronApplication, index: number, button: number) =>
   app.evaluate(
-    (_modules, [i, b]) => (globalThis as unknown as Hooks).innytypesE2E.notices.press(i, b),
+    (_modules, [i, b]) => (globalThis as unknown as Hooks).reloadE2E.notices.press(i, b),
     [index, button] as const,
   );
 const dockBadge = (app: ElectronApplication): Promise<number> =>
-  app.evaluate(() => (globalThis as unknown as Hooks).innytypesE2E.badge());
+  app.evaluate(() => (globalThis as unknown as Hooks).reloadE2E.badge());
 const openPopouts = (app: ElectronApplication): Promise<string[]> =>
-  app.evaluate(() => (globalThis as unknown as Hooks).innytypesE2E.popouts());
+  app.evaluate(() => (globalThis as unknown as Hooks).reloadE2E.popouts());
 const popoutPages = (app: ElectronApplication): Page[] =>
-  app.windows().filter((page) => page.url().startsWith("inny-view://"));
+  app.windows().filter((page) => page.url().startsWith("reload-view://"));
 
 /** Launch with the e2e hooks, deploy the livekit flow watching `folder`, open its board. */
 async function launchOnRuns(
@@ -861,18 +861,18 @@ async function launchOnRuns(
   question: boolean,
 ) {
   fs.mkdirSync(folder, { recursive: true });
-  const running = await launchApp({ ...env, INNYTYPES_E2E_HOOKS: "1" });
+  const running = await launchApp({ ...env, RELOAD_E2E_HOOKS: "1" });
   await trace(running.app);
   apps.push(running.app);
   const { window, output } = running;
   const port = Number((await waitForRunning(window, "runtime")).port);
   expect(
-    (await window.evaluate(() => (window as unknown as Inny).inny.app.completeSetup())).ok,
+    (await window.evaluate(() => (window as unknown as Reload).reload.app.completeSetup())).ok,
   ).toBe(true);
   expect(await deploy(port, runsFlow(folder, question))).toBe(204);
   await expect
     .poll(() => output.join(""), { timeout: 30_000 })
-    .toMatch(/\[inny-livekit-recorder rec\] ready/);
+    .toMatch(/\[reload-livekit-recorder rec\] ready/);
   await window.evaluate((flowId) => {
     globalThis.location.hash = `#/live/${flowId}`;
   }, RUNS_FLOW);
@@ -957,7 +957,7 @@ test("three runs, three cards", async () => {
     await expect(question.getByTestId("view-dismiss")).toHaveText(STRINGS["question.skip"]);
     // Drawn with the tokens: the panel is the token's colour, not the browser's default.
     const panel = await question.evaluate((element) => ({
-      token: getComputedStyle(document.documentElement).getPropertyValue("--inny-surface-panel"),
+      token: getComputedStyle(document.documentElement).getPropertyValue("--reload-surface-panel"),
       fill: getComputedStyle(element).backgroundColor,
     }));
     expect(panel.token.trim()).not.toBe("");
@@ -1024,7 +1024,7 @@ test("a hidden question still notifies and counts", async () => {
     const questions = async () =>
       (await delivered(app))
         .map((notice, index) => ({ notice, index }))
-        .filter(({ notice }) => notice.title === "InnyTypes is waiting for you");
+        .filter(({ notice }) => notice.title === "Reload is waiting for you");
     await expect.poll(async () => (await questions()).length, { timeout: 10_000 }).toBe(2);
     const asked = await questions();
     const bindings = asked.map(({ notice }) => notice.actions?.map((a) => `${a.label} ${a.runId}`));
@@ -1124,7 +1124,7 @@ test("clear done is undoable", async () => {
       (flowId) =>
         (
           window as unknown as {
-            inny: {
+            reload: {
               app: {
                 runs(
                   q: object,
@@ -1132,7 +1132,7 @@ test("clear done is undoable", async () => {
               };
             };
           }
-        ).inny.app.runs({ flowId }),
+        ).reload.app.runs({ flowId }),
       RUNS_FLOW,
     );
     expect(kept.value.runs.map((run) => `${run.title} ${String(run.cleared)}`)).toEqual([
@@ -1159,16 +1159,16 @@ test("the pop-out page draws the Question pop-out with tokens.css, and every Ark
   const { scratch, env } = scratchDirectories();
   const apps: ElectronApplication[] = [];
   try {
-    const running = await launchApp({ ...env, INNYTYPES_E2E_HOOKS: "1" });
+    const running = await launchApp({ ...env, RELOAD_E2E_HOOKS: "1" });
     apps.push(running.app);
     const { app, window } = running;
     await waitForRunning(window, "runtime");
     // The pop-outs' own session serves the page, its tokens and styles, under one CSP.
     const served = await app.evaluate(async ({ session }) => {
-      const views = session.fromPartition("inny-views");
+      const views = session.fromPartition("reload-views");
       const out: Record<string, string | null> = {};
       for (const name of ["view.html", "view.js", "tokens.css", "view-kit.css", "app.css"]) {
-        const response = await views.fetch(`inny-view://app/${name}`);
+        const response = await views.fetch(`reload-view://app/${name}`);
         out[name] = response.ok ? response.headers.get("content-security-policy") : null;
       }
       return out;
@@ -1186,9 +1186,9 @@ test("the pop-out page draws the Question pop-out with tokens.css, and every Ark
         show: false,
         width: 900,
         height: 900,
-        webPreferences: { partition: "inny-views", sandbox: true, contextIsolation: true },
+        webPreferences: { partition: "reload-views", sandbox: true, contextIsolation: true },
       });
-      await probe.loadURL("inny-view://app/view.html#ark-widgets");
+      await probe.loadURL("reload-view://app/view.html#ark-widgets");
     });
     await expect.poll(() => popoutPages(app).length, { timeout: 15_000 }).toBe(1);
     const page = popoutPages(app)[0] as Page;

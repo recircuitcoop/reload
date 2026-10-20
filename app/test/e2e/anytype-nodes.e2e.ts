@@ -61,34 +61,34 @@ test("a watched folder's file becomes an Anytype object, recorded as a snapshot,
   const url = await anytype.start();
   const inbox = path.join(scratch, "inbox");
   fs.mkdirSync(inbox);
-  const logFile = path.join(scratch, "innytypes.log");
+  const logFile = path.join(scratch, "reload.log");
   try {
-    const { app, window, output } = await launchApp({ ...env, INNYTYPES_LOG_FILE: logFile });
+    const { app, window, output } = await launchApp({ ...env, RELOAD_LOG_FILE: logFile });
     const said = () => output.join("");
     const runtime = await waitForRunning(window, "runtime");
     const flow = [
       { id: "tab1", type: "tab", label: "Anytype" },
-      { id: "watch", type: "inny-folderflow-watch", folder: inbox, wires: [["create"]] },
+      { id: "watch", type: "reload-folderflow-watch", folder: inbox, wires: [["create"]] },
       {
         id: "create",
-        type: "inny-anytype-create-object",
+        type: "reload-reload_anytype-create-object",
         space_id: SPACE,
         name_field: "/name",
         body_field: "/body",
         api_base_url: url,
         wires: [["link"]],
       },
-      { id: "link", type: "inny-folderflow-link", window: "inline", wires: [[]] },
+      { id: "link", type: "reload-folderflow-link", window: "inline", wires: [[]] },
     ].map((node, n) => (n === 0 ? node : { z: "tab1", x: 100, y: 40 * n, ...node }));
     expect(await deploy(Number(runtime.port), flow)).toBe(204);
     await expect
       .poll(said, { timeout: 20_000 })
-      .toMatch(/\[inny-anytype-create-object create\] ready/);
-    await expect.poll(said, { timeout: 20_000 }).toMatch(/\[inny-folderflow-watch watch\] ready/);
+      .toMatch(/\[reload-reload_anytype-create-object create\] ready/);
+    await expect.poll(said, { timeout: 20_000 }).toMatch(/\[reload-folderflow-watch watch\] ready/);
 
     // ── a file appears; Anytype gets exactly one object for it ──────────────────────────
     fs.writeFileSync(path.join(inbox, "meeting.md"), "# Meeting\nNotes.");
-    const recorded = /snapshot (\S+) recorded from \[inny-folderflow-link link\]/;
+    const recorded = /snapshot (\S+) recorded from \[reload-folderflow-link link\]/;
     await expect.poll(() => recorded.exec(said())?.[1], { timeout: 20_000 }).toBeDefined();
     const created = anytype.to("POST", `/v1/spaces/${SPACE}/objects`);
     expect(created).toHaveLength(1);
@@ -110,7 +110,9 @@ test("a watched folder's file becomes an Anytype object, recorded as a snapshot,
       ).toBe(true);
     }
     // The log is one of the files scanned: the node's own lines reached it.
-    expect(fs.readFileSync(logFile, "utf8")).toContain("[inny-anytype-create-object create]");
+    expect(fs.readFileSync(logFile, "utf8")).toContain(
+      "[reload-reload_anytype-create-object create]",
+    );
     expect(filesHolding(scratch, canaryKey)).toEqual([anytypeKeyFile(scratch)]);
     expect(said()).not.toContain(canaryKey);
   } finally {

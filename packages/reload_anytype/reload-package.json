@@ -1,6 +1,6 @@
 {
   "protocol": 2,
-  "package": "anytype",
+  "package": "reload_anytype",
   "version": "0.1.0",
   "environment": { "kind": "node", "node": ">=22" },
   "types": [
@@ -8,7 +8,7 @@
       "id": "create-object",
       "kind": "node",
       "label": "Create Anytype object",
-      "description": "Creates one object in an Anytype space for each event, named and filled from the payload. The Anytype key is read from InnyTypes' pairing, never from the flow.",
+      "description": "Creates one object in an Anytype space for each event, named and filled from the payload. The Anytype key is read from Reload's pairing, never from the flow.",
       "icon": "font-awesome/fa-plus-square",
       "command": ["{node}", "{package}/dist/anytype.cjs"],
       "config": {
@@ -36,7 +36,7 @@
           }
         }
       },
-      "outputs": [{ "port": "created", "event": "anytype.object.created.v1" }]
+      "outputs": [{ "port": "created", "event": "reload_anytype.object.created.v1" }]
     },
     {
       "id": "update-object",
@@ -79,7 +79,7 @@
           }
         }
       },
-      "outputs": [{ "port": "updated", "event": "anytype.object.updated.v1" }]
+      "outputs": [{ "port": "updated", "event": "reload_anytype.object.updated.v1" }]
     },
     {
       "id": "read-object",
@@ -106,7 +106,7 @@
           }
         }
       },
-      "outputs": [{ "port": "object", "event": "anytype.object.read.v1" }]
+      "outputs": [{ "port": "object", "event": "reload_anytype.object.read.v1" }]
     },
     {
       "id": "read-space",
@@ -139,7 +139,7 @@
           }
         }
       },
-      "outputs": [{ "port": "objects", "event": "anytype.space.read.v1" }]
+      "outputs": [{ "port": "objects", "event": "reload_anytype.space.read.v1" }]
     },
     {
       "id": "search",
@@ -181,7 +181,7 @@
           }
         }
       },
-      "outputs": [{ "port": "results", "event": "anytype.search.results.v1" }]
+      "outputs": [{ "port": "results", "event": "reload_anytype.search.results.v1" }]
     }
   ]
 }

@@ -30,7 +30,7 @@ const DAY = 24 * 60 * 60 * 1000;
 
 function pkg(overrides: Partial<Package> = {}): Package {
   return {
-    name: "innyrize",
+    name: "reload_summarize",
     version: "0.3",
     source: { kind: "catalogue" },
     signed: true,
@@ -413,7 +413,10 @@ describe("rowActions (design-system Package row)", () => {
   });
 
   it("a folder offers Check for changes instead of Update", () => {
-    const folder = pkg({ source: { kind: "folder", path: "~/packages/innyrize" }, signed: false });
+    const folder = pkg({
+      source: { kind: "folder", path: "~/packages/reload_summarize" },
+      signed: false,
+    });
     expect(rowActions(folder, T0)).toEqual({
       enabled: ["unregister", "remove", "check-for-changes"],
       disabled: [],

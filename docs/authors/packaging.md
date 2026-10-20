@@ -1,35 +1,35 @@
-# Packaging and signing: `inny-pack`
+# Packaging and signing: `reload-pack`
 
-Source: `tools/inny-pack/`. `inny-pack` builds the archive spec §2.3.5 defines, signs it with
-minisign, and then re-verifies what it just built through the **same code InnyTypes itself
+Source: `tools/reload-pack/`. `reload-pack` builds the archive spec §2.3.5 defines, signs it with
+minisign, and then re-verifies what it just built through the **same code Reload itself
 runs on install** — `domain/packages/archive.ts`, `domain/packages/environment.ts`,
-`adapters/signature/minisign.ts`, `adapters/fs/package-source.ts` — so a package `inny-pack`
-finished building is one InnyTypes has already, in that same run, agreed to accept.
+`adapters/signature/minisign.ts`, `adapters/fs/package-source.ts` — so a package `reload-pack`
+finished building is one Reload has already, in that same run, agreed to accept.
 
-Build it once (or `node tools/inny-pack/cli.ts` directly, which runs from source):
+Build it once (or `node tools/reload-pack/cli.ts` directly, which runs from source):
 
 ```sh
-npx esbuild tools/inny-pack/cli.ts --bundle --platform=node --target=node22 --format=cjs \
-  --outfile=tools/inny-pack/dist/cli.cjs
-alias inny-pack="node $(pwd)/tools/inny-pack/dist/cli.cjs"
+npx esbuild tools/reload-pack/cli.ts --bundle --platform=node --target=node22 --format=cjs \
+  --outfile=tools/reload-pack/dist/cli.cjs
+alias reload-pack="node $(pwd)/tools/reload-pack/dist/cli.cjs"
 ```
 
 ## 1. Generate a signing key, once
 
 ```sh
-inny-pack keygen ~/.inny-pack --name my-name
+reload-pack keygen ~/.reload-pack --name my-name
 ```
 
-Writes `~/.inny-pack/my-name.pub` (share this — it is what people trust your packages by) and
-`~/.inny-pack/my-name.key` (never share, never commit; mode `0600`). This is **not** a
+Writes `~/.reload-pack/my-name.pub` (share this — it is what people trust your packages by) and
+`~/.reload-pack/my-name.key` (never share, never commit; mode `0600`). This is **not** a
 minisign secret key file — minisign's own secret key format is passphrase-encrypted, and
-reimplementing that container is out of scope here. Nothing in InnyTypes ever reads a secret
+reimplementing that container is out of scope here. Nothing in Reload ever reads a secret
 key, only the public key and the signatures you make with it, and those ARE the format
 minisign itself produces (`docs/domain/signature/minisign.ts` parses either equally). If you
 already run real `minisign` and want its public key format specifically, that also works —
-`inny-pack verify` and the app's own installer read a bare minisign `.pub` file either way.
+`reload-pack verify` and the app's own installer read a bare minisign `.pub` file either way.
 
-`inny-pack build` also refuses outright if it finds a `.key` file inside the package folder
+`reload-pack build` also refuses outright if it finds a `.key` file inside the package folder
 you point it at, so a signing key can never ship by accident.
 
 ## 2. Prepare your files
@@ -42,7 +42,7 @@ uv pip compile requirements.in --generate-hashes -o requirements.lock
 ```
 
 Exact pins (`name==version`) with `--hash=sha256:...` and nothing else — no ranges, no git
-references, no local wheels (`domain/packages/lock.ts` refuses anything else, and `inny-pack
+references, no local wheels (`domain/packages/lock.ts` refuses anything else, and `reload-pack
 build` runs that same check before it signs a byte). No dependencies at all means no
 `requirements.lock` file — its absence IS the declaration of "nothing to install".
 
@@ -55,7 +55,7 @@ npx esbuild src/main.ts --bundle --platform=node --target=node22 --format=cjs \
   --outfile=dist/main.cjs
 ```
 
-Then your `inny-package.json` command names `["{node}", "{package}/dist/main.cjs"]`.
+Then your `reload-package.json` command names `["{node}", "{package}/dist/main.cjs"]`.
 
 **`executable`:** build your binary for each `<platform>-<arch>` you support, and declare its
 path and sha256 under `environment.binaries` (`docs/authors/declaration.md`).
@@ -63,12 +63,12 @@ path and sha256 under `environment.binaries` (`docs/authors/declaration.md`).
 ## 3. Build and sign
 
 ```sh
-inny-pack build path/to/your-package --key ~/.inny-pack/my-name.key --out your-package-1.0.0.tgz
+reload-pack build path/to/your-package --key ~/.reload-pack/my-name.key --out your-package-1.0.0.tgz
 ```
 
 This:
 
-1. reads and validates `inny-package.json` — the same JSON Schema and the same rules beyond it
+1. reads and validates `reload-package.json` — the same JSON Schema and the same rules beyond it
    (`domain/packages/declaration.ts`) the app checks on install, so a broken declaration is
    refused here, before anything is signed, with the same wording;
 2. judges your environment the way the app would (`domain/packages/environment.ts`) — the
@@ -77,13 +77,13 @@ This:
 4. signs `files.json` with your key, `files.json.minisig`;
 5. tars and gzips everything into the archive;
 6. **re-reads that archive** through the app's own verification path and prints its content
-   hash — if this step disagrees with what was just built, `inny-pack` refuses to hand you the
+   hash — if this step disagrees with what was just built, `reload-pack` refuses to hand you the
    file rather than publish something broken.
 
 ## 4. Verify an archive on its own
 
 ```sh
-inny-pack verify your-package-1.0.0.tgz --key ~/.inny-pack/my-name.pub
+reload-pack verify your-package-1.0.0.tgz --key ~/.reload-pack/my-name.pub
 ```
 
 Exactly the check the app runs before it ever unpacks a file from the archive: the signature
@@ -94,6 +94,6 @@ version number is refused the same way here as it is on install).
 
 ## A path install, for local development
 
-While developing, point InnyTypes at your package's folder directly — no archive, no
+While developing, point Reload at your package's folder directly — no archive, no
 signature. It is still hashed and compared by content the same way (spec §2.3.5): the content
 hash is what stops a version silently changing under you, archive or not.

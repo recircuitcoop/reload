@@ -74,7 +74,7 @@ describe("uv-python", () => {
 
   it.each(["3.12", "3.14", ">=3.11", "3"])("refuses Python %j, with a reason", (python) => {
     expect(refusal(declaration({ kind: "uv-python", python }))).toBe(
-      `monty: it asks for Python ${python}, and InnyTypes provides Python 3.13 only; ` +
+      `monty: it asks for Python ${python}, and Reload provides Python 3.13 only; ` +
         'declare "python": "3.13"',
     );
   });

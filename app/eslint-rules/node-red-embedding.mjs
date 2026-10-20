@@ -1,4 +1,4 @@
-// An ESLint rule for the one way InnyTypes may embed Node-RED (arch_pivot P9–P10, WI-0018-08).
+// An ESLint rule for the one way Reload may embed Node-RED (arch_pivot P9–P10, WI-0018-08).
 //
 // 1. `RED.stop()` followed by `RED.start()` in one process breaks Node-RED: every type becomes
 //    "already registered", then "missing", and every flow stops (arch_pivot P9 surprise 1). A
@@ -168,6 +168,6 @@ const noNodeRedRestart = {
 };
 
 export default {
-  meta: { name: "innytypes-node-red" },
+  meta: { name: "reload-node-red" },
   rules: { "no-node-red-restart": noNodeRedRestart },
 };

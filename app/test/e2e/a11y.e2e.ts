@@ -8,7 +8,7 @@
 //     failed on. Every icon-only control met on the way is named, and by a strings.ts line.
 // (e) The same for General's dialogs that need a state first: a package from a folder (the
 //     unsigned dialog), a package's Go back after a catalogue update (packages.e2e.ts's verkit
-//     catalogue) and InnyTypes' own Go back after an update (the version that ran last, older).
+//     catalogue) and Reload's own Go back after an update (the version that ran last, older).
 // (b) The app window loads the IBM Plex faces app.css names (plan 0022 §J), from its own files.
 // (c) The keyboard: Setup in tab order with a focus ring at every stop, a Flows row's ⋯ menu,
 //     and a dialog that keeps the focus inside and closes on Escape as Cancel does. Edit layout's
@@ -16,7 +16,7 @@
 // (d) prefers-reduced-motion: no transition and no animation runs anywhere on the page.
 //
 // Node-RED's own editor inside the canvas frame is left out of axe: it is unthemed and not drawn
-// by InnyTypes (plan 0022 risk 1).
+// by Reload (plan 0022 risk 1).
 import fs from "node:fs";
 import * as path from "node:path";
 import AxeBuilder from "@axe-core/playwright";
@@ -54,7 +54,7 @@ const QUESTION_NODES = [
   },
   {
     id: "a11y-ask",
-    type: "inny-popoutkit-ask",
+    type: "reload-popoutkit-ask",
     z: QUESTION_FLOW,
     window: "inline",
     show: "rich",
@@ -195,9 +195,9 @@ async function toReady(window: Page) {
   await window.evaluate(() =>
     (
       globalThis as unknown as {
-        inny: { app: { setSetupStep(move: { kind: "next" }): Promise<unknown> } };
+        reload: { app: { setSetupStep(move: { kind: "next" }): Promise<unknown> } };
       }
-    ).inny.app.setSetupStep({ kind: "next" }),
+    ).reload.app.setSetupStep({ kind: "next" }),
   );
   await expect(window.getByTestId("setup-step")).toHaveAttribute("data-step", "ready", {
     timeout: 15_000,
@@ -320,7 +320,7 @@ test("(a) every route and dialog, light and dark: no serious or critical axe fin
 
     // ── the quit question (as the shell asks it) ─────────────────────────────────────────
     await app.evaluate(({ BrowserWindow }) => {
-      BrowserWindow.getAllWindows()[0]?.webContents.send("inny:quit-question", {});
+      BrowserWindow.getAllWindows()[0]?.webContents.send("reload:quit-question", {});
     });
     const question = window.getByTestId("quit-question");
     await expect(question).toBeVisible({ timeout: 15_000 });
@@ -341,7 +341,7 @@ test("(a) every route and dialog, light and dark: no serious or critical axe fin
     await app.evaluate(({ Menu }) => {
       Menu.getApplicationMenu()?.getMenuItemById("preview-a-view")?.click();
     });
-    const popouts = () => app.windows().filter((page) => page.url().startsWith("inny-view://"));
+    const popouts = () => app.windows().filter((page) => page.url().startsWith("reload-view://"));
     await expect.poll(() => popouts().length, { timeout: 15_000 }).toBe(1);
     const popout = popouts()[0] as Page;
     await expect(popout.getByTestId("question-popout")).toBeVisible({ timeout: 15_000 });
@@ -350,7 +350,7 @@ test("(a) every route and dialog, light and dark: no serious or critical axe fin
     await expect(popout.getByTestId("skip-dialog")).toBeVisible();
     await visit("pop-out skip dialog", popout);
 
-    // ── the runtime banner, while InnyTypes restarts itself ──────────────────────────────
+    // ── the runtime banner, while Reload restarts itself ──────────────────────────────
     const runtime = await waitForRunning(window, "runtime");
     process.kill(runtime.pid, "SIGKILL");
     await expect(window.getByTestId("runtime-banner")).toBeVisible({ timeout: 15_000 });
@@ -390,7 +390,7 @@ test("(b) the app window loads the IBM Plex faces it names, from its own files",
       await Promise.all(
         faces.map((face) => {
           const [weight, family] = [face.slice(0, 3), face.slice(4)];
-          return document.fonts.load(`${weight} 16px "${family}"`, "InnyTypes");
+          return document.fonts.load(`${weight} 16px "${family}"`, "Reload");
         }),
       );
       await document.fonts.ready;
@@ -558,18 +558,18 @@ test("(d) with reduced motion asked for, no transition or animation runs", async
 /** An install builds the package's environment: allow it its time (as packages.e2e.ts). */
 const INSTALL_MS = 120_000;
 
-test("(e) General's dialogs that need a state first: unsigned, a package's Go back, InnyTypes' Go back", async () => {
+test("(e) General's dialogs that need a state first: unsigned, a package's Go back, Reload's Go back", async () => {
   test.setTimeout(6 * 60_000);
   const { scratch, userData, env } = scratchDirectories();
   const catalogue = await serveVerkit();
   const withCatalogue = {
     ...env,
-    INNYTYPES_E2E_HOOKS: "1",
-    INNYTYPES_CATALOGUE_URL: catalogue.url,
-    INNYTYPES_CATALOGUE_KEY: catalogue.key,
-    INNYTYPES_TEST_CATALOGUE_CA: CERT,
+    RELOAD_E2E_HOOKS: "1",
+    RELOAD_CATALOGUE_URL: catalogue.url,
+    RELOAD_CATALOGUE_KEY: catalogue.key,
+    RELOAD_TEST_CATALOGUE_CA: CERT,
   };
-  // The version that ran last is older than this one: InnyTypes was updated, and offers Go back.
+  // The version that ran last is older than this one: Reload was updated, and offers Go back.
   fs.mkdirSync(userData, { recursive: true });
   fs.writeFileSync(
     path.join(userData, "shell-settings.json"),
@@ -589,7 +589,7 @@ test("(e) General's dialogs that need a state first: unsigned, a package's Go ba
     const first = await launch();
     const visit = (where: string) => stop(first.window, where, findings, unnamed);
 
-    // InnyTypes' own Go back, confirmed once.
+    // Reload's own Go back, confirmed once.
     await first.general.getByTestId("general-update-go-back").click();
     const appGoBack = first.window.getByTestId("update-go-back-dialog");
     await expect(appGoBack).toBeVisible();

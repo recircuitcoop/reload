@@ -1,7 +1,7 @@
-// @innytypes/node/view: defineView, the one way to write a widget (plan 0021 §9), the browser
+// @recircuit/reload-node/view: defineView, the one way to write a widget (plan 0021 §9), the browser
 // half of the TypeScript SDK. A widget is a plain web component, defined in the package's
-// `view/component.js` and drawn by InnyTypes in the pop-up's sandbox (spec 8.5.3), inside
-// InnyTypes' chrome: the page draws the title and Continue · Later · Skip this step, the widget
+// `view/component.js` and drawn by Reload in the pop-up's sandbox (spec 8.5.3), inside
+// Reload's chrome: the page draws the title and Continue · Later · Skip this step, the widget
 // draws only its body (spec 8.5.6). No framework and no imports, so a package bundles it into
 // its one component.js as it is.
 //
@@ -45,9 +45,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** `window.inny`, the bridge the pop-up's preload exposes. */
+/** `window.reload`, the bridge the pop-up's preload exposes. */
 function bridge(): WidgetBridge {
-  return (window as unknown as { inny: WidgetBridge }).inny;
+  return (window as unknown as { reload: WidgetBridge }).reload;
 }
 
 /** The context of `element`, from the view the page handed it. */

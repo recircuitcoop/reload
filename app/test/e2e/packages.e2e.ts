@@ -39,7 +39,7 @@ import {
 } from "./app-harness";
 import { CERT, KEY, serveVerkit, versionNode, writePackageFolder } from "./verkit-catalogue";
 
-const PROBE = "inny-probekit-probe";
+const PROBE = "reload-probekit-probe";
 /** A uv venv is built at install: allow it its time. */
 const INSTALL_MS = 120_000;
 
@@ -105,7 +105,7 @@ function declaration(name: string, environment: unknown, command: string[], type
 }
 
 const PROBE_FILES: Files = {
-  "inny-package.json": declaration(
+  "reload-package.json": declaration(
     "probekit",
     { kind: "uv-python", python: "3.13" },
     ["{python}", "{package}/node.py"],
@@ -151,7 +151,7 @@ async function serveCatalogue(signer: Signer): Promise<{ url: string; close(): P
   published.set("/probekit.tgz", signedArchive(PROBE_FILES, signer));
   const tampered = {
     ...PROBE_FILES,
-    "inny-package.json": declaration(
+    "reload-package.json": declaration(
       "tampered",
       { kind: "uv-python", python: "3.13" },
       ["{python}", "{package}/node.py"],
@@ -212,14 +212,14 @@ function request(port: number, method: string, route: string, body?: unknown) {
 const palette = (editor: FrameLocator, type: string) =>
   editor.locator(`.red-ui-palette-node[data-palette-type="${type}"]`);
 
-/** Every inny-package.json under the install base: none may be written before verification. */
+/** Every reload-package.json under the install base: none may be written before verification. */
 function declarationsUnder(root: string): string[] {
   if (!fs.existsSync(root)) {
     return [];
   }
   return fs
     .readdirSync(root, { recursive: true, encoding: "utf8" })
-    .filter((file) => path.basename(file) === "inny-package.json");
+    .filter((file) => path.basename(file) === "reload-package.json");
 }
 
 test("a signed package from the catalogue: refused tampered, installed, in the canvas's palette, run from its own environment, removed only when no flow uses it", async () => {
@@ -231,10 +231,10 @@ test("a signed package from the catalogue: refused tampered, installed, in the c
   try {
     const { app, window, output } = await launchApp({
       ...env,
-      INNYTYPES_E2E_HOOKS: "1",
-      INNYTYPES_CATALOGUE_URL: catalogue.url,
-      INNYTYPES_CATALOGUE_KEY: signer.publicKeyLine,
-      INNYTYPES_TEST_CATALOGUE_CA: CERT,
+      RELOAD_E2E_HOOKS: "1",
+      RELOAD_CATALOGUE_URL: catalogue.url,
+      RELOAD_CATALOGUE_KEY: signer.publicKeyLine,
+      RELOAD_TEST_CATALOGUE_CA: CERT,
     });
     apps.push(app);
     // The editor's beforeunload guard is left to the app, as with no driver attached (see
@@ -322,7 +322,7 @@ test("a signed package from the catalogue: refused tampered, installed, in the c
     expect(
       fs
         .readdirSync(path.join(userData, "node-red", "generated"))
-        .filter((file) => file.startsWith("inny-probekit-")),
+        .filter((file) => file.startsWith("reload-probekit-")),
     ).toEqual([]);
     await expect(palette(await openCanvas(window, "tab1"), PROBE)).toHaveCount(0, {
       timeout: 15_000,
@@ -422,7 +422,7 @@ test("unregister refused while used, naming every flow and step", async () => {
     writePackageFolder(folder, "usekit", "0.1.0", versionNode("0.1.0"));
     const row = await installFolder(app, window, general, "usekit", folder);
     await expect(row).toContainText(STRINGS["packages.registered"], { timeout: 30_000 });
-    const type = "inny-usekit-step";
+    const type = "reload-usekit-step";
     const flows = [
       tab("ta", "Recordings to Anytype"),
       step("sa", type, "ta", "Transcribe"),
@@ -513,12 +513,12 @@ test("install from a folder, check for changes", async () => {
     // Install anyway: its phases are pushed in order, and its row says "Installing · n%".
     await first.window.evaluate(() => {
       const seen = { phases: [] as unknown[][], shown: [] as string[] };
-      (window as unknown as { innySeen: typeof seen }).innySeen = seen;
+      (window as unknown as { reloadSeen: typeof seen }).reloadSeen = seen;
       (
         window as unknown as {
-          inny: { app: { onPackages(listener: (changed: unknown) => void): void } };
+          reload: { app: { onPackages(listener: (changed: unknown) => void): void } };
         }
-      ).inny.app.onPackages((changed) => {
+      ).reload.app.onPackages((changed) => {
         const c = changed as { name: string | null; phase: string; percent: number } | null;
         if (c !== null) seen.phases.push([c.name, c.phase, c.percent]);
       });
@@ -532,7 +532,8 @@ test("install from a folder, check for changes", async () => {
     });
     let row = await installFolder(first.app, first.window, general, "monty", folder);
     const seen = await first.window.evaluate(
-      () => (window as unknown as { innySeen: { phases: unknown[][]; shown: string[] } }).innySeen,
+      () =>
+        (window as unknown as { reloadSeen: { phases: unknown[][]; shown: string[] } }).reloadSeen,
     );
     expect(seen.phases).toEqual([
       [null, "fetching", 0],
@@ -605,10 +606,10 @@ test("go back within seven days, not after", async () => {
   const catalogue = await serveVerkit();
   const withCatalogue = {
     ...env,
-    INNYTYPES_E2E_HOOKS: "1",
-    INNYTYPES_CATALOGUE_URL: catalogue.url,
-    INNYTYPES_CATALOGUE_KEY: catalogue.key,
-    INNYTYPES_TEST_CATALOGUE_CA: CERT,
+    RELOAD_E2E_HOOKS: "1",
+    RELOAD_CATALOGUE_URL: catalogue.url,
+    RELOAD_CATALOGUE_KEY: catalogue.key,
+    RELOAD_TEST_CATALOGUE_CA: CERT,
   };
   const apps: ElectronApplication[] = [];
   const live = path.join(userData, "node-packages", "packages", "verkit");
@@ -647,7 +648,7 @@ test("go back within seven days, not after", async () => {
       .getByTestId("package-install-offer")
       .click();
     await expect(first.row).toContainText(STRINGS["packages.installed"], { timeout: INSTALL_MS });
-    const flows = [tab("t1", "Flow 1"), step("vk", "inny-verkit-step", "t1", "Say version")];
+    const flows = [tab("t1", "Flow 1"), step("vk", "reload-verkit-step", "t1", "Say version")];
     expect((await request(first.port, "POST", "/red/flows", flows)).status).toBe(204);
     await running("0.1.0");
     catalogue.publish("0.2.0");

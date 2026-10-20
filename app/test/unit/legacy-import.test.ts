@@ -34,7 +34,7 @@ describe("buildLegacyImportPlan", () => {
       plugins: {
         update_mode: "off",
         monty: { update_mode: "auto" },
-        innyrize: { update_mode: "off" },
+        reload_summarize: { update_mode: "off" },
         whodunnit: { update_mode: "manual", pinned: true },
       },
     });
@@ -42,7 +42,7 @@ describe("buildLegacyImportPlan", () => {
       update_mode: "pinned",
       overrides: {
         monty: { update_mode: "auto" },
-        innyrize: { update_mode: "pinned" },
+        reload_summarize: { update_mode: "pinned" },
         whodunnit: { update_mode: "pinned" },
       },
     });

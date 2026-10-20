@@ -156,11 +156,11 @@ describe("ElectronLoginItem (macOS, Windows): the real call, with Electron's app
     const { app } = mockApp(() => ({ openAtLogin: false, status: "requires-approval" }));
     expect(() => {
       new ElectronLoginItem(app).register();
-    }).toThrow("did not register InnyTypes to start at login (requires-approval)");
+    }).toThrow("did not register Reload to start at login (requires-approval)");
     const stuck = mockApp(() => ({ openAtLogin: true })).app;
     expect(() => {
       new ElectronLoginItem(stuck).unregister();
-    }).toThrow("still starts InnyTypes at login");
+    }).toThrow("still starts Reload at login");
   });
 
   it("a throw from Electron is a refusal too", () => {
@@ -177,15 +177,15 @@ describe("ElectronLoginItem (macOS, Windows): the real call, with Electron's app
 });
 
 describe("AutostartLoginItem (Linux): one .desktop file in the autostart directory", () => {
-  const entry = { executable: "/opt/InnyTypes/innytypes", icon: "innytypes" };
-  const scratch = (): string => fs.mkdtempSync(path.join(os.tmpdir(), "inny-autostart-"));
+  const entry = { executable: "/opt/Reload/reload", icon: "reload" };
+  const scratch = (): string => fs.mkdtempSync(path.join(os.tmpdir(), "reload-autostart-"));
 
   it("writes the entry where the desktop reads it at login, and removing it twice is fine", () => {
     const dir = path.join(scratch(), "autostart");
     const item = new AutostartLoginItem(entry, dir);
     item.register();
     const text = fs.readFileSync(path.join(dir, DESKTOP_FILENAME), "utf8");
-    expect(text).toContain("Exec=/opt/InnyTypes/innytypes\n");
+    expect(text).toContain("Exec=/opt/Reload/reload\n");
     expect(text).toContain("X-GNOME-Autostart-enabled=true\n");
     expect(text).toContain("SingleMainWindow=true\n");
     item.unregister();
@@ -210,22 +210,20 @@ describe("AutostartLoginItem (Linux): one .desktop file in the autostart directo
 
   it("names the application once, by its id, with no field codes, and escapes what it must", () => {
     const text = renderDesktopEntry({
-      executable: "/home/a b/100%/Inny\\Types",
+      executable: "/home/a b/100%/Reload\\Types",
       icon: "line\nInjected=1",
     });
-    expect(DESKTOP_FILENAME).toBe("it.l1nx.innytypes.helper.desktop");
-    expect(text).toContain('Exec="/home/a b/100%%/Inny\\\\\\\\Types"\n');
+    expect(DESKTOP_FILENAME).toBe("it.recircu.reload.desktop");
+    expect(text).toContain('Exec="/home/a b/100%%/Reload\\\\\\\\Types"\n');
     expect(text).toContain("Icon=line\\nInjected=1\n");
     expect(text).not.toMatch(/^Injected=/m);
     expect(text).not.toMatch(/%[fFuU]/);
-    expect(text).toContain("StartupWMClass=it.l1nx.innytypes.helper\n");
+    expect(text).toContain("StartupWMClass=it.recircu.reload\n");
     expect(renderDesktopEntry({ executable: "/a\tb", icon: "i" })).toContain("Exec=/a\\tb\n");
   });
 
   it("refuses a launcher that is not an absolute path, and an entry with no icon", () => {
-    expect(() => renderDesktopEntry({ executable: "innytypes", icon: "i" })).toThrow(
-      /absolute path/,
-    );
+    expect(() => renderDesktopEntry({ executable: "reload", icon: "i" })).toThrow(/absolute path/);
     expect(() => renderDesktopEntry({ executable: "", icon: "i" })).toThrow(/absolute path/);
     expect(() => renderDesktopEntry({ executable: "/a", icon: "" })).toThrow(/needs an icon/);
   });
@@ -241,7 +239,7 @@ describe("AutostartLoginItem (Linux): one .desktop file in the autostart directo
 
 describe("the stored switch and its IPC", () => {
   it("is stored beside the other settings, which it leaves as they were", () => {
-    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "inny-settings-")), "s.json");
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "reload-settings-")), "s.json");
     const store = new JsonSettingsStore(file);
     expect(store.readLaunchAtLogin()).toBe(false);
     store.writeEndpoint({ host: "127.0.0.1", port: 31010 });

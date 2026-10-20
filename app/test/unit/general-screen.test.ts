@@ -123,7 +123,7 @@ describe("the AI apps section", () => {
     expect(servedAddress(status)).toBe("127.0.0.1:31010");
     expect(servedPort(status)).toBe(31010);
     expect(aiAppsLine(status)).toBe(
-      "Claude, Codex and other apps can use your Anytype through InnyTypes at `127.0.0.1:31010`.",
+      "Claude, Codex and other apps can use your Anytype through Reload at `127.0.0.1:31010`.",
     );
   });
 
@@ -159,7 +159,7 @@ describe("the AI apps section's host", () => {
       try {
         checkedAddress(host, 40001);
       } catch (error) {
-        reason = `Error invoking remote method 'inny:mcp-endpoint-move': ${String(error)}`;
+        reason = `Error invoking remote method 'reload:mcp-endpoint-move': ${String(error)}`;
       }
       expect(reason).not.toBe("");
       expect(moveRefusal(reason, 40001)).toBe(STRINGS["general.aiApps.hostRefused"]);
@@ -185,7 +185,7 @@ describe("Set up ChatGPT (WI-0022-30)", () => {
   it("says ChatGPT's own Add server steps in order, every one a strings.ts line", () => {
     expect(CHATGPT_STEPS.map((key) => STRINGS[key])).toEqual([
       "Open Settings › MCP servers and choose Add server.",
-      "Name: innytypes. Transport: Streamable HTTP.",
+      "Name: reload. Transport: Streamable HTTP.",
       "URL: paste the address. Copy address copies it.",
       "Authentication: Bearer token. Paste the token. Copy token copies it.",
       "Save, then choose Restart.",
@@ -239,7 +239,7 @@ describe("the privacy notice beside the reports question (D25)", () => {
 
   it("says only what is true of this version: usage counts to Umami Cloud after a yes, no crash report, nothing before an answer", () => {
     // Where the release sends: Umami Cloud for usage counts, no GlitchTip for crash reports.
-    const built = telemetryEndpoints({}, packageJson.innytypes);
+    const built = telemetryEndpoints({}, packageJson.reload);
     expect(new URL(built.umamiUrl).hostname).toBe("cloud.umami.is");
     expect(STRINGS["privacy.sent.where"]).toContain("sent to Umami Cloud");
     expect(STRINGS["privacy.sent.address"]).toContain("Umami Cloud your IP address");
@@ -269,7 +269,7 @@ describe("the privacy notice beside the reports question (D25)", () => {
       "packages",
     ]);
     expect(STRINGS["privacy.sent.versions"]).toBe(
-      "the InnyTypes version, your operating system, its version and the processor type",
+      "the Reload version, your operating system, its version and the processor type",
     );
 
     // Sending wraps a report, adding only the version and values the same on every computer.
@@ -290,10 +290,10 @@ describe("the privacy notice beside the reports question (D25)", () => {
     const other = sent("b".repeat(64));
     expect(one.headers).toEqual({
       "Content-Type": "application/json",
-      "User-Agent": "innytypes/0.3.0",
+      "User-Agent": "reload/0.3.0",
     });
     expect(one.body.payload).toMatchObject({
-      website: packageJson.innytypes.umamiWebsiteId,
+      website: packageJson.reload.umamiWebsiteId,
       hostname: UMAMI_HOSTNAME,
       url: UMAMI_URL_PATH,
       name: "usage",
@@ -302,7 +302,7 @@ describe("the privacy notice beside the reports question (D25)", () => {
     expect({ ...one.body.payload, data: null }).toEqual({ ...other.body.payload, data: null });
     expect(one.headers).toEqual(other.headers);
     expect(STRINGS["privacy.sent.wrapped"]).toContain(
-      "adding only the InnyTypes version and values that are the same on every computer",
+      "adding only the Reload version and values that are the same on every computer",
     );
     expect(STRINGS["privacy.rights.see"]).toContain(
       "shows what each report carries before it is sent",
@@ -333,7 +333,7 @@ describe("the privacy notice beside the reports question (D25)", () => {
     );
     expect(licence).toContain("Copyright (c) 2026 Re:Circuit Cooperative");
     expect(STRINGS["privacy.rights.contact"]).toContain(
-      "Re:Circuit Cooperative, who make InnyTypes, at privacy@recircu.it",
+      "Re:Circuit Cooperative, who make Reload, at privacy@recircu.it",
     );
     // Nothing the code does not do: the earlier claims that were not true of this version.
     for (const untrue of [
@@ -393,14 +393,19 @@ describe("Recorders and folders", () => {
   it("finds every folder source that is set up, with its flow's switch", () => {
     expect(
       folderSteps([
-        flow("a", true, [step("w1", FOLDER_SOURCE_TYPE), step("f1", "inny-anytype-create-object")]),
+        flow("a", true, [
+          step("w1", FOLDER_SOURCE_TYPE),
+          step("f1", "reload-reload_anytype-create-object"),
+        ]),
         flow("b", false, [step("w2", FOLDER_SOURCE_TYPE), step("w3", FOLDER_SOURCE_TYPE, false)]),
       ]),
     ).toEqual([
       { flowId: "a", nodeId: "w1", on: true },
       { flowId: "b", nodeId: "w2", on: false },
     ]);
-    expect(folderSteps([flow("c", true, [step("x", "inny-anytype-create-object")])])).toEqual([]);
+    expect(
+      folderSteps([flow("c", true, [step("x", "reload-reload_anytype-create-object")])]),
+    ).toEqual([]);
   });
 
   it("names a folder by its own name, never its path, watching or not", () => {
@@ -427,7 +432,7 @@ describe("Packages (plan 0022 §F)", () => {
   const at = new Date(2026, 9, 14, 9, 14);
   const view = (updates: number): PackagesView => ({
     offers: [],
-    packages: ["anytype", "folder", "monty", "innyrize"].map((name, index) => ({
+    packages: ["anytype", "folder", "monty", "reload_summarize"].map((name, index) => ({
       publisher: null,
       actions: { enabled: [], disabled: [] },
       package: {

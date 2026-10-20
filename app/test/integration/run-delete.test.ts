@@ -34,7 +34,7 @@ afterEach(async () => {
 
 /** The node at bound 1, its journal (the run of every input journaled, recorded), its replay and actions. */
 async function setUp() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "inny-run-delete-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "reload-run-delete-"));
   const journal = openSqliteJournal(path.join(dir, "journal.sqlite"));
   const journaled: string[] = [];
   const put = journal.put.bind(journal);
@@ -71,7 +71,7 @@ function ask(node: RawNode, journal: SqliteJournal, run: string): RecordingDeliv
   journal.started({ flowId: FLOW, runId: run, title: run, at: Date.now() });
   const delivery = new RecordingDelivery();
   node.node.input(
-    { payload: { do: "present", content: { title: run } }, topic: "t", inny: { run } },
+    { payload: { do: "present", content: { title: run } }, topic: "t", reload: { run } },
     delivery,
   );
   return delivery;

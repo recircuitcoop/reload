@@ -1,4 +1,4 @@
-// InnyTypes' own update, as one state machine (plan 0022 §A "domain/updates/", §G; ux-writing
+// Reload's own update, as one state machine (plan 0022 §A "domain/updates/", §G; ux-writing
 // "Configuration › General", Updates; design-system "Configuration › General section"). Values
 // only: every state's sentence ("Up to date · 0.2.1 · checked today 09:14", "Checking…", …) is
 // ui/strings.ts's (WI-0022-10), listed state by state in

@@ -60,7 +60,7 @@ function appWindow() {
       made.push(fake);
       return fake as unknown as BrowserWindow;
     },
-    url: "inny-app://app/index.html",
+    url: "reload-app://app/index.html",
     preload: "/app/preload.cjs",
     hidden: true,
     logger,
@@ -74,7 +74,7 @@ describe("the app window", () => {
     const { window, made, options } = appWindow();
     expect(window.current).toBeNull();
     window.open();
-    expect(made[0]?.loaded).toEqual(["inny-app://app/index.html"]);
+    expect(made[0]?.loaded).toEqual(["reload-app://app/index.html"]);
     expect(options[0]).toMatchObject({
       show: false,
       webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false },
@@ -128,14 +128,14 @@ describe("the app window", () => {
 
   it("sends to the page only while a window is open", () => {
     const { window, made } = appWindow();
-    window.toPage("inny:x", 1);
+    window.toPage("reload:x", 1);
     window.open();
-    window.toPage("inny:x", 2);
+    window.toPage("reload:x", 2);
     const first = made[0];
     if (first === undefined) throw new Error("no window");
     first.destroyed = true;
-    window.toPage("inny:x", 3);
-    expect(first.sent).toEqual([["inny:x", 2]]);
+    window.toPage("reload:x", 3);
+    expect(first.sent).toEqual([["reload:x", 2]]);
   });
 });
 

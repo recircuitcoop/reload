@@ -1,4 +1,4 @@
-"""Unit tests for innytypes_node.Node (node protocol v2, spec Appendix A), covering the SDK
+"""Unit tests for reload_node.Node (node protocol v2, spec Appendix A), covering the SDK
 checklist of spec §12.1 and the conformance table of §12.2 (C1, C3–C5, C9–C14) at the module
 level. The end-to-end run of the SAME rules against a real subprocess, C1–C14 in full, is
 app/test/conformance/sdk-node.test.ts and app/test/conformance/sdk-views.test.ts, which drive
@@ -14,7 +14,7 @@ from collections.abc import Callable
 
 import pytest
 
-from innytypes_node import (
+from reload_node import (
     REDACTED,
     AudioItem,
     Component,
@@ -29,7 +29,7 @@ from innytypes_node import (
 START = {
     "t": "start",
     "protocol": 2,
-    "node": {"id": "n1", "type": "inny-pkg-kind", "name": "My node"},
+    "node": {"id": "n1", "type": "reload-pkg-kind", "name": "My node"},
     "config": {"a": 1},
     "credentials": {"token": "s3cr3t-token"},
     "data_dir": "/tmp/data",
@@ -78,7 +78,7 @@ def start_node(monkeypatch: pytest.MonkeyPatch, *rest: dict[str, object], **kwar
 def test_start_reads_node_config_credentials_and_data_dir(monkeypatch: pytest.MonkeyPatch) -> None:
     patch_io(monkeypatch)
     node = start_node(monkeypatch)
-    assert node.node == {"id": "n1", "type": "inny-pkg-kind", "name": "My node"}
+    assert node.node == {"id": "n1", "type": "reload-pkg-kind", "name": "My node"}
     assert node.config == {"a": 1}
     assert node.credentials == {"token": "s3cr3t-token"}
     assert node.data_dir == "/tmp/data"

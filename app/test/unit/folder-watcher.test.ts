@@ -1,4 +1,4 @@
-// The folder source's watcher (packages/folder/src/watcher.ts, WI-0022-25) in process, time
+// The folder source's watcher (packages/reload_folder/src/watcher.ts, WI-0022-25) in process, time
 // driven through scan(now): a file is remembered only once its emit succeeded, one file's failed
 // emit does not stop the others, and a file whose emit failed is passed on after a restart.
 
@@ -13,7 +13,7 @@ import {
   QUIET_MS,
   SEEN_FILE,
   type CreatedFile,
-} from "../../../packages/folder/src/watcher";
+} from "../../../packages/reload_folder/src/watcher";
 
 const scratches: string[] = [];
 
@@ -25,7 +25,7 @@ afterEach(() => {
 
 /** A watched folder and a data folder, both empty. */
 function instance(): { folder: string; dataDir: string } {
-  const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "inny-watcher-")));
+  const scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-watcher-")));
   scratches.push(scratch);
   const folder = path.join(scratch, "watched");
   const dataDir = path.join(scratch, "data");
@@ -58,7 +58,7 @@ function failingFor(name: string, sent: string[]) {
   };
 }
 
-describe("packages/folder watcher: remembered only once passed on", () => {
+describe("packages/reload_folder watcher: remembered only once passed on", () => {
   it("a failed emit for one file leaves it unrecorded and offered again; the others are passed on and recorded", () => {
     const { folder, dataDir } = instance();
     const watcher = new FolderWatcher({ folder }, dataDir);

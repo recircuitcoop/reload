@@ -469,13 +469,13 @@ export function LiveOrganismsPage() {
         <Cell of="runtime-banner" width={1152}>
           <RuntimeBanner
             state="restarting"
-            message="InnyTypes stopped unexpectedly and is restarting."
+            message="Reload stopped unexpectedly and is restarting."
           />
         </Cell>
         <Cell of="runtime-banner" width={1152}>
           <RuntimeBanner
             state="down"
-            message="InnyTypes stopped 5 times in 2 minutes and won't restart on its own."
+            message="Reload stopped 5 times in 2 minutes and won't restart on its own."
             restartLabel="Restart"
           />
         </Cell>

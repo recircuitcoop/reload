@@ -1,5 +1,5 @@
-// Conformance (spec §12.2) of BOTH node SDKs' reference nodes: sdk-py (innytypes-node) and
-// sdk-ts (@innytypes/node), built ON the SDKs rather than hand-rolling the protocol like
+// Conformance (spec §12.2) of BOTH node SDKs' reference nodes: sdk-py (reload-node) and
+// sdk-ts (@recircuit/reload-node), built ON the SDKs rather than hand-rolling the protocol like
 // app/test/fixtures/raw-node/node.py does. This is the "run the conformance suite against a
 // reference node built on each SDK, not only against raw fixtures" half of WI-0018-26; C10 and
 // C11 (the view frames) are sdk-views.test.ts. C15 is runtime-side and stays out of scope here.
@@ -62,7 +62,7 @@ class Session {
     this.send({
       t: "start",
       protocol: 2,
-      node: { id: "conformance", type: "inny-sdk-kitchen", name: "" },
+      node: { id: "conformance", type: "reload-sdk-kitchen", name: "" },
       config: {},
       credentials,
       data_dir: "/nonexistent-data-dir",
@@ -256,7 +256,7 @@ describe.each(SDK_LANGUAGES)("conformance: the %s SDK's kitchen reference node",
   });
 
   it("C13 credentials: a credential value never appears on stdout or stderr, even where a handler logs it outright", async () => {
-    const canary = "inny-canary-5f2c9a71e0d34b8c";
+    const canary = "reload-canary-5f2c9a71e0d34b8c";
     const node = session(language);
     node.start({ token: canary });
     node.send({ t: "input", id: "use", event: { type: "t.v1", data: { do: "credential" } } });

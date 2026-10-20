@@ -239,7 +239,7 @@ const search: Operation = async (client, key, config, payload) => {
   };
 };
 
-/** The operation of each declared type id (inny-package.json). */
+/** The operation of each declared type id (reload-package.json). */
 export const OPERATIONS: Readonly<Record<string, Operation>> = {
   "create-object": createObject,
   "update-object": updateObject,

@@ -8,7 +8,7 @@
   },
   {
     "id": "fta-watch",
-    "type": "inny-folder-watch",
+    "type": "reload-reload_folder-watch",
     "z": "fta-tab",
     "name": "Watch a folder",
     "x": 140,
@@ -17,7 +17,7 @@
   },
   {
     "id": "fta-file",
-    "type": "inny-anytype-create-object",
+    "type": "reload-reload_anytype-create-object",
     "z": "fta-tab",
     "name": "File in Anytype",
     "type_key": "page",

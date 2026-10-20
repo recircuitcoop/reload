@@ -74,7 +74,7 @@ describe("presentation", () => {
 const record: SnapshotRecord = {
   id: "s",
   instanceId: "rec",
-  type: "inny-viewpy-record",
+  type: "reload-viewpy-record",
   label: "Record",
   time: 1,
   content: {},

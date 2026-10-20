@@ -10,7 +10,7 @@
 // Pure: no I/O, no DOM, no library.
 
 import type { JsonSchema } from "../packages/declaration";
-import { innytypeOptions, type InnytypeOptions } from "./innytype";
+import { reloadOptions, type ReloadOptions } from "./reload-keyword";
 import {
   READING_SPACES,
   READING_TYPES,
@@ -46,10 +46,10 @@ export interface Field {
   /** A select's options, in the schema's order. */
   readonly options?: readonly unknown[];
   /**
-   * Where a text field's options come from, when its property declares them through `innytype`
+   * Where a text field's options come from, when its property declares them through `reload`
    * (spec 2.4.1); resolving them is the options route's job. The value stays a plain string.
    */
-  readonly innytype?: InnytypeOptions;
+  readonly reload?: ReloadOptions;
   /** A group's fields, or a table's columns. */
   readonly fields?: readonly Field[];
 }
@@ -139,9 +139,9 @@ function fieldOf(key: string, property: JsonSchema, required: boolean): Field {
   if (control === "select") {
     field.options = property["enum"] as readonly unknown[];
   }
-  const innytype = control === "text" ? innytypeOptions(property) : null;
-  if (innytype !== null) {
-    field.innytype = innytype;
+  const reload = control === "text" ? reloadOptions(property) : null;
+  if (reload !== null) {
+    field.reload = reload;
   }
   if (control === "group") {
     field.fields = formModel(property).fields;
@@ -217,22 +217,22 @@ export function moveRow(rows: readonly Row[], from: number, to: number): Row[] {
 // ── dynamic options (plan 0022 §B, D9) ───────────────────────────────────────────────────
 
 /**
- * What a field with `innytype` options asks for, given the values its siblings hold now: the
+ * What a field with `reload` options asks for, given the values its siblings hold now: the
  * spaces, or the types of the space its `of` sibling holds. Null when it asks nothing: a field
- * with no `innytype`, or a types field whose space is not chosen yet.
+ * with no `reload`, or a types field whose space is not chosen yet.
  */
 export function optionsQueryOf(
   field: Field,
   siblings: Readonly<Record<string, unknown>>,
 ): OptionsQuery | null {
-  const innytype = field.innytype;
-  if (innytype === undefined) {
+  const reload = field.reload;
+  if (reload === undefined) {
     return null;
   }
-  if (innytype.source === "spaces") {
+  if (reload.source === "spaces") {
     return { source: "spaces" };
   }
-  const spaceId = siblings[innytype.of];
+  const spaceId = siblings[reload.of];
   return typeof spaceId === "string" && spaceId !== "" ? { source: "types", spaceId } : null;
 }
 
@@ -255,7 +255,7 @@ export interface DynamicSelect {
 const EMPTY_CHOICE: NodeOption = { value: "", label: "" };
 
 /**
- * The select of `field` (an `innytype` field) holding `value`, in `state`. The value stays a
+ * The select of `field` (an `reload` field) holding `value`, in `state`. The value stays a
  * plain string and is never dropped silently: while reading, when refused, and when the
  * answer lacks it, it is offered under its own text, so saving keeps it. The one exception is
  * `keepUnlisted: false`, after the person chose another space: a type that space lacks is
@@ -272,7 +272,7 @@ export function dynamicSelect(
     case "waiting":
       return { options: [EMPTY_CHOICE], value: "", disabled: true, sentence: null };
     case "loading": {
-      const sentence = field.innytype?.source === "types" ? READING_TYPES : READING_SPACES;
+      const sentence = field.reload?.source === "types" ? READING_TYPES : READING_SPACES;
       return { options: [EMPTY_CHOICE, ...stored], value, disabled: true, sentence };
     }
     case "answered": {

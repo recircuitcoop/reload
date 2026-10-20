@@ -1,8 +1,8 @@
-// What electron-updater installs is what InnyTypes verified (plan 0003 D10; plan 0022 §G): the
+// What electron-updater installs is what Reload verified (plan 0003 D10; plan 0022 §G): the
 // production UpdateCheck, ElectronUpdaterInstaller, HttpsClient, MinisignVerifier and
 // sha512Base64, against a local HTTPS release host — never GitHub (test/fixtures/tls).
 //
-// electron-updater reads the feed a second time, on its own fetch, after InnyTypes verified it.
+// electron-updater reads the feed a second time, on its own fetch, after Reload verified it.
 // The host here can answer that second fetch with another document, as a hostile or broken
 // server could. The AppUpdater is a fake that fetches and downloads from that host as
 // electron-updater 6 does (its own yml read; an older version offered only with allowDowngrade;
@@ -72,7 +72,7 @@ afterAll(async () => {
 });
 
 beforeEach(() => {
-  scratch = fs.mkdtempSync(path.join(os.tmpdir(), "inny-update-binding-"));
+  scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-update-binding-"));
   published.clear();
   seen.clear();
 });
@@ -82,9 +82,9 @@ afterEach(() => {
 });
 
 /** A release as electron-builder publishes it under `dir`: the yml, its signature, the zip. */
-function release(version: string, bytes = `InnyTypes ${version}`) {
+function release(version: string, bytes = `Reload ${version}`) {
   const artifact = encode(bytes);
-  const file = `InnyTypes-${version}-mac.zip`;
+  const file = `Reload-${version}-mac.zip`;
   const yaml = encode(
     `version: ${version}\nfiles:\n  - url: ${file}\n    sha512: ${sha512Base64(artifact)}\n` +
       `    size: ${String(artifact.length)}\n`,
@@ -107,7 +107,7 @@ function publish(
   published.set(`${dir}/latest-mac.yml.minisig`, { first: encode(signer.sign(good.yaml)) });
   published.set(`${dir}/${good.file}`, { first: good.artifact });
   if (other !== undefined) {
-    // The same name: the verified bytes first (InnyTypes' own fetch), the substitute after.
+    // The same name: the verified bytes first (Reload's own fetch), the substitute after.
     published.set(
       `${dir}/${other.file}`,
       other.file === good.file
@@ -184,7 +184,7 @@ function checker(signer: Signer) {
     transport: { http, verifier: new MinisignVerifier(), sha512: sha512Base64 },
     settings: new JsonSettingsStore(settings),
     report: { notifier, logger },
-    selfUpdater: new ElectronUpdaterInstaller(updater as never, "acme/innytypes", "latest", logger),
+    selfUpdater: new ElectronUpdaterInstaller(updater as never, "acme/reload", "latest", logger),
     session: {
       clock: { now: () => 0, after: () => () => undefined },
       currentVersion: () => CURRENT,
@@ -198,7 +198,7 @@ function checker(signer: Signer) {
   return { check, updater, notifier, events };
 }
 
-describe("electron-updater installs only what InnyTypes verified", () => {
+describe("electron-updater installs only what Reload verified", () => {
   it("the same release on electron-updater's own fetch: downloaded, and installed at quit", async () => {
     const signer = new Signer();
     publish("", signer, NEWER);

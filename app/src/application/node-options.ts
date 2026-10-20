@@ -1,5 +1,5 @@
 // The runtime's one resolver of a step's dynamic options (plan 0022 §B, D9): the canvas form's
-// admin route `/red/inny/options` and Setup's `AppApi.nodeOptions` both answer through it.
+// admin route `/red/reload/options` and Setup's `AppApi.nodeOptions` both answer through it.
 //
 // It asks the services process, which alone holds the Anytype key, over the direct peer
 // channel, and turns what comes back into options: a space's id or a type's key as the value

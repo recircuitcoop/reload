@@ -248,7 +248,7 @@ describe("configOf and credentialsOf", () => {
   it("takes only the declared, non-secret properties of a Node-RED node, coerced", () => {
     const node = {
       id: "n1",
-      type: "inny-x-y",
+      type: "reload-x-y",
       z: "tab",
       name: "mine",
       wires: [[]],

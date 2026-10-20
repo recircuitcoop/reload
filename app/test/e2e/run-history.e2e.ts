@@ -29,8 +29,8 @@ interface RunValue {
   /** A waiting run's card names the view it waits on (plan 0022 §C). */
   card?: { waiting: { viewId: string } | null };
 }
-interface Inny {
-  inny: {
+interface Reload {
+  reload: {
     app: {
       completeSetup(): Promise<{ ok: boolean }>;
       runs(query: object): Promise<{ ok: boolean; value?: { runs: RunValue[] } }>;
@@ -63,17 +63,17 @@ function historyFlow(folder: string, tail: "file" | "none" | "question" = "file"
   });
   return [
     { id: FLOW, type: "tab", label: FLOW_NAME },
-    step("rec", "inny-livekit-recorder", "Recorder", 1, ["copy"]),
-    step("copy", "inny-livekit-copy", "Copy", 2, ["work"]),
-    step("work", "inny-livekit-work", "Transcribe", 3, tail === "none" ? [] : ["file"]),
+    step("rec", "reload-livekit-recorder", "Recorder", 1, ["copy"]),
+    step("copy", "reload-livekit-copy", "Copy", 2, ["work"]),
+    step("work", "reload-livekit-work", "Transcribe", 3, tail === "none" ? [] : ["file"]),
     ...(tail === "none"
       ? []
-      : [step("file", "inny-livekit-work", "File", 4, tail === "question" ? ["ask"] : [])]),
+      : [step("file", "reload-livekit-work", "File", 4, tail === "question" ? ["ask"] : [])]),
     ...(tail === "question"
       ? [
           {
             id: "ask",
-            type: "inny-viewts-ask",
+            type: "reload-viewts-ask",
             z: FLOW,
             name: "Approve sending",
             ...at(5),
@@ -130,12 +130,12 @@ async function launchOnHistory(
   const { window, output } = running;
   const port = Number((await waitForRunning(window, "runtime")).port);
   expect(
-    (await window.evaluate(() => (window as unknown as Inny).inny.app.completeSetup())).ok,
+    (await window.evaluate(() => (window as unknown as Reload).reload.app.completeSetup())).ok,
   ).toBe(true);
   expect(await deploy(port, historyFlow(folder))).toBe(204);
   await expect
     .poll(() => output.join(""), { timeout: 30_000 })
-    .toMatch(/\[inny-livekit-recorder rec\] ready/);
+    .toMatch(/\[reload-livekit-recorder rec\] ready/);
   await go(window, `#/configuration/flows/${FLOW}/history`);
   await expect(history(window)).toHaveAttribute("data-flow", FLOW, { timeout: 30_000 });
   return { ...running, port };
@@ -153,7 +153,7 @@ const rowsOf = (window: Page, title: string) => rows(window).filter({ hasText: t
 /** The flow's runs, newest first, as the page's own call answers them. */
 async function runsOf(window: Page): Promise<RunValue[]> {
   const answer = await window.evaluate(
-    (flowId) => (window as unknown as Inny).inny.app.runs({ flowId, limit: 200 }),
+    (flowId) => (window as unknown as Reload).reload.app.runs({ flowId, limit: 200 }),
     FLOW,
   );
   expect(answer.ok).toBe(true);
@@ -170,7 +170,7 @@ async function allDone(window: Page, count: number): Promise<RunValue[]> {
 
 /** The flow's steps' ids as `flow.list` answers them now: a redeploy has landed when they move. */
 const stepIds = (window: Page) => async () => {
-  const answer = await window.evaluate(() => (window as unknown as Inny).inny.app.flows());
+  const answer = await window.evaluate(() => (window as unknown as Reload).reload.app.flows());
   return answer.value?.find((flow) => flow.id === FLOW)?.steps.map((step) => step.id);
 };
 
@@ -378,7 +378,7 @@ test("delete keeps Anytype objects", async () => {
     await expect(dialog).toHaveAttribute("role", "alertdialog");
     await expect(dialog).toContainText("Delete this run?");
     await expect(dialog).toContainText(
-      "Its results in Anytype are kept; only InnyTypes' record of it goes.",
+      "Its results in Anytype are kept; only Reload's record of it goes.",
     );
     await expect(dialog.getByTestId("history-delete-primary")).toHaveText(
       STRINGS["history.delete"],
@@ -386,7 +386,7 @@ test("delete keeps Anytype objects", async () => {
     await dialog.getByTestId("history-delete-primary").click();
     await expect(rowsOf(window, "rec1")).toHaveCount(0, { timeout: 10_000 });
     const gone = await window.evaluate(
-      (runId) => (window as unknown as Inny).inny.app.run(runId),
+      (runId) => (window as unknown as Reload).reload.app.run(runId),
       made?.runId ?? "",
     );
     expect(gone).toEqual({
@@ -423,7 +423,7 @@ test("delete keeps Anytype objects", async () => {
       .poll(stepIds(window), { timeout: 30_000 })
       .toEqual(["copy", "work", "file", "ask"]);
     // The recorder starts again with the redeploy: only a recording after that is a new run.
-    const readies = () => output.join("").split("[inny-livekit-recorder rec] ready").length - 1;
+    const readies = () => output.join("").split("[reload-livekit-recorder rec] ready").length - 1;
     await expect.poll(readies, { timeout: 30_000 }).toBe(2);
     record(folder, "rec4");
     await expect
@@ -435,7 +435,7 @@ test("delete keeps Anytype objects", async () => {
     await dialog.getByTestId("history-delete-primary").click();
     await expect.poll(async () => runsOf(window), { timeout: 10_000 }).toEqual([]);
     const answered = await window.evaluate(
-      (id) => (window as unknown as Inny).inny.app.submitView(id, {}),
+      (id) => (window as unknown as Reload).reload.app.submitView(id, {}),
       question,
     );
     expect(answered.ok).toBe(false);
@@ -473,7 +473,7 @@ test("a step no longer in the flow is refused", async () => {
 
     // Asked anyway (a menu read before the redeploy): refused with the sentence, nothing started.
     const answer = await window.evaluate(
-      ({ flowId, runId }) => (window as unknown as Inny).inny.app.rerun(flowId, runId, "file"),
+      ({ flowId, runId }) => (window as unknown as Reload).reload.app.rerun(flowId, runId, "file"),
       { flowId: FLOW, runId: first?.runId ?? "" },
     );
     expect(answer).toEqual({

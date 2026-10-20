@@ -1,4 +1,4 @@
-# Loop pack — innytypes
+# Loop pack — reload
 
 Per-project codified knowledge for the loop (docs-and-code-agree gate input), so the maker
 and the checker share intent. The numbered plans are in `docs/plans/`; plan 0001 is the host, plan 0002 the Anytype MCP
@@ -7,7 +7,7 @@ and reports on everything.
 
 ## What this project is
 
-`innytypes` is a **host application that wraps the Anytype desktop app**. One application icon
+`reload` is a **host application that wraps the Anytype desktop app**. One application icon
 starts InnyTypesHelper, which starts Anytype and the host. Features arrive as **addons**. The host
 owns its child processes (spawn, stop, report; restarts are the helper's),
 addon discovery and lifecycle, dependency resolution, a cross-process event bus, the stable
@@ -38,17 +38,17 @@ and a WorkItem that turns it back into an addon is a change to plans 0001 and 00
    process boundary.
 4. **An emitter never blocks on a subscriber.** Delivery is fire-and-forget over a bounded
    per-subscriber queue. A subscriber that dies, hangs or falls behind is dropped and the host
-   emits `innytypes.listener-failed.v1`. Any design where a slow listener can stall a publisher is
+   emits `reload.listener-failed.v1`. Any design where a slow listener can stall a publisher is
    wrong even if it passes.
 5. **A missing requirement degrades, it does not crash.** The addon does not start, the host
    reports what is missing, everything else keeps running. This is designed behaviour and needs
    a test that actually removes a requirement — not an error path nobody exercises.
-6. **Installation is explicit.** `innytypes addons install`, never an implicit install at
+6. **Installation is explicit.** `reload addons install`, never an implicit install at
    startup. A startup that mutates the environment is a startup nobody can debug. The one
    sanctioned exception is InnyTypesHelper (plan 0003): background core downloads applied at
    quit, and `auto` updates of an already installed addon. Nothing is applied during startup.
 7. **The Anytype API key never enters the tree.** It is read from `$ANYTYPE_API_KEY`, falling
-   back to `~/.config/innytypes/anytype_api_key`. `ServerConfig.api_key` is `repr=False`, and
+   back to `~/.config/reload/anytype_api_key`. `ServerConfig.api_key` is `repr=False`, and
    that is load-bearing: a supervisor logs its configuration when a child dies. Any new
    structure carrying the key inherits the obligation. `tests/test_no_secrets.py` scans every
    tracked file; if it fires, remove the credential, never weaken the scanner.

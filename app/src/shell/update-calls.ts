@@ -1,4 +1,4 @@
-// InnyTypes' own update, as General shows it (plan 0022 §G): domain/updates' state machine, fed by
+// Reload's own update, as General shows it (plan 0022 §G): domain/updates' state machine, fed by
 // every check UpdateCheck makes (Check now and the scheduled ones alike), and pushed to the page
 // at each step.
 //
@@ -7,7 +7,7 @@
 //   UpdateCheck.installAtQuit).
 // * Go back (D4): offered for seven days after the first start on a new version, which this file
 //   records (domain/updates/history.ts). It verifies the older release exactly as an update is
-//   verified (UpdateCheck.goBack); only a verified one is staged, and InnyTypes then quits to
+//   verified (UpdateCheck.goBack); only a verified one is staged, and Reload then quits to
 //   install it. A release that does not verify is refused and nothing is installed.
 // * The crash-loop offer: the runtime reaching its crash-loop limit within ten minutes of the
 //   first start on a new version raises one notice and puts Go back in the banner (the page reads
@@ -40,7 +40,7 @@ import type { UpdateView } from "../ui/general-contract";
 import { guarded, notAvailable, opOf, refused, unknownOp } from "./answer";
 import { IPC } from "./ipc";
 
-const NOTICE_SUBJECT = "InnyTypes";
+const NOTICE_SUBJECT = "Reload";
 
 export interface UpdateCallsDeps {
   readonly ipc: Pick<IpcMain, "handle">;
@@ -55,7 +55,7 @@ export interface UpdateCallsDeps {
   readonly notifier: Notifier;
   /** Open the release notes of the release tagged `tag` in the browser. */
   readonly openReleaseNotes: (tag: string) => void;
-  /** Quit InnyTypes; the quit installs a ready update, or the verified older release. */
+  /** Quit Reload; the quit installs a ready update, or the verified older release. */
   readonly quit: () => void;
   readonly logger: Logger;
 }

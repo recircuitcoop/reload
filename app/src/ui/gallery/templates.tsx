@@ -25,7 +25,7 @@ function Region({ name, className }: { readonly name: string; readonly className
 }
 
 const SIDEBAR = (
-  <Region name="sidebar" className="h-full w-[var(--inny-size-nav-width)] shrink-0" />
+  <Region name="sidebar" className="h-full w-[var(--reload-size-nav-width)] shrink-0" />
 );
 
 function Frame({ children }: { readonly children: ReactNode }) {

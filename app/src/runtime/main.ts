@@ -66,24 +66,24 @@ import { SecretRegistry } from "../domain/redaction/registry";
 const registry = new SecretRegistry();
 const logWith = (name: string) =>
   sourceLog({ name, pid: process.pid, write: syncWriter(1), now: () => Date.now(), registry });
-const logger = logWith("innytypes.runtime");
-const nodeRedLogger = logWith("innytypes.node-red");
-printCanary(logger, process.env["INNYTYPES_LOG_CANARY"]);
+const logger = logWith("reload.runtime");
+const nodeRedLogger = logWith("reload.node-red");
+printCanary(logger, process.env["RELOAD_LOG_CANARY"]);
 // Said once, so the e2e harness can check every process runs in its scratch home.
 logger.info(`this process's HOME is ${process.env["HOME"] ?? "(unset)"}`);
 const host = processHostOver(process);
 
 // Where JS node packages' `{node}` placeholder runs (plan 0018 §1; WI-0018-23): this target's
-// bundled Node once INNYTYPES_RUNTIMES_DIR names its fetched runtimes, else Electron's own
+// bundled Node once RELOAD_RUNTIMES_DIR names its fetched runtimes, else Electron's own
 // binary run as node (SystemRuntimeLocator), which is all a dev run or a test has.
-const runtimesDir = process.env["INNYTYPES_RUNTIMES_DIR"];
+const runtimesDir = process.env["RELOAD_RUNTIMES_DIR"];
 const runtimeLocator: RuntimeLocator =
   runtimesDir !== undefined && runtimesDir !== ""
     ? new BundledRuntimeLocator(runtimesDir, process.platform)
     : new SystemRuntimeLocator(
         process.env,
         process.platform,
-        path.join(os.tmpdir(), "innytypes-uv-cache"),
+        path.join(os.tmpdir(), "reload-uv-cache"),
       );
 
 // @node-red/nodes' own core, whose excluded files are computed below (nodeRedSettings), and
@@ -185,7 +185,7 @@ let flowNodeType: (type: string) => ReturnType<typeof flowNodeTypeOf> | undefine
 
 // A step's dynamic options (plan 0022 §B, D9): the services process holds the Anytype key, so
 // the spaces and types a form chooses from are asked of it over the direct channel. One
-// resolver answers the canvas form's `/red/inny/options` and Setup's `node.options` alike.
+// resolver answers the canvas form's `/red/reload/options` and Setup's `node.options` alike.
 const services = new PeerCaller({ clock: systemClock, timeoutMs: 30_000 });
 const nodeOptions = new NodeOptions({ ask: (op, args) => services.call(op, args), logger });
 
@@ -413,7 +413,7 @@ async function startNodeRed(config: InitConfig): Promise<void> {
     // The e2e gate's fixture folder when the shell hands one on (its hooks on only); else the
     // build's, checked by tools/templates/check.mjs.
     templates: new FsTemplateSource(
-      process.env["INNYTYPES_TEMPLATES_DIR"] ?? path.join(APP_DIR, "dist", "templates"),
+      process.env["RELOAD_TEMPLATES_DIR"] ?? path.join(APP_DIR, "dist", "templates"),
       logger,
     ),
     nodeType: (type) => flowNodeType(type),
@@ -477,7 +477,7 @@ serveShell({
       runActions === null ||
       flows === null
     ) {
-      return Promise.resolve({ ok: false, error: "the InnyTypes runtime is still starting" });
+      return Promise.resolve({ ok: false, error: "the Reload runtime is still starting" });
     }
     // A package update's check that its instances came back ready (WI-0018-17).
     if (op === "package.ready") {

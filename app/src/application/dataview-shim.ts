@@ -46,7 +46,7 @@ type Json = Readonly<Record<string, unknown>>;
 const isObject = (value: unknown): value is Json =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-/** A dataview InnyTypes will not forward: where it is, which member, and what is wrong. */
+/** A dataview Reload will not forward: where it is, which member, and what is wrong. */
 export interface DataviewRefusal {
   /** Where the block sits in the arguments, e.g. `ops[0].blocks[1]`. */
   readonly path: string;

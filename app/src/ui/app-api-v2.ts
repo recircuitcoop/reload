@@ -77,7 +77,7 @@ export interface AppApiV2 {
   templates(): FlowAnswer<readonly FlowTemplateEntry[]>;
   /** A new flow, off, from a template. */
   flowFromTemplate(templateId: string, name?: string): FlowAnswer<FlowNamed>;
-  /** A step's form; `innytype` options unresolved (nodeOptions resolves them). */
+  /** A step's form; `reload` options unresolved (nodeOptions resolves them). */
   nodeForm(flowId: string, nodeId: string): FlowAnswer<NodeForm>;
   /** Save a step's form: validated, written, that tab deployed. */
   configureNode(
@@ -125,13 +125,13 @@ export interface AppApiV2 {
   /** Setup's state changed. */
   onSetup(listener: (state: SetupState) => void): void;
 
-  // ── InnyTypes' own update (plan 0022 §G) ──
+  // ── Reload's own update (plan 0022 §G) ──
   updateState(): Promise<Answer<UpdateView>>;
   /** "Check now": the check runs, and the state moves as it goes. */
   checkNow(): Promise<Answer<UpdateView>>;
-  /** "Quit and update": only when an update is ready; InnyTypes quits and installs it. */
+  /** "Quit and update": only when an update is ready; Reload quits and installs it. */
   quitAndUpdate(): Promise<Answer<null>>;
-  /** Go back to the previous release (D4): verified as an update is, then InnyTypes quits to install it. */
+  /** Go back to the previous release (D4): verified as an update is, then Reload quits to install it. */
   goBack(): Promise<Answer<UpdateView>>;
   /** The "Check automatically" switch. */
   setUpdateAutoCheck(on: boolean): Promise<Answer<UpdateView>>;

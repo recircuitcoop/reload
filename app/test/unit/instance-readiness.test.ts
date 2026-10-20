@@ -65,7 +65,7 @@ function spec(id: string, pkg: string): NodeProcessSpec {
       flowId: "flow-1",
       package: pkg,
       typeId: "ping",
-      type: `inny-${pkg}-ping`,
+      type: `reload-${pkg}-ping`,
       name: "",
       kind: "node",
     },
@@ -200,10 +200,10 @@ describe("the nodes Node-RED runs", () => {
       enabledNodes([
         { id: "on", type: "tab" },
         { id: "off", type: "tab", disabled: true },
-        { id: "a", type: "inny-pinger-ping", z: "on" },
-        { id: "b", type: "inny-pinger-ping", z: "on", d: true },
-        { id: "c", type: "inny-pinger-ping", z: "off" },
-        { id: "d", type: "inny-pinger-ping" },
+        { id: "a", type: "reload-pinger-ping", z: "on" },
+        { id: "b", type: "reload-pinger-ping", z: "on", d: true },
+        { id: "c", type: "reload-pinger-ping", z: "off" },
+        { id: "d", type: "reload-pinger-ping" },
         { id: 7, type: "odd" },
         null,
         ["not", "a", "node"],
@@ -211,8 +211,8 @@ describe("the nodes Node-RED runs", () => {
     ).toEqual([
       { id: "on", type: "tab" },
       { id: "off", type: "tab" },
-      { id: "a", type: "inny-pinger-ping" },
-      { id: "d", type: "inny-pinger-ping" },
+      { id: "a", type: "reload-pinger-ping" },
+      { id: "d", type: "reload-pinger-ping" },
     ]);
   });
 });

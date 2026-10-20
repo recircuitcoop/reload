@@ -70,7 +70,7 @@ describe("the declaration schema file", () => {
     );
     const block = /```json\n([\s\S]*?)\n```/.exec(section)?.[1] ?? "";
     const file = fs.readFileSync(
-      path.join(REPOSITORY, "docs/specs/inny-package.v2.schema.json"),
+      path.join(REPOSITORY, "docs/specs/reload-package.v2.schema.json"),
       "utf8",
     );
     expect(JSON.parse(file)).toEqual(JSON.parse(block));
@@ -268,7 +268,7 @@ describe("parseDeclaration", () => {
 
 describe("the ports and names of a type", () => {
   it("derives the Node-RED type name from the package and the type id (spec 2.1.4)", () => {
-    expect(nodeTypeName("monty", "folder-watcher")).toBe("inny-monty-folder-watcher");
+    expect(nodeTypeName("monty", "folder-watcher")).toBe("reload-monty-folder-watcher");
   });
 
   it("numbers the pass-through outputs first, then one port per action (spec 2.2)", () => {

@@ -1,9 +1,9 @@
 // The Anytype desktop app (plan 0018 §4.1 point 6; launcher.py:894 `_start_anytype`, 706, 986):
-// started if it is not running, adopted if it is, and quit on Quit ONLY if InnyTypes started it.
+// started if it is not running, adopted if it is, and quit on Quit ONLY if Reload started it.
 //
 // * Not installed is a documented degradation, never a failure to start: everything that does
 //   not need Anytype still runs.
-// * An adopted app was here before InnyTypes and must outlive it: no quit ever reaches it. Only a
+// * An adopted app was here before Reload and must outlive it: no quit ever reaches it. Only a
 //   start hands back a StartedApp, so there is nothing to quit an adopted one with.
 
 import type { DesktopApps, StartedApp } from "../ports/desktop-apps";
@@ -39,7 +39,7 @@ export class AnytypeApp {
     const { apps, executable, logger } = this.#deps;
     if (executable === null) {
       logger.warn(
-        "the Anytype desktop app was not found on this machine; InnyTypes starts without it " +
+        "the Anytype desktop app was not found on this machine; Reload starts without it " +
           "and everything that does not need it still runs",
       );
       return (this.#state = "missing");
@@ -65,19 +65,19 @@ export class AnytypeApp {
     }
   }
 
-  /** On Quit: quit Anytype when InnyTypes started it, and leave it running otherwise. */
+  /** On Quit: quit Anytype when Reload started it, and leave it running otherwise. */
   async quitIfOurs(): Promise<void> {
     this.#quitting = true;
     const started = this.#started;
     if (started === null) {
       if (this.#state === "adopted") {
-        this.#deps.logger.info("leaving the Anytype desktop app running: InnyTypes adopted it");
+        this.#deps.logger.info("leaving the Anytype desktop app running: Reload adopted it");
       }
       return;
     }
     this.#started = null;
     this.#deps.logger.info(
-      `quitting the Anytype desktop app InnyTypes started (process ${String(started.pid)})`,
+      `quitting the Anytype desktop app Reload started (process ${String(started.pid)})`,
     );
     try {
       await started.quit();

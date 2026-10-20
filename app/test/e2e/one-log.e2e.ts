@@ -33,7 +33,7 @@ function linesOf(text: string, name: string, pid?: number): string[] {
 test("the shell, the runtime and the services write one file at the old path, and no canary reaches it", async () => {
   const { scratch, userData, env } = scratchDirectories();
   try {
-    const { app, window, output } = await launchApp({ ...env, INNYTYPES_LOG_CANARY: CANARY });
+    const { app, window, output } = await launchApp({ ...env, RELOAD_LOG_CANARY: CANARY });
     const runtime = await waitForRunning(window, "runtime");
     const services = await waitForRunning(window, "services");
     const shellPid = shellOf(app).pid;
@@ -43,38 +43,38 @@ test("the shell, the runtime and the services write one file at the old path, an
     const file = oldPathUnder(env);
     expect(file.startsWith(scratch)).toBe(true);
     const text = fs.readFileSync(file, "utf8");
-    expect(text).toContain(`innytypes shell (process ${String(shellPid)}) is logging to ${file}`);
+    expect(text).toContain(`reload shell (process ${String(shellPid)}) is logging to ${file}`);
     // Each process in its own lines, with its own pid.
-    expect(linesOf(text, "innytypes.shell", shellPid)).not.toEqual([]);
-    expect(linesOf(text, "innytypes.runtime", runtime.pid).join("\n")).toContain(
+    expect(linesOf(text, "reload.shell", shellPid)).not.toEqual([]);
+    expect(linesOf(text, "reload.runtime", runtime.pid).join("\n")).toContain(
       `runtime generation 1 started as pid ${String(runtime.pid)}`,
     );
-    expect(linesOf(text, "innytypes.services", services.pid).join("\n")).toContain(
+    expect(linesOf(text, "reload.services", services.pid).join("\n")).toContain(
       "services stopping (quit)",
     );
     // A record reaches the file as a line, never as the JSON it travelled in.
     expect(text).not.toContain('{"t":');
 
     // Every process printed the canary; the file and the terminal hold only the marker.
-    for (const name of ["innytypes.shell", "innytypes.runtime", "innytypes.services"]) {
+    for (const name of ["reload.shell", "reload.runtime", "reload.services"]) {
       expect(linesOf(text, name).join("\n")).toContain("log canary: [redacted]");
     }
     expect(text).not.toContain(CANARY);
     expect(output.join("")).not.toContain(CANARY);
-    expect(fs.readdirSync(path.dirname(file))).toEqual(["innytypes.log"]);
+    expect(fs.readdirSync(path.dirname(file))).toEqual(["reload.log"]);
   } finally {
     fs.rmSync(scratch, { recursive: true, force: true });
   }
 });
 
-test("INNYTYPES_LOG_FILE and INNYTYPES_LOG_LEVEL are honoured", async () => {
+test("RELOAD_LOG_FILE and RELOAD_LOG_LEVEL are honoured", async () => {
   const { scratch, userData, env } = scratchDirectories();
   try {
     const named = path.join(scratch, "elsewhere", "named.log");
     const { app, window } = await launchApp({
       ...env,
-      INNYTYPES_LOG_FILE: named,
-      INNYTYPES_LOG_LEVEL: "error",
+      RELOAD_LOG_FILE: named,
+      RELOAD_LOG_LEVEL: "error",
     });
     const runtime = await waitForRunning(window, "runtime");
     process.kill(runtime.pid, "SIGKILL");
@@ -84,7 +84,7 @@ test("INNYTYPES_LOG_FILE and INNYTYPES_LOG_LEVEL are honoured", async () => {
 
     expect(fs.existsSync(oldPathUnder(env))).toBe(false);
     const text = fs.readFileSync(named, "utf8");
-    expect(text).toMatch(/ ERROR +\d+ innytypes\.shell: the runtime exited unexpectedly/);
+    expect(text).toMatch(/ ERROR +\d+ reload\.shell: the runtime exited unexpectedly/);
     // At ERROR, nothing routine is written, from the shell or from a child.
     for (const level of ["DEBUG", "INFO", "WARNING"]) {
       expect(text).not.toContain(` ${level} `);
@@ -94,14 +94,14 @@ test("INNYTYPES_LOG_FILE and INNYTYPES_LOG_LEVEL are honoured", async () => {
   }
 });
 
-test("a misspelled INNYTYPES_LOG_LEVEL is said in the log, which is written at DEBUG", async () => {
+test("a misspelled RELOAD_LOG_LEVEL is said in the log, which is written at DEBUG", async () => {
   const { scratch, userData, env } = scratchDirectories();
   try {
     const named = path.join(scratch, "chatty.log");
     const { app, window } = await launchApp({
       ...env,
-      INNYTYPES_LOG_FILE: named,
-      INNYTYPES_LOG_LEVEL: "chatty",
+      RELOAD_LOG_FILE: named,
+      RELOAD_LOG_LEVEL: "chatty",
     });
     await waitForRunning(window, "runtime");
     await quit(app);
@@ -112,7 +112,7 @@ test("a misspelled INNYTYPES_LOG_LEVEL is said in the log, which is written at D
       "'chatty' is not a logging level; expected one of debug, info, warning, error, " +
         "critical; logging at DEBUG instead",
     );
-    expect(text).toMatch(/ INFO +\d+ innytypes\.runtime: runtime generation 1 started/);
+    expect(text).toMatch(/ INFO +\d+ reload\.runtime: runtime generation 1 started/);
   } finally {
     fs.rmSync(scratch, { recursive: true, force: true });
   }
@@ -122,7 +122,7 @@ test("lines a child wrote just before its kill -9 are in the file", async () => 
   const { scratch, userData, env } = scratchDirectories();
   try {
     const named = path.join(scratch, "killed.log");
-    const { app, window } = await launchApp({ ...env, INNYTYPES_LOG_FILE: named });
+    const { app, window } = await launchApp({ ...env, RELOAD_LOG_FILE: named });
     // The runtime writes its "started" line and at once posts ready; it is killed the moment
     // the page shows it running.
     const first = await waitForRunning(window, "runtime");
@@ -132,10 +132,10 @@ test("lines a child wrote just before its kill -9 are in the file", async () => 
     await expect.poll(() => processesNaming(userData), { timeout: 10_000 }).toEqual([]);
 
     const text = fs.readFileSync(named, "utf8");
-    expect(linesOf(text, "innytypes.runtime", first.pid).join("\n")).toContain(
+    expect(linesOf(text, "reload.runtime", first.pid).join("\n")).toContain(
       `runtime generation 1 started as pid ${String(first.pid)}`,
     );
-    expect(linesOf(text, "innytypes.runtime", second.pid).join("\n")).toContain(
+    expect(linesOf(text, "reload.runtime", second.pid).join("\n")).toContain(
       `runtime generation 2 started as pid ${String(second.pid)}`,
     );
   } finally {

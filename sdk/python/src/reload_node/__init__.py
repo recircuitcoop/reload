@@ -1,9 +1,30 @@
-"""A vendored copy of innytypes-node (sdk/python/src/innytypes_node/__init__.py), so this
-example package has zero dependencies to lock (spec 2.3.3: no requirements.lock at all means
-no dependencies). Once innytypes-node is published to an index this package's own
-requirements.lock can pin by hash, a real package would depend on it instead
-(docs/authors/packaging.md); until then, a small single-file SDK is vendored the way many
-protocol clients are. Keep this in sync with the canonical source by hand.
+"""reload-node: the Python node SDK (node protocol v2, spec Appendix A).
+
+Standard library only, so an installed node package needs nothing beyond reload-node
+itself (spec 2.3.3: an addon environment holds the addon and its own hash-locked
+requirements.lock, nothing else). This module speaks the frames a node process originates or
+answers (docs/specs/node-protocol-v2.md sections 3, 4, 6 and 8): framing, the lifecycle, and
+the two view frames (present, snapshot).
+
+Two rules hold for everything this module writes, matching sdk/ts/src/node.ts exactly:
+
+* stdout carries frames only (spec 3.3). A stray ``print()`` inside a handler is redirected to
+  stderr, redacted, rather than corrupting the frame stream (C3).
+* every registered secret -- every credential value, by default -- is replaced by
+  ``"[redacted]"`` in every frame and every line this module writes to stderr, so a key that
+  turns up in a traceback or an error message never leaves the process (spec 11.1, C13).
+
+The Appendix A surface (``Node.__init__``, ``send``, ``ready``, ``emit``, ``done``, ``error``,
+``status``, ``log``, ``present``, ``snapshot``, ``run``) is exactly what the spike shipped, plus
+what its own appendix names as missing and this SDK now closes:
+
+* stdout hygiene (C3): see ``_redirect_stdio`` below;
+* the frame size limit (spec 3.5): ``send`` raises ``FrameTooLargeError`` rather than writing
+  an oversize frame the runtime would only discard;
+* refusing an undeclared port at the call site (C5, SHOULD): opt in with ``Node(ports=...)``.
+
+Revision 2.1 (spec 1.3, still wire protocol 2) adds ``done(..., notes=, results=)`` and
+``progress()``: optional, so a node that never calls them sends exactly the 2.0 frames.
 """
 
 from __future__ import annotations
@@ -18,6 +39,7 @@ __all__ = [
     "MAX_FRAME_BYTES",
     "REDACTED",
     "AudioItem",
+    "Component",
     "ImageItem",
     "MediaItem",
     "protect",
@@ -56,6 +78,18 @@ class AudioItem(TypedDict):
 
 #: One ``media`` item; ``content["media"]`` is one of these or a list of them.
 MediaItem = ImageItem | AudioItem
+
+
+class Component(TypedDict):
+    """``content["component"]`` (spec 8.1.3, plan 0021): an action view's widget, its package's
+    own custom element, drawn in the pop-up only and handed ``props`` (any JSON object, judged
+    at present by the type's ``props`` schema). A ``form`` beside it is drawn instead when the
+    widget can't be. What the widget answers reaches ``on_action`` as any JSON its type's
+    ``answer`` schema allows: treat it as input."""
+
+    element: str
+    props: NotRequired[dict[str, Any]]
+
 
 # ── redaction (module-global: one registry per process, like sdk/ts/src/node.ts) ───────────
 
@@ -244,7 +278,8 @@ class Node:
 
     def present(self, input_id: str, content: dict[str, Any]) -> None:
         """Show ``content`` (spec 8.1) for this input; ``content["media"]`` holds
-        ``ImageItem``/``AudioItem`` values, sent exactly as given."""
+        ``ImageItem``/``AudioItem`` values and ``content["component"]`` a ``Component`` with its
+        props, sent exactly as given."""
         self.send({"t": "present", "in": input_id, "content": content})
 
     def snapshot(self, content: dict[str, Any], state: Any, input_id: str | None = None) -> None:

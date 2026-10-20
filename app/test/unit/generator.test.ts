@@ -23,7 +23,7 @@ import { STRINGS } from "../../src/ui/strings";
 let dir: string;
 
 beforeEach(() => {
-  dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "inny-generated-")));
+  dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-generated-")));
 });
 
 afterEach(() => {
@@ -94,7 +94,7 @@ function editorDefinition(file: string): { registered: Registered; defined: [str
   const registered: Registered[] = [];
   const defined: [string, unknown][] = [];
   const window = {
-    InnyForms: {
+    ReloadForms: {
       define: (type: string, schema: unknown) => defined.push([type, schema]),
       validate: () => true,
     },
@@ -115,30 +115,30 @@ describe("generateTypes", () => {
     const written = generateTypes(
       [SNAPSHOT, SOURCE].map((type) => ({ declaration: DECLARATION, type })),
       dir,
-      "window.InnyForms = {};",
+      "window.ReloadForms = {};",
     );
-    expect(written).toEqual(["inny-demo-board", "inny-demo-watch"]);
+    expect(written).toEqual(["reload-demo-board", "reload-demo-watch"]);
     expect(fs.readdirSync(dir).sort()).toEqual([
-      "inny-demo-board.html",
-      "inny-demo-board.js",
-      "inny-demo-watch.html",
-      "inny-demo-watch.js",
+      "reload-demo-board.html",
+      "reload-demo-board.js",
+      "reload-demo-watch.html",
+      "reload-demo-watch.js",
       `${FORMS_FILE}.html`,
       `${FORMS_FILE}.js`,
     ]);
     expect(fs.readFileSync(path.join(dir, `${FORMS_FILE}.html`), "utf8")).toContain(
-      "window.InnyForms = {};",
+      "window.ReloadForms = {};",
     );
   });
 
   it("removes every module a previous run generated, and nothing it did not", () => {
-    fs.writeFileSync(path.join(dir, "inny-demo-gone.js"), "");
-    fs.writeFileSync(path.join(dir, "inny-demo-gone.html"), "");
+    fs.writeFileSync(path.join(dir, "reload-demo-gone.js"), "");
+    fs.writeFileSync(path.join(dir, "reload-demo-gone.html"), "");
     fs.writeFileSync(path.join(dir, "sleeper.js"), "hand-written");
     generateTypes([{ declaration: DECLARATION, type: SOURCE }], dir, "");
     expect(fs.readdirSync(dir).sort()).toEqual([
-      "inny-demo-watch.html",
-      "inny-demo-watch.js",
+      "reload-demo-watch.html",
+      "reload-demo-watch.js",
       `${FORMS_FILE}.html`,
       `${FORMS_FILE}.js`,
       "sleeper.js",
@@ -162,11 +162,11 @@ describe("a generated editor definition", () => {
   });
 
   it("puts each kind in its own palette category, named Sources, Steps, Questions and results", () => {
-    expect(editorDefinition("inny-demo-board.html").registered.definition).toMatchObject({
+    expect(editorDefinition("reload-demo-board.html").registered.definition).toMatchObject({
       category: "Questions and results",
       paletteLabel: "Board",
     });
-    expect(editorDefinition("inny-demo-watch.html").registered.definition).toMatchObject({
+    expect(editorDefinition("reload-demo-watch.html").registered.definition).toMatchObject({
       category: "Sources",
     });
     expect(CATEGORY).toEqual({
@@ -183,17 +183,19 @@ describe("a generated editor definition", () => {
   });
 
   it("uses the declared icon, and the kind's own when none is declared", () => {
-    expect(editorDefinition("inny-demo-watch.html").registered.definition["icon"]).toBe("file.svg");
-    expect(editorDefinition("inny-demo-board.html").registered.definition["icon"]).toBe(
+    expect(editorDefinition("reload-demo-watch.html").registered.definition["icon"]).toBe(
+      "file.svg",
+    );
+    expect(editorDefinition("reload-demo-board.html").registered.definition["icon"]).toBe(
       DEFAULT_ICON.view,
     );
-    expect(editorDefinition("inny-demo-fed.html").registered.definition["icon"]).toBe(
+    expect(editorDefinition("reload-demo-fed.html").registered.definition["icon"]).toBe(
       DEFAULT_ICON.source,
     );
   });
 
   it("has one output per port, pass-through ports before action ports, each labelled", () => {
-    const { definition } = editorDefinition("inny-demo-board.html").registered;
+    const { definition } = editorDefinition("reload-demo-board.html").registered;
     expect(definition["outputs"]).toBe(4);
     expect(definition["outputLabels"]).toEqual([
       "shown (demo.shown.v1)",
@@ -204,13 +206,13 @@ describe("a generated editor definition", () => {
   });
 
   it("gives a source no input unless it declares one", () => {
-    expect(editorDefinition("inny-demo-watch.html").registered.definition["inputs"]).toBe(0);
-    expect(editorDefinition("inny-demo-fed.html").registered.definition["inputs"]).toBe(1);
-    expect(editorDefinition("inny-demo-board.html").registered.definition["inputs"]).toBe(1);
+    expect(editorDefinition("reload-demo-watch.html").registered.definition["inputs"]).toBe(0);
+    expect(editorDefinition("reload-demo-fed.html").registered.definition["inputs"]).toBe(1);
+    expect(editorDefinition("reload-demo-board.html").registered.definition["inputs"]).toBe(1);
   });
 
   it("makes every writeOnly or x-secret property a credential, and never a default", () => {
-    const { definition } = editorDefinition("inny-demo-board.html").registered;
+    const { definition } = editorDefinition("reload-demo-board.html").registered;
     expect(definition["credentials"]).toEqual({
       token: { type: "password" },
       key: { type: "password" },
@@ -224,35 +226,35 @@ describe("a generated editor definition", () => {
   });
 
   it("validates every property through the form code, and defines its schema there", () => {
-    const { registered, defined } = editorDefinition("inny-demo-board.html");
+    const { registered, defined } = editorDefinition("reload-demo-board.html");
     const defaults = registered.definition["defaults"] as Record<string, { validate?: unknown }>;
     expect(defaults["name"]?.validate).toBeUndefined();
     for (const key of ["title", "limit", "rows", "nested"]) {
       expect(typeof defaults[key]?.validate).toBe("function");
     }
-    expect(defined).toEqual([["inny-demo-board", SNAPSHOT.config]]);
+    expect(defined).toEqual([["reload-demo-board", SNAPSHOT.config]]);
   });
 
   it("draws the secrets as password inputs Node-RED fills, the required one marked", () => {
-    const html = fs.readFileSync(path.join(dir, "inny-demo-board.html"), "utf8");
+    const html = fs.readFileSync(path.join(dir, "reload-demo-board.html"), "utf8");
     expect(html).toContain(
-      '<label for="node-input-token">Token <span class="inny-required" data-testid="inny-required-token">*</span></label>' +
+      '<label for="node-input-token">Token <span class="reload-required" data-testid="reload-required-token">*</span></label>' +
         '<input type="password" id="node-input-token"',
     );
     expect(html).toContain('<input type="password" id="node-input-key"');
     expect(html).toContain(
-      '<div class="inny-form" data-inny-type="inny-demo-board" data-testid="inny-form-inny-demo-board"></div>',
+      '<div class="reload-form" data-reload-type="reload-demo-board" data-testid="reload-form-reload-demo-board"></div>',
     );
     // The help escapes what the author wrote.
     expect(html).toContain("Shows the &lt;latest&gt; state.");
   });
 
   it("queues its schema when the form code is not in the page yet", () => {
-    const html = fs.readFileSync(path.join(dir, "inny-demo-watch.html"), "utf8");
+    const html = fs.readFileSync(path.join(dir, "reload-demo-watch.html"), "utf8");
     const script = /<script type="text\/javascript">([\s\S]*?)<\/script>/.exec(html)?.[1] ?? "";
     const window: Record<string, unknown> = {};
     vm.runInNewContext(script, { window, RED: { nodes: { registerType: () => undefined } } });
-    expect(window["InnyFormsPending"]).toEqual([["inny-demo-watch", SOURCE.config]]);
+    expect(window["ReloadFormsPending"]).toEqual([["reload-demo-watch", SOURCE.config]]);
   });
 });
 
@@ -260,12 +262,14 @@ describe("a generated module", () => {
   it("registers its type through the runtime's global, and refuses to load without it", () => {
     generateTypes([{ declaration: DECLARATION, type: SOURCE }], dir, "");
     const load = (): void => {
-      const module: unknown = createRequire(import.meta.url)(path.join(dir, "inny-demo-watch.js"));
+      const module: unknown = createRequire(import.meta.url)(
+        path.join(dir, "reload-demo-watch.js"),
+      );
       (module as (RED: unknown) => void)("the RED");
     };
     const key = Symbol.for(REGISTER_GLOBAL);
     const global = globalThis as Record<symbol, unknown>;
-    expect(load).toThrow("inny-demo-watch is loaded only by the InnyTypes runtime");
+    expect(load).toThrow("reload-demo-watch is loaded only by the Reload runtime");
     const calls: unknown[][] = [];
     global[key] = (...args: unknown[]) => {
       calls.push(args);
@@ -275,6 +279,6 @@ describe("a generated module", () => {
     } finally {
       Reflect.deleteProperty(global, key);
     }
-    expect(calls).toEqual([["the RED", "inny-demo-watch"]]);
+    expect(calls).toEqual([["the RED", "reload-demo-watch"]]);
   });
 });

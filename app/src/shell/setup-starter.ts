@@ -10,7 +10,7 @@
 // * Try with a sample: the bundled 10-second sample copied into the chosen folder, so the folder
 //   source passes it on and the run is real. The source leaves alone the files already in the
 //   folder the first time it scans it, so the copy waits for that first scan, as the source says
-//   it: its own status "watching" (a green dot; the contract is in packages/folder/README.md), which packages/folder shows only once a scan has
+//   it: its own status "watching" (a green dot; the contract is in packages/reload_folder/README.md), which packages/reload_folder shows only once a scan has
 //   finished, read through the runtime's `node.status`. The ring "watching" the runtime shows
 //   when the process starts comes before any scan, and is not taken for it.
 //
@@ -28,7 +28,7 @@ import { STRINGS } from "../ui/strings";
 import { refused } from "./answer";
 import { canvasState, flowAnswer } from "./flow-calls";
 
-/** The folder source's status once a scan has finished (packages/folder/src/main.ts). */
+/** The folder source's status once a scan has finished (packages/reload_folder/src/main.ts). */
 export const FIRST_SCAN_STATUS = { text: "watching", shape: "dot" } as const;
 /** How long Try with a sample waits for the folder source's first scan. */
 export const FIRST_SCAN_WAIT_MS = 30_000;

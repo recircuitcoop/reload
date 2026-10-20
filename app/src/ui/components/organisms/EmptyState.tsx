@@ -23,7 +23,7 @@ export function EmptyState({ area, message, actionLabel, onAction, className }: 
       {...variantAttributes("empty-state", { area }, `empty-state-${area}`)}
       className={cx("flex w-full flex-col items-center gap-4 pt-7 text-center", className)}
     >
-      <p className="max-w-[var(--inny-size-reading-width)] text-body text-secondary">{message}</p>
+      <p className="max-w-[var(--reload-size-reading-width)] text-body text-secondary">{message}</p>
       {actionLabel === undefined ? null : (
         <Button
           kind="secondary"

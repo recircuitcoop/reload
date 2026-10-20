@@ -41,7 +41,7 @@ let viewDir: string;
 let files: ViewFiles;
 
 beforeEach(() => {
-  scratch = fs.mkdtempSync(path.join(os.tmpdir(), "inny-view-tokens-"));
+  scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-view-tokens-"));
   viewDir = path.join(scratch, "view");
   const kit = path.join(scratch, "packages", "kit");
   fs.mkdirSync(path.join(kit, "view"), { recursive: true });
@@ -71,7 +71,7 @@ beforeEach(() => {
   expect(scripts["build:styles"]).toContain(
     "copyFileSync('dist/ui/app.css', 'dist/ui/view/app.css')",
   );
-  fs.writeFileSync(path.join(viewDir, "app.css"), ".p-4{padding:var(--inny-space-4)}");
+  fs.writeFileSync(path.join(viewDir, "app.css"), ".p-4{padding:var(--reload-space-4)}");
   // A package's own files can never stand in for the page's.
   fs.writeFileSync(path.join(kit, "view", "component.js"), "/* kit */");
   fs.writeFileSync(path.join(kit, "view", "tokens.css"), "/* the kit's own tokens */");
@@ -111,7 +111,7 @@ describe("the tokens in the sandbox", () => {
       "view-kit.css": fs.readFileSync(path.join(viewDir, "view-kit.css"), "utf8"),
       "app.css": fs.readFileSync(path.join(viewDir, "app.css"), "utf8"),
     };
-    for (const origin of ["inny-view://app", "inny-view://kit"]) {
+    for (const origin of ["reload-view://app", "reload-view://kit"]) {
       for (const [name, body] of Object.entries(shells)) {
         const url = `${origin}/${name}`;
         const response = viewPageResponse(url, files);
@@ -131,22 +131,27 @@ describe("the tokens in the sandbox", () => {
       expect(html.indexOf("tokens.css")).toBeLessThan(html.indexOf("view-kit.css"));
     }
     // A package's component loads after view.js, so the page sees its load failures (plan 0021 §5).
-    const kitPage = await viewPageResponse("inny-view://kit/view.html", files).text();
+    const kitPage = await viewPageResponse("reload-view://kit/view.html", files).text();
     expect(kitPage.indexOf('<script src="view.js"></script>')).toBeLessThan(
       kitPage.indexOf('<script src="component.js"></script>'),
     );
-    expect(viewPageResponse("inny-view://nobody/tokens.css", files).status).toBe(404);
+    expect(viewPageResponse("reload-view://nobody/tokens.css", files).status).toBe(404);
 
     // tokens.css: the semantic tokens as custom properties, light by default and dark both ways.
     const tokens = shells["tokens.css"];
-    const defined = new Set([...tokens.matchAll(/^\s*(--inny-[a-z0-9-]+):/gm)].map((m) => m[1]));
-    expect(defined.has("--inny-surface-canvas")).toBe(true);
+    const defined = new Set([...tokens.matchAll(/^\s*(--reload-[a-z0-9-]+):/gm)].map((m) => m[1]));
+    expect(defined.has("--reload-surface-canvas")).toBe(true);
     expect(tokens).toContain("@media (prefers-color-scheme: dark)");
     expect(tokens).toContain(':root[data-theme="dark"]');
 
     // view-kit.css: button, field, list row, drag handle; every custom property it uses is a token.
     const kit = shells["view-kit.css"];
-    for (const rule of [".inny-button", ".inny-field", ".inny-list-row", ".inny-drag-handle"]) {
+    for (const rule of [
+      ".reload-button",
+      ".reload-field",
+      ".reload-list-row",
+      ".reload-drag-handle",
+    ]) {
       expect(kit, rule).toContain(`${rule} {`);
     }
     const used = [...kit.matchAll(/var\((--[a-z0-9-]+)\)/g)].map((m) => m[1] as string);

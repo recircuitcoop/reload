@@ -102,7 +102,7 @@ describe("conformance C14: replay", () => {
           }
         }
       });
-      const start = { id: "c14", type: "inny-rawnode-raw", name: "" };
+      const start = { id: "c14", type: "reload-rawnode-raw", name: "" };
       child.stdin.write(
         encodeFrame({
           t: "start",

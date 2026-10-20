@@ -12,7 +12,7 @@ const ENTRY = path.join(APP, "src", "ui", "gallery", "main.tsx");
 /** The app window's frame (WI-0022-11), whose #/gallery route draws the same gallery. */
 const FRAME_ENTRY = path.join(APP, "src", "ui", "main.tsx");
 /** Set on the gallery's root element; nothing else in the UI says it. */
-const MARKER = "innytypes-component-gallery";
+const MARKER = "reload-component-gallery";
 
 const script = (): string => {
   const manifest = JSON.parse(fs.readFileSync(path.join(APP, "package.json"), "utf8")) as {
@@ -35,7 +35,7 @@ async function bundle(
     jsx: "automatic",
     define: {
       "process.env.NODE_ENV": JSON.stringify(nodeEnv),
-      INNY_BUILD_MODE: JSON.stringify(nodeEnv),
+      RELOAD_BUILD_MODE: JSON.stringify(nodeEnv),
     },
     logLevel: "silent",
   });
@@ -48,7 +48,7 @@ describe("the gallery bundle", () => {
     expect(pages).toContain("src/ui/gallery/main.tsx");
     expect(pages).toContain("--jsx=automatic");
     expect(pages).toContain('--define:process.env.NODE_ENV=\\"${NODE_ENV:-development}\\"');
-    expect(pages).toContain('--define:INNY_BUILD_MODE=\\"${NODE_ENV:-development}\\"');
+    expect(pages).toContain('--define:RELOAD_BUILD_MODE=\\"${NODE_ENV:-development}\\"');
   });
 
   it("carries no gallery code, no component and no React in a production build", async () => {

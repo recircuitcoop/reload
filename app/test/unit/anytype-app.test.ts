@@ -1,5 +1,5 @@
 // The Anytype desktop app (WI-0018-21; plan 0018 §4.1 point 6; launcher.py:894, 706, 986):
-// started if absent, adopted if running, quit on Quit only if InnyTypes started it. Against a
+// started if absent, adopted if running, quit on Quit only if Reload started it. Against a
 // fake set of desktop apps: no test here starts, finds or signals anything real.
 import { describe, expect, it } from "vitest";
 import { anytypeExecutable, findInProcessTable } from "../../src/adapters/process/desktop-apps";
@@ -54,7 +54,7 @@ function subject(fake: DesktopApps, executable: string | null = ANYTYPE) {
 }
 
 describe("the Anytype desktop app", () => {
-  it("is started when it is not running, and quit on Quit because InnyTypes started it", async () => {
+  it("is started when it is not running, and quit on Quit because Reload started it", async () => {
     const { fake, journal } = apps(null);
     const { anytype, logger } = subject(fake);
     expect(anytype.state).toBeNull();
@@ -62,7 +62,7 @@ describe("the Anytype desktop app", () => {
     await anytype.quitIfOurs();
     await anytype.quitIfOurs();
     expect(journal).toEqual([`find ${ANYTYPE}`, `launch ${ANYTYPE}`, "quit 4242"]);
-    expect(logger.lines.join("\n")).toContain("quitting the Anytype desktop app InnyTypes started");
+    expect(logger.lines.join("\n")).toContain("quitting the Anytype desktop app Reload started");
   });
 
   it("is adopted when it is already running, and never quit", async () => {

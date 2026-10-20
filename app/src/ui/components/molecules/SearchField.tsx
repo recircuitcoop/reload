@@ -38,7 +38,7 @@ export function SearchField({
       {...variantAttributes("search-field", { state: shown }, testId)}
       role="search"
       className={cx(
-        "flex h-[var(--inny-size-control)] w-full items-center gap-2 rounded-pill border border-surface-line bg-surface-panel px-3 text-secondary",
+        "flex h-[var(--reload-size-control)] w-full items-center gap-2 rounded-pill border border-surface-line bg-surface-panel px-3 text-secondary",
         shown === "typing"
           ? "outline-2 -outline-offset-1 outline-focus"
           : "focus-within:outline-2 focus-within:-outline-offset-1 focus-within:outline-focus",

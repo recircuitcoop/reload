@@ -90,7 +90,7 @@ describe("the MCP exchange", () => {
         result: {
           protocolVersion: MCP_PROTOCOL_VERSION,
           capabilities: { tools: {}, resources: {} },
-          serverInfo: { name: "innytypes-anytype", version: "1" },
+          serverInfo: { name: "reload-anytype", version: "1" },
         },
       },
     });
@@ -282,7 +282,7 @@ describe("a tool name carrying a credential", () => {
     registry.protect(KEY);
     const written: string[] = [];
     const logger = sourceLog({
-      name: "innytypes.services",
+      name: "reload.services",
       pid: 1,
       write: (text) => written.push(text),
       now: () => 0,

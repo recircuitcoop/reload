@@ -66,7 +66,7 @@ export function crashLoopMessage(child: ChildName, settings: CrashLoopSettings):
     ? `${String(minutes)} minute${minutes === 1 ? "" : "s"}`
     : `${String(settings.windowMs / 1000)} seconds`;
   return (
-    `The InnyTypes ${child} stopped unexpectedly ${String(settings.maxCrashes)} times in ` +
+    `The Reload ${child} stopped unexpectedly ${String(settings.maxCrashes)} times in ` +
     `${window}, so it is no longer restarted. Press Restart to try again.`
   );
 }

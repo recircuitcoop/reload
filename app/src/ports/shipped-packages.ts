@@ -1,5 +1,5 @@
 // The node packages that ship inside the app (plan 0022 §H, D17): the folders beside it, at
-// PACKAGE_ROOTS[0] = `<APP_DIR>/../packages`, each read for its inny-package.json.
+// PACKAGE_ROOTS[0] = `<APP_DIR>/../packages`, each read for its reload-package.json.
 //
 // adapters/fs/declared-package-store.ts answers it when given that one root, and only that
 // one: the test fixtures' root is never "shipped inside the app".

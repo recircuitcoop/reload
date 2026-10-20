@@ -16,8 +16,8 @@
 #
 # Run from app/, with `--config packaging/electron-builder.release.yml`.
 
-appId: it.l1nx.innytypes.helper
-productName: InnyTypes
+appId: it.recircu.reload
+productName: Reload
 copyright: Copyright © 2026 Re:Circuit Cooperative
 
 directories:
@@ -61,12 +61,12 @@ afterPack: packaging/after-pack.cjs
 
 # A release's own address (plan 0018 §1): electron-builder writes latest-mac.yml and
 # latest-linux.yml against it, and the owner's minisign key signs them afterwards (a manual
-# step; the private key never touches this repository or this config). REPLACE_ME/REPLACE_ME
-# is the same placeholder package.json's own innytypes.updateRepo carries.
+# step; the private key never touches this repository or this config). package.json's own
+# reload.updateRepo stays a placeholder until the update channel works (plan 0027).
 publish:
   provider: github
-  owner: REPLACE_ME
-  repo: REPLACE_ME
+  owner: recircuitcoop
+  repo: reload
 
 mac:
   target:
@@ -75,7 +75,7 @@ mac:
     - target: zip
       arch: [arm64, x64]
   category: public.app-category.developer-tools
-  icon: "../src/innytypes/resources/innytypes.icns"
+  icon: "packaging/icons/reload.icns"
   # No `identity` key: electron-builder finds the Developer ID certificate CSC_LINK (or the
   # keychain) provides and signs for real. hardenedRuntime is required for notarising.
   hardenedRuntime: true
@@ -89,9 +89,9 @@ linux:
       arch: [arm64, x64]
     - target: deb
       arch: [arm64, x64]
-  icon: "../src/innytypes/resources/innytypes.png"
+  icon: "packaging/icons/reload.png"
   category: Development
-  executableName: innytypes
+  executableName: reload
 
 deb:
   depends:

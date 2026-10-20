@@ -84,7 +84,7 @@ export interface WatchSettings {
   readonly folder: string;
 }
 
-/** What `folder.file.created.v1` carries for one new file. */
+/** What `reload_folder.file.created.v1` carries for one new file. */
 export interface CreatedFile {
   readonly name: string;
   readonly path: string;

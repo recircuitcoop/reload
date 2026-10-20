@@ -212,8 +212,7 @@ export class PackageUpdates {
     if (origin === undefined) {
       return {
         kind: "unchecked",
-        reason:
-          "it was installed before InnyTypes recorded where from; install it again to check it",
+        reason: "it was installed before Reload recorded where from; install it again to check it",
       };
     }
     if (origin.kind === "catalogue") {

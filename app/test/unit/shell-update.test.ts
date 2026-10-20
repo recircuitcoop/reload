@@ -61,49 +61,49 @@ describe("wireUpdate", () => {
 });
 
 describe("updateSource: only a build that is not installed can be pointed elsewhere", () => {
-  const built = { updateRepo: "acme/innytypes", updatePublicKey: "the built-in key" };
+  const built = { updateRepo: "acme/reload", updatePublicKey: "the built-in key" };
   const overrides = {
-    INNYTYPES_UPDATE_REPO: "mallory/innytypes",
-    INNYTYPES_UPDATE_KEY: "mallory's key",
-    INNYTYPES_E2E_HOOKS: "1",
-    INNYTYPES_TEST_UPDATE_RELEASES: "https://mallory.invalid/releases",
+    RELOAD_UPDATE_REPO: "mallory/reload",
+    RELOAD_UPDATE_KEY: "mallory's key",
+    RELOAD_E2E_HOOKS: "1",
+    RELOAD_TEST_UPDATE_RELEASES: "https://mallory.invalid/releases",
   };
 
   it("an installed build ignores every override: its own repo, key and GitHub releases", () => {
     expect(updateSource({ packaged: true, env: overrides, built })).toEqual({
-      repo: "acme/innytypes",
+      repo: "acme/reload",
       publicKey: "the built-in key",
-      releases: "https://github.com/acme/innytypes/releases",
+      releases: "https://github.com/acme/reload/releases",
     });
   });
 
   it("a development or e2e build takes the repo, the key and the test release host", () => {
     expect(updateSource({ packaged: false, env: overrides, built })).toEqual({
-      repo: "mallory/innytypes",
+      repo: "mallory/reload",
       publicKey: "mallory's key",
       releases: "https://mallory.invalid/releases",
     });
   });
 
   it("the test release host needs the e2e hooks, even in development", () => {
-    const env = { ...overrides, INNYTYPES_E2E_HOOKS: undefined };
+    const env = { ...overrides, RELOAD_E2E_HOOKS: undefined };
     expect(updateSource({ packaged: false, env, built }).releases).toBe(
-      "https://github.com/mallory/innytypes/releases",
+      "https://github.com/mallory/reload/releases",
     );
   });
 
-  it("the e2e hooks are on only with INNYTYPES_E2E_HOOKS=1 in a build that is not installed", () => {
-    expect(e2eHooksOn({ packaged: false, env: { INNYTYPES_E2E_HOOKS: "1" } })).toBe(true);
-    expect(e2eHooksOn({ packaged: true, env: { INNYTYPES_E2E_HOOKS: "1" } })).toBe(false);
+  it("the e2e hooks are on only with RELOAD_E2E_HOOKS=1 in a build that is not installed", () => {
+    expect(e2eHooksOn({ packaged: false, env: { RELOAD_E2E_HOOKS: "1" } })).toBe(true);
+    expect(e2eHooksOn({ packaged: true, env: { RELOAD_E2E_HOOKS: "1" } })).toBe(false);
     expect(e2eHooksOn({ packaged: false, env: {} })).toBe(false);
-    expect(e2eHooksOn({ packaged: false, env: { INNYTYPES_E2E_HOOKS: "true" } })).toBe(false);
+    expect(e2eHooksOn({ packaged: false, env: { RELOAD_E2E_HOOKS: "true" } })).toBe(false);
   });
 
   it("with nothing set, a development build uses what it was built with", () => {
     expect(updateSource({ packaged: false, env: {}, built })).toEqual({
-      repo: "acme/innytypes",
+      repo: "acme/reload",
       publicKey: "the built-in key",
-      releases: "https://github.com/acme/innytypes/releases",
+      releases: "https://github.com/acme/reload/releases",
     });
   });
 });

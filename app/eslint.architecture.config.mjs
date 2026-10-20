@@ -29,9 +29,9 @@ export default [
     files: ["src/**/*.{ts,tsx}"],
     languageOptions: { parser: tseslint.parser },
     linterOptions: { noInlineConfig: true, reportUnusedDisableDirectives: "off" },
-    plugins: { "innytypes-node-red": nodeRedEmbedding },
+    plugins: { "reload-node-red": nodeRedEmbedding },
     rules: {
-      "innytypes-node-red/no-node-red-restart": "error",
+      "reload-node-red/no-node-red-restart": "error",
       // No file may exceed 600 lines, blank lines and comments included: no god modules.
       "max-lines": ["error", { max: 600, skipBlankLines: false, skipComments: false }],
       // `process.env.X` and `const { env } = process`.
@@ -62,8 +62,8 @@ export default [
   {
     // The gallery (D11) is a dev-only page of sample flows; its sample words are not the app's.
     files: ["src/ui/components/**/*.tsx", "src/ui/screens/**/*.tsx"],
-    plugins: { "innytypes-words": noJsxText },
-    rules: { "innytypes-words/no-jsx-text": "error" },
+    plugins: { "reload-words": noJsxText },
+    rules: { "reload-words/no-jsx-text": "error" },
   },
   {
     files: COMPOSITION_ROOTS,

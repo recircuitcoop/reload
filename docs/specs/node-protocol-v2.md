@@ -1,12 +1,12 @@
 ---
 type: spec
-title: InnyTypes node protocol v2
+title: Reload node protocol v2
 status: DRAFT
 created: 2026-09-25
 source: plan 0017, slice 02; derived from the slice 01 spike (docs/arch_pivot.md)
 ---
 
-# InnyTypes node protocol v2
+# Reload node protocol v2
 
 Revision **2.1** (plan 0022 §B). The wire integer is still `2`; see 1.3 for what a revision is.
 
@@ -21,10 +21,10 @@ Vocabulary, as in plan 0017:
 | **event** | A message travelling along a wire in a flow. Its type is a versioned name. |
 | **source** | A type that starts runs by emitting events. It normally has no input (but see `input`, section 2.4). |
 | **node** | A type that takes an event in, does work, and emits events. A sink is a node with no outputs. |
-| **view** | A type whose result is shown to the person in the InnyTypes app: an **action** view (the flow waits) or a **snapshot** view (it records and passes on). |
+| **view** | A type whose result is shown to the person in the Reload app: an **action** view (the flow waits) or a **snapshot** view (it records and passes on). |
 | **flow** | A graph of sources, nodes and views, drawn on the canvas. |
 | **node package** | The installable unit that declares one or more types. |
-| **runtime** | The InnyTypes process that embeds Node-RED, runs node processes, and keeps the journal. |
+| **runtime** | The Reload process that embeds Node-RED, runs node processes, and keeps the journal. |
 | **shell** | The Electron main process: windows, lock, quit, notifications, and supervision of the runtime. |
 | **instance** | One node of a type placed on the canvas. There is one process per instance. |
 
@@ -35,7 +35,7 @@ Every requirement is one of two kinds:
 
 A requirement with no mark is either proven or a direct consequence of something proven.
 
-Sections 10 and part of 8.5 are **INTERNAL**: they bind the InnyTypes runtime and shell, not node
+Sections 10 and part of 8.5 are **INTERNAL**: they bind the Reload runtime and shell, not node
 package authors.
 
 ## 1. Scope and versioning
@@ -70,23 +70,23 @@ package authors.
      unknown fields); a node written for an older revision never sends them, and is served
      exactly as before.
    - **Revision 2.1** adds, every one of them optional: `notes` and `results` on `done` (4.2.1),
-     `in`, `progress`, `eta_s` and `phase` on `status` (4.2.2), and the `innytype` annotation on
+     `in`, `progress`, `eta_s` and `phase` on `status` (4.2.2), and the `reload` annotation on
      config schema properties (2.4.1).
 4. Version 1 (the pre-0017 plugin contract, `{kind, payload}`, fire-and-forget) is not supported.
    There is no bridge; plan 0017's cutover converts packages in one wave.
 
-## 2. The node package declaration (`inny-package.json`)
+## 2. The node package declaration (`reload-package.json`)
 
 ### 2.1 Location and identity
 
-1. Every node package MUST contain exactly one `inny-package.json` at its root.
+1. Every node package MUST contain exactly one `reload-package.json` at its root.
 2. `package` is the package name, matching `^[a-z][a-z0-9_]{1,39}$`. It MUST be unique among
    installed packages.
    - The runtime MUST refuse a second package with an existing name, and report it; the one
      already installed wins.
    - The name `user-events` is RESERVED for created event types (section 9).
 3. Each type has an `id`, matching `^[a-z][a-z0-9_-]{0,63}$`, unique within its package.
-4. The Node-RED node type name is derived, never declared: `inny-<package>-<id>`.
+4. The Node-RED node type name is derived, never declared: `reload-<package>-<id>`.
 
 ### 2.2 Types
 
@@ -163,13 +163,13 @@ never by number.
 
 Types MUST NOT declare an output port named after a Node-RED internal (`_msgid`, `topic`).
 
-#### 2.4.1 The `innytype` annotation (revision 2.1)
+#### 2.4.1 The `reload` annotation (revision 2.1)
 
-Everything InnyTypes-specific about one property of a `config` schema lives in ONE field of that
-property, `innytype`, whose value is an object. It is an annotation: it never changes which
+Everything Reload-specific about one property of a `config` schema lives in ONE field of that
+property, `reload`, whose value is an object. It is an annotation: it never changes which
 values validate, and the stored value stays what the property's own schema says (a string, for
 both keys below). Two keys are defined now; both declare options the editor and Setup offer for
-a `type: "string"` property, resolved by InnyTypes, never by the node:
+a `type: "string"` property, resolved by Reload, never by the node:
 
 | Key | Value | The options are |
 |---|---|---|
@@ -178,20 +178,20 @@ a `type: "string"` property, resolved by InnyTypes, never by the node:
 
 ```json
 "properties": {
-  "space": { "type": "string", "title": "Space", "innytype": { "spaces": true } },
-  "type": { "type": "string", "title": "Type", "innytype": { "types": { "of": "space" } } }
+  "space": { "type": "string", "title": "Space", "reload": { "spaces": true } },
+  "type": { "type": "string", "title": "Type", "reload": { "types": { "of": "space" } } }
 }
 ```
 
-1. A property carrying `innytype` MUST be `"type": "string"`, and its `innytype` MUST declare
+1. A property carrying `reload` MUST be `"type": "string"`, and its `reload` MUST declare
    exactly one of `spaces` and `types`: an empty object, or both keys, is refused. This holds
    at every depth the form draws: top-level properties, the properties of a nested object, and
    those of an array's `items`. The declaration schema (2.6) refuses each case.
-2. `types.of` SHOULD name a sibling property that itself declares `innytype.spaces`.
+2. `types.of` SHOULD name a sibling property that itself declares `reload.spaces`.
 3. Later keys join the same object when a revision defines them. Today they MAY appear beside
    `spaces` or `types`, and a receiver ignores a key it does not know; a later revision that
    lets a new key stand alone relaxes rule 1 for it.
-4. InnyTypes-specific schema keys are never spelled as separate `x-` prefixed keywords; only
+4. Reload-specific schema keys are never spelled as separate `x-` prefixed keywords; only
    `x-secret` (2.5), which predates this rule, remains.
 
 ### 2.5 Config and credentials
@@ -219,7 +219,7 @@ a `type: "string"` property, resolved by InnyTypes, never by the node:
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://innytypes/schemas/inny-package.v2.json",
+  "$id": "https://reload/schemas/reload-package.v2.json",
   "type": "object",
   "required": ["protocol", "package", "version", "types"],
   "properties": {
@@ -268,14 +268,14 @@ a `type: "string"` property, resolved by InnyTypes, never by the node:
     "config": { "type": "object", "$ref": "#/$defs/configProperty" },
     "configProperty": {
       "properties": {
-        "innytype": { "$ref": "#/$defs/innytype" },
+        "reload": { "$ref": "#/$defs/reload" },
         "properties": { "type": "object", "additionalProperties": { "$ref": "#/$defs/configProperty" } },
         "items": { "$ref": "#/$defs/configProperty" }
       },
-      "if": { "required": ["innytype"] },
+      "if": { "required": ["reload"] },
       "then": { "properties": { "type": { "const": "string" } }, "required": ["type"] }
     },
-    "innytype": {
+    "reload": {
       "type": "object",
       "properties": {
         "spaces": { "const": true },
@@ -502,7 +502,7 @@ The schemas state the shape a frame has once the runtime has applied the revisio
 ```json
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://innytypes/schemas/frames.v2.json",
+  "$id": "https://reload/schemas/frames.v2.json",
   "$defs": {
     "id": { "type": "string", "minLength": 1, "maxLength": 128 },
     "start": {
@@ -649,16 +649,16 @@ When the runtime sends an event to the next node on a wire, the Node-RED `msg` M
 |---|---|
 | `msg.payload` | the event data (`emit.data`) |
 | `msg.topic` | the event type name |
-| `msg.inny.event` | the CloudEvents-shaped envelope (5.3) |
-| `msg.inny.run` | the run id (5.5) |
-| `msg.inny.cause` | the input id that caused this output, when there is one |
+| `msg.reload.event` | the CloudEvents-shaped envelope (5.3) |
+| `msg.reload.run` | the run id (5.5) |
+| `msg.reload.cause` | the input id that caused this output, when there is one |
 | `msg._msgid` | Node-RED's id. It MUST be kept for outputs caused by an input (the runtime sends a clone of the input message through that input's `send`), and is new for a new run. |
 
 ### 5.2 Event type names
 
 1. Form: `<owner>.<name>.v<N>`, lower case, where:
    - `<owner>` is the package name, or `user` for created event types (section 9);
-   - `<name>` MAY contain dots for sub-names (`anytype.object.created.v1`);
+   - `<name>` MAY contain dots for sub-names (`reload_anytype.object.created.v1`);
    - `N` is an integer ≥ 1.
 2. A version is IMMUTABLE. Once published, `x.y.vN`'s payload schema MUST NOT change. Any change
    is a new version, `vN+1`, declared beside the old one.
@@ -666,13 +666,13 @@ When the runtime sends an event to the next node on a wire, the Node-RED `msg` M
    **[UNPROVEN]** The spike checked emits against declared PORTS (which fixes the type), not owner
    prefixes at install time. The installer must check the prefixes.
 
-### 5.3 The envelope (`msg.inny.event`)
+### 5.3 The envelope (`msg.reload.event`)
 
 ```json
 {
   "specversion": "1.0",
   "id": "<uuid, new per emission>",
-  "source": "inny://<package>/<type id>/<node instance id>",
+  "source": "reload://<package>/<type id>/<node instance id>",
   "type": "<event type name>",
   "time": "<RFC 3339 UTC>",
   "datacontenttype": "application/json"
@@ -686,10 +686,10 @@ When the runtime sends an event to the next node on a wire, the Node-RED `msg` M
 ### 5.4 Emitting
 
 1. `emit {port, data, in}`, with a live `in`: the runtime clones the input's message, replaces
-   `payload` and `topic`, sets `msg.inny = {event, run: <the input's run>, cause: in}`, and sends
+   `payload` and `topic`, sets `msg.reload = {event, run: <the input's run>, cause: in}`, and sends
    through that input's `send`. That keeps the correlation with the input.
 2. `emit {port, data}`, with no `in`: a NEW run. The runtime builds a fresh message
-   `{payload, topic, inny: {event, run: event.id}}` and sends it with `node.send`. This is how
+   `{payload, topic, reload: {event, run: event.id}}` and sends it with `node.send`. This is how
    sources, snapshot actions and fires start runs (proven).
 3. The output goes on the port index of `port` (2.2). Other ports receive nothing.
 
@@ -739,7 +739,7 @@ When the runtime sends an event to the next node on a wire, the Node-RED `msg` M
 
 1. **Journal before send.** Before writing an `input` frame, the runtime MUST durably record:
    - the input id, instance id and type;
-   - the message (`payload`, `topic`, `inny`, `_msgid`);
+   - the message (`payload`, `topic`, `reload`, `_msgid`);
    - the event, the attempt count and the state `sent`;
    - the time.
 
@@ -866,7 +866,7 @@ against the flow as it is NOW. It MUST refuse a press with a reason, never drop 
 |---|---|---|
 | the instance is no longer in the deployed flow | "The view that took this snapshot is no longer in the flow." | 409 |
 | the action's port is wired to nothing | `Nothing is wired to the "<label>" output.` | 409 |
-| the runtime is restarting or down | "the InnyTypes runtime is restarting; try again in a moment" | 409 |
+| the runtime is restarting or down | "the Reload runtime is restarting; try again in a moment" | 409 |
 
 ### 8.5 Pop-outs (the security contract is INTERNAL; the `window` option is for authors)
 
@@ -879,15 +879,15 @@ against the flow as it is NOW. It MUST refuse a press with a reason, never drop 
 2. Several pop-outs MAY be open at once, one per pending view or snapshot. They are independent,
    and a second open of the same one focuses the existing window.
 3. **The pop-out page** MUST be served by the SHELL, never by the runtime:
-   - on the custom scheme `inny-view://app/…` (privileged: standard, secure), or, for a view
-     drawn by its package's `component`, on `inny-view://<package>/…`, where the shell serves
+   - on the custom scheme `reload-view://app/…` (privileged: standard, secure), or, for a view
+     drawn by its package's `component`, on `reload-view://<package>/…`, where the shell serves
      the same page plus the package's own `view/` files;
-   - in its own session partition `inny-views`;
+   - in its own session partition `reload-views`;
    - with a request filter that cancels every URL outside that scheme.
 
    Beside `view.js`, on every view origin, the shell serves the page's own `tokens.css` (the
    design tokens as CSS custom properties, light and dark, built from
-   `docs/ux/tokens/innytypes.tokens.json`) and `view-kit.css` (button, field, list row, drag
+   `docs/ux/tokens/reload.tokens.json`) and `view-kit.css` (button, field, list row, drag
    handle, written only against those properties), which the page links. A package's `view/`
    folder never stands in for one of them. The CSP (8.5.5) is unchanged: `style-src 'self'`
    allows both.
@@ -910,20 +910,20 @@ against the flow as it is NOW. It MUST refuse a press with a reason, never drop 
    base-uri 'none'
    ```
 
-6. **The bridge** is `window.inny` with exactly five calls, and NONE takes an id:
+6. **The bridge** is `window.reload` with exactly five calls, and NONE takes an id:
    - `get()` → the view or snapshot this window was opened for: `{kind: "view" | "snapshot" | "gone", …}`;
      a view carries its `content` (with `component.props`) and its `draft` (8.1.6);
    - `submit(values)` → action views only;
    - `action(actionId, values)` → snapshots only;
    - `draft(values)` → action views only: keeps the person's unfinished answer (8.1.6). The shell
      refuses one over 64 KiB, or not plain JSON, before the hop; the runtime judges the rest;
-   - `setValid(valid)` → page-local: it dispatches an `inny-valid` event on `window`, with the
+   - `setValid(valid)` → page-local: it dispatches an `reload-valid` event on `window`, with the
      boolean as its `detail`, and makes no IPC call.
 
    The shell MUST bind each window to its target and refuse anything else ("not an action view",
    "not a snapshot").
 
-   **The chrome is InnyTypes'.** Once a view's component is drawn (on its package's own pop-out,
+   **The chrome is Reload's.** Once a view's component is drawn (on its package's own pop-out,
    when its element is defined), the page draws **Continue** · **Later** · **Skip this step**
    under it in place of Submit and Dismiss; the component draws only its body. Until then the
    view keeps its enabled Submit and Dismiss.
@@ -938,7 +938,7 @@ against the flow as it is NOW. It MUST refuse a press with a reason, never drop 
    disables it again). Pressing it calls the component's `answer()` and submits what it returns;
    the component never submits by itself. **Later** closes the window and sends nothing (8.2.3).
    **Skip this step** dismisses the view (8.2.2). A component written before 0.4.0, which
-   answers with an `inny-submit` event, still submits that way.
+   answers with an `reload-submit` event, still submits that way.
 7. **What a view sends back** (`submit` values, `action` values) is any JSON object. The RUNTIME
    judges it, once, the same for the pop-out and for the app's own pages; the shell passes it
    on unchanged, refusing before the hop only one over 64 KiB or one that is not plain JSON.
@@ -1023,7 +1023,7 @@ against the flow as it is NOW. It MUST refuse a press with a reason, never drop 
    - The shell (Electron main) forks ONE runtime as an Electron `utilityProcess`, and supervises it.
    - The runtime hosts the HTTP server (Node-RED at `/red` behind the deploy guard), Node-RED, the
      journal and the node processes.
-   - There is no HTTP app API. The app pages (`inny-app://app/…`) and the pop-outs (8.5.3) are
+   - There is no HTTP app API. The app pages (`reload-app://app/…`) and the pop-outs (8.5.3) are
      served by the SHELL, so a runtime restart never blanks them. Every page call goes over IPC
      to the shell and, for the runtime, on as a `call` (below).
 2. **Messages.** Structured-clone objects with a field `t`, over the utilityProcess port. Calls
@@ -1105,14 +1105,14 @@ against the flow as it is NOW. It MUST refuse a press with a reason, never drop 
      is written, and replace occurrences with `[redacted]` (proven).
    - Nodes MUST NOT log, emit or snapshot credentials.
    - Keys for core services (the Anytype API key) MAY instead be read by the node at run time from
-     the InnyTypes key store, and MUST NOT pass through Node-RED (proven with Create object).
+     the Reload key store, and MUST NOT pass through Node-RED (proven with Create object).
    - **[UNPROVEN]** Keeping the credential secret in the OS keychain.
 2. **Identity is bound.**
    - The runtime stamps `source`, `id`, `time` and `type` (from the port).
    - A node MAY emit only on its declared ports, and only for its own live input ids.
    - Anything else is refused and logged.
 3. **The deploy guard.** In front of Node-RED's `POST /red/flows`, the runtime MUST refuse (400,
-   `{"code":"unknown_types","message":"Not installed in InnyTypes: …"}`) any deploy naming a type
+   `{"code":"unknown_types","message":"Not installed in Reload: …"}`) any deploy naming a type
    that is not registered.
    - It checks with the documented `RED.runtime.nodes.getNodeList`.
    - Structural types `tab`, `subflow` and `group`, and `subflow:*`, are allowed.
@@ -1123,7 +1123,7 @@ against the flow as it is NOW. It MUST refuse a press with a reason, never drop 
      `functionExternalModules: false`.
    - With these, Node-RED does not mount the install routes (404) and shows no palette manager.
    - A module dropped into `userDir/node_modules` is not loaded (proven).
-   - Hot-added packages come ONLY through InnyTypes' installer. **[UNPROVEN]** Signature and lock
+   - Hot-added packages come ONLY through Reload's installer. **[UNPROVEN]** Signature and lock
      verification before a declaration reaches the watched folder; the watched folder MUST NOT be
      writable by node processes.
 5. **Core nodes.**
@@ -1200,7 +1200,7 @@ Revision 2.1 (plan 0022 §B) adds:
 | C20 | notes and results | `done` with `notes` and `results` reaches the input's run: notes and warnings split, results kept with their step; over 20 entries or 200 characters are cut and logged, never refused |
 | C21 | progress | `status` with `in` updates only that input's step (text, progress, time left), the badge as before; an unknown `in` updates the badge only |
 | C22 | old shapes | a `done` with only `in`, and a `status` without `in`, mean what they meant in 2.0 |
-| C23 | `innytype` | a config schema with `innytype.spaces` and `innytype.types.of` passes the declaration schema and strict validation, validates values exactly as without it, and its options are read back for the form; a malformed one is refused at the declaration. Resolving the options against Anytype is not part of C23. |
+| C23 | `reload` | a config schema with `reload.spaces` and `reload.types.of` passes the declaration schema and strict validation, validates values exactly as without it, and its options are read back for the form; a malformed one is refused at the declaration. Resolving the options against Anytype is not part of C23. |
 
 Plan 0020 adds:
 
@@ -1214,7 +1214,7 @@ everything in C1 to C15 on Windows and Linux.
 
 ## Appendix A — The minimal Python SDK surface
 
-From `spike/packages/_sdk/inny_node.py`:
+From `spike/packages/_sdk/reload_node.py`:
 
 ```python
 class Node:

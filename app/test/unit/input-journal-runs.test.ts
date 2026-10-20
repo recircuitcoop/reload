@@ -18,7 +18,7 @@ function journalOf(store = new MemoryJournal()) {
     queue: { ...DEFAULT_QUEUE, bound: 1 },
     instanceId: "n1",
     flowId: "tab1",
-    type: "inny-pkg-t",
+    type: "reload-pkg-t",
     label: "Transcribe",
     newId: () => `in-${String((n += 1))}`,
     log: (level, message) => logs.push(`${level} ${message}`),
@@ -31,7 +31,7 @@ const delivery = (): InputDelivery & { ends: (Error | undefined)[] } => {
   return { ends, send: () => undefined, done: (error) => ends.push(error) };
 };
 
-const message = { payload: 1, topic: "t.v1", inny: { run: "run-1" } };
+const message = { payload: 1, topic: "t.v1", reload: { run: "run-1" } };
 
 describe("the input journal's run changes", () => {
   it("journals, presents, submits and ends a step, each with its change, and stamps the flow", () => {

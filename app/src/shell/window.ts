@@ -35,7 +35,7 @@ export class AppWindow {
     const window = this.#deps.createWindow({
       width: 960,
       height: 640,
-      title: "InnyTypes",
+      title: "Reload",
       show: !this.#deps.hidden,
       webPreferences: {
         sandbox: true,

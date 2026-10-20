@@ -1,5 +1,5 @@
 // Configuration › General › Updates (plan 0022 §G; ux-writing "Configuration › General", Updates;
-// design-system "Configuration › General section"): InnyTypes' own update. The one-line state
+// design-system "Configuration › General section"): Reload's own update. The one-line state
 // from ux-writing, a Progress while downloading, Check now (Secondary), Quit and update (Primary,
 // when ready), Go back to the previous version (Quiet, confirmed once in a dialog, for seven days
 // after an update), the "Check automatically" Switch and a Release notes Link.

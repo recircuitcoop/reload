@@ -1,7 +1,7 @@
 // Setup's node forms (plan 0022 §H, ux-writing "Node forms"): one screen per step of the starter
 // flow after its source, in wire order, titled "Set up: *step name*" with "Step n of N." over
 // it. The step's own form is read with nodeForm and saved with configureNode, the same calls the
-// canvas's forms use; a field whose options come from Anytype (`innytype`) lists them through
+// canvas's forms use; a field whose options come from Anytype (`reload`) lists them through
 // nodeOptions. Continue saves, and moves on only once the step is saved.
 import { useEffect, useState } from "react";
 import type { AppApi } from "../contract";
@@ -173,7 +173,7 @@ function SetupFormField({ api, field, draft, problem, onChange }: FieldProps) {
               />
             );
           }
-          if (field.innytype !== null) {
+          if (field.reload !== null) {
             return <AnytypeSelect api={api} field={field} draft={draft} onChange={onChange} />;
           }
           return (
@@ -196,19 +196,19 @@ function SetupFormField({ api, field, draft, problem, onChange }: FieldProps) {
 /** A field whose options are the paired Anytype's spaces, or one space's types. */
 function AnytypeSelect({ api, field, draft, onChange }: Omit<FieldProps, "problem">) {
   const [options, setOptions] = useState<Answer<NodeOptions> | null>(null);
-  const innytype = field.innytype;
+  const reload = field.reload;
   const spaceId =
-    innytype?.source === "types" && typeof draft[innytype.of] === "string"
-      ? String(draft[innytype.of])
+    reload?.source === "types" && typeof draft[reload.of] === "string"
+      ? String(draft[reload.of])
       : "";
   useEffect(() => {
     let live = true;
     setOptions(null);
-    if (innytype === null || (innytype.source === "types" && spaceId === "")) {
+    if (reload === null || (reload.source === "types" && spaceId === "")) {
       return;
     }
     const query =
-      innytype.source === "spaces"
+      reload.source === "spaces"
         ? ({ source: "spaces" } as const)
         : ({ source: "types", spaceId } as const);
     void api.nodeOptions(query).then((answer) => {
@@ -217,7 +217,7 @@ function AnytypeSelect({ api, field, draft, onChange }: Omit<FieldProps, "proble
     return () => {
       live = false;
     };
-  }, [api, innytype, spaceId]);
+  }, [api, reload, spaceId]);
   const value = typeof draft[field.key] === "string" ? String(draft[field.key]) : "";
   const listed = options?.ok === true ? options.value.options : [];
   // The value kept is offered under its own text when the answer lacks it: never dropped.
@@ -225,7 +225,7 @@ function AnytypeSelect({ api, field, draft, onChange }: Omit<FieldProps, "proble
     listed.some((option) => option.value === value) || value === ""
       ? listed
       : [...listed, { value, label: value }];
-  const reading = innytype?.source === "types" ? t("form.readingTypes") : t("form.readingSpaces");
+  const reading = reload?.source === "types" ? t("form.readingTypes") : t("form.readingSpaces");
   return (
     <div className="flex flex-col gap-1">
       <Select
@@ -238,7 +238,7 @@ function AnytypeSelect({ api, field, draft, onChange }: Omit<FieldProps, "proble
           onChange(chosen ?? "");
         }}
       />
-      {options === null && (innytype?.source === "spaces" || spaceId !== "") ? (
+      {options === null && (reload?.source === "spaces" || spaceId !== "") ? (
         <p className="text-caption text-secondary">{reading}</p>
       ) : null}
       {options?.ok === false ? (

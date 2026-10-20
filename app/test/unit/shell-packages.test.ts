@@ -21,7 +21,7 @@ import { supervised } from "../fakes/supervised";
 let scratch: string;
 
 beforeEach(() => {
-  scratch = fs.mkdtempSync(path.join(os.tmpdir(), "inny-shell-packages-"));
+  scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-shell-packages-"));
 });
 
 afterEach(() => {
@@ -107,10 +107,10 @@ describe("the deployed flows' types", () => {
       file,
       JSON.stringify([
         { id: "t", type: "tab" },
-        { id: "a", type: "inny-pinger-ping", z: "t" },
+        { id: "a", type: "reload-pinger-ping", z: "t" },
       ]),
     );
-    expect(deployedTypes(file)).toEqual(["tab", "inny-pinger-ping"]);
+    expect(deployedTypes(file)).toEqual(["tab", "reload-pinger-ping"]);
     fs.writeFileSync(file, "{");
     expect(() => deployedTypes(file)).toThrow(SyntaxError);
   });
@@ -187,8 +187,8 @@ describe("catalogueSource: only a build that is not installed can be pointed els
     catalogueKey: "the built-in key",
   };
   const env = {
-    INNYTYPES_CATALOGUE_URL: "https://mallory.invalid/catalogue",
-    INNYTYPES_CATALOGUE_KEY: "mallory's key",
+    RELOAD_CATALOGUE_URL: "https://mallory.invalid/catalogue",
+    RELOAD_CATALOGUE_KEY: "mallory's key",
   };
 
   it("an installed build ignores both variables: its own catalogue and key", () => {

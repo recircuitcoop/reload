@@ -159,7 +159,7 @@ describe("the runtime raises them to a connected editor", () => {
   let engine: EmbeddedNodeRed;
 
   beforeAll(async () => {
-    scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "inny-red-events-")));
+    scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-red-events-")));
     const userDir = path.join(scratch, "node-red");
     const generatedDir = path.join(userDir, "generated");
     fs.mkdirSync(generatedDir, { recursive: true });
@@ -214,9 +214,9 @@ describe("the runtime raises them to a connected editor", () => {
   it("node/removed arrives as notification/node/removed with each set's id and types", async () => {
     const editor = await editorSocket(port);
     try {
-      engine.raiseNodeRemoved([{ id: "node-red/inny-gone", types: ["inny-gone"] }]);
+      engine.raiseNodeRemoved([{ id: "node-red/reload-gone", types: ["reload-gone"] }]);
       const message = await arrival(editor.received, "notification/node/removed");
-      expect(message.data).toEqual([{ id: "node-red/inny-gone", types: ["inny-gone"] }]);
+      expect(message.data).toEqual([{ id: "node-red/reload-gone", types: ["reload-gone"] }]);
       // Nothing is raised for nothing: no empty notification reaches the editor.
       engine.raiseNodeRemoved([]);
       expect(await engine.raiseNodeAdded([])).toEqual([]);

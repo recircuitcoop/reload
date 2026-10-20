@@ -14,7 +14,7 @@ import {
 /** The exact message shape Electron's asar-aware fs produced for a packaged build. */
 const ASAR_MESSAGE =
   "ENOENT, node_modules/@node-red/nodes/examples not found in " +
-  "/Applications/InnyTypes.app/Contents/Resources/app.asar";
+  "/Applications/Reload.app/Contents/Resources/app.asar";
 
 /** The plain Node shape a real filesystem (development) produces. */
 function enoentError(path: string): NodeJS.ErrnoException {

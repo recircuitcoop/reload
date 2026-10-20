@@ -14,7 +14,7 @@ let scratch: string;
 let file: string;
 
 beforeEach(() => {
-  scratch = fs.mkdtempSync(path.join(os.tmpdir(), "inny-snapshots-"));
+  scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-snapshots-"));
   file = path.join(scratch, "snapshots.sqlite");
 });
 
@@ -25,7 +25,7 @@ afterEach(() => {
 const record: SnapshotRecord = {
   id: "s1",
   instanceId: "rec",
-  type: "inny-viewpy-record",
+  type: "reload-viewpy-record",
   label: "Record",
   time: 5,
   content: { title: "t" },

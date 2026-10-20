@@ -200,7 +200,7 @@ export function envelopeOf(
   return {
     specversion: "1.0",
     id: stamp.newId(),
-    source: `inny://${pkg}/${typeId}/${id}`,
+    source: `reload://${pkg}/${typeId}/${id}`,
     type,
     time: new Date(stamp.clock.now()).toISOString(),
     datacontenttype: "application/json",

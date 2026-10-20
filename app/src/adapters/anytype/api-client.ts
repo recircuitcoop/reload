@@ -1,6 +1,6 @@
 // The client for Anytype's local API (plan 0018 §3, the port of anytype_api.py and of the
 // pairing half of anytype_mcp/keys.py). One client, two users: the services process, and
-// later the packages/anytype nodes, which bundle this same file (§4.2).
+// later the packages/reload_anytype nodes, which bundle this same file (§4.2).
 //
 // * The credential, the base URL and the pinned `Anytype-Version` come from one place
 //   (domain/anytype/pins.ts), so the client cannot drift from what the MCP child is sent.
@@ -8,7 +8,7 @@
 //   the person can quit at any moment has no "still up" to remember.
 // * Endpoints are wrapped by name only once a slice has a caller for them: GET /v1/spaces
 //   (the probe's, for the service), the spaces and types a step's form chooses from
-//   (plan 0022 §B, every page of each), and the object and search calls of the packages/anytype
+//   (plan 0022 §B, every page of each), and the object and search calls of the packages/reload_anytype
 //   nodes (WI-0018-20), and a file's bytes for the MCP endpoint (plan 0019). Anything else
 //   goes through `requestJson`.
 // * No error carries the key or a response body, and every message is redacted on its way out,
@@ -155,7 +155,7 @@ export class AnytypeClient implements AnytypeApi, FileSource {
     }
   }
 
-  // ── objects and search: what the packages/anytype nodes call (§4.2) ────────────────────
+  // ── objects and search: what the packages/reload_anytype nodes call (§4.2) ────────────────────
 
   /** Create one object in `spaceId` (POST /v1/spaces/{space_id}/objects). */
   async createObject(
@@ -323,9 +323,9 @@ export class AnytypeClient implements AnytypeApi, FileSource {
     });
   }
 
-  /** Ask Anytype to show a pairing code for InnyTypes (keys.py:109-129). */
+  /** Ask Anytype to show a pairing code for Reload (keys.py:109-129). */
   async startPairing(): Promise<string> {
-    const answer = await this.#post("/v1/auth/challenges", { app_name: "InnyTypes" });
+    const answer = await this.#post("/v1/auth/challenges", { app_name: "Reload" });
     const challengeId = answer?.["challenge_id"];
     if (typeof challengeId !== "string" || challengeId.trim() === "") {
       throw new PairingError(

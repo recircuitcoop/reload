@@ -16,7 +16,7 @@ import {
 import type { LeveledLogger, NodeLineLevel, NodeSource, SecretSink } from "../ports/logger";
 
 export interface SourceLogDeps {
-  /** The logger name every record of this process carries: `innytypes.runtime`. */
+  /** The logger name every record of this process carries: `reload.runtime`. */
   readonly name: string;
   readonly pid: number;
   /** Writes text to stdout, synchronously. */
@@ -41,7 +41,7 @@ const NODE_LEVELS: Readonly<Record<NodeLineLevel, LevelName>> = {
 
 /** The logger name a node instance's lines are written under. */
 export function nodeLoggerName(source: NodeSource): string {
-  return `innytypes.node.${source.type}.${source.instance}`;
+  return `reload.node.${source.type}.${source.instance}`;
 }
 
 export function sourceLog(deps: SourceLogDeps): SourceLog {
@@ -95,7 +95,7 @@ export function sourceLog(deps: SourceLogDeps): SourceLog {
 }
 
 /** The logger name the Anytype MCP child's stderr is written under (plan 0015). */
-export const MCP_CHILD_LOGGER = "innytypes.anytype-mcp";
+export const MCP_CHILD_LOGGER = "reload.anytype-mcp";
 
 /**
  * The Anytype MCP child's stderr in the one log (plan 0015): each line one record at WARNING,

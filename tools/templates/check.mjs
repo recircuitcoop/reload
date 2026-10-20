@@ -8,7 +8,7 @@
 // - the file parses, and holds exactly one tab, and every other node is on that tab (`z`);
 // - no node id is used twice, and no `credentials` key appears anywhere;
 // - every type is one of Node-RED's own `core/common` nodes (the only core nodes the palette
-//   lock keeps, spec 11.5), or an InnyTypes type `inny-<package>-<id>` whose package the entry
+//   lock keeps, spec 11.5), or a Reload type `reload-<package>-<id>` whose package the entry
 //   declares in `packages`; for a package that lives in this repository, the type must also be
 //   one its declaration has;
 // - no template file is left out of the index;
@@ -26,7 +26,7 @@ import { fileURLToPath } from "node:url";
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const STRUCTURAL = new Set(["tab", "group"]);
 /** As app/src/application/deploy-guard.ts: a package name has no hyphen. */
-const INNY_TYPE = /^inny-([a-z][a-z0-9_]{1,39})-([a-z][a-z0-9_-]{0,63})$/;
+const RELOAD_TYPE = /^reload-([a-z][a-z0-9_]{1,39})-([a-z][a-z0-9_-]{0,63})$/;
 const TEMPLATE_ID = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 /** Node-RED's `core/common` types, read from its own editor files. */
@@ -52,7 +52,7 @@ export function repositoryPackages() {
   const packages = new Map();
   const root = path.join(REPO, "packages");
   for (const name of fs.existsSync(root) ? fs.readdirSync(root) : []) {
-    const file = path.join(root, name, "inny-package.json");
+    const file = path.join(root, name, "reload-package.json");
     if (fs.existsSync(file)) {
       const declaration = JSON.parse(fs.readFileSync(file, "utf8"));
       packages.set(declaration.package, new Set(declaration.types.map((type) => type.id)));
@@ -120,13 +120,13 @@ function typeProblems(who, node, entry, { core, packages }) {
   if (STRUCTURAL.has(type) || core.has(type)) {
     return [];
   }
-  const inny = INNY_TYPE.exec(type);
-  if (inny === null) {
+  const reload = RELOAD_TYPE.exec(type);
+  if (reload === null) {
     return [
-      `${who}: ${node.id} is of type ${type}, which is neither Node-RED's core/common nor InnyTypes'`,
+      `${who}: ${node.id} is of type ${type}, which is neither Node-RED's core/common nor Reload's`,
     ];
   }
-  const [, name, id] = inny;
+  const [, name, id] = reload;
   if (!entry.packages.includes(name)) {
     return [`${who}: ${node.id} is of type ${type}, from the package ${name} it does not declare`];
   }

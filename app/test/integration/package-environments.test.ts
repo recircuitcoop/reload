@@ -45,7 +45,7 @@ let locator: RuntimeLocator;
 const lockLine = new Map<string, string>();
 
 beforeAll(() => {
-  scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "inny-envs-")));
+  scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-envs-")));
   wheels = path.join(scratch, "wheels");
   cacheDir = path.join(scratch, "uv-cache");
   fs.mkdirSync(wheels);
@@ -130,7 +130,7 @@ function declaration(
 
 function pythonPackage(name: string, version: string, extra: Files = {}): Files {
   return {
-    "inny-package.json": declaration(name, version, { kind: "uv-python", python: "3.13" }),
+    "reload-package.json": declaration(name, version, { kind: "uv-python", python: "3.13" }),
     "node.py": "print('hello')\n",
     ...extra,
   };
@@ -210,8 +210,8 @@ describe("uv-python: one verified environment per package", () => {
       );
       // Only the package's own files, never the two that describe the archive.
       expect(fs.readdirSync(path.join(built.live, "package")).sort()).toEqual([
-        "inny-package.json",
         "node.py",
+        "reload-package.json",
         "requirements.lock",
       ]);
       expect(fs.existsSync(path.join(base, "staging", "monty"))).toBe(false);
@@ -251,14 +251,16 @@ describe("uv-python: one verified environment per package", () => {
       );
       await buildPackageEnvironment(
         archiveOf(
-          pythonPackage("innyrize", "0.1.0", { "requirements.lock": lockLine.get("beta") ?? "" }),
+          pythonPackage("reload_summarize", "0.1.0", {
+            "requirements.lock": lockLine.get("beta") ?? "",
+          }),
         ),
         ports,
       );
       await buildPackageEnvironment(archiveOf(pythonPackage("bare", "0.1.0")), ports);
       // No host library, no other package's dependency, nothing the lock does not name.
       expect(distributions("monty")).toEqual(["alpha"]);
-      expect(distributions("innyrize")).toEqual(["beta"]);
+      expect(distributions("reload_summarize")).toEqual(["beta"]);
       expect(distributions("bare")).toEqual([]);
     },
     UV_TIMEOUT_MS,
@@ -288,12 +290,12 @@ describe("uv-python: one verified environment per package", () => {
   it("refuses another Python version with a reason, before anything is built", async () => {
     const files = {
       ...pythonPackage("monty", "0.1.0"),
-      "inny-package.json": declaration("monty", "0.1.0", { kind: "uv-python", python: "3.12" }),
+      "reload-package.json": declaration("monty", "0.1.0", { kind: "uv-python", python: "3.12" }),
     };
     const refused = await refusal(archiveOf(files), portsWith(unreachable));
     expect(refused.reason).toBe("environment");
     expect(refused.message).toBe(
-      'monty: it asks for Python 3.12, and InnyTypes provides Python 3.13 only; declare "python": "3.13"',
+      'monty: it asks for Python 3.12, and Reload provides Python 3.13 only; declare "python": "3.13"',
     );
     expect(fs.existsSync(path.join(base, "staging"))).toBe(false);
     expect(logger.lines.some((line) => line.includes("was refused (environment)"))).toBe(true);
@@ -376,15 +378,15 @@ describe("the archive: signature, then per-file hashes, then the content hash", 
     );
     expect(missing.reason).toBe("unreadable");
     const broken = await refusal(
-      archiveOf({ "inny-package.json": JSON.stringify({ protocol: 2, package: "monty" }) }),
+      archiveOf({ "reload-package.json": JSON.stringify({ protocol: 2, package: "monty" }) }),
       portsWith(unreachable),
     );
     expect(broken.reason).toBe("declaration");
-    expect(broken.message).toContain("inny-package.json: version: is required");
-    const notJson = await refusal(folderOf({ "inny-package.json": "{" }), portsWith(unreachable));
-    expect(notJson.message).toMatch(/^inny-package\.json is not JSON/);
+    expect(broken.message).toContain("reload-package.json: version: is required");
+    const notJson = await refusal(folderOf({ "reload-package.json": "{" }), portsWith(unreachable));
+    expect(notJson.message).toMatch(/^reload-package\.json is not JSON/);
     const none = await refusal(folderOf({ "node.py": "" }), portsWith(unreachable));
-    expect(none.message).toBe("the package has no inny-package.json");
+    expect(none.message).toBe("the package has no reload-package.json");
   });
 });
 
@@ -462,7 +464,7 @@ describe("node: pre-bundled JavaScript, and nothing ever runs npm", () => {
     );
 
   const nodePackage = (command: unknown, extra: Files = {}): Files => ({
-    "inny-package.json": declaration("viewts", "0.1.0", { kind: "node", node: ">=22" }, command),
+    "reload-package.json": declaration("viewts", "0.1.0", { kind: "node", node: ">=22" }, command),
     "node.js": "process.stdout.write('')\n",
     ...extra,
   });
@@ -498,7 +500,7 @@ describe("executable: a per-platform binary with its sha256 in the declaration",
   const binary = "#!/bin/sh\necho ok\n";
   const target = `${process.platform}-${process.arch}`;
   const exePackage = (digest: string): Files => ({
-    "inny-package.json": declaration(
+    "reload-package.json": declaration(
       "tool",
       "1.0.0",
       { kind: "executable", binaries: { [target]: { path: "bin/tool", sha256: digest } } },

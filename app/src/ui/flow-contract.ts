@@ -11,7 +11,7 @@ export interface FlowNamed {
   readonly name: string;
 }
 
-/** A step's form (plan 0022 §D): its schema, values and name; `innytype` options unresolved. */
+/** A step's form (plan 0022 §D): its schema, values and name; `reload` options unresolved. */
 export interface NodeForm {
   readonly flowId: string;
   readonly nodeId: string;

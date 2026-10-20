@@ -5,10 +5,10 @@ import { describe, expect, it } from "vitest";
 import { childEnvironment } from "../../src/shell/child-environment";
 
 const ENV = {
-  INNYTYPES_LOG_CANARY: "canary",
+  RELOAD_LOG_CANARY: "canary",
   ANYTYPE_API_BASE_URL: "http://127.0.0.1:9",
-  INNYTYPES_MCP_PORT: "",
-  INNYTYPES_TEMPLATES_DIR: "/fixtures/templates",
+  RELOAD_MCP_PORT: "",
+  RELOAD_TEMPLATES_DIR: "/fixtures/templates",
   PATH: "/usr/bin",
 };
 
@@ -18,7 +18,7 @@ describe("childEnvironment", () => {
       childEnvironment("services", { home: "/h", env: ENV, runtimesDir: null, e2eHooks: true }),
     ).toEqual({
       HOME: "/h",
-      INNYTYPES_LOG_CANARY: "canary",
+      RELOAD_LOG_CANARY: "canary",
       ANYTYPE_API_BASE_URL: "http://127.0.0.1:9",
     });
   });
@@ -28,15 +28,15 @@ describe("childEnvironment", () => {
       childEnvironment("runtime", { home: "/h", env: ENV, runtimesDir: "/rt", e2eHooks: true }),
     ).toEqual({
       HOME: "/h",
-      INNYTYPES_LOG_CANARY: "canary",
-      INNYTYPES_TEMPLATES_DIR: "/fixtures/templates",
-      INNYTYPES_RUNTIMES_DIR: "/rt",
+      RELOAD_LOG_CANARY: "canary",
+      RELOAD_TEMPLATES_DIR: "/fixtures/templates",
+      RELOAD_RUNTIMES_DIR: "/rt",
     });
     expect(
       childEnvironment("runtime", { home: "/h", env: {}, runtimesDir: null, e2eHooks: false }),
     ).toEqual({ HOME: "/h" });
     expect(
       childEnvironment("runtime", { home: "/h", env: ENV, runtimesDir: null, e2eHooks: false }),
-    ).not.toHaveProperty("INNYTYPES_TEMPLATES_DIR");
+    ).not.toHaveProperty("RELOAD_TEMPLATES_DIR");
   });
 });

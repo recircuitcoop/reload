@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Native stage gate for innytypes (plan 0001).
+# Native stage gate for reload (plan 0001).
 #
 # HERMETIC BY CONSTRUCTION. Everything this gate needs is committed, so a clean clone
 # passes with no manual step — no pre-created venv, no optional extra to remember, no
@@ -197,7 +197,7 @@ $NPM run --silent gate:conformance
 echo "== app: e2e (playwright _electron, dev build) =="
 $NPM run --silent gate:e2e
 
-# == sdk/python == The Python node SDK (innytypes-node, WI-0018-26): its own project, its own
+# == sdk/python == The Python node SDK (reload-node, WI-0018-26): its own project, its own
 # committed uv.lock, checked the same hermetic way as the root project above. A subshell (not
 # --project, which points uv at another project's pyproject.toml without changing the actual
 # working directory) so `ruff`/`mypy`'s relative paths, and sdk/python's own pyproject.toml

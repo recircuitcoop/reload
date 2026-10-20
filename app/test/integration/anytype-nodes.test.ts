@@ -1,11 +1,11 @@
 // The first-party Anytype node package (plan 0018 §4.2, WI-0018-20), end to end below the app:
-// packages/anytype is bundled by esbuild exactly as `npm run build:packages` bundles it, packed
+// packages/reload_anytype is bundled by esbuild exactly as `npm run build:packages` bundles it, packed
 // as a signed archive, installed through WI-0018-15's package environment code, and each of
 // its five types is then run from the INSTALLED folder, through the runtime's own node-process
 // adapter, against a fake Anytype over real HTTP (test/fakes/anytype.ts).
 //
 // Never the person's Anytype and never their key: the key is a canary in a scratch file, named
-// to the node the way the runtime names it (INNYTYPES_ANYTYPE_KEY_FILE).
+// to the node the way the runtime names it (RELOAD_ANYTYPE_KEY_FILE).
 
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -58,7 +58,7 @@ import {
 } from "../fixtures/raw-node/fixture";
 
 const REPOSITORY = path.resolve(import.meta.dirname, "..", "..", "..");
-const PACKAGE_SOURCE = path.join(REPOSITORY, "packages", "anytype");
+const PACKAGE_SOURCE = path.join(REPOSITORY, "packages", "reload_anytype");
 /** The canary: a key-shaped value that must never appear anywhere but its own file. */
 const KEY = `canary-anytype-key-${randomUUID()}`;
 const SPACE = "space-1";
@@ -69,13 +69,13 @@ let keyFile: string;
 let declaredTypes: readonly DeclaredType[];
 
 beforeAll(async () => {
-  scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "inny-anytype-nodes-")));
+  scratch = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-anytype-nodes-")));
   // The package as it ships: its declaration and one pre-bundled file (spec 2.3.3).
   const folder = path.join(scratch, "anytype");
   fs.mkdirSync(folder);
   fs.copyFileSync(
-    path.join(PACKAGE_SOURCE, "inny-package.json"),
-    path.join(folder, "inny-package.json"),
+    path.join(PACKAGE_SOURCE, "reload-package.json"),
+    path.join(folder, "reload-package.json"),
   );
   await build({
     entryPoints: [path.join(PACKAGE_SOURCE, "src", "main.ts")],
@@ -87,7 +87,7 @@ beforeAll(async () => {
     logLevel: "warning",
   });
   const files = Object.fromEntries(
-    ["inny-package.json", "dist/anytype.cjs"].map((file) => [
+    ["reload-package.json", "dist/anytype.cjs"].map((file) => [
       file,
       fs.readFileSync(path.join(folder, file)),
     ]),
@@ -131,7 +131,7 @@ beforeAll(async () => {
   );
   installed = path.join(built.live, "package");
   const parsed = parseDeclaration(
-    JSON.parse(fs.readFileSync(path.join(installed, "inny-package.json"), "utf8")),
+    JSON.parse(fs.readFileSync(path.join(installed, "reload-package.json"), "utf8")),
     (value) => new AjvSchemaValidator().declaration(value),
   );
   if (!parsed.ok) {
@@ -202,7 +202,7 @@ afterEach(async () => {
 function typeOf(id: string): DeclaredType {
   const type = declaredTypes.find((declared) => declared.id === id);
   if (type === undefined) {
-    throw new Error(`packages/anytype declares no ${id}`);
+    throw new Error(`packages/reload_anytype declares no ${id}`);
   }
   return type;
 }
@@ -218,9 +218,9 @@ function startType(
     identity: {
       id: `a${randomUUID().slice(0, 8)}`,
       flowId: "flow-1",
-      package: "anytype",
+      package: "reload_anytype",
       typeId,
-      type: `inny-anytype-${typeId}`,
+      type: `reload-reload_anytype-${typeId}`,
       name: "",
       kind: "node",
     },
@@ -270,14 +270,14 @@ function everything(started: Started, deliveries: RecordingDelivery[]): string {
 
 // ── the declaration ──────────────────────────────────────────────────────────────────────
 
-describe("packages/anytype", () => {
+describe("packages/reload_anytype", () => {
   it("declares the five types of §4.2, installs from a signed archive as a node package, and ships one pre-bundled file", () => {
     expect(declaredTypes.map((type) => [type.id, type.kind, type.outputs])).toEqual([
-      ["create-object", "node", [{ port: "created", event: "anytype.object.created.v1" }]],
-      ["update-object", "node", [{ port: "updated", event: "anytype.object.updated.v1" }]],
-      ["read-object", "node", [{ port: "object", event: "anytype.object.read.v1" }]],
-      ["read-space", "node", [{ port: "objects", event: "anytype.space.read.v1" }]],
-      ["search", "node", [{ port: "results", event: "anytype.search.results.v1" }]],
+      ["create-object", "node", [{ port: "created", event: "reload_anytype.object.created.v1" }]],
+      ["update-object", "node", [{ port: "updated", event: "reload_anytype.object.updated.v1" }]],
+      ["read-object", "node", [{ port: "object", event: "reload_anytype.object.read.v1" }]],
+      ["read-space", "node", [{ port: "objects", event: "reload_anytype.space.read.v1" }]],
+      ["search", "node", [{ port: "results", event: "reload_anytype.search.results.v1" }]],
     ]);
     for (const type of declaredTypes) {
       expect(type.command).toEqual(["{node}", "{package}/dist/anytype.cjs"]);
@@ -481,7 +481,7 @@ describe("the key", () => {
     );
     const unpaired = await send(node, { name: "x" });
     expect(unpaired.ends[0]?.message).toBe(
-      "InnyTypes is not paired with Anytype yet; pair in Settings",
+      "Reload is not paired with Anytype yet; pair in Settings",
     );
     expect(anytype.received).toEqual([]);
     fs.mkdirSync(path.dirname(later), { mode: 0o700 });
@@ -515,10 +515,10 @@ describe("what a node process is started with", () => {
   }
 
   it("only the first-party Anytype package's processes get the key's path; none gets the proxy token's, or any key", () => {
-    const anytypeNode = environmentOf("anytype", true);
-    expect(anytypeNode["INNYTYPES_ANYTYPE_KEY_FILE"]).toBe(keyFile);
+    const anytypeNode = environmentOf("reload_anytype", true);
+    expect(anytypeNode["RELOAD_ANYTYPE_KEY_FILE"]).toBe(keyFile);
     for (const [pkg, firstParty] of [
-      ["anytype", false],
+      ["reload_anytype", false],
       ["monty", true],
       ["folderflow", true],
       ["viewts", false],

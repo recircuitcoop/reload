@@ -11,7 +11,7 @@ export interface LegacyImportReport {
   readonly launchAtLoginWanted: boolean;
   readonly imported: readonly string[];
   readonly ignored: readonly LegacyIgnoredItem[];
-  /** What the first start of Reload moved from InnyTypes (plan 0028 step 1), when anything did. */
+  /** What the first start of Reload moved from Reload (plan 0028 step 1), when anything did. */
   readonly moved?: readonly string[];
 }
 

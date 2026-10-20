@@ -371,7 +371,7 @@ export class PackageInstaller {
   /** Why `name` cannot be installed now, or null. */
   #refusedName(name: string): string | null {
     if (this.#ports.shipped().some((shipped) => shipped.name === name)) {
-      return `${name} is the name of a package shipped with InnyTypes`;
+      return `${name} is the name of a package shipped with Reload`;
     }
     let installed: InstalledRecord | undefined;
     try {

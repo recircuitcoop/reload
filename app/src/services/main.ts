@@ -53,15 +53,15 @@ import type { SecretStore } from "../ports/secret-store";
 const registry = new SecretRegistry();
 const logWith = (name: string, pid: number) =>
   sourceLog({ name, pid, write: syncWriter(1), now: () => Date.now(), registry });
-const logger = logWith("innytypes.services", process.pid);
-printCanary(logger, process.env["INNYTYPES_LOG_CANARY"]);
+const logger = logWith("reload.services", process.pid);
+printCanary(logger, process.env["RELOAD_LOG_CANARY"]);
 // Said once, so the e2e harness can check every process runs in its scratch home.
 logger.info(`this process's HOME is ${process.env["HOME"] ?? "(unset)"}`);
 const host = processHostOver(process);
 const link = shellLinkOver(process.parentPort);
 
 /**
- * The e2e gate's substitutes, as one JSON object in INNYTYPES_TEST_ANYTYPE; unset in every
+ * The e2e gate's substitutes, as one JSON object in RELOAD_TEST_ANYTYPE; unset in every
  * ordinary run. `entry` (and `args`) replace the pinned package with a fake MCP child, `surface`
  * names a recorded surface to hold it to, and `heartbeatMs` shortens the ping interval.
  */
@@ -71,7 +71,7 @@ interface TestSubstitutes {
   readonly surface?: string;
   readonly heartbeatMs?: number;
 }
-const substitutes = JSON.parse(process.env["INNYTYPES_TEST_ANYTYPE"] ?? "{}") as TestSubstitutes;
+const substitutes = JSON.parse(process.env["RELOAD_TEST_ANYTYPE"] ?? "{}") as TestSubstitutes;
 
 // Anytype's local API: the desktop app's port, or where ANYTYPE_API_BASE_URL points (anytype-cli).
 const apiBaseUrl = process.env["ANYTYPE_API_BASE_URL"]?.trim() || DEFAULT_API_BASE_URL;
@@ -79,16 +79,16 @@ const apiBaseUrl = process.env["ANYTYPE_API_BASE_URL"]?.trim() || DEFAULT_API_BA
 const anytypeApi = new AnytypeClient({ apiBaseUrl, redact: (text) => registry.redact(text) });
 
 // The node that runs the pinned package (plan 0018 §1; WI-0018-23): this target's bundled Node
-// once INNYTYPES_RUNTIMES_DIR names its fetched runtimes, else Electron's own binary run as
+// once RELOAD_RUNTIMES_DIR names its fetched runtimes, else Electron's own binary run as
 // node, which is all a dev run or a test has.
-const runtimesDir = process.env["INNYTYPES_RUNTIMES_DIR"];
+const runtimesDir = process.env["RELOAD_RUNTIMES_DIR"];
 const runtimeLocator: RuntimeLocator =
   runtimesDir !== undefined && runtimesDir !== ""
     ? new BundledRuntimeLocator(runtimesDir, process.platform)
     : new SystemRuntimeLocator(
         process.env,
         process.platform,
-        path.join(os.tmpdir(), "innytypes-uv-cache"),
+        path.join(os.tmpdir(), "reload-uv-cache"),
       );
 const node = runtimeLocator.node();
 const surface =
@@ -155,7 +155,7 @@ function keyLocation(files: SecretPaths): string {
 /**
  * The loopback MCP endpoint (§4.1 points 3 and 4): the gateway in front of the validated child,
  * behind the existing proxy token file (created once, owner-only, when there is none), at the
- * address stored in userData's settings.json, else INNYTYPES_MCP_HOST and INNYTYPES_MCP_PORT.
+ * address stored in userData's settings.json, else RELOAD_MCP_HOST and RELOAD_MCP_PORT.
  * Null when the token cannot be read; the reason is logged and answered to General.
  */
 /** WI-0018-25: the pid the old helper's lock names, or null when there is none to read. */

@@ -17,7 +17,7 @@ import { ELECTRON_BINARY } from "./app-harness";
 const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "fixtures");
 
 test("minisign verifies both forms and refuses a tampered file in Electron's own crypto", () => {
-  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "inny-minisign-"));
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-minisign-"));
   try {
     const bundle = path.join(scratch, "electron-check.cjs");
     buildSync({

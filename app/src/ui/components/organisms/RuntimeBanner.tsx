@@ -1,5 +1,5 @@
 // Runtime banner (Penpot 04 Organisms › runtime-banner). State: Restarting, Down. Full width
-// under the top bar, 48 high: the waiting-soft fill while InnyTypes restarts itself, the
+// under the top bar, 48 high: the waiting-soft fill while Reload restarts itself, the
 // failed-soft fill once it gave up, with Restart as the Primary button. It belongs to no surface;
 // any page shows it. Right after an update, a crash loop also offers Go back beside Restart
 // (plan 0022 §G, D4), as a Secondary button: offered, never applied.

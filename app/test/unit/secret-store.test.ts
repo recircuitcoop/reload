@@ -77,7 +77,7 @@ function redactor(): { registry: SecretRegistry; sink: SecretSink } {
 let userData: string;
 
 beforeEach(() => {
-  userData = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "inny-keychain-")));
+  userData = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-keychain-")));
 });
 
 afterEach(() => {

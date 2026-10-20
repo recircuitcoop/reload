@@ -23,8 +23,8 @@ export const STRUCTURAL_TYPES: readonly string[] = ["tab", "subflow", "group"];
 /** The module Node-RED gives its core nodes and every local node file (the generated types). */
 export const CORE_MODULE = "node-red";
 
-/** `inny-<package>-<id>` (spec 2.1): a package name has no hyphen, so the first one ends it. */
-const INNY_TYPE = /^inny-([a-z][a-z0-9_]{1,39})-[a-z][a-z0-9_-]{0,63}$/;
+/** `reload-<package>-<id>` (spec 2.1): a package name has no hyphen, so the first one ends it. */
+const RELOAD_TYPE = /^reload-([a-z][a-z0-9_]{1,39})-[a-z][a-z0-9_-]{0,63}$/;
 
 const PASS: GuardAnswer = { ok: true };
 
@@ -73,20 +73,20 @@ export function typesNamedIn(route: FlowsRoute, body: unknown): string[] {
   return [...types];
 }
 
-/** The created event types' types, `inny-user-events-<name>-v<N>` (spec 9.5). */
+/** The created event types' types, `reload-user-events-<name>-v<N>` (spec 9.5). */
 const USER_EVENTS_TYPE = new RegExp(
-  `^inny-${USER_EVENTS_PACKAGE}-[a-z][a-z0-9_]{1,39}-v[1-9][0-9]*$`,
+  `^reload-${USER_EVENTS_PACKAGE}-[a-z][a-z0-9_]{1,39}-v[1-9][0-9]*$`,
 );
 
 /**
- * The package an InnyTypes type belongs to, or null when the type is not one. `user-events`,
+ * The package a Reload type belongs to, or null when the type is not one. `user-events`,
  * reserved for created event types, is the one name with a hyphen (spec 2.1.2).
  */
-export function innyPackageOf(type: string): string | null {
+export function reloadPackageOf(type: string): string | null {
   if (USER_EVENTS_TYPE.test(type)) {
     return USER_EVENTS_PACKAGE;
   }
-  return INNY_TYPE.exec(type)?.[1] ?? null;
+  return RELOAD_TYPE.exec(type)?.[1] ?? null;
 }
 
 /** The set that registers `type`: loaded, enabled, and listing it. */
@@ -99,7 +99,7 @@ function registeringSet(type: string, sets: readonly NodeSet[]): NodeSet | undef
  *
  * - Structure (`tab`, `subflow`, `group`, `subflow:*`) is always allowed.
  * - Every other type must be registered.
- * - An InnyTypes type (`inny-<package>-<id>`) must also belong to a verified package.
+ * - A Reload type (`reload-<package>-<id>`) must also belong to a verified package.
  * - Any other type must be one of Node-RED's own: with the palette lock (spec 11.4, 11.5) those
  *   are `core/common`. A type from a module is refused even if something let it load.
  */
@@ -116,9 +116,9 @@ export function refusedTypes(
     if (set === undefined) {
       return true;
     }
-    const innyPackage = innyPackageOf(type);
-    if (innyPackage !== null) {
-      return !verified.has(innyPackage);
+    const reloadPackage = reloadPackageOf(type);
+    if (reloadPackage !== null) {
+      return !verified.has(reloadPackage);
     }
     return set.module !== CORE_MODULE;
   });
@@ -182,7 +182,7 @@ export class DeployGuard implements RequestGuard {
     return {
       ok: false,
       status: 400,
-      body: { code: "unknown_types", message: `Not installed in InnyTypes: ${list}` },
+      body: { code: "unknown_types", message: `Not installed in Reload: ${list}` },
     };
   }
 }

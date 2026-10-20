@@ -4,10 +4,10 @@
  * builds the CSS, and there is no PostCSS or Vite (decision D2).
  *
  * Colour comes from tokens only. The generated dist/generated/tokens.css (tools/tokens/build.mjs,
- * never committed) defines every --inny-* property for both themes; the @theme block below
+ * never committed) defines every --reload-* property for both themes; the @theme block below
  * clears Tailwind's own palette and scales and binds the utilities to those properties, so
  * `bg-accent`, `text-primary`, `rounded-m` and `p-4` are tokens and `bg-red-500` does not exist.
- * `inline` makes each utility read the --inny-* property itself, so a theme switched on any
+ * `inline` makes each utility read the --reload-* property itself, so a theme switched on any
  * element (data-theme) reaches it. tools/tokens/check.mjs fails the gate on any raw colour here.
  */
 @import "tailwindcss" source(none);
@@ -19,74 +19,74 @@
 @theme inline {
   /* Colour: the semantic tokens only, never a ramp (docs/ux/design-system.md, Foundations). */
   --color-*: initial;
-  --color-surface-canvas: var(--inny-surface-canvas);
-  --color-surface-panel: var(--inny-surface-panel);
-  --color-surface-sunken: var(--inny-surface-sunken);
-  --color-surface-line: var(--inny-surface-line);
-  --color-primary: var(--inny-text-primary);
-  --color-secondary: var(--inny-text-secondary);
-  --color-muted: var(--inny-text-muted);
-  --color-on-accent: var(--inny-text-on-accent);
-  --color-accent: var(--inny-accent-default);
-  --color-accent-soft: var(--inny-accent-soft);
-  --color-accent-on: var(--inny-accent-on);
-  --color-running: var(--inny-state-running);
-  --color-running-soft: var(--inny-state-running-soft);
-  --color-waiting: var(--inny-state-waiting);
-  --color-waiting-soft: var(--inny-state-waiting-soft);
-  --color-done: var(--inny-state-done);
-  --color-done-soft: var(--inny-state-done-soft);
-  --color-failed: var(--inny-state-failed);
-  --color-failed-soft: var(--inny-state-failed-soft);
-  --color-focus: var(--inny-focus);
+  --color-surface-canvas: var(--reload-surface-canvas);
+  --color-surface-panel: var(--reload-surface-panel);
+  --color-surface-sunken: var(--reload-surface-sunken);
+  --color-surface-line: var(--reload-surface-line);
+  --color-primary: var(--reload-text-primary);
+  --color-secondary: var(--reload-text-secondary);
+  --color-muted: var(--reload-text-muted);
+  --color-on-accent: var(--reload-text-on-accent);
+  --color-accent: var(--reload-accent-default);
+  --color-accent-soft: var(--reload-accent-soft);
+  --color-accent-on: var(--reload-accent-on);
+  --color-running: var(--reload-state-running);
+  --color-running-soft: var(--reload-state-running-soft);
+  --color-waiting: var(--reload-state-waiting);
+  --color-waiting-soft: var(--reload-state-waiting-soft);
+  --color-done: var(--reload-state-done);
+  --color-done-soft: var(--reload-state-done-soft);
+  --color-failed: var(--reload-state-failed);
+  --color-failed-soft: var(--reload-state-failed-soft);
+  --color-focus: var(--reload-focus);
 
   /* Space: the 4px scale, by its token step (p-4 is space.4, 16px; p-5 is space.5, 24px). */
   --spacing: initial;
   --spacing-*: initial;
   --spacing-0: 0px;
-  --spacing-1: var(--inny-space-1);
-  --spacing-2: var(--inny-space-2);
-  --spacing-3: var(--inny-space-3);
-  --spacing-4: var(--inny-space-4);
-  --spacing-5: var(--inny-space-5);
-  --spacing-6: var(--inny-space-6);
-  --spacing-7: var(--inny-space-7);
-  --spacing-8: var(--inny-space-8);
+  --spacing-1: var(--reload-space-1);
+  --spacing-2: var(--reload-space-2);
+  --spacing-3: var(--reload-space-3);
+  --spacing-4: var(--reload-space-4);
+  --spacing-5: var(--reload-space-5);
+  --spacing-6: var(--reload-space-6);
+  --spacing-7: var(--reload-space-7);
+  --spacing-8: var(--reload-space-8);
 
   /* Shape. */
   --radius-*: initial;
-  --radius-s: var(--inny-radius-s);
-  --radius-m: var(--inny-radius-m);
-  --radius-l: var(--inny-radius-l);
-  --radius-pill: var(--inny-radius-pill);
+  --radius-s: var(--reload-radius-s);
+  --radius-m: var(--reload-radius-m);
+  --radius-l: var(--reload-radius-l);
+  --radius-pill: var(--reload-radius-pill);
 
   /* Elevation: two shadows only. */
   --shadow-*: initial;
-  --shadow-raised: var(--inny-shadow-raised);
-  --shadow-popout: var(--inny-shadow-popout);
+  --shadow-raised: var(--reload-shadow-raised);
+  --shadow-popout: var(--reload-shadow-popout);
 
   /* Type. */
   --font-*: initial;
-  --font-sans: var(--inny-font-family-sans);
-  --font-mono: var(--inny-font-family-mono);
+  --font-sans: var(--reload-font-family-sans);
+  --font-mono: var(--reload-font-family-mono);
   --text-*: initial;
-  --text-caption: var(--inny-font-size-caption);
-  --text-body: var(--inny-font-size-body);
-  --text-body-large: var(--inny-font-size-body-large);
-  --text-title: var(--inny-font-size-title);
-  --text-page: var(--inny-font-size-page);
+  --text-caption: var(--reload-font-size-caption);
+  --text-body: var(--reload-font-size-body);
+  --text-body-large: var(--reload-font-size-body-large);
+  --text-title: var(--reload-font-size-title);
+  --text-page: var(--reload-font-size-page);
   --font-weight-*: initial;
-  --font-weight-regular: var(--inny-font-weight-regular);
-  --font-weight-medium: var(--inny-font-weight-medium);
-  --font-weight-semibold: var(--inny-font-weight-semibold);
+  --font-weight-regular: var(--reload-font-weight-regular);
+  --font-weight-medium: var(--reload-font-weight-medium);
+  --font-weight-semibold: var(--reload-font-weight-semibold);
   --leading-*: initial;
-  --leading-tight: var(--inny-font-lineheight-tight);
-  --leading-body: var(--inny-font-lineheight-body);
+  --leading-tight: var(--reload-font-lineheight-tight);
+  --leading-body: var(--reload-font-lineheight-body);
   --tracking-*: initial;
-  --tracking-label: var(--inny-font-letterspacing-label);
+  --tracking-label: var(--reload-font-letterspacing-label);
 
   /* Motion. */
-  --default-transition-duration: var(--inny-duration-quick);
+  --default-transition-duration: var(--reload-duration-quick);
 }
 
 /*
@@ -187,14 +187,14 @@
 
 @layer base {
   html {
-    font-family: var(--inny-font-family-sans);
-    font-size: var(--inny-font-size-body);
-    line-height: var(--inny-font-lineheight-body);
+    font-family: var(--reload-font-family-sans);
+    font-size: var(--reload-font-size-body);
+    line-height: var(--reload-font-lineheight-body);
   }
 
   body {
-    background-color: var(--inny-surface-canvas);
-    color: var(--inny-text-primary);
+    background-color: var(--reload-surface-canvas);
+    color: var(--reload-text-primary);
   }
 
   /*

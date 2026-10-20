@@ -55,7 +55,7 @@ export function NumberField({
       <NumberInput.Control
         className={fieldBoxClass(
           state,
-          "h-[var(--inny-size-control)] items-center gap-1 pr-1 pl-3",
+          "h-[var(--reload-size-control)] items-center gap-1 pr-1 pl-3",
         )}
       >
         <NumberInput.Input

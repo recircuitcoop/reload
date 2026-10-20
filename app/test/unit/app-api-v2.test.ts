@@ -192,7 +192,7 @@ function harness() {
     },
   };
   const logger = new RecordingLogger();
-  const dialogs = { folder: "/Users/me/packages/innyrize" as string | null };
+  const dialogs = { folder: "/Users/me/packages/reload_summarize" as string | null };
   const quits: number[] = [];
   const board = new FakeBoard();
   /** The editor's canvas: deployed nodes and steps not saved yet, with their names. */
@@ -210,7 +210,7 @@ function harness() {
   // The run watch's count (shell/run-notices.ts has its own tests): none waiting here.
   const pending = { pending: () => 0, onChange: () => undefined };
   // Node-RED's saved flows, where the runtime loads them from; none until a test writes it.
-  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "inny-v2-"));
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-v2-"));
   const flowsFile = path.join(scratch, "flows.json");
   const boardsFile = path.join(scratch, "boards.json");
   const updateCalls = wireAppCalls({
@@ -642,22 +642,22 @@ describe("AppApi v2 calls, through the shell to its processes", () => {
       value: [
         flow("a", {
           name: "Recordings to Anytype",
-          steps: steps("inny-innyrize-diarize", "Transcribe"),
+          steps: steps("reload-reload_summarize-diarize", "Transcribe"),
         }),
         flow("b", {
           name: "Invoices from the mailbox",
-          steps: steps("inny-innyrize-pdf", "Read PDF"),
+          steps: steps("reload-reload_summarize-pdf", "Read PDF"),
         }),
-        flow("c", { name: "Photos", steps: steps("inny-anytype-create", "File") }),
+        flow("c", { name: "Photos", steps: steps("reload-reload_anytype-create", "File") }),
       ],
     }));
-    expect(await h.api.unregisterPackage("innyrize")).toEqual({
+    expect(await h.api.unregisterPackage("reload_summarize")).toEqual({
       ok: false,
       refused: {
         reason: "in-use",
         sentence: "packages.inUse.many",
         inUse: {
-          name: "innyrize",
+          name: "reload_summarize",
           action: "unregister",
           uses: [
             { flow: "Recordings to Anytype", step: "Transcribe" },
@@ -666,7 +666,7 @@ describe("AppApi v2 calls, through the shell to its processes", () => {
         },
       },
     });
-    expect(await h.api.unregisterPackage("anytype")).toMatchObject({
+    expect(await h.api.unregisterPackage("reload_anytype")).toMatchObject({
       refused: { sentence: "packages.inUse.one" },
     });
     expect(await h.api.unregisterPackage("monty")).toEqual({ ok: true, value: null });
@@ -674,9 +674,11 @@ describe("AppApi v2 calls, through the shell to its processes", () => {
     // A source counts as a use as much as a step does.
     h.runtime.answers.set("flow.list", () => ({
       ok: true,
-      value: [flow("d", { name: "Watch", sources: steps("inny-folder-watch", "New file") })],
+      value: [
+        flow("d", { name: "Watch", sources: steps("reload-reload_folder-watch", "New file") }),
+      ],
     }));
-    expect(await h.api.uninstallPackage("folder")).toMatchObject({
+    expect(await h.api.uninstallPackage("reload_folder")).toMatchObject({
       refused: {
         sentence: "packages.inUse.one",
         inUse: { action: "remove", uses: [{ flow: "Watch", step: "New file" }] },
@@ -684,11 +686,11 @@ describe("AppApi v2 calls, through the shell to its processes", () => {
     });
     // A step on the canvas, not saved: a use as much as a deployed one, named as the canvas does.
     h.canvas.nodes = [
-      { id: "New file", type: "inny-folder-watch", name: "New file", flow: "Watch" },
-      { id: "draft", type: "inny-folder-watch", name: "Draft watch", flow: "Sketch" },
+      { id: "New file", type: "reload-reload_folder-watch", name: "New file", flow: "Watch" },
+      { id: "draft", type: "reload-reload_folder-watch", name: "Draft watch", flow: "Sketch" },
       { id: "other", type: "inject", name: "inject", flow: "Sketch" },
     ];
-    expect(await h.api.unregisterPackage("folder")).toMatchObject({
+    expect(await h.api.unregisterPackage("reload_folder")).toMatchObject({
       refused: {
         sentence: "packages.inUse.many",
         inUse: {
@@ -744,7 +746,7 @@ describe("AppApi v2 calls, through the shell to its processes", () => {
     expect(h.sent.some(([channel]) => channel === IPC.packagesChanged)).toBe(true);
     expect(await h.api.chooseInstallFolder()).toEqual({
       ok: true,
-      value: { folder: "/Users/me/packages/innyrize" },
+      value: { folder: "/Users/me/packages/reload_summarize" },
     });
     h.dialogs.folder = null;
     expect(await h.api.chooseInstallFolder()).toEqual({ ok: true, value: { folder: null } });

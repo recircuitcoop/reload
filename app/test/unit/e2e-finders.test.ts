@@ -5,7 +5,7 @@
 //
 // The one exception is Node-RED's own editor inside the canvas's frame: its palette, its header,
 // its edit tray and its form inputs are Node-RED's markup (`.red-ui-*` classes, `#red-ui-*`,
-// `#node-input-*` and `#node-dialog-*` ids), which InnyTypes does not draw and cannot give test ids.
+// `#node-input-*` and `#node-dialog-*` ids), which Reload does not draw and cannot give test ids.
 // Reading what a found element holds (its text, its attributes, its children in an evaluate) is
 // not finding, and is not what this checks.
 import fs from "node:fs";

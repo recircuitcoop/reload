@@ -24,10 +24,10 @@ export function isChannelError(result: CallResult): result is ChannelError {
 }
 
 const WORDING: Readonly<Record<ChannelErrorCode, (child: ChildName) => string>> = {
-  restarting: (child) => `the InnyTypes ${child} is restarting; try again in a moment`,
-  down: (child) => `the InnyTypes ${child} stopped unexpectedly and is not back yet`,
-  timeout: (child) => `the InnyTypes ${child} did not answer in time`,
-  stopped: (child) => `the InnyTypes ${child} stopped before it answered`,
+  restarting: (child) => `the Reload ${child} is restarting; try again in a moment`,
+  down: (child) => `the Reload ${child} stopped unexpectedly and is not back yet`,
+  timeout: (child) => `the Reload ${child} did not answer in time`,
+  stopped: (child) => `the Reload ${child} stopped before it answered`,
 };
 
 export function channelError(code: ChannelErrorCode, child: ChildName): ChannelError {

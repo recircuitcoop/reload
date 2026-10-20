@@ -53,8 +53,8 @@ const SCHEMA = {
   type: "object",
   required: ["space_id"],
   properties: {
-    space_id: { type: "string", title: "Space", innytype: { spaces: true } },
-    type_key: { type: "string", innytype: { types: { of: "space_id" } }, default: "page" },
+    space_id: { type: "string", title: "Space", reload: { spaces: true } },
+    type_key: { type: "string", reload: { types: { of: "space_id" } }, default: "page" },
     note: { type: "string", description: "Said in the note." },
     token: { type: "string", writeOnly: true, title: "Token" },
     count: { type: "integer", default: 2 },
@@ -63,7 +63,7 @@ const SCHEMA = {
     mode: { enum: ["fast", "slow"] },
     rows: { type: "array", items: { type: "object" } },
     group: { type: "object" },
-    odd: { type: "string", innytype: { spaces: true, types: { of: "x" } } },
+    odd: { type: "string", reload: { spaces: true, types: { of: "x" } } },
     broken: 7,
   },
 };
@@ -85,17 +85,17 @@ describe("a step's form", () => {
     expect(fields[0]).toMatchObject({
       label: "Space",
       required: true,
-      innytype: { source: "spaces" },
+      reload: { source: "spaces" },
     });
     expect(fields[1]).toMatchObject({
       label: "type_key",
       required: false,
-      innytype: { source: "types", of: "space_id" },
+      reload: { source: "types", of: "space_id" },
     });
     expect(fields[2]?.help).toBe("Said in the note.");
     expect(fields[7]?.options).toEqual(["fast", "slow"]);
     // Both sources at once is no source, as the domain reads it.
-    expect(fields[8]?.innytype).toBeNull();
+    expect(fields[8]?.reload).toBeNull();
     expect(setupFields({})).toEqual([]);
     expect(setupFields({ properties: { a: { type: "string" } }, required: "a" })[0]?.required).toBe(
       false,

@@ -48,7 +48,7 @@ let reported: unknown[];
 const TYPE = userNodeType("note", 1);
 
 beforeEach(async () => {
-  scratch = fs.mkdtempSync(path.join(os.tmpdir(), "inny-created-sources-"));
+  scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-created-sources-"));
   fired = [];
   inputs = [];
   started = [];
@@ -144,8 +144,8 @@ describe("a created source in the Node-RED glue", () => {
     red.create(TYPE, { id: "src1", z: "tab9", wires: [["next"]] });
     const { spec, host } = started[0] ?? { spec: null, host: null };
     expect(spec?.identity).toMatchObject({ id: "src1", flowId: "tab9", kind: "source" });
-    const inny = { event: {} as never, run: "evt-1" };
-    host?.send({ index: 0, port: "out", message: { payload: { title: "T" }, topic: "x", inny } });
+    const reload = { event: {} as never, run: "evt-1" };
+    host?.send({ index: 0, port: "out", message: { payload: { title: "T" }, topic: "x", reload } });
     expect(reported).toEqual([
       { emitted: { flowId: "tab9", runId: "evt-1", type: "x", data: { title: "T" } } },
     ]);

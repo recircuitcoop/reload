@@ -5,7 +5,7 @@
     "id": "strangers",
     "name": "Strangers",
     "line": "x",
-    "packages": ["anytype"],
+    "packages": ["reload_anytype"],
     "official": false
   },
   { "id": "absent", "name": "Absent", "line": "x", "packages": [], "official": true },
@@ -15,7 +15,7 @@
     "id": "unshipped",
     "name": "Unshipped",
     "line": "x",
-    "packages": ["anytype", "monty"],
+    "packages": ["reload_anytype", "monty"],
     "official": false,
     "starter": true
   },

@@ -224,7 +224,7 @@ describe("the shell's flow relay", () => {
   });
 
   it("saves an export where the person chooses, and says when they cancelled", async () => {
-    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "inny-export-"));
+    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-export-"));
     try {
       const file = path.join(scratch, "out.json");
       const exported = { name: "Invoices: 2026/10", nodes: [{ id: "t", type: "tab" }] };

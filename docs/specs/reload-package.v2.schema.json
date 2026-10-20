@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://innytypes/schemas/inny-package.v2.json",
+  "$id": "https://reload/schemas/reload-package.v2.json",
   "type": "object",
   "required": ["protocol", "package", "version", "types"],
   "properties": {
@@ -49,14 +49,14 @@
     "config": { "type": "object", "$ref": "#/$defs/configProperty" },
     "configProperty": {
       "properties": {
-        "innytype": { "$ref": "#/$defs/innytype" },
+        "reload": { "$ref": "#/$defs/reload" },
         "properties": { "type": "object", "additionalProperties": { "$ref": "#/$defs/configProperty" } },
         "items": { "$ref": "#/$defs/configProperty" }
       },
-      "if": { "required": ["innytype"] },
+      "if": { "required": ["reload"] },
       "then": { "properties": { "type": { "const": "string" } }, "required": ["type"] }
     },
-    "innytype": {
+    "reload": {
       "type": "object",
       "properties": {
         "spaces": { "const": true },

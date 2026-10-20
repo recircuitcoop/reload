@@ -62,7 +62,7 @@ export function MultiSelect({
       <ArkCombobox.Control
         className={fieldBoxClass(
           "default",
-          "min-h-[var(--inny-size-control)] flex-wrap items-center gap-1 py-1 pr-2 pl-1",
+          "min-h-[var(--reload-size-control)] flex-wrap items-center gap-1 py-1 pr-2 pl-1",
         )}
       >
         {chosen.map((option) => (

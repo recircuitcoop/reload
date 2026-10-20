@@ -192,7 +192,7 @@ describe("serveShell", () => {
         v: 1,
         t: "reply",
         rid: "r9",
-        result: { ok: false, error: "the InnyTypes services does not serve view.get yet" },
+        result: { ok: false, error: "the Reload services does not serve view.get yet" },
       },
     ]);
   });

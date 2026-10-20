@@ -86,7 +86,7 @@ export const eventTypeName = (name: string, version: number): string =>
 /** The type id in the `user-events` package: `<name>-v<N>` (spec 2.1.3 allows the hyphen). */
 export const userTypeId = (name: string, version: number): string => `${name}-v${String(version)}`;
 
-/** The Node-RED type of a created version: `inny-user-events-<name>-v<N>`. */
+/** The Node-RED type of a created version: `reload-user-events-<name>-v<N>`. */
 export const userNodeType = (name: string, version: number): string =>
   nodeTypeName(USER_EVENTS_PACKAGE, userTypeId(name, version));
 

@@ -8,13 +8,13 @@ import { createStores, StoresContext } from "./store";
 
 declare global {
   interface Window {
-    readonly inny: { readonly app: AppApi };
+    readonly reload: { readonly app: AppApi };
   }
 }
 
 const mount = document.getElementById("frame");
 if (mount !== null) {
-  const api = window.inny.app;
+  const api = window.reload.app;
   createRoot(mount).render(
     <StoresContext.Provider value={createStores(api)}>
       <Frame api={api} />

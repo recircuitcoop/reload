@@ -35,7 +35,7 @@ let host: PublishingHost;
 let now = NOW;
 
 beforeEach(() => {
-  scratch = fs.mkdtempSync(path.join(os.tmpdir(), "inny-catalogue-"));
+  scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-catalogue-"));
   host = new PublishingHost();
   now = NOW;
 });

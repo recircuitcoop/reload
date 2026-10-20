@@ -72,7 +72,7 @@ export class OneLog implements SecretSink {
 
   /** One line of `child`'s stdout or stderr pipe. `pid` is the child's, when it is known. */
   ingest(child: string, pid: number | null, stream: ChildStream, line: Line): void {
-    const name = `innytypes.${child}`;
+    const name = `reload.${child}`;
     const printed = (level: LevelName, text: string): void => {
       if (text === "" && !line.cut) {
         return; // a blank line says nothing (children.py skips them too)
@@ -111,13 +111,13 @@ export class OneLog implements SecretSink {
     readonly destination: string | null;
     readonly levelProblem: string | null;
   }): void {
-    const logger = this.logger("innytypes.logs", options.pid);
+    const logger = this.logger("reload.logs", options.pid);
     const level = levelLabel(this.#deps.level);
     if (options.levelProblem !== null) {
       logger.warn(`${options.levelProblem}; logging at ${level} instead`);
     }
     logger.info(
-      `innytypes ${options.role} (process ${String(options.pid)}) is logging to ` +
+      `reload ${options.role} (process ${String(options.pid)}) is logging to ` +
         `${options.destination ?? "nowhere"} at ${level}`,
     );
   }

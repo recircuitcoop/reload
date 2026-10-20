@@ -51,7 +51,7 @@ let generatedDir: string;
 let shippedRoot: string;
 
 beforeEach(() => {
-  base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "inny-install-")));
+  base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-install-")));
   roots = new FsPackageRoots(path.join(base, "node-packages"));
   logger = new RecordingLogger();
   signer = new Signer();
@@ -63,10 +63,10 @@ beforeEach(() => {
   inUse = { deployed: [], undeployed: [] };
   generatedDir = path.join(base, "generated");
   shippedRoot = path.join(base, "shipped");
-  // One shipped package, as packages/anytype ships with the app.
+  // One shipped package, as packages/reload_anytype ships with the app.
   fs.mkdirSync(path.join(shippedRoot, "anytype"), { recursive: true });
   fs.writeFileSync(
-    path.join(shippedRoot, "anytype", "inny-package.json"),
+    path.join(shippedRoot, "anytype", "reload-package.json"),
     declaration("anytype", "1.0.0"),
   );
 });
@@ -107,7 +107,7 @@ function declaration(name: string, version: string): string {
 }
 
 const packageFiles = (name = "pinger", version = "0.1.0"): Files => ({
-  "inny-package.json": declaration(name, version),
+  "reload-package.json": declaration(name, version),
   "node.js": "process.stdout.write('')\n",
 });
 
@@ -229,7 +229,7 @@ function declarationsWritten(): string[] {
   }
   return fs
     .readdirSync(root, { recursive: true, encoding: "utf8" })
-    .filter((file) => path.basename(file) === "inny-package.json");
+    .filter((file) => path.basename(file) === "reload-package.json");
 }
 
 function folderOf(files: Files): string {
@@ -371,7 +371,7 @@ describe("install from the catalogue", () => {
     const { installer } = setUp();
     expect(await installer.installFromCatalogue("anytype")).toEqual({
       ok: false,
-      error: "Not installed: anytype is the name of a package shipped with InnyTypes.",
+      error: "Not installed: anytype is the name of a package shipped with Reload.",
     });
     served.set(ARCHIVE_URL, signedArchive(packageFiles("other"), signer));
     expect(await installer.installFromCatalogue("pinger")).toEqual({
@@ -468,7 +468,7 @@ describe("install from a file, for developers", () => {
     );
     expect(outcome).toEqual({
       ok: false,
-      error: "Not installed: anytype is the name of a package shipped with InnyTypes",
+      error: "Not installed: anytype is the name of a package shipped with Reload",
     });
     expect(declarationsWritten()).toEqual([]);
   });
@@ -527,11 +527,11 @@ describe("removal", () => {
 
   it("is refused while a deployed flow uses its types", async () => {
     const { remover } = await installed();
-    inUse = { deployed: ["tab", "inny-pinger-ping", "debug"], undeployed: null };
+    inUse = { deployed: ["tab", "reload-pinger-ping", "debug"], undeployed: null };
     expect(await remover.remove("pinger")).toEqual({
       ok: false,
       error:
-        "Not removed: the deployed flows use inny-pinger-ping; delete those nodes (and deploy) " +
+        "Not removed: the deployed flows use reload-pinger-ping; delete those nodes (and deploy) " +
         "before removing it.",
     });
     expect(roots.installed("pinger")).toBeDefined();
@@ -540,11 +540,11 @@ describe("removal", () => {
 
   it("is refused while an undeployed flow in the editor uses its types", async () => {
     const { remover } = await installed();
-    inUse = { deployed: [], undeployed: ["inny-pinger-ping", "inject"] };
+    inUse = { deployed: [], undeployed: ["reload-pinger-ping", "inject"] };
     expect(await remover.remove("pinger")).toEqual({
       ok: false,
       error:
-        "Not removed: the editor's undeployed flows use inny-pinger-ping; delete those nodes " +
+        "Not removed: the editor's undeployed flows use reload-pinger-ping; delete those nodes " +
         "(and deploy) before removing it.",
     });
     expect(roots.installed("pinger")).toBeDefined();
@@ -562,18 +562,18 @@ describe("removal", () => {
   it("otherwise takes the environment, the record and the generated modules, and restarts only the runtime", async () => {
     const { remover } = await installed();
     fs.mkdirSync(generatedDir, { recursive: true });
-    for (const file of ["inny-pinger-ping.js", "inny-pinger-ping.html", "inny-other-x.js"]) {
+    for (const file of ["reload-pinger-ping.js", "reload-pinger-ping.html", "reload-other-x.js"]) {
       fs.writeFileSync(path.join(generatedDir, file), "");
     }
     // Another package's type in use does not hold this one.
-    inUse = { deployed: ["inny-pingerx-ping"], undeployed: ["inny-other-x"] };
+    inUse = { deployed: ["reload-pingerx-ping"], undeployed: ["reload-other-x"] };
     expect(await remover.remove("pinger")).toEqual({
       ok: true,
       message: "pinger 0.1.0 is removed.",
     });
     expect(roots.installed("pinger")).toBeUndefined();
     expect(fs.existsSync(path.join(roots.live, "pinger"))).toBe(false);
-    expect(fs.readdirSync(generatedDir)).toEqual(["inny-other-x.js"]);
+    expect(fs.readdirSync(generatedDir)).toEqual(["reload-other-x.js"]);
     expect(restarts).toEqual(["pinger was removed"]);
     expect(logger.lines).toContainEqual(
       expect.stringContaining("only the runtime restarted, in 312 ms"),
@@ -586,7 +586,7 @@ describe("removal", () => {
     const { remover } = setUp();
     expect(await remover.remove("anytype")).toEqual({
       ok: false,
-      error: "Not removed: anytype is shipped with InnyTypes and cannot be removed.",
+      error: "Not removed: anytype is shipped with Reload and cannot be removed.",
     });
     expect(await remover.remove("pinger")).toEqual({
       ok: false,
@@ -602,9 +602,9 @@ describe("removal", () => {
   });
 
   it("finds a package's types by their prefix only", () => {
-    expect(typesOf("pinger", ["inny-pinger-a", "inny-pinger-a", "inny-pingers-b", "x"])).toEqual([
-      "inny-pinger-a",
-    ]);
+    expect(
+      typesOf("pinger", ["reload-pinger-a", "reload-pinger-a", "reload-pingers-b", "x"]),
+    ).toEqual(["reload-pinger-a"]);
   });
 });
 
@@ -628,7 +628,7 @@ describe("the installed-package store", () => {
       path.join(roots.live, "broken", "installed.json"),
       JSON.stringify({ package: "broken", version: "1", signed: true }),
     );
-    fs.writeFileSync(path.join(roots.live, "broken", "package", "inny-package.json"), "{");
+    fs.writeFileSync(path.join(roots.live, "broken", "package", "reload-package.json"), "{");
     const store = new InstalledPackageStore(shipped(), roots, logger);
     expect(store.packages()).toEqual(["anytype", "pinger"]);
     expect(store.documents()[0]?.installed).toBe(false);
@@ -643,7 +643,7 @@ describe("the installed-package store", () => {
     const folder = roots.stage("snake");
     roots.writeFiles(
       folder.packageDir,
-      new Map([["inny-package.json", new TextEncoder().encode(declaration("snake", "1.0.0"))]]),
+      new Map([["reload-package.json", new TextEncoder().encode(declaration("snake", "1.0.0"))]]),
     );
     roots.writeRecord(folder, {
       package: "snake",

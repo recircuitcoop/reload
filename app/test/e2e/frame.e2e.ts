@@ -23,8 +23,8 @@ const hashOf = (window: Page) => window.evaluate(() => globalThis.location.hash)
 async function completeSetup(window: Page): Promise<void> {
   const answer = await window.evaluate(() =>
     (
-      globalThis as unknown as { inny: { app: { completeSetup(): Promise<{ ok: boolean }> } } }
-    ).inny.app.completeSetup(),
+      globalThis as unknown as { reload: { app: { completeSetup(): Promise<{ ok: boolean }> } } }
+    ).reload.app.completeSetup(),
   );
   expect(answer.ok).toBe(true);
 }
@@ -190,14 +190,14 @@ test("the quit question shows and is answered even when Setup's state cannot be 
     await app.evaluate(({ ipcMain }) => {
       const answers: unknown[] = [];
       (globalThis as unknown as { quitAnswers: unknown[] }).quitAnswers = answers;
-      ipcMain.removeHandler("inny:quit-answer");
-      ipcMain.handle("inny:quit-answer", (_event, choice: unknown) => {
+      ipcMain.removeHandler("reload:quit-answer");
+      ipcMain.handle("reload:quit-answer", (_event, choice: unknown) => {
         answers.push(choice);
       });
     });
     // A quit whose Save failed asks again, saying why (shell/quit-question.ts ask(problem)).
     await app.evaluate(({ BrowserWindow }) => {
-      BrowserWindow.getAllWindows()[0]?.webContents.send("inny:quit-question", {
+      BrowserWindow.getAllWindows()[0]?.webContents.send("reload:quit-question", {
         problem: "The deploy <b>failed</b>.",
       });
     });
@@ -322,7 +322,7 @@ test("the frame fills the window, and reloads whole while the runtime is killed 
     // kill -9, and the page reloaded at once: it is the shell's, so it comes back whole.
     process.kill(runtime.pid, "SIGKILL");
     await window.reload();
-    expect(window.url().split("#")[0]).toBe("inny-app://app/index.html");
+    expect(window.url().split("#")[0]).toBe("reload-app://app/index.html");
     await expect(frame(window)).toHaveAttribute("data-route", "general", { timeout: 15_000 });
     runtime = await waitForRunning(window, "runtime", runtime.generation + 1);
 

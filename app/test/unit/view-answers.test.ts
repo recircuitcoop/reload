@@ -85,7 +85,7 @@ let node: FrameNode;
 function attach(answer: JsonSchema | null): void {
   const view: LiveView = {
     node,
-    type: "inny-kit-reorder",
+    type: "reload-kit-reorder",
     package: "kit",
     label: "Reorder",
     window: "popout",
@@ -291,14 +291,14 @@ describe("view answers, judged in the runtime", () => {
       expect(
         logger.has(
           new RegExp(
-            `view ${id} of type inny-kit-reorder: .*\\(type at #/properties/order/type\\)`,
+            `view ${id} of type reload-kit-reorder: .*\\(type at #/properties/order/type\\)`,
           ),
         ),
       ).toBe(true);
       expect(
         logger.has(
           new RegExp(
-            `view ${id} of type inny-kit-reorder: .*\\(additionalProperties at #/additionalProperties\\)`,
+            `view ${id} of type reload-kit-reorder: .*\\(additionalProperties at #/additionalProperties\\)`,
           ),
         ),
       ).toBe(true);
@@ -380,7 +380,7 @@ describe("view answers, judged in the runtime", () => {
       node = new FrameNode();
       service.attach("rec", {
         node,
-        type: "inny-kit-record",
+        type: "reload-kit-record",
         package: "kit",
         label: "Record",
         window: "popout",

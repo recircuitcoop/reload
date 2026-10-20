@@ -40,7 +40,7 @@ describe("forking", () => {
     expect(launcher.specs).toEqual([
       {
         modulePath: "/app/dist/runtime/main.cjs",
-        serviceName: "InnyTypes runtime",
+        serviceName: "Reload runtime",
         env: { HOME: "/home/test" },
       },
     ]);

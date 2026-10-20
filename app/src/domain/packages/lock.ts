@@ -171,7 +171,7 @@ export function lockText(lock: EnvironmentLock): string {
     ].join(" \\\n    "),
   );
   return (
-    "# Re-emitted by InnyTypes from the package's own lock; the environment beside it was\n" +
+    "# Re-emitted by Reload from the package's own lock; the environment beside it was\n" +
     "# installed from exactly this file, with `uv pip sync --require-hashes`.\n" +
     blocks.join("\n") +
     "\n"

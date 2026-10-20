@@ -3,7 +3,7 @@
 // to the process. The rules themselves are in domain/journal; the store is the JournalStore
 // port.
 //
-// Replay without a marker (plan 0018 §7). The spike tagged a replayed message `_innyReplay`,
+// Replay without a marker (plan 0018 §7). The spike tagged a replayed message `_reloadReplay`,
 // and the tag reached Catch and Complete. Here the replayed message carries its four journaled
 // fields and nothing else; this instance remembers the message OBJECT it handed to Node-RED
 // (a WeakMap), and knows it again when Node-RED's `receive` delivers that same object back as

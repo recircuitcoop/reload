@@ -1,20 +1,20 @@
-# The Python SDK: `innytypes-node`
+# The Python SDK: `reload-node`
 
-Source: `sdk/python/src/innytypes_node/`. Standard library only — no dependency your package
+Source: `sdk/python/src/reload_node/`. Standard library only — no dependency your package
 ever has to reconcile with another package's, or with the host's (`sdk/python/pyproject.toml`
 declares `dependencies = []`, and `sdk/python/tests/test_stdlib_only.py` holds it, both as a
 declared fact and by inspecting every import in the module).
 
 ## Install
 
-Your package's `requirements.lock` names `innytypes-node` like any other pinned, hash-locked
+Your package's `requirements.lock` names `reload-node` like any other pinned, hash-locked
 dependency (`docs/authors/packaging.md`). During development, point your interpreter at
 `sdk/python/src` directly, or `uv pip install -e sdk/python` from the repository root.
 
 ## The `Node` class
 
 ```python
-from innytypes_node import Node
+from reload_node import Node
 
 node = Node()  # reads and checks the start frame; sends nothing before that (spec 4.1)
 
@@ -68,8 +68,8 @@ with no input to fail) is logged instead.
   `Node()` reads the start frame, every value in `credentials` is registered with the
   redactor. A credential that turns up in a log line or an exception message becomes
   `"[redacted]"` — you do not have to remember to call `protect()` yourself. Call
-  `innytypes_node.protect(secret)` for anything else worth protecting (a token you fetch at
-  runtime, say), and `innytypes_node.redact(text)` to redact text by hand.
+  `reload_node.protect(secret)` for anything else worth protecting (a token you fetch at
+  runtime, say), and `reload_node.redact(text)` to redact text by hand.
 - **A frame over 1 MiB is refused before it is ever sent** (`FrameTooLargeError`, spec §3.5):
   the runtime would only discard it and fail the input anyway. Pass a large payload as a file
   path instead (the pattern `folderflow`'s fixture uses for a folder).
@@ -79,5 +79,5 @@ with no input to fail) is logged instead.
 
 ## A complete example
 
-`sdk/python/examples/echo` is a whole installable package — its `inny-package.json`, its one
+`sdk/python/examples/echo` is a whole installable package — its `reload-package.json`, its one
 file, nothing else — worth reading end to end before writing your own.

@@ -71,10 +71,10 @@ describe("the quit", () => {
     const { quit, events, asked } = flow({
       palette: DIRTY,
       answers: ["deploy", "cancel"],
-      deploys: ["Not installed in InnyTypes: exec"],
+      deploys: ["Not installed in Reload: exec"],
     });
     await expect(quit.request({ ask: true })).resolves.toBe("cancelled");
-    expect(asked).toEqual([null, "Not installed in InnyTypes: exec"]);
+    expect(asked).toEqual([null, "Not installed in Reload: exec"]);
     expect(events).toEqual(["ask", "deploy", "ask"]);
     expect(quit.idle).toBe(true);
     expect(quit.done).toBe(false);

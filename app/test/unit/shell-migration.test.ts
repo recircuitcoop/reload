@@ -205,7 +205,7 @@ describe("wireMigration", () => {
     });
     let deleted = false;
     const legacyPackages = {
-      list: () => (deleted ? [] : ["monty", "innyrize"]),
+      list: () => (deleted ? [] : ["monty", "reload_summarize"]),
       deleteAll: () => {
         deleted = true;
       },
@@ -224,16 +224,16 @@ describe("wireMigration", () => {
       logger,
       firstStart: NOTHING_MOVED,
     });
-    expect(raised).toContain("InnyTypes found plugin environments from the old installation");
+    expect(raised).toContain("Reload found plugin environments from the old installation");
     expect(deleted).toBe(false);
-    expect(call("inny:legacy-packages")).toEqual(["monty", "innyrize"]);
+    expect(call("reload:legacy-packages")).toEqual(["monty", "reload_summarize"]);
     expect(deleted).toBe(false); // listing is not deleting
-    expect(call("inny:delete-legacy-packages")).toEqual(["monty", "innyrize"]);
+    expect(call("reload:delete-legacy-packages")).toEqual(["monty", "reload_summarize"]);
     expect(deleted).toBe(true);
-    expect(call("inny:legacy-packages")).toEqual([]);
+    expect(call("reload:legacy-packages")).toEqual([]);
   });
 
-  it("after InnyTypes 0.3.0's userData moved, registers the new login item, removes the old one and records the move", () => {
+  it("after Reload 0.3.0's userData moved, registers the new login item, removes the old one and records the move", () => {
     const settings = memorySettings();
     settings.writeLaunchAtLogin(true); // 0.3.0's switch, moved with its settings
     const { item: legacyLoginItem, removed } = fakeLegacyLoginItem(true);

@@ -31,7 +31,7 @@ const at = (minute: number) => new Date(2026, 9, 6, 14, minute);
 const envelope = (id: string) => ({
   specversion: "1.0",
   id,
-  source: "inny://livekit/recorder/rec",
+  source: "reload://livekit/recorder/rec",
   type: "livekit.recording.v1",
   time: "2026-10-06T12:00:00.000Z",
   datacontenttype: "application/json",
@@ -64,13 +64,13 @@ const KEPT: JournaledMessage[] = [
   {
     payload: { title: "rec1" },
     topic: "livekit.recording.v1",
-    inny: { event: envelope("r1"), run: "r1" },
+    reload: { event: envelope("r1"), run: "r1" },
     _msgid: "m1",
   },
   {
     payload: { title: "rec1" },
     topic: "livekit.copied.v1",
-    inny: { event: envelope("e2"), run: "r1", cause: "i1" },
+    reload: { event: envelope("e2"), run: "r1", cause: "i1" },
     _msgid: "m1",
   },
 ];
@@ -92,7 +92,7 @@ class Fixture {
     id: FLOW,
     label: "Recordings",
     disabled: false,
-    nodes: ["rec", "copy", "work"].map((id) => ({ id, type: `inny-livekit-${id}`, z: FLOW })),
+    nodes: ["rec", "copy", "work"].map((id) => ({ id, type: `reload-livekit-${id}`, z: FLOW })),
     configs: [],
   };
   storeFails = false;
@@ -173,7 +173,7 @@ describe("re-run (plan 0022 §E)", () => {
         message: {
           payload: { title: "rec1" },
           topic: "livekit.recording.v1",
-          inny: {
+          reload: {
             event: { ...envelope("new1"), time: new Date(5_000).toISOString() },
             run: "new1",
           },
@@ -207,7 +207,7 @@ describe("re-run (plan 0022 §E)", () => {
         message: {
           payload: { title: "rec1" },
           topic: "livekit.copied.v1",
-          inny: { event: envelope("e2"), run: "new1", cause: "i1" },
+          reload: { event: envelope("e2"), run: "new1", cause: "i1" },
         },
       },
     ]);
@@ -239,7 +239,7 @@ describe("re-run (plan 0022 §E)", () => {
     );
     fixture.runs.set("new1", fromWork);
     const work = KEPT[1] as JournaledMessage;
-    fixture.kept.set("new1", [{ ...work, inny: { ...(work.inny as object), run: "new1" } }]);
+    fixture.kept.set("new1", [{ ...work, reload: { ...(work.reload as object), run: "new1" } }]);
 
     // Re-run: the source's event of r1, from the recorder, as a run from the start.
     await fixture.actions.call("run.rerun", { flowId: FLOW, runId: "new1" });
@@ -262,7 +262,7 @@ describe("re-run (plan 0022 §E)", () => {
     expect(fixture.started.at(-1)?.results).toEqual([]);
     // From Work again: new1's own input, Copy's kept result kept again, Work's dropped.
     await fixture.actions.call("run.rerun", { flowId: FLOW, runId: "new1", from: "work" });
-    expect(fixture.redelivered.at(-1)?.message.inny).toMatchObject({ run: "new4" });
+    expect(fixture.redelivered.at(-1)?.message.reload).toMatchObject({ run: "new4" });
     expect(fixture.started.at(-1)?.results?.map((result) => result.text)).toEqual(["Copied rec1"]);
 
     // The run its source started is no longer kept: there is no source event to send again.
@@ -313,7 +313,7 @@ describe("re-run (plan 0022 §E)", () => {
     expect(await rerun({ from: "late" })).toEqual(refusal(NOT_REACHED_SENTENCE));
     expect(await rerun({ runId: "r2", from: "work" })).toEqual(refusal(NOT_REACHED_SENTENCE));
 
-    // A source event that names no InnyTypes source (a Node-RED inject fed the first step).
+    // A source event that names no Reload source (a Node-RED inject fed the first step).
     fixture.kept.set("r2", [{ payload: 1 }, null]);
     expect(await rerun({ runId: "r2" })).toEqual(refusal(NO_STEP_SENTENCE));
     fixture.kept.set("r2", []);
@@ -413,11 +413,11 @@ describe("delete (plan 0022 §E)", () => {
 });
 
 describe("sourceOf", () => {
-  it("names the emitting instance from the envelope's inny:// source, else nothing", () => {
+  it("names the emitting instance from the envelope's reload:// source, else nothing", () => {
     expect(sourceOf(KEPT[0] as JournaledMessage)).toBe("rec");
     expect(sourceOf({ payload: 1 })).toBeNull();
-    expect(sourceOf({ payload: 1, inny: { event: { source: "https://x/y" } } })).toBeNull();
-    expect(sourceOf({ payload: 1, inny: { event: { source: "inny://a/b/" } } })).toBeNull();
-    expect(sourceOf({ payload: 1, inny: { event: "nope" } })).toBeNull();
+    expect(sourceOf({ payload: 1, reload: { event: { source: "https://x/y" } } })).toBeNull();
+    expect(sourceOf({ payload: 1, reload: { event: { source: "reload://a/b/" } } })).toBeNull();
+    expect(sourceOf({ payload: 1, reload: { event: "nope" } })).toBeNull();
   });
 });

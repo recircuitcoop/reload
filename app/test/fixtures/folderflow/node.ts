@@ -4,7 +4,7 @@
 //
 // - `watch` (a source): every file that appears in `folder` after start is emitted on `file`
 //   as {name, body}, a new run each. Polled, so it behaves the same on every platform.
-// - `link` (a snapshot view): each input, an anytype.object.created.v1 payload, is recorded as
+// - `link` (a snapshot view): each input, an reload_anytype.object.created.v1 payload, is recorded as
 //   a snapshot whose content is `{title, anytype: {objectId, spaceId, name}}`, then passed on.
 
 import * as fs from "node:fs";

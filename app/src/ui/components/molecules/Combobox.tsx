@@ -83,7 +83,7 @@ export function Combobox({
       <ArkCombobox.Control
         className={fieldBoxClass(
           open ? "focus" : "default",
-          "h-[var(--inny-size-control)] items-center gap-2 px-3",
+          "h-[var(--reload-size-control)] items-center gap-2 px-3",
         )}
       >
         <ArkCombobox.Input
