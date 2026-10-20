@@ -56,3 +56,7 @@ app/release/
 .env
 *.key
 credentials.toml
+
+# Local tool state (Serena, repo-scan output), not project files
+.serena/
+scan-output/
