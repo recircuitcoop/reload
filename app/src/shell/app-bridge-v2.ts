@@ -94,7 +94,7 @@ export function appApiV2Over(ipc: RendererIpc): AppApiV2 {
     onPackages: (listener) => {
       on(IPC.packagesChanged, listener);
     },
-    anytypeSpaces: () => flow("anytype.spaces"),
+    anytypeSpaces: (fresh) => flow("anytype.spaces", fresh === true ? { fresh: true } : null),
     status: () => general("status.get"),
     onStatus: (listener) => {
       on(IPC.statusChanged, listener);

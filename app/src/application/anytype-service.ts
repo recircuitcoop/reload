@@ -118,7 +118,8 @@ export async function serveAnytypeOptions(
   args: unknown,
 ): Promise<OpResult> {
   if (op === "anytype.spaces") {
-    return { ok: true, value: await service.spaces() };
+    const fresh = (args as { fresh?: unknown } | null)?.fresh === true;
+    return { ok: true, value: await service.spaces(fresh) };
   }
   const spaceId =
     typeof args === "object" && args !== null ? (args as Record<string, unknown>)["spaceId"] : null;
@@ -202,9 +203,9 @@ export class AnytypeService {
     return this.#pairing.start();
   }
 
-  /** The paired Anytype's spaces, or why they cannot be listed. */
-  spaces(): Promise<readonly SpaceEntry[] | OptionsRefusal> {
-    return this.#list("spaces", (key) => this.#deps.api.listSpaces(key));
+  /** The paired Anytype's spaces, or why they cannot be listed; `fresh`: never from memory. */
+  spaces(fresh = false): Promise<readonly SpaceEntry[] | OptionsRefusal> {
+    return this.#list("spaces", (key) => this.#deps.api.listSpaces(key), fresh);
   }
 
   /** The types of `spaceId` that are not archived, or why they cannot be listed. */
@@ -232,15 +233,17 @@ export class AnytypeService {
   // ── what a step's form chooses from ─────────────────────────────────────────────────────
 
   /**
-   * One list, from memory while it is younger than OPTIONS_CACHE_MS, else read with the key.
-   * A refusal is never kept: the person may open Anytype, or pair, a moment later.
+   * One list, from memory while it is younger than OPTIONS_CACHE_MS, else read with the key;
+   * `fresh` reads it now, and keeps what it read. A refusal is never kept: the person may open
+   * Anytype, or pair, a moment later.
    */
   async #list<T>(
     name: string,
     read: (key: string) => Promise<readonly T[]>,
+    fresh = false,
   ): Promise<readonly T[] | OptionsRefusal> {
     const kept = this.#listed.get(name);
-    if (kept !== undefined && this.#deps.clock.now() - kept.at < OPTIONS_CACHE_MS) {
+    if (!fresh && kept !== undefined && this.#deps.clock.now() - kept.at < OPTIONS_CACHE_MS) {
       return kept.entries as readonly T[];
     }
     let key: string | null;

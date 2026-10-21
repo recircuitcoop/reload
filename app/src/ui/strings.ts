@@ -14,8 +14,6 @@
 //   `general.aiApps.setup` (the endpoint's URL, in the command Copy setup copies) and
 //   `packages.fromFolder.caption` (the folder a package came from).
 //
-// The Setup walkthrough's screens, in order, are ux-writing's "The first run (Setup)".
-//
 // Lines ux-writing does not give, decided by WI-0022-10 and marked `// decided`: the first tab's
 // name, the between-steps lines, the unchecked and going-back update states, a check that failed
 // for another reason than the connection, three or more uses in one refusal, a shipped package's
@@ -67,6 +65,7 @@ export const STRINGS = {
   "setup.example.skip": "Skip the example",
   "setup.example.needsAnytype": "The example needs Anytype. Connect it first.",
   "setup.example.noSpace": "Anytype has no space yet. Create one in Anytype, then come back.",
+  "setup.example.checkAgain": "Check again",
   "setup.folder.title": "Source folder",
   "setup.folder.body": "Choose the folder Reload watches. Every new file in it starts your flow.",
   "setup.folder.choose": "Choose a folder…",

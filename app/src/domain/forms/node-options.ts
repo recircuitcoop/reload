@@ -8,9 +8,13 @@
 //
 // Pure: no I/O, no library.
 
-/** What a form asks for: the paired Anytype's spaces, or one space's types. */
+/**
+ * What a form asks for: the paired Anytype's spaces, or one space's types. `fresh` spaces are
+ * read from Anytype now, past the services process's memory of them (Setup's Check again).
+ */
 export type OptionsQuery =
-  { readonly source: "spaces" } | { readonly source: "types"; readonly spaceId: string };
+  | { readonly source: "spaces"; readonly fresh?: true }
+  | { readonly source: "types"; readonly spaceId: string };
 
 /** One option: the plain string the node stores, and the name a person reads. */
 export interface NodeOption {
@@ -64,7 +68,7 @@ export function parseOptionsQuery(raw: unknown): OptionsQuery | null {
     return null;
   }
   if (raw["source"] === "spaces") {
-    return { source: "spaces" };
+    return raw["fresh"] === true ? { source: "spaces", fresh: true } : { source: "spaces" };
   }
   const spaceId = raw["spaceId"] ?? raw["space"];
   if (raw["source"] === "types" && typeof spaceId === "string" && spaceId !== "") {

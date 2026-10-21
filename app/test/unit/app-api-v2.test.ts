@@ -371,6 +371,12 @@ describe("AppApi v2 calls, through the shell to its processes", () => {
       ok: true,
       value: { options: [{ value: "s1", label: "Work" }] },
     });
+    // Check again: the same resolver, asked to read Anytype now.
+    expect((await h.api.anytypeSpaces(true)).ok).toBe(true);
+    expect(h.runtime.calls.filter(([op]) => op === "node.options").slice(-2)).toEqual([
+      ["node.options", { source: "spaces" }],
+      ["node.options", { source: "spaces", fresh: true }],
+    ]);
   });
 
   it("board: kept in boards.json, reconciled at read time, changed in Edit layout", async () => {

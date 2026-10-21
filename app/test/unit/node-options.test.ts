@@ -111,6 +111,11 @@ function channel(): [PeerLink & { sent: unknown[] }, PeerLink & { sent: unknown[
 describe("the options a form asks for, and their answers", () => {
   it("reads a query from the page and from the route's search parameters, and refuses others", () => {
     expect(parseOptionsQuery({ source: "spaces" })).toEqual({ source: "spaces" });
+    expect(parseOptionsQuery({ source: "spaces", fresh: true })).toEqual({
+      source: "spaces",
+      fresh: true,
+    });
+    expect(parseOptionsQuery({ source: "spaces", fresh: "yes" })).toEqual({ source: "spaces" });
     expect(parseOptionsQuery({ source: "types", spaceId: "sp1" })).toEqual({
       source: "types",
       spaceId: "sp1",
@@ -179,6 +184,18 @@ describe("the services process's spaces and types", () => {
     clock.advance(1);
     await subject.spaces();
     expect(api.listed).toHaveLength(4);
+  });
+
+  it("reads the spaces now when asked fresh (Setup's Check again), and keeps what it read", async () => {
+    const { subject, api } = services();
+    await subject.spaces();
+    expect(await serveAnytypeOptions(subject, "anytype.spaces", { fresh: true })).toMatchObject({
+      ok: true,
+    });
+    expect(api.listed).toHaveLength(2);
+    // Not fresh: from memory, the list just read.
+    await serveAnytypeOptions(subject, "anytype.spaces", {});
+    expect(api.listed).toHaveLength(2);
   });
 
   it("forgets every list when a new pairing lands", async () => {
@@ -289,6 +306,16 @@ describe("the runtime's resolver", () => {
     });
     return { resolver, asked, logger };
   };
+
+  it("passes a fresh spaces query on to the services process", async () => {
+    const spaces = resolverOver({ ok: true, value: SPACES });
+    await spaces.resolver.resolve({ source: "spaces", fresh: true });
+    await spaces.resolver.resolve({ source: "spaces" });
+    expect(spaces.asked).toEqual([
+      ["anytype.spaces", { fresh: true }],
+      ["anytype.spaces", {}],
+    ]);
+  });
 
   it("turns spaces into id options and types into key options, named, or by their value when unnamed", async () => {
     const spaces = resolverOver({ ok: true, value: SPACES });

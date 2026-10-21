@@ -126,8 +126,10 @@ export function wireFlowCalls({ ipc, runtime, editor, logger, dialog }: FlowCall
         return saveCanvas(editor, logger);
       }
       if (op === "anytype.spaces") {
-        // Setup's "Found 8 spaces.": the same resolver a form's space choice uses.
-        const spaces = await runtime.call("node.options", { source: "spaces" });
+        // Setup's "Found 8 spaces.": the same resolver a form's space choice uses; `fresh` passed on.
+        const fresh = (args as { fresh?: unknown } | null)?.fresh === true;
+        const query = fresh ? { source: "spaces", fresh: true } : { source: "spaces" };
+        const spaces = await runtime.call("node.options", query);
         return flowAnswer(spaces, op, logger);
       }
       const read = FLOW_READS.find((each) => each === op);

@@ -111,10 +111,14 @@ export function GeneralScreen({
 
 // ── Anytype ──────────────────────────────────────────────────────────────────────────────────
 
-/** Anytype's state, asked every ANYTYPE_POLL_MS, and its spaces once it is ready. */
+/**
+ * Anytype's state, asked every ANYTYPE_POLL_MS, and its spaces once it is ready; `checkAgain`
+ * reads the spaces again from Anytype itself, past the services process's memory of them.
+ */
 export function useAnytype(api: AppApi) {
   const [status, set] = useState<AnytypeStatus | null>(null);
   const [spaces, setSpaces] = useState<Answer<NodeOptions> | null>(null);
+  const [checked, setChecked] = useState(0);
   useEffect(() => {
     let live = true;
     const ask = () => {
@@ -139,14 +143,17 @@ export function useAnytype(api: AppApi) {
       return;
     }
     let live = true;
-    void api.anytypeSpaces().then((answer) => {
+    void api.anytypeSpaces(checked > 0).then((answer) => {
       if (live) setSpaces(answer);
     });
     return () => {
       live = false;
     };
-  }, [api, ready]);
-  return { status, spaces, set };
+  }, [api, ready, checked]);
+  const checkAgain = useCallback(() => {
+    setChecked((times) => times + 1);
+  }, []);
+  return { status, spaces, set, checkAgain };
 }
 
 function AnytypeSection({

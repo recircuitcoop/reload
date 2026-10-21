@@ -106,7 +106,7 @@ Configuration, which Setup cannot reach). A step form's refusal names its fields
 | Anytype, done | | "Connected. Found 8 spaces." | Continue |
 | Example | **Start with an example?** | "The example files every new file in a folder you choose as a page in Anytype. You can change it or delete it later in Configuration › Flows." | Back · Skip the example · Use the example |
 | Example, Anytype not connected | **Start with an example?** | The same, then "The example needs Anytype. Connect it first." | Back · Skip the example · Connect Anytype (back to the Anytype step) |
-| Example, Anytype has no space | **Start with an example?** | The same, then "Anytype has no space yet. Create one in Anytype, then come back." | Back · Skip the example |
+| Example, Anytype has no space | **Start with an example?** | The same, then "Anytype has no space yet. Create one in Anytype, then come back." Read again when the window is back in front. | Back · Skip the example · Check again |
 | Source folder | **Source folder** | "Choose the folder Reload watches. Every new file in it starts your flow." After choosing: the folder's name, in full, under the button. | Choose a folder… · Back · Skip the example · Continue |
 | Node forms | **Set up: *step name*** (one per step of the starter) | The step's description, then its form. Progress: "Step 1 of 2." | Back · Skip the example · Continue |
 | Ready | **Ready** | "Your flow is on. Drop a file in *folder* to start. Or try it now with a 10-second sample." | Try with a sample · Open Live · I'll build my own (secondary) |

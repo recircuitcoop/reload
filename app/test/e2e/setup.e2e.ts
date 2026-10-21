@@ -572,6 +572,40 @@ test("the step form, Anytype not connected: Connect Anytype goes back to Setup's
   }
 });
 
+test("Anytype with no space: the example waits for one, and Check again finds it", async () => {
+  test.setTimeout(180_000);
+  const { scratch, env, canaryKey } = scratchDirectories();
+  const connected = await connectedAnytype(scratch, canaryKey);
+  connected.anytype.spaces = [];
+  const apps: ElectronApplication[] = [];
+  try {
+    const { app, window } = await launchApp({ ...env, ...connected.env });
+    apps.push(app);
+    const seen: string[] = [];
+    await welcomeAndReports(window, seen);
+    await expect(window.getByTestId("setup-anytype")).toHaveText("Connected. Found 0 spaces.", {
+      timeout: 30_000,
+    });
+    await button(window, "setup.continue").click();
+    await at(window, "example", seen);
+    // No space to file in: said plainly, and no Use the example.
+    await expect(window.getByTestId("setup-example-no-space")).toHaveText(
+      STRINGS["setup.example.noSpace"],
+      { timeout: 20_000 },
+    );
+    await expect(window.getByTestId("setup-example-use")).toHaveCount(0);
+    // The person makes a space in Anytype, then checks again: read from Anytype, not memory.
+    connected.anytype.spaces = [{ id: "sp-work", name: "Work" }];
+    await window.getByTestId("setup-example-check").click();
+    await expect(window.getByTestId("setup-example-use")).toBeVisible({ timeout: 20_000 });
+    await expect(window.getByTestId("setup-example-no-space")).toHaveCount(0);
+    await quit(app);
+  } finally {
+    await cleanUp(apps, scratch);
+    await connected.anytype.close();
+  }
+});
+
 test("Skip the example on Source folder removes the starter it installed", async () => {
   test.setTimeout(180_000);
   const { scratch, env, canaryKey } = scratchDirectories();

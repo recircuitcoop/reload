@@ -52,7 +52,7 @@ export class NodeOptions {
   async resolve(query: OptionsQuery): Promise<OptionsAnswer> {
     const [op, args, idKey] =
       query.source === "spaces"
-        ? (["anytype.spaces", {}, "id"] as const)
+        ? (["anytype.spaces", query.fresh === true ? { fresh: true } : {}, "id"] as const)
         : (["anytype.types", { spaceId: query.spaceId }, "key"] as const);
     const result = await this.#deps.ask(op, args);
     if (!result.ok) {
@@ -77,7 +77,7 @@ export class NodeOptions {
     return { options: options as NodeOption[] };
   }
 
-  /** The shell's `node.options` call (Setup, WI-0022-16): `{source, spaceId?}`. */
+  /** The shell's `node.options` call (Setup, WI-0022-16): `{source, spaceId?, fresh?}`. */
   async call(args: unknown): Promise<OpResult> {
     const query = parseOptionsQuery(args);
     if (query === null) {

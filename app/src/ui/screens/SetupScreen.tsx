@@ -155,6 +155,17 @@ function Step(props: StepProps) {
 function ExampleStep({ api, move }: StepProps) {
   const anytype = useAnytype(api);
   const readiness = exampleReadiness(anytype.status, anytype.spaces);
+  const { checkAgain } = anytype;
+  // No space yet: the person makes one in Anytype, then comes back to this window.
+  useEffect(() => {
+    if (readiness !== "no-space") {
+      return;
+    }
+    window.addEventListener("focus", checkAgain);
+    return () => {
+      window.removeEventListener("focus", checkAgain);
+    };
+  }, [readiness, checkAgain]);
   return (
     <SetupStep
       title={t("setup.example.title")}
@@ -178,6 +189,11 @@ function ExampleStep({ api, move }: StepProps) {
               onClick={() => void move({ kind: "connectAnytype" })}
             >
               {t("setup.anytype.title")}
+            </Button>
+          ) : null}
+          {readiness === "no-space" ? (
+            <Button kind="primary" data-testid="setup-example-check" onClick={checkAgain}>
+              {t("setup.example.checkAgain")}
             </Button>
           ) : null}
           {readiness === "ready" || readiness === "unknown" ? (

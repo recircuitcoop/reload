@@ -167,8 +167,11 @@ export interface AppApiV2 {
   onPackages(listener: (changed: PackagesChanged) => void): void;
 
   // ── Anytype, status, General ──
-  /** The paired Anytype's spaces (Setup's "Found 8 spaces."). */
-  anytypeSpaces(): FlowAnswer<NodeOptions>;
+  /**
+   * The paired Anytype's spaces (Setup's "Found 8 spaces."). `fresh`: read from Anytype now, not
+   * from the services process's memory of them (Setup's Check again).
+   */
+  anytypeSpaces(fresh?: boolean): FlowAnswer<NodeOptions>;
   /** The status pill, the runtime banner and the Live badge. */
   status(): Promise<Answer<StatusView>>;
   /** They changed: coalesced. */
