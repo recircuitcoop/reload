@@ -15,27 +15,41 @@
 //   function of node:fs and node:fs/promises is wrapped: a write to a path inside the real
 //   home is refused before it reaches the disk, and recorded, so the test fails even when
 //   the code under test swallows the refusal. This catches what redirection cannot: a path
-//   spelled out, or captured before the redirection happened.
+//   spelled out, or captured before the redirection happened. A Node child a test starts
+//   with the inherited environment is closed the same way: NODE_OPTIONS loads
+//   test/home-guard-child.cjs into it first, and its refusals are written to a file this
+//   process reads after each test, so they fail the test that started it.
 //
 // Two places inside the real home stay writable: the temp directory (when it lives there)
 // and this repository's checkout, which on a developer machine usually sits under the home.
 //
-// What it cannot see, said plainly: a child process, whose writes happen outside this
-// process's fs module, when it was started with an environment that does not name the
+// What it cannot see, said plainly: a child that is not Node (Python, a shell) writing a real
+// home path it spelled out, and any child started with an environment of its own that names
+// neither the scratch home nor NODE_OPTIONS. Those are caught only by what they leave in the
 // scratch home.
 // The default export: the module object itself, whose functions can be replaced. A
 // namespace import (`* as fs`) is frozen.
 import fs from "node:fs";
-import { syncBuiltinESMExports } from "node:module";
+import { createRequire, syncBuiltinESMExports } from "node:module";
 import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach } from "vitest";
 
-/** A test tried to change something in this user's real home. Not an fs error on purpose. */
-export class WriteToRealDirectory extends Error {
-  override name = "WriteToRealDirectory";
+// The refusal itself is shared with the child guard: one list of what a write is.
+interface FsGuard {
+  readonly WriteToRealDirectory: new (message: string) => Error;
+  readonly guardFs: (
+    fs: object,
+    state: { readonly realHomes: readonly string[]; readonly allowed: readonly string[] },
+    record: (entry: string) => void,
+  ) => void;
 }
+const fsGuard = createRequire(import.meta.url)("./home-guard-fs.cjs") as FsGuard;
+const CHILD_GUARD = fileURLToPath(new URL("./home-guard-child.cjs", import.meta.url));
+
+/** A test tried to change something in this user's real home. Not an fs error on purpose. */
+export const WriteToRealDirectory = fsGuard.WriteToRealDirectory;
 
 /** Names the scratch home to any process started from this one. */
 export const SANDBOX_VARIABLE = "RELOAD_TEST_HOME";
@@ -45,6 +59,8 @@ interface GuardState {
   readonly allowed: readonly string[];
   readonly sandboxHome: string;
   readonly blocked: string[];
+  /** Where a guarded child writes each refusal, one line each. */
+  readonly refusals: string;
 }
 
 // vitest can run several test files in one worker process, and every file runs its setup
@@ -66,119 +82,6 @@ function bothSpellings(location: string): string[] {
   return [...spellings];
 }
 
-function isInside(target: string, root: string): boolean {
-  return target === root || target.startsWith(root + path.sep);
-}
-
-function toPath(argument: unknown): string | null {
-  if (typeof argument === "string") {
-    return path.resolve(argument);
-  }
-  if (Buffer.isBuffer(argument)) {
-    return path.resolve(argument.toString("utf8"));
-  }
-  if (argument instanceof URL && argument.protocol === "file:") {
-    return path.resolve(fileURLToPath(argument));
-  }
-  return null; // a file descriptor, or nothing: no path to judge
-}
-
-/** The real-home path an argument names, or null when it names none. */
-function insideRealHome(state: GuardState, argument: unknown): string | null {
-  const target = toPath(argument);
-  if (target === null) {
-    return null;
-  }
-  if (state.allowed.some((root) => isInside(target, root))) {
-    return null;
-  }
-  return state.realHomes.some((root) => isInside(target, root)) ? target : null;
-}
-
-const WRITE_FLAGS =
-  fs.constants.O_WRONLY |
-  fs.constants.O_RDWR |
-  fs.constants.O_CREAT |
-  fs.constants.O_TRUNC |
-  fs.constants.O_APPEND;
-
-function opensForWriting(flags: unknown): boolean {
-  if (typeof flags === "number") {
-    return (flags & WRITE_FLAGS) !== 0;
-  }
-  if (typeof flags === "string") {
-    return /[wax+]/.test(flags);
-  }
-  return false; // the default flag is "r"
-}
-
-// Which arguments of each write-shaped function name a path the call changes.
-const FIRST_PATH = [
-  "appendFile",
-  "chmod",
-  "chown",
-  "lchmod",
-  "lchown",
-  "lutimes",
-  "mkdir",
-  "mkdtemp",
-  "rm",
-  "rmdir",
-  "truncate",
-  "unlink",
-  "utimes",
-  "writeFile",
-  "createWriteStream",
-] as const;
-const BOTH_PATHS = ["copyFile", "cp", "link", "rename", "symlink"] as const;
-
-type Checker = (args: unknown[]) => unknown[];
-
-const CHECKERS = new Map<string, Checker>([
-  ...FIRST_PATH.map((name): [string, Checker] => [name, (args) => [args[0]]]),
-  ...BOTH_PATHS.map((name): [string, Checker] => [name, (args) => [args[0], args[1]]]),
-  ["open", (args) => (opensForWriting(args[1]) ? [args[0]] : [])],
-]);
-
-function refusal(state: GuardState, name: string, args: unknown[]): WriteToRealDirectory | null {
-  const checker = CHECKERS.get(name.replace(/Sync$/, ""));
-  if (checker === undefined) {
-    return null;
-  }
-  for (const argument of checker(args)) {
-    const target = insideRealHome(state, argument);
-    if (target !== null) {
-      state.blocked.push(`fs.${name} ${target}`);
-      return new WriteToRealDirectory(`a test tried to fs.${name} ${target}, in this user's home`);
-    }
-  }
-  return null;
-}
-
-type AnyFunction = (...args: unknown[]) => unknown;
-
-/** Wrap every write-shaped function of one fs object; `rejects` for the promise API. */
-function guardObject(state: GuardState, target: object, rejects: boolean): void {
-  const functions = target as Record<string, unknown>;
-  for (const name of Object.keys(functions)) {
-    const original = functions[name];
-    if (typeof original !== "function" || !CHECKERS.has(name.replace(/Sync$/, ""))) {
-      continue;
-    }
-    const wrapped = function (this: unknown, ...args: unknown[]): unknown {
-      const error = refusal(state, name, args);
-      if (error !== null) {
-        if (rejects) {
-          return Promise.reject(error);
-        }
-        throw error;
-      }
-      return (original as AnyFunction).apply(this, args);
-    };
-    functions[name] = wrapped;
-  }
-}
-
 function install(): GuardState {
   const existing = holder[STATE_KEY];
   if (existing !== undefined) {
@@ -190,6 +93,8 @@ function install(): GuardState {
   const realHomes = [...new Set([os.homedir(), os.userInfo().homedir].flatMap(bothSpellings))];
   const allowed = [...new Set([os.tmpdir(), REPOSITORY].flatMap(bothSpellings))];
   const sandboxHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-home-")));
+  const refusals = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "reload-refusals-")), "log");
+  fs.writeFileSync(refusals, "");
 
   process.env[SANDBOX_VARIABLE] = sandboxHome;
   process.env["HOME"] = sandboxHome;
@@ -200,9 +105,15 @@ function install(): GuardState {
   process.env["XDG_CACHE_HOME"] = path.join(sandboxHome, ".cache");
   process.env["XDG_RUNTIME_DIR"] = path.join(sandboxHome, "run");
 
-  const state: GuardState = { realHomes, allowed, sandboxHome, blocked: [] };
-  guardObject(state, fs, false);
-  guardObject(state, fs.promises, true);
+  // Every Node child started with this environment guards itself the same way.
+  process.env["RELOAD_TEST_REAL_HOMES"] = JSON.stringify(realHomes);
+  process.env["RELOAD_TEST_ALLOWED"] = JSON.stringify(allowed);
+  process.env["RELOAD_TEST_REFUSALS"] = refusals;
+  process.env["NODE_OPTIONS"] =
+    `${process.env["NODE_OPTIONS"] ?? ""} --require ${JSON.stringify(CHILD_GUARD)}`.trim();
+
+  const state: GuardState = { realHomes, allowed, sandboxHome, blocked: [], refusals };
+  fsGuard.guardFs(fs, state, (entry) => state.blocked.push(entry));
   // ESM named imports of node:fs are bound to their own copies; this re-syncs them, so
   // `import { writeFileSync } from "node:fs"` gets the guarded function too.
   syncBuiltinESMExports();
@@ -210,6 +121,7 @@ function install(): GuardState {
   // Remove the scratch home when this worker ends. rmSync is allowed: it is not in the home.
   process.once("exit", () => {
     fs.rmSync(sandboxHome, { recursive: true, force: true });
+    fs.rmSync(path.dirname(refusals), { recursive: true, force: true });
   });
 
   holder[STATE_KEY] = state;
@@ -231,7 +143,9 @@ export const REAL_HOMES = state.realHomes;
  * is emptied afterwards, so one leaking test fails and the next starts clean.
  */
 export function collectLeaks(): string[] {
-  const leaks = state.blocked.map((entry) => `refused: ${entry}`);
+  const children = fs.readFileSync(state.refusals, "utf8").split("\n").filter(Boolean);
+  fs.writeFileSync(state.refusals, "");
+  const leaks = [...state.blocked, ...children].map((entry) => `refused: ${entry}`);
   state.blocked.length = 0;
   for (const entry of fs.readdirSync(SANDBOX_HOME).sort()) {
     const full = path.join(SANDBOX_HOME, entry);

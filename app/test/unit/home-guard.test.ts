@@ -1,5 +1,6 @@
 // The home guard is only worth anything while it can fail. Each test here makes it refuse or
 // report something, and takes the leak back with collectLeaks() so the test itself passes.
+import { spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import * as fsp from "node:fs/promises";
 import fs from "node:fs";
@@ -96,6 +97,79 @@ describe("the real home", () => {
     writeFileSync(path.join(scratch, "file"), "x");
     fs.rmSync(scratch, { recursive: true });
 
+    expect(collectLeaks()).toEqual([]);
+  });
+});
+
+describe("a child process started with the inherited environment", () => {
+  /** Run `script` in a Node child that inherits this test's environment, as a test would. */
+  function child(script: string): ReturnType<typeof spawnSync> {
+    return spawnSync(process.execPath, ["-e", script], { encoding: "utf8" });
+  }
+
+  it("is refused a write it spells out into the real home, and the test that started it fails", () => {
+    const probe = probeInRealHome();
+
+    // The child swallows the refusal and exits 0: what it leaves on record still fails the test.
+    const run = child(
+      `try { require("node:fs").writeFileSync(${JSON.stringify(probe)}, "x"); } ` +
+        `catch (error) { process.stdout.write(error.name); }`,
+    );
+
+    expect(run.status).toBe(0);
+    expect(run.stdout).toBe("WriteToRealDirectory");
+    expect(fs.existsSync(probe)).toBe(false);
+    expect(collectLeaks()).toEqual([
+      `refused: fs.writeFileSync ${probe} (child process ${String(run.pid)})`,
+    ]);
+  });
+
+  it("is refused through an ESM import of node:fs and the promise API too", () => {
+    const probe = probeInRealHome();
+
+    const run = spawnSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        `import { mkdirSync } from "node:fs"; import { writeFile } from "node:fs/promises";` +
+          `try { mkdirSync(${JSON.stringify(probe)}); } catch {}` +
+          `await writeFile(${JSON.stringify(probe)}, "x").catch(() => {});`,
+      ],
+      { encoding: "utf8" },
+    );
+
+    expect(run.status).toBe(0);
+    expect(fs.existsSync(probe)).toBe(false);
+    expect(collectLeaks()).toEqual([
+      `refused: fs.mkdirSync ${probe} (child process ${String(run.pid)})`,
+      `refused: fs.writeFile ${probe} (child process ${String(run.pid)})`,
+    ]);
+  });
+
+  it("writing where production code looks lands in the scratch home, and is reported", () => {
+    const run = child(
+      `const p = require("node:path").join(require("node:os").homedir(), ".config", "reload");` +
+        `require("node:fs").mkdirSync(p, { recursive: true });` +
+        `require("node:fs").writeFileSync(require("node:path").join(p, "settings.json"), "{}");`,
+    );
+
+    expect(run.status).toBe(0);
+    expect(collectLeaks()).toContain(
+      `written: ~/${path.join(".config", "reload", "settings.json")}`,
+    );
+  });
+
+  it("may still write in the temp directory", () => {
+    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-guard-"));
+
+    const run = child(
+      `require("node:fs").writeFileSync(${JSON.stringify(path.join(scratch, "file"))}, "x")`,
+    );
+
+    expect(run.status).toBe(0);
+    expect(fs.readFileSync(path.join(scratch, "file"), "utf8")).toBe("x");
+    fs.rmSync(scratch, { recursive: true });
     expect(collectLeaks()).toEqual([]);
   });
 });
