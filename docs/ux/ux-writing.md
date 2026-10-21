@@ -96,7 +96,7 @@ decides (for the example: **Space**, a list of the spaces by name, and **Save as
 that space). The fields the package marks advanced are never shown in Setup. When the spaces cannot be read:
 "Connect Anytype to choose a space." · **Connect Anytype**, back to Setup's Anytype step (never
 Configuration, which Setup cannot reach). A step form's refusal names its fields by their titles:
-"*File in Anytype* isn't set up yet: choose a space."
+"*File in Anytype* isn't set up yet: choose the Space."
 
 | Screen | Title | Body | Buttons |
 |---|---|---|---|

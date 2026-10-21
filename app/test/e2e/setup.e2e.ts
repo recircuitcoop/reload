@@ -358,7 +358,7 @@ test("the starter's forms, then Ready, then Open Live lands in Live", async () =
     // Continue with nothing chosen is refused, in words: never a schema key, anywhere.
     await button(window, "setup.continue").click();
     await expect(window.getByTestId("setup-message")).toHaveText(
-      "File in Anytype isn't set up yet: choose a space.",
+      "File in Anytype isn't set up yet: choose the Space.",
     );
     await expect(setupStep(window)).toHaveAttribute("data-step", "node-forms");
     expect(await shownText(window)).not.toMatch(/space_id|type_key|_field|api_base_url/);

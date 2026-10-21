@@ -195,30 +195,59 @@ describe("a refusal in the person's words", () => {
     type: "object",
     properties: {
       space_id: { type: "string", title: "Space", reload: { spaces: true } },
-      mode: { enum: ["fast", "slow"], title: "Order" },
-      folder: { type: "string", title: "Folder" },
-      limit: { type: "integer", title: "At most" },
+      user: { enum: ["me", "you"], title: "User" },
+      folder: { type: "string", title: "Folder", minLength: 1 },
+      api_key: { type: "string", title: "API key" },
+      url: { type: "string", title: "URL", pattern: "^https?://" },
+      token: { type: "string", title: "OpenAI token", maxLength: 8 },
+      limit: { type: "integer", title: "At most", minimum: 1, maximum: 100 },
       body_field: { type: "string" },
-      rows: {
+      volumes: {
         type: "array",
+        title: "Volumes",
         items: { type: "object", properties: { name: { type: "string", title: "Name" } } },
       },
     },
   };
+  const said = (path: string, message: string) => describedProblems(schema, [{ path, message }]);
 
-  it("names each property by its title, never its key", () => {
-    const said = describedProblems(schema, [
-      { path: "/space_id", message: "is required" },
-      { path: "/mode", message: "is required" },
-      { path: "/folder", message: "is required" },
-      { path: "/limit", message: "must be <= 1000" },
-      { path: "/rows/0/name", message: "is required" },
-      { path: "/body_field", message: "must be string" },
-      { path: "", message: "must be object" },
-    ]);
-    expect(said).toBe(
-      "choose a space; choose an order; fill in folder; At most must be <= 1000; fill in name; body field must be string; the form must be object",
+  it("a missing value: choose or fill in the property, its title exactly as written", () => {
+    expect(said("/space_id", "is required")).toBe("choose the Space");
+    expect(said("/user", "is required")).toBe("choose the User");
+    expect(said("/api_key", "is required")).toBe("fill in the API key");
+    expect(said("/url", "is required")).toBe("fill in the URL");
+    expect(said("/token", "is required")).toBe("fill in the OpenAI token");
+    // No title: the key, spaced, never as the schema spells it.
+    expect(said("/body_field", "is required")).toBe("fill in the body field");
+  });
+
+  it("what is wrong with a value, in plain words, never ajv's", () => {
+    expect(said("/limit", "must be <= 100")).toBe("At most must be 100 or less");
+    expect(said("/limit", "must be >= 1")).toBe("At most must be 1 or more");
+    expect(said("/limit", "must be integer")).toBe("At most must be a whole number");
+    expect(said("/folder", "must NOT have fewer than 1 characters")).toBe(
+      "Folder must not be empty",
     );
-    expect(said).not.toMatch(/space_id|body_field|\//);
+    expect(said("/token", "must NOT have more than 8 characters")).toBe(
+      "OpenAI token must be at most 8 characters long",
+    );
+    expect(said("/url", 'must match pattern "^https?://"')).toBe(
+      "URL is not in the form it must have",
+    );
+    expect(said("/user", "must be equal to one of the allowed values")).toBe(
+      "User must be one of its choices",
+    );
+    expect(said("", "must be object")).toBe("the form must be a group of values");
+  });
+
+  it("a table's row is named by the table and the row's number, from 1", () => {
+    expect(said("/volumes/0", "must be object")).toBe("Volumes, row 1: must be a group of values");
+    expect(said("/volumes/2/name", "is required")).toBe("Volumes, row 3: fill in the Name");
+    expect(
+      describedProblems(schema, [
+        { path: "/space_id", message: "is required" },
+        { path: "/limit", message: "must be <= 100" },
+      ]),
+    ).toBe("choose the Space; At most must be 100 or less");
   });
 });

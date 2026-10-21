@@ -175,22 +175,18 @@ export function formModel(schema: JsonSchema): FormModel {
 
 // ── a refusal in the person's words ──────────────────────────────────────────────────────
 
-/** The property schema at a problem's JSON Pointer ("/rows/0/name"); null past the schema. */
+/** The property schema at a JSON Pointer of property names ("/retry/attempts"); null past it. */
 function propertyAt(schema: JsonSchema, path: string): JsonSchema | null {
   let at: JsonSchema | null = schema;
   for (const segment of path.split("/").slice(1)) {
-    if (at === null) {
-      return null;
-    }
-    const rows: JsonSchema | null = /^\d+$/.test(segment) ? rowSchemaOf(at) : null;
-    const properties: unknown = at["properties"];
-    const next: unknown = rows ?? (isRecord(properties) ? properties[segment] : undefined);
+    const properties: unknown = at?.["properties"];
+    const next: unknown = isRecord(properties) ? properties[segment] : undefined;
     at = isRecord(next) ? next : null;
   }
   return at;
 }
 
-/** A property's name as the person reads it: its title, else its key with spaces. */
+/** A property's name as the person reads it: its title exactly as written, else its key spaced. */
 function nameAt(schema: JsonSchema, path: string): string {
   const title = propertyAt(schema, path)?.["title"];
   if (typeof title === "string" && title !== "") {
@@ -199,31 +195,81 @@ function nameAt(schema: JsonSchema, path: string): string {
   return (path.split("/").at(-1) ?? "").replaceAll("_", " ");
 }
 
+/** A value's JSON Schema type in plain words. */
+const TYPE_WORDS: Readonly<Record<string, string>> = {
+  integer: "a whole number",
+  number: "a number",
+  string: "text",
+  boolean: "on or off",
+  object: "a group of values",
+  array: "a list",
+  null: "empty",
+};
+
+/** What ajv says is wrong (minimum, maximum, minLength, maxLength, pattern, type, enum), plainly. */
+function plainMessage(message: string): string {
+  const words: [RegExp, (found: string) => string][] = [
+    [/^must be <= (.+)$/, (n) => `must be ${n} or less`],
+    [/^must be >= (.+)$/, (n) => `must be ${n} or more`],
+    [/^must be < (.+)$/, (n) => `must be less than ${n}`],
+    [/^must be > (.+)$/, (n) => `must be more than ${n}`],
+    [
+      /^must NOT have fewer than (\d+) characters?$/,
+      (n) => (n === "1" ? "must not be empty" : `must be at least ${n} characters long`),
+    ],
+    [/^must NOT have more than (\d+) characters?$/, (n) => `must be at most ${n} characters long`],
+    [/^must match pattern .*$/, () => "is not in the form it must have"],
+    [/^must be equal to one of the allowed values$/, () => "must be one of its choices"],
+    [/^must be (\w+)$/, (type) => `must be ${TYPE_WORDS[type] ?? type}`],
+  ];
+  for (const [pattern, said] of words) {
+    const found = pattern.exec(message);
+    if (found !== null) {
+      return said(found[1] ?? "");
+    }
+  }
+  return message;
+}
+
+/** One problem in the person's words, against `schema`, the object its path starts in. */
+function describedProblem(schema: JsonSchema, path: string, message: string): string {
+  if (path === "") {
+    return `the form ${plainMessage(message)}`;
+  }
+  const segments = path.split("/").slice(1);
+  const row = segments.findIndex((segment) => /^\d+$/.test(segment));
+  if (row > 0) {
+    // A table's row: "<table title>, row N: …", the rest judged against the row's own schema.
+    const table = `/${segments.slice(0, row).join("/")}`;
+    const rest = segments.slice(row + 1);
+    const rows = rowSchemaOf(propertyAt(schema, table) ?? {}) ?? {};
+    const inner =
+      rest.length === 0
+        ? plainMessage(message)
+        : describedProblem(rows, `/${rest.join("/")}`, message);
+    return `${nameAt(schema, table)}, row ${String(Number(segments[row]) + 1)}: ${inner}`;
+  }
+  const name = nameAt(schema, path);
+  if (message !== "is required") {
+    return `${name} ${plainMessage(message)}`;
+  }
+  const property = propertyAt(schema, path) ?? {};
+  const chosen = reloadOptions(property) !== null || Array.isArray(property["enum"]);
+  return chosen ? `choose the ${name}` : `fill in the ${name}`;
+}
+
 /**
  * What a step lacks, as one clause in the person's words, for "*Step* isn't set up yet: ….": a
- * missing choice is "choose a space", a missing value "fill in folder", anything else the
- * property's title and what is wrong. Never a schema key (ux-writing, Voice).
+ * missing choice is "choose the Space", a missing value "fill in the API key", a table's row
+ * "Volumes, row 2: fill in the Name", anything else the property's title and what is wrong in
+ * plain words ("At most must be 100 or less"). Titles keep their own case; never a schema key
+ * (ux-writing, Voice).
  */
 export function describedProblems(
   schema: JsonSchema,
   problems: readonly { readonly path: string; readonly message: string }[],
 ): string {
-  return problems
-    .map(({ path, message }) => {
-      if (path === "") {
-        return `the form ${message}`;
-      }
-      const name = nameAt(schema, path);
-      if (message !== "is required") {
-        return `${name} ${message}`;
-      }
-      const lower = name.charAt(0).toLowerCase() + name.slice(1);
-      const property = propertyAt(schema, path) ?? {};
-      const chosen = reloadOptions(property) !== null || Array.isArray(property["enum"]);
-      const article = /^[aeiou]/i.test(lower) ? "an" : "a";
-      return chosen ? `choose ${article} ${lower}` : `fill in ${lower}`;
-    })
-    .join("; ");
+  return problems.map(({ path, message }) => describedProblem(schema, path, message)).join("; ");
 }
 
 /** The same schema without its secret properties: what `config` holds (spec 2.5.2). */

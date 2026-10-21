@@ -253,7 +253,7 @@ test("the form in the real editor: every control, required marked, rows added, r
       return { valid: node.valid, errors: node.validationErrors };
     }, PROBE);
     expect(judged.valid).toBe(false);
-    expect(judged.errors).toEqual(["Label must NOT have fewer than 1 characters"]);
+    expect(judged.errors).toEqual(["Label must not be empty"]);
 
     await editor.evaluate(() => {
       const RED = (window as unknown as { RED: EditorRed }).RED;
