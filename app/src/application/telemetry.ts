@@ -16,8 +16,10 @@
 //   a transport renders only what was queued. After it, the credential gate of plan 0029: a
 //   field named like a credential refuses the report, and every string is scrubbed.
 // * Reporting never waits on a server: `recordUsage` and `recordCrash` write one small file and
-//   schedule the sender. The sender posts with a timeout and backs off between failures on the
-//   injected clock, so a GlitchTip that is down, slow or gone costs a restart nothing.
+//   schedule the sender. The sender posts back to back while the server answers (usage events
+//   up to MAX_BATCH a request, plan 0029's volume), with a timeout, and backs off between
+//   failures on the injected clock, so a server that is down, slow or gone costs a restart
+//   nothing.
 
 import {
   credentialFieldName,
@@ -27,12 +29,21 @@ import {
 } from "../domain/telemetry/redact";
 import {
   checkIdentifier,
+  isSignalName,
   TelemetryError,
+  VOUCHED_FIELDS,
   type QueuedReport,
   type ReportKind,
+  type SignalName,
   type TelemetryAnswer,
 } from "../domain/telemetry/reports";
-import { hasEndpoint, outgoingFor, type Endpoints } from "../domain/telemetry/transports";
+import {
+  hasEndpoint,
+  MAX_BATCH,
+  outgoingFor,
+  type Endpoints,
+  type Outgoing,
+} from "../domain/telemetry/transports";
 import type { Cancel, Clock } from "../ports/clock";
 import type { Logger, SecretSink } from "../ports/logger";
 import type {
@@ -94,6 +105,18 @@ const OWN_IDENTIFIERS: readonly string[] = ["machine_id", "report_id"];
 /** A kind of report, in the log's words: an `error` report is about a crash. */
 const named = (kind: ReportKind): string => (kind === "error" ? "crash report" : "usage report");
 
+/**
+ * The next request's reports, taken off the front of `waiting`: up to MAX_BATCH usage events in a
+ * row, or one crash report.
+ */
+function nextGroup(waiting: QueuedReport[]): QueuedReport[] {
+  if (waiting[0]?.kind !== "usage") {
+    return waiting.splice(0, 1);
+  }
+  const run = waiting.findIndex((report, index) => index >= MAX_BATCH || report.kind !== "usage");
+  return waiting.splice(0, run === -1 ? waiting.length : run);
+}
+
 export class TelemetryPipeline {
   readonly #deps: TelemetryDeps;
   readonly #backoff: readonly number[];
@@ -117,9 +140,16 @@ export class TelemetryPipeline {
 
   // ── what a caller reports ──────────────────────────────────────────────────────────────
 
-  /** Queue one usage report, or nothing at all when the switch does not allow it. */
-  recordUsage(payload: Readonly<Record<string, unknown>>): QueuedReport | null {
-    return this.#report("usage", payload);
+  /**
+   * Queue one usage event, the signal `event` (plan 0029), or nothing at all when the switch
+   * does not allow it.
+   */
+  recordUsage(event: SignalName, payload: Readonly<Record<string, unknown>>): QueuedReport | null {
+    if (!isSignalName(event)) {
+      this.#deps.logger.warn("a usage report could not be queued: it names no known signal");
+      return null;
+    }
+    return this.#report("usage", { ...payload, event });
   }
 
   /** Queue one crash report, or nothing at all when the switch does not allow it. */
@@ -168,18 +198,23 @@ export class TelemetryPipeline {
    */
   async flush(): Promise<FlushResult> {
     let sent = 0;
-    for (const report of this.pending()) {
+    const waiting = [...this.pending()];
+    while (waiting.length > 0) {
       if (this.#halted || !this.#allows()) {
         return { sent, retryInMs: null };
       }
-      let outgoing;
+      const group = nextGroup(waiting);
+      const kind = (group[0] as QueuedReport).kind;
+      let outgoing: Outgoing;
       try {
-        outgoing = outgoingFor(report, this.#deps.endpoints, this.#deps.release);
+        outgoing = outgoingFor(group, this.#deps.endpoints, this.#deps.release);
       } catch (error) {
-        // An endpoint that is not HTTPS, or gone from the build: there is nowhere this report
+        // An endpoint that is not HTTPS, or gone from the build: there is nowhere these reports
         // may go, and no later moment when there will be.
-        this.#deps.logger.warn(`a ${named(report.kind)} is dropped unsent: ${reasonOf(error)}`);
-        this.#deps.queue.remove(report);
+        this.#deps.logger.warn(`a ${named(kind)} is dropped unsent: ${reasonOf(error)}`);
+        for (const report of group) {
+          this.#deps.queue.remove(report);
+        }
         continue;
       }
       const result = await this.#deps.poster.post(outgoing);
@@ -187,14 +222,16 @@ export class TelemetryPipeline {
         this.#failures += 1;
         const delay = this.#backoff[Math.min(this.#failures, this.#backoff.length) - 1] ?? 0;
         this.#deps.logger.info(
-          `a ${named(report.kind)} could not be sent (${result.detail}); ` +
+          `a ${named(kind)} could not be sent (${result.detail}); ` +
             `trying again in ${String(Math.round(delay / 1000))} s`,
         );
         return { sent, retryInMs: delay };
       }
       this.#failures = 0;
-      this.#deps.queue.remove(report);
-      sent += 1;
+      for (const report of group) {
+        this.#deps.queue.remove(report);
+      }
+      sent += group.length;
     }
     return { sent, retryInMs: null };
   }
@@ -307,7 +344,7 @@ export class TelemetryPipeline {
           `a field's name contains "${named}", which no report may carry (plan 0029)`,
         );
       }
-      const redacted = redactPayload(stamped, this.#deps.credentials, this.#raw);
+      const redacted = redactPayload(stamped, this.#deps.credentials, this.#raw, VOUCHED_FIELDS);
       const report = this.#deps.queue.enqueue(kind, scrubPayload(redacted, OWN_IDENTIFIERS));
       this.#wake();
       return report;

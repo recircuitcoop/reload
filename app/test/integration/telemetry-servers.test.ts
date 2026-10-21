@@ -173,7 +173,7 @@ describe("telemetry against local fake GlitchTip and Umami servers", () => {
   it("before an answer: no request, no queued file, no machine identifier read", async () => {
     const { pipeline, queueDir, identified } = world("unset");
     pipeline.recordCrash(hostile());
-    pipeline.recordUsage(usagePayload(VERSIONS, []));
+    pipeline.recordUsage("app_start", usagePayload(VERSIONS, []));
     await pipeline.flush();
     expect(received).toEqual([]);
     expect(fs.existsSync(queueDir)).toBe(false);
@@ -204,20 +204,23 @@ describe("telemetry against local fake GlitchTip and Umami servers", () => {
 
   it("usage goes to Umami as a custom event", async () => {
     const { pipeline } = world("on");
-    pipeline.recordUsage(usagePayload(VERSIONS, [{ id: "anytype", version: "1.0.0" }]));
+    pipeline.recordUsage(
+      "app_start",
+      usagePayload(VERSIONS, [{ id: "anytype", version: "1.0.0" }]),
+    );
     await pipeline.flush();
     expect(received.map((request) => request.url)).toEqual(["/umami/api/send"]);
     expect(received[0]?.headers["user-agent"]).toBe("reload/2.0.0");
     expect(JSON.parse(received[0]?.body ?? "")).toMatchObject({
       type: "event",
-      payload: { website: "site-7", name: "usage", hostname: "app.reload.invalid" },
+      payload: { website: "site-7", name: "app_start", hostname: "app.reload.invalid" },
     });
   });
 
   it("no canary secret, home path or raw identifier is in a queued file or a sent request", async () => {
     const { pipeline, queued } = world("on");
     pipeline.recordCrash(hostile());
-    pipeline.recordUsage({ ...usagePayload(VERSIONS, []), where: HOME, id: RAW });
+    pipeline.recordUsage("app_start", { ...usagePayload(VERSIONS, []), where: HOME, id: RAW });
     const onDisk = queued();
     expect(onDisk).not.toBe("");
     await pipeline.flush();

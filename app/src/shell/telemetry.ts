@@ -119,7 +119,10 @@ export function wireTelemetry(deps: TelemetryWiring): TelemetryPipeline {
 
   const reportUsage = (): void => {
     const { named, unsigned } = reportedPackages(deps.packages());
-    pipeline.recordUsage({ ...usagePayload(versions, named), unsigned_packages: unsigned });
+    pipeline.recordUsage("app_start", {
+      ...usagePayload(versions, named),
+      unsigned_packages: unsigned,
+    });
   };
   const status = (): TelemetryStatus => pipeline.state();
   ipc.handle(IPC.telemetry, status);

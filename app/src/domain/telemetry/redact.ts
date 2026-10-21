@@ -149,18 +149,30 @@ export type JsonObject = { [key: string]: Json };
 
 /**
  * The one function every payload passes through before it is queued. `secrets` are exact strings
- * that must not survive anywhere in the result, on top of what `credentials` removes. The result
- * is always JSON: a value this cannot understand is replaced, never passed through.
+ * that must not survive anywhere in the result, on top of what `credentials` removes. `vouched`
+ * names top-level fields whose value the key-name rule leaves (the builders made it from a closed
+ * form, reports.ts VOUCHED_FIELDS); their text is still redacted like every other string. The
+ * result is always JSON: a value this cannot understand is replaced, never passed through.
  */
 export function redactPayload(
   payload: Readonly<Record<string, unknown>>,
   credentials: CredentialRedactor,
   secrets: readonly string[] = [],
+  vouched: readonly string[] = [],
 ): JsonObject {
   const named = [...secrets]
     .filter((secret) => secret.length >= MINIMUM_SECRET_LENGTH)
     .sort((a, b) => b.length - a.length);
-  return redactMapping(payload, { credentials, secrets: named }, 0);
+  const scrub = { credentials, secrets: named };
+  const redacted = redactMapping(payload, scrub, 0);
+  for (const field of vouched) {
+    // Only a string or null: a vouched field never carries a structure past the key-name rule.
+    const value = payload[field];
+    if (Object.hasOwn(redacted, field) && (typeof value === "string" || value === null)) {
+      redacted[field] = redactValue(value, scrub, 1);
+    }
+  }
+  return redacted;
 }
 
 interface Scrubbers {

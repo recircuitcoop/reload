@@ -31,7 +31,7 @@ describe("the telemetry pipeline: nothing before the question is answered (F2)",
     const pipeline = new TelemetryPipeline(world.deps);
     pipeline.start();
     expect(pipeline.recordCrash(crash())).toBeNull();
-    expect(pipeline.recordUsage(usage())).toBeNull();
+    expect(pipeline.recordUsage("app_start", usage())).toBeNull();
     expect(await pipeline.flush()).toEqual({ sent: 0, retryInMs: null });
     world.clock.advance(60_000);
     await settle();
@@ -55,7 +55,7 @@ describe("the telemetry pipeline: nothing before the question is answered (F2)",
     );
     pipeline.start();
     pipeline.recordCrash(crash());
-    pipeline.recordUsage(usage());
+    pipeline.recordUsage("app_start", usage());
     expect(pipeline.pending()).toEqual([]);
     expect(pipeline.state()).toEqual({ answer: "unset", problem: null, queued: 0 });
     await pipeline.flush();
@@ -138,7 +138,7 @@ describe("the telemetry pipeline: the switch is read again, every time", () => {
     const world = telemetryWorld("on");
     const pipeline = new TelemetryPipeline(world.deps);
     pipeline.recordCrash(crash());
-    pipeline.recordUsage(usage());
+    pipeline.recordUsage("app_start", usage());
     expect(pipeline.state().queued).toBe(2);
     pipeline.answer(false);
     expect(world.queue.reports).toEqual([]);
@@ -181,7 +181,7 @@ describe("the telemetry pipeline: what is queued", () => {
     const world = telemetryWorld("on");
     const pipeline = new TelemetryPipeline(world.deps);
     pipeline.recordCrash(crash());
-    pipeline.recordUsage(usage());
+    pipeline.recordUsage("app_start", usage());
     expect(world.identifierCalls()).toBe(1);
     expect(world.registry.redact(`id ${RAW_IDENTIFIER}`)).toBe(`id ${REDACTED}`);
     // Even when a caller put it in a report, it does not survive the redaction.
@@ -206,7 +206,7 @@ describe("the telemetry pipeline: what is queued", () => {
     pipeline.recordCrash(hostile);
     // A field NAMED like a credential is refused outright (plan 0029 rule 2): nothing is queued.
     expect(pipeline.recordCrash({ ...hostile, anytype_api_key: ANYTYPE_KEY })).toBeNull();
-    pipeline.recordUsage({ ...usage(), note: HOME_PATH, arch: HOME_PATH });
+    pipeline.recordUsage("app_start", { ...usage(), note: HOME_PATH, arch: HOME_PATH });
     const queued = JSON.stringify(world.queue.reports);
     await pipeline.flush();
     const sent = JSON.stringify(world.poster.sent);
@@ -238,7 +238,7 @@ describe("the telemetry pipeline: what is queued", () => {
     const world = telemetryWorld("on", { endpoints: NO_ENDPOINTS });
     const pipeline = new TelemetryPipeline(world.deps);
     expect(pipeline.recordCrash(crash())).toBeNull();
-    expect(pipeline.recordUsage(usage())).toBeNull();
+    expect(pipeline.recordUsage("app_start", usage())).toBeNull();
     expect(world.queue.reports).toEqual([]);
     expect(world.identifierCalls()).toBe(0);
   });
@@ -275,7 +275,7 @@ describe("the telemetry pipeline: sending", () => {
     const pipeline = new TelemetryPipeline(world.deps);
     pipeline.start();
     pipeline.start();
-    const first = pipeline.recordUsage(usage());
+    const first = pipeline.recordUsage("app_start", usage());
     const second = pipeline.recordCrash(crash());
     expect(world.poster.sent).toEqual([]);
     world.clock.advance(0);
@@ -409,7 +409,7 @@ describe("the telemetry pipeline: sending", () => {
     const pipeline = new TelemetryPipeline(world.deps);
     pipeline.start();
     pipeline.answer(true);
-    pipeline.recordUsage(usage());
+    pipeline.recordUsage("app_start", usage());
     world.clock.advance(0);
     await settle();
     expect(world.poster.sent).toHaveLength(1);

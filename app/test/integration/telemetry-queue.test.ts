@@ -1,6 +1,7 @@
 // The telemetry queue on disk (WI-0018-22), the port of ReportQueue (telemetry.py:709-896): in
-// order, owner-only, bounded at 128 reports and 1 MiB by dropping the oldest, and never blocked by a
-// file it cannot read. Plus the switch in shell-settings.json. Everything in a scratch folder.
+// order, owner-only, bounded at 20 000 reports and 16 MiB by dropping the oldest (plan 0029: an
+// event every time a package is used), and never blocked by a file it cannot read. Plus the switch
+// in shell-settings.json. Everything in a scratch folder.
 import fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -11,7 +12,10 @@ import {
   DEFAULT_MAX_REPORTS,
   DiskReportQueue,
 } from "../../src/adapters/telemetry/disk-queue";
+import { TelemetryPipeline } from "../../src/application/telemetry";
+import { NOTICE_VERSION } from "../../src/domain/telemetry/reports";
 import { RecordingLogger } from "../fakes/children";
+import { telemetryWorld } from "../fakes/telemetry";
 
 let scratch = "";
 let root = "";
@@ -53,20 +57,55 @@ describe("the telemetry queue", () => {
     expect(fs.statSync(root).mode & 0o777).toBe(0o700);
   });
 
-  it("the defaults are 128 reports and 1 MiB", () => {
-    expect(DEFAULT_MAX_REPORTS).toBe(128);
-    expect(DEFAULT_MAX_QUEUE_BYTES).toBe(1024 * 1024);
+  it("the defaults are 20 000 reports and 16 MiB", () => {
+    expect(DEFAULT_MAX_REPORTS).toBe(20_000);
+    expect(DEFAULT_MAX_QUEUE_BYTES).toBe(16 * 1024 * 1024);
   });
 
   it("drops the oldest rather than growing past its report bound", () => {
-    const queue = new DiskReportQueue(root, new RecordingLogger());
-    for (let n = 1; n <= DEFAULT_MAX_REPORTS + 5; n += 1) {
+    const queue = new DiskReportQueue(root, new RecordingLogger(), { maxReports: 128 });
+    for (let n = 1; n <= 128 + 5; n += 1) {
       queue.enqueue("error", { n });
     }
     const pending = queue.pending();
-    expect(pending).toHaveLength(DEFAULT_MAX_REPORTS);
+    expect(pending).toHaveLength(128);
     expect(pending[0]?.payload).toEqual({ n: 6 });
-    expect(pending.at(-1)?.payload).toEqual({ n: DEFAULT_MAX_REPORTS + 5 });
+    expect(pending.at(-1)?.payload).toEqual({ n: 128 + 5 });
+  });
+
+  it("20 001 reports drop exactly the oldest one, and off empties all of them", () => {
+    const queue = new DiskReportQueue(root, new RecordingLogger());
+    for (let n = 1; n <= DEFAULT_MAX_REPORTS + 1; n += 1) {
+      queue.enqueue("usage", { n });
+    }
+    expect(files()).toHaveLength(DEFAULT_MAX_REPORTS);
+    expect(files()[0]).toBe("000000000002-usage.json");
+    const pending = queue.pending();
+    expect(pending[0]?.payload).toEqual({ n: 2 });
+    expect(pending.at(-1)?.payload).toEqual({ n: DEFAULT_MAX_REPORTS + 1 });
+    // Off, through the pipeline's one gate: every one of them deleted, none sent.
+    const world = telemetryWorld("on", { queue });
+    const pipeline = new TelemetryPipeline(world.deps);
+    pipeline.answer(false);
+    expect(files()).toEqual([]);
+    expect(world.poster.sent).toEqual([]);
+  }, 120_000);
+
+  it("a queue that knew its files still sees a removal and another writer's file at its next scan", () => {
+    const one = new DiskReportQueue(root, new RecordingLogger(), { maxReports: 2 });
+    const two = new DiskReportQueue(root, new RecordingLogger(), { maxReports: 2 });
+    one.enqueue("usage", { n: 1 });
+    two.enqueue("usage", { n: 2 });
+    // `one` has not seen n=2 yet; its next sequence is taken, so it skips past it.
+    expect(one.enqueue("usage", { n: 3 }).sequence).toBe(3);
+    expect(one.pending().map((report) => report.payload["n"])).toEqual([1, 2, 3]);
+    // Now indexed: the next write brings the queue back inside its bound.
+    one.enqueue("usage", { n: 4 });
+    expect(one.pending().map((report) => report.payload["n"])).toEqual([3, 4]);
+    const [first] = one.pending();
+    one.remove(first as never);
+    one.enqueue("usage", { n: 5 });
+    expect(one.pending().map((report) => report.payload["n"])).toEqual([4, 5]);
   });
 
   it("drops the oldest when its bytes run out, but never the newest", () => {
@@ -155,7 +194,17 @@ describe("the telemetry switch in shell-settings.json", () => {
     expect(JSON.parse(fs.readFileSync(file, "utf8"))).toEqual({
       launchAtLogin: true,
       telemetry: false,
+      telemetryNotice: NOTICE_VERSION,
     });
+    // A yes to an older privacy notice (plan 0029) is asked again; a no stays a no.
+    fs.writeFileSync(file, JSON.stringify({ telemetry: true }));
+    expect(store.readTelemetry()).toBe("unset");
+    fs.writeFileSync(file, JSON.stringify({ telemetry: true, telemetryNotice: 1 }));
+    expect(store.readTelemetry()).toBe("unset");
+    fs.writeFileSync(file, JSON.stringify({ telemetry: false, telemetryNotice: 1 }));
+    expect(store.readTelemetry()).toBe("off");
+    store.writeTelemetry(true);
+    expect(store.readTelemetry()).toBe("on");
     fs.writeFileSync(file, JSON.stringify({ telemetry: "yes" }));
     expect(() => store.readTelemetry()).toThrow("must be true or false");
     fs.writeFileSync(file, "{broken");

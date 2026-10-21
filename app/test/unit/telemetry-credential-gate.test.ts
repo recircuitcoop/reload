@@ -103,7 +103,7 @@ const BUILDERS: readonly BuilderFixture[] = [
   {
     name: "usagePayload",
     record: (pipeline, planted) =>
-      pipeline.recordUsage(usagePayload(versionsOf(planted), [{ id: planted, version: planted }])),
+      pipeline.recordUsage("app_start", usagePayload(versionsOf(planted), [{ id: planted, version: planted }])),
   },
   {
     name: "crashPayload",
@@ -192,7 +192,7 @@ describe("the credential gate: field names (rule 2)", () => {
       ]) {
         const world = telemetryWorld("on");
         const pipeline = new TelemetryPipeline(world.deps);
-        expect(pipeline.recordUsage(payload)).toBeNull();
+        expect(pipeline.recordUsage("app_start", payload)).toBeNull();
         expect(world.queue.reports).toEqual([]);
         expect(world.logger.lines.join("\n")).toContain(
           `a usage report could not be queued: a field's name contains "${fragment}"`,
@@ -206,7 +206,7 @@ describe("the credential gate: field names (rule 2)", () => {
     const pipeline = new TelemetryPipeline(world.deps);
     const versions = { appVersion: "0.4.0", os: "darwin", osVersion: "25.3.0", arch: "arm64" };
     expect(
-      pipeline.recordUsage({
+      pipeline.recordUsage("app_start", {
         ...usagePayload(versions, [{ id: "reload_anytype", version: "1.0.0" }]),
         unsigned_packages: 0,
       }),

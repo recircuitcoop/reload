@@ -45,11 +45,37 @@ export const UMAMI_HOSTNAME = "app.reload.invalid";
 /** The one path Reload reports usage from: counted on the circu.it site under the reload campaign. */
 export const UMAMI_URL_PATH = "/app?utm_source=reload&utm_medium=app&utm_campaign=reload";
 
-/** The request that carries `report`, for this build's endpoints. Throws when it has none. */
-export function outgoingFor(report: QueuedReport, endpoints: Endpoints, release: string): Outgoing {
-  return report.kind === "error"
-    ? glitchtipRequest(report, endpoints.glitchtipDsn, release)
-    : umamiRequest(report, endpoints, release);
+const isGroup = (
+  reports: QueuedReport | readonly QueuedReport[],
+): reports is readonly QueuedReport[] => Array.isArray(reports);
+
+/** The most usage events one request carries, to Umami's `/api/batch` (plan 0029, volume). */
+export const MAX_BATCH = 50;
+
+/**
+ * The request that carries `reports`, for this build's endpoints: a crash report alone, or up to
+ * MAX_BATCH usage events (one to `/api/send`, more to `/api/batch`). Throws when it has none.
+ */
+export function outgoingFor(
+  reports: QueuedReport | readonly QueuedReport[],
+  endpoints: Endpoints,
+  release: string,
+): Outgoing {
+  const group: readonly QueuedReport[] = isGroup(reports) ? reports : [reports];
+  const [first] = group;
+  if (first === undefined || group.length > MAX_BATCH) {
+    throw new TelemetryError(`a request carries 1 to ${String(MAX_BATCH)} reports`);
+  }
+  if (first.kind === "error") {
+    if (group.length > 1) {
+      throw new TelemetryError("a crash report is sent alone");
+    }
+    return glitchtipRequest(first, endpoints.glitchtipDsn, release);
+  }
+  if (group.some((report) => report.kind !== "usage")) {
+    throw new TelemetryError("a batch carries usage events only");
+  }
+  return umamiRequest(group, endpoints, release);
 }
 
 function httpsUrl(text: string, what: string): URL {
@@ -162,32 +188,45 @@ export function flatten(payload: JsonObject, prefix = ""): JsonObject {
   return flat;
 }
 
-/** One Umami custom event: the report's kind as its name, the flattened payload as its data. */
-export function renderUmami(report: QueuedReport, websiteId: string): string {
-  return JSON.stringify({
+/** One Umami custom event's body: named as its signal, the flattened payload as its data. */
+function umamiEvent(report: QueuedReport, websiteId: string): JsonObject {
+  return {
     type: "event",
     payload: {
       website: websiteId,
       hostname: UMAMI_HOSTNAME,
       url: UMAMI_URL_PATH,
-      name: report.kind,
+      name: text(report.payload["event"], report.kind),
       data: flatten(report.payload),
     },
-  });
+  };
 }
 
-function umamiRequest(report: QueuedReport, endpoints: Endpoints, release: string): Outgoing {
+/** One Umami custom event, as `/api/send` takes it. */
+export function renderUmami(report: QueuedReport, websiteId: string): string {
+  return JSON.stringify(umamiEvent(report, websiteId));
+}
+
+function umamiRequest(
+  reports: readonly QueuedReport[],
+  endpoints: Endpoints,
+  release: string,
+): Outgoing {
   if (!hasEndpoint(endpoints, "usage")) {
     throw new TelemetryError("this build has no Umami endpoint, so no usage report is sent");
   }
   const base = httpsUrl(endpoints.umamiUrl, "Umami URL");
+  const [one] = reports;
+  const single = reports.length === 1 && one !== undefined;
   return {
-    url: `${base.href.replace(/\/+$/, "")}/api/send`,
+    url: `${base.href.replace(/\/+$/, "")}/api/${single ? "send" : "batch"}`,
     headers: {
       "Content-Type": "application/json",
       // Umami refuses a request with no User-Agent. This one names the app and nothing else.
       "User-Agent": `reload/${release}`,
     },
-    body: renderUmami(report, endpoints.umamiWebsiteId),
+    body: single
+      ? renderUmami(one, endpoints.umamiWebsiteId)
+      : JSON.stringify(reports.map((report) => umamiEvent(report, endpoints.umamiWebsiteId))),
   };
 }
