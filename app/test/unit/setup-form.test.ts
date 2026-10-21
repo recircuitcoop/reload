@@ -8,6 +8,7 @@ import type { AnytypeStatus } from "../../src/ui/contract";
 import {
   anytypeStep,
   draftOf,
+  exampleReadiness,
   markedParts,
   plainOf,
   problemsByField,
@@ -48,6 +49,20 @@ describe("Connect Anytype", () => {
     // Ready, but the spaces not read yet: nothing said, Connect still offered.
     expect(anytypeStep(status("ready"), null, false)).toEqual({ kind: "waiting", line: null });
     expect(anytypeStep(status("starting"), null, false).kind).toBe("waiting");
+  });
+});
+
+describe("Start with an example?", () => {
+  it("is ready only with Anytype connected and a space to file in", () => {
+    expect(exampleReadiness(null, null)).toBe("unknown");
+    expect(exampleReadiness(status("ready"), null)).toBe("unknown");
+    expect(exampleReadiness(status("no-key"), null)).toBe("no-anytype");
+    expect(exampleReadiness(status("unreachable"), null)).toBe("no-anytype");
+    const refused = { ok: false as const, refused: { reason: "unreachable", sentence: "s" } };
+    expect(exampleReadiness(status("ready"), refused as never)).toBe("no-anytype");
+    // Connected, but no space: nothing the example's form could choose.
+    expect(exampleReadiness(status("ready"), spaces(0))).toBe("no-space");
+    expect(exampleReadiness(status("ready"), spaces(2))).toBe("ready");
   });
 });
 

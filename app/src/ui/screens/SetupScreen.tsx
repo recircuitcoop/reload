@@ -31,7 +31,7 @@ import {
   type Route,
   type SetupNavEntry,
 } from "../routes";
-import { anytypeStep, markedParts } from "../setup-form";
+import { anytypeStep, exampleReadiness, markedParts } from "../setup-form";
 import { useFlows, useSetup, useStores } from "../store";
 import { t, type PlainKey } from "../strings";
 import { wordRefusal } from "../words";
@@ -148,15 +148,13 @@ function Step(props: StepProps) {
 
 /**
  * Start with an example?: only Use the example installs the starter flow. The example files into
- * Anytype, so with Anytype not connected it offers Connect Anytype (Setup's Anytype step) in its
- * place: a form that cannot list a space is never walked into.
+ * a space of Anytype's, so with Anytype not connected it offers Connect Anytype (Setup's Anytype
+ * step) in its place, and with no space it says to create one: a form that cannot list a space is
+ * never walked into.
  */
 function ExampleStep({ api, move }: StepProps) {
   const anytype = useAnytype(api);
-  const ready = anytype.status?.state === "ready";
-  // Not known yet: Anytype's state, or, once it is ready, its spaces.
-  const known = anytype.status !== null && (!ready || anytype.spaces !== null);
-  const connected = ready && anytype.spaces?.ok === true;
+  const readiness = exampleReadiness(anytype.status, anytype.spaces);
   return (
     <SetupStep
       title={t("setup.example.title")}
@@ -173,7 +171,7 @@ function ExampleStep({ api, move }: StepProps) {
           >
             {t("setup.example.skip")}
           </Button>
-          {known && !connected ? (
+          {readiness === "no-anytype" ? (
             <Button
               kind="primary"
               data-testid="setup-example-connect"
@@ -181,22 +179,28 @@ function ExampleStep({ api, move }: StepProps) {
             >
               {t("setup.anytype.title")}
             </Button>
-          ) : (
+          ) : null}
+          {readiness === "ready" || readiness === "unknown" ? (
             <Button
               kind="primary"
               data-testid="setup-example-use"
-              state={known ? "default" : "loading"}
+              state={readiness === "ready" ? "default" : "loading"}
               onClick={() => void move({ kind: "useExample" })}
             >
               {t("setup.example.use")}
             </Button>
-          )}
+          ) : null}
         </>
       }
     >
-      {known && !connected ? (
+      {readiness === "no-anytype" ? (
         <div data-testid="setup-example-needs-anytype">
           <InlineMessage kind="warning">{t("setup.example.needsAnytype")}</InlineMessage>
+        </div>
+      ) : readiness === "no-space" ? (
+        // Connected, but no space to file in: nothing to choose in the example's form.
+        <div data-testid="setup-example-no-space">
+          <InlineMessage kind="warning">{t("setup.example.noSpace")}</InlineMessage>
         </div>
       ) : undefined}
     </SetupStep>

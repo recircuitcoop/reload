@@ -47,6 +47,26 @@ export function anytypeStep(
   return { kind: "waiting", line: null };
 }
 
+/** Whether the example can be used: Anytype connected with a space to file in, or why not. */
+export type ExampleReadiness = "unknown" | "no-anytype" | "no-space" | "ready";
+
+/**
+ * Start with an example?: the example files into a space, so it can be used only with Anytype
+ * connected and at least one space; "unknown" until Anytype's state, then its spaces, are read.
+ */
+export function exampleReadiness(
+  status: AnytypeStatus | null,
+  spaces: Answer<NodeOptions> | null,
+): ExampleReadiness {
+  if (status === null || (status.state === "ready" && spaces === null)) {
+    return "unknown";
+  }
+  if (status.state !== "ready" || spaces?.ok !== true) {
+    return "no-anytype";
+  }
+  return spaces.value.options.length === 0 ? "no-space" : "ready";
+}
+
 // ── a step's form, from its schema ──────────────────────────────────────────────────────────
 
 export type SetupFieldKind = "text" | "secret" | "number" | "integer" | "boolean" | "enum";
