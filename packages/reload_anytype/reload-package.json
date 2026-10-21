@@ -2,10 +2,7 @@
   "protocol": 2,
   "package": "reload_anytype",
   "version": "0.2.0",
-  "environment": {
-    "kind": "node",
-    "node": ">=22"
-  },
+  "environment": { "kind": "node", "node": ">=22" },
   "types": [
     {
       "id": "create-object",
@@ -21,57 +18,40 @@
           "space_id": {
             "type": "string",
             "title": "Space",
-            "reload": {
-              "spaces": true
-            },
-            "description": "The Anytype space each new object goes in."
+            "description": "The Anytype space each new object goes in.",
+            "reload": { "spaces": true }
           },
           "type_key": {
             "type": "string",
             "title": "Save as",
             "description": "What the new object is in Anytype, such as a page or a note.",
             "default": "page",
-            "reload": {
-              "types": {
-                "of": "space_id"
-              }
-            }
+            "reload": { "types": { "of": "space_id" } }
           },
           "name_field": {
             "type": "string",
             "title": "Name from",
             "description": "Which part of what reaches this step names the object; \"Untitled\" when there is none. Most flows never change it.",
             "default": "/name",
-            "reload": {
-              "advanced": true
-            }
+            "reload": { "advanced": true }
           },
           "body_field": {
             "type": "string",
             "title": "Text from",
             "description": "Which part of what reaches this step fills the object; empty when there is none. Most flows never change it.",
             "default": "/body",
-            "reload": {
-              "advanced": true
-            }
+            "reload": { "advanced": true }
           },
           "api_base_url": {
             "type": "string",
             "title": "Anytype address",
             "description": "Where Reload reaches Anytype on this computer. Change it only if Anytype runs somewhere else.",
             "default": "http://127.0.0.1:31009",
-            "reload": {
-              "advanced": true
-            }
+            "reload": { "advanced": true }
           }
         }
       },
-      "outputs": [
-        {
-          "port": "created",
-          "event": "reload_anytype.object.created.v1"
-        }
-      ]
+      "outputs": [{ "port": "created", "event": "reload_anytype.object.created.v1" }]
     },
     {
       "id": "update-object",
@@ -87,19 +67,15 @@
           "space_id": {
             "type": "string",
             "title": "Space",
-            "reload": {
-              "spaces": true
-            },
-            "description": "The Anytype space the object is in."
+            "description": "The Anytype space the object is in.",
+            "reload": { "spaces": true }
           },
           "object_id_field": {
             "type": "string",
             "title": "Object from",
             "description": "Which part of what reaches this step names the object. Most flows never change it.",
             "default": "/object_id",
-            "reload": {
-              "advanced": true
-            }
+            "reload": { "advanced": true }
           },
           "properties": {
             "type": "array",
@@ -108,10 +84,7 @@
               "type": "object",
               "required": ["key", "value_field"],
               "properties": {
-                "key": {
-                  "type": "string",
-                  "title": "Property key"
-                },
+                "key": { "type": "string", "title": "Property key" },
                 "value_field": {
                   "type": "string",
                   "title": "Value from",
@@ -125,18 +98,11 @@
             "title": "Anytype address",
             "description": "Where Reload reaches Anytype on this computer. Change it only if Anytype runs somewhere else.",
             "default": "http://127.0.0.1:31009",
-            "reload": {
-              "advanced": true
-            }
+            "reload": { "advanced": true }
           }
         }
       },
-      "outputs": [
-        {
-          "port": "updated",
-          "event": "reload_anytype.object.updated.v1"
-        }
-      ]
+      "outputs": [{ "port": "updated", "event": "reload_anytype.object.updated.v1" }]
     },
     {
       "id": "read-object",
@@ -152,37 +118,26 @@
           "space_id": {
             "type": "string",
             "title": "Space",
-            "reload": {
-              "spaces": true
-            },
-            "description": "The Anytype space the object is in."
+            "description": "The Anytype space the object is in.",
+            "reload": { "spaces": true }
           },
           "object_id_field": {
             "type": "string",
             "title": "Object from",
             "description": "Which part of what reaches this step names the object. Most flows never change it.",
             "default": "/object_id",
-            "reload": {
-              "advanced": true
-            }
+            "reload": { "advanced": true }
           },
           "api_base_url": {
             "type": "string",
             "title": "Anytype address",
             "description": "Where Reload reaches Anytype on this computer. Change it only if Anytype runs somewhere else.",
             "default": "http://127.0.0.1:31009",
-            "reload": {
-              "advanced": true
-            }
+            "reload": { "advanced": true }
           }
         }
       },
-      "outputs": [
-        {
-          "port": "object",
-          "event": "reload_anytype.object.read.v1"
-        }
-      ]
+      "outputs": [{ "port": "object", "event": "reload_anytype.object.read.v1" }]
     },
     {
       "id": "read-space",
@@ -198,20 +153,14 @@
           "space_id": {
             "type": "string",
             "title": "Space",
-            "reload": {
-              "spaces": true
-            },
-            "description": "The Anytype space to list."
+            "description": "The Anytype space to list.",
+            "reload": { "spaces": true }
           },
           "type_filter": {
             "type": "string",
             "title": "Only objects of type",
             "description": "Empty for every type.",
-            "reload": {
-              "types": {
-                "of": "space_id"
-              }
-            }
+            "reload": { "types": { "of": "space_id" } }
           },
           "limit": {
             "type": "integer",
@@ -225,18 +174,11 @@
             "title": "Anytype address",
             "description": "Where Reload reaches Anytype on this computer. Change it only if Anytype runs somewhere else.",
             "default": "http://127.0.0.1:31009",
-            "reload": {
-              "advanced": true
-            }
+            "reload": { "advanced": true }
           }
         }
       },
-      "outputs": [
-        {
-          "port": "objects",
-          "event": "reload_anytype.space.read.v1"
-        }
-      ]
+      "outputs": [{ "port": "objects", "event": "reload_anytype.space.read.v1" }]
     },
     {
       "id": "search",
@@ -251,29 +193,20 @@
           "space_id": {
             "type": "string",
             "title": "Space",
-            "reload": {
-              "spaces": true
-            },
-            "description": "Empty to search every space."
+            "description": "Empty to search every space.",
+            "reload": { "spaces": true }
           },
-          "query": {
-            "type": "string",
-            "title": "Search for"
-          },
+          "query": { "type": "string", "title": "Search for" },
           "query_field": {
             "type": "string",
             "title": "Search for what reaches this step",
             "description": "Which part of what reaches this step holds the words; used instead of Search for when set.",
-            "reload": {
-              "advanced": true
-            }
+            "reload": { "advanced": true }
           },
           "types": {
             "type": "array",
             "title": "Only types",
-            "items": {
-              "type": "string"
-            }
+            "items": { "type": "string" }
           },
           "limit": {
             "type": "integer",
@@ -287,18 +220,11 @@
             "title": "Anytype address",
             "description": "Where Reload reaches Anytype on this computer. Change it only if Anytype runs somewhere else.",
             "default": "http://127.0.0.1:31009",
-            "reload": {
-              "advanced": true
-            }
+            "reload": { "advanced": true }
           }
         }
       },
-      "outputs": [
-        {
-          "port": "results",
-          "event": "reload_anytype.search.results.v1"
-        }
-      ]
+      "outputs": [{ "port": "results", "event": "reload_anytype.search.results.v1" }]
     }
   ]
 }
