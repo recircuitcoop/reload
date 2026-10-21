@@ -262,19 +262,32 @@ export function failureOf(frame: Extract<NodeFrame, { t: "error" }>): StepFailur
   };
 }
 
-/** One ended step of `identity`'s node, as the shell is told it for the usage signals. */
+/**
+ * One use of `identity`'s node, as the shell is told it for the usage signals: a step that ended
+ * (`ok` or not), or a run its source started. A source's error outside any step is a
+ * `source-error`, with no use.
+ */
 export function stepSignal(
   identity: NodeIdentity,
   durationMs: number,
   ok: boolean,
   failure: StepFailure | undefined,
+  kind: "step" | "source-error" = "step",
 ): ChildSignal {
   return {
-    kind: "step",
+    kind,
     package: identity.package,
     step: { nodeKind: identity.kind, nodeId: identity.typeId, durationMs, ok },
     failure: failure ?? null,
   };
+}
+
+/** A source's `error` frame of no input: one package_error, and no use (plan 0029). */
+export function sourceError(
+  identity: NodeIdentity,
+  frame: Extract<NodeFrame, { t: "error" }>,
+): ChildSignal {
+  return stepSignal(identity, 0, false, failureOf(frame), "source-error");
 }
 
 // ── encoding ─────────────────────────────────────────────────────────────────────────────

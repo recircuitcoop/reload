@@ -300,6 +300,20 @@ const HOOKS: readonly {
       ]),
   },
   {
+    name: "a source's run, and its error frame outside any step",
+    facts: (planted) =>
+      Promise.resolve([
+        stepSignal({ ...IDENTITY, kind: "source" }, 0, true, undefined),
+        stepSignal(
+          { ...IDENTITY, kind: "source" },
+          0,
+          false,
+          failureOf({ t: "error", message: planted, error_type: planted, file: planted, line: 1 }),
+          "source-error",
+        ),
+      ]),
+  },
+  {
     name: "a step whose facts crossed the channel with extra fields a package added",
     facts: (planted) =>
       Promise.resolve(

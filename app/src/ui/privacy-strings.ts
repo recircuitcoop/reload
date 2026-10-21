@@ -24,7 +24,7 @@ export const PRIVACY_STRINGS = {
   "privacy.sent.steps":
     "every time a step of a package runs: the package, its version, where it came from, whether it is signed, what it runs on, the kind and type of the step but never its name, how long it took and whether it worked. A package nobody signed is only called unsigned", // plan 0029
   "privacy.sent.errors":
-    "every time such a step fails: the same, the kind of error (its class's name or code), and the file and line in the package where it happened. Never the error's message", // plan 0029
+    "every time such a step, or a package's source, fails: the same, the kind of error (its class's name or code), and the file and line in the package where it happened. Never the error's message", // plan 0029
   "privacy.sent.aiApps":
     "every time an AI app uses Reload's Anytype tools: which tool, the name the AI app gives itself, how long it took and whether it worked, never what it asked or what it was answered", // plan 0029
   "privacy.sent.flows":

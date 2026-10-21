@@ -3,9 +3,10 @@
 // whether anything is queued at all (consent first) and redacts and scrubs it first.
 //
 // The runtime and the services process tell their facts over the channel (the `signal`
-// message): a step a packaged node ran, an MCP tools/call, a deploy's counts. They name a package
-// by its declared name; here it is looked up in the package store, so the event says where the
-// package came from and whether anyone signed it, and an unsigned one is counted, never named.
+// message): a step a packaged node ran or a run a source started, a source's error, an MCP
+// call, a deploy's counts. They name a package by its declared name; here it is looked up in the
+// package store, so the event says where the package came from and whether anyone signed it, and
+// an unsigned one is counted, never named.
 // A package the store does not know (a created event type's, or one removed meanwhile) is
 // treated as unsigned: what nobody vouched for is never named.
 
@@ -108,9 +109,13 @@ export class UsageSignals {
   /** What a child told: a step, an MCP call or a deploy, as its events. */
   child(signal: ChildSignal): void {
     switch (signal.kind) {
-      case "step": {
+      case "step":
+      case "source-error": {
         const facts = this.facts(signal.package) ?? unknownPackage(signal.package);
-        this.record(packageUsed(facts, signal.step));
+        // A source's error is no use: only its package_error is told.
+        if (signal.kind === "step") {
+          this.record(packageUsed(facts, signal.step));
+        }
         if (!signal.step.ok) {
           const failure = signal.failure ?? { errorType: null, file: null, line: null };
           this.record(packageError(facts, signal.step, failure));

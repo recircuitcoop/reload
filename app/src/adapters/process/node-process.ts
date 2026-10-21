@@ -32,6 +32,7 @@ import {
   failureOf,
   FrameTooLargeError,
   outcomeOf,
+  sourceError,
   statusOf,
   stepSignal,
   stepStatusOf,
@@ -428,6 +429,7 @@ class ChildNodeProcess implements NodeProcess {
         }
         this.#log("error", frame.message);
         this.#host.nodeError(frame.message);
+        this.#deps.steps?.(sourceError(this.#spec.identity, frame)); // plan 0029: no use
         return;
       case "present":
         this.#onPresent(frame.in, frame.content);
@@ -462,6 +464,7 @@ class ChildNodeProcess implements NodeProcess {
       // A new run: its id is this event's id (spec 5.4.2, 5.5).
       const message = { payload: data, topic: declared.event, reload: { event, run: event.id } };
       this.#host.send({ index, port, message });
+      this.#deps.steps?.(stepSignal(this.#spec.identity, 0, true, undefined)); // a run is a use
       return;
     }
     // Caused by an input: it keeps the input's run and names the input (spec 5.4.1).
@@ -522,8 +525,7 @@ class ChildNodeProcess implements NodeProcess {
     input?.delivery.status?.(stepStatusOf(frame));
   }
 
-  /** The terminal frame of an input; a second one, or one for an unknown id, is ignored. The step
-   * is told (plan 0029); failure facts come only from the node's own `error` frame. */
+  /** An input's terminal frame, its step told (plan 0029); a second or unknown one is ignored. */
   #finish(inputId: string, error?: Error, outcome?: StepOutcome, failure?: StepFailure): void {
     const input = this.#inputs.get(inputId);
     if (input === undefined) {

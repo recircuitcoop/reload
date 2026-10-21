@@ -470,6 +470,19 @@ describe("the launch's own signals (plan 0029)", () => {
       step: { ...step, nodeId: "secret-type", ok: false },
       failure: { errorType: "Error", file: "lib/mine.js", line: 3 },
     });
+    // A source's run is a use; its error outside any step is an error, and no use.
+    world.runtime.tell({
+      kind: "step",
+      package: "probekit",
+      step: { ...step, nodeKind: "source", durationMs: 0 },
+      failure: null,
+    });
+    world.runtime.tell({
+      kind: "source-error",
+      package: "probekit",
+      step: { ...step, nodeKind: "source", durationMs: 0, ok: false },
+      failure: { errorType: "OSError", file: "src/watch.py", line: 9 },
+    });
     world.runtime.tell({
       kind: "step",
       package: "anytype",
@@ -508,6 +521,7 @@ describe("the launch's own signals (plan 0029)", () => {
       }),
       expect.objectContaining({ package: "probekit", ok: false }),
       expect.objectContaining({ package: "unsigned", version: null, node_id: null, ok: false }),
+      expect.objectContaining({ package: "probekit", node_kind: "source", ok: true }),
       expect.objectContaining({ package: "anytype", source: "shipped", signed: true, ok: false }),
     ]);
     expect(payloads(world, "package_error")).toEqual([
@@ -518,6 +532,13 @@ describe("the launch's own signals (plan 0029)", () => {
         line: 7,
       }),
       expect.objectContaining({ package: "unsigned", error_type: "Error", file: null, line: 3 }),
+      expect.objectContaining({
+        package: "probekit",
+        node_kind: "source",
+        error_type: "OSError",
+        file: "src/watch.py",
+        line: 9,
+      }),
       expect.objectContaining({
         package: "anytype",
         error_type: null,
@@ -609,6 +630,12 @@ describe("a child's facts reach the shell over the channel (plan 0029)", () => {
       {
         kind: "mcp-call",
         call: { tool: null, client: null, durationMs: 1, ok: false, errorCode: -32602 },
+      },
+      {
+        kind: "source-error",
+        package: "p",
+        step: { nodeKind: "source", nodeId: "t", durationMs: 0, ok: false },
+        failure: { errorType: "E", file: null, line: null },
       },
       { kind: "deployed", nodesPerFlow: [1, 0], perPackage: [{ package: "p", nodes: 1 }] },
     ];

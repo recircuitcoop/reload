@@ -388,8 +388,10 @@ export function parseChildSignal(value: unknown): ChildSignal | null {
   if (!isRecord(value)) {
     return null;
   }
-  switch (value["kind"]) {
-    case "step": {
+  const kind = value["kind"];
+  switch (kind) {
+    case "step":
+    case "source-error": {
       const step = value["step"];
       if (
         !isTextUpTo(value["package"], 214) ||
@@ -404,7 +406,7 @@ export function parseChildSignal(value: unknown): ChildSignal | null {
         return null;
       }
       return {
-        kind: "step",
+        kind,
         package: value["package"],
         step: {
           nodeKind: step["nodeKind"],

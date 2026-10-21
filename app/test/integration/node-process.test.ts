@@ -219,6 +219,25 @@ describe("a node process", () => {
     expect(byOk.every((signal) => (signal?.step.durationMs ?? -1) >= 0)).toBe(true);
   });
 
+  it("tells every run it starts as one use, and an error of no input as one source error", async () => {
+    const node = raw();
+    const [, started] = send(node.node, { do: "new-run" });
+    const [, noisy] = send(node.node, { do: "noise" });
+    await waitFor("both", () => started.finished && noisy.finished);
+    await waitFor("the error of no input", () => node.host.errors.length === 1);
+    const step = { nodeKind: node.spec.identity.kind, nodeId: node.spec.identity.typeId };
+    // Two inputs ended (two uses) and one run started (one more), each one a `step`.
+    expect(node.steps.filter((signal) => signal.kind === "step")).toHaveLength(3);
+    expect(node.steps.filter((signal) => signal.kind === "source-error")).toEqual([
+      {
+        kind: "source-error",
+        package: node.spec.identity.package,
+        step: { ...step, durationMs: 0, ok: false },
+        failure: { errorType: null, file: null, line: null },
+      },
+    ]);
+  });
+
   it("routes stderr, stray stdout, log frames and input-less errors to the one log", async () => {
     const node = raw();
     const [, delivery] = send(node.node, { do: "noise" });

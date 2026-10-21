@@ -248,11 +248,11 @@ export const SOURCE_FILE = new RegExp(
   String.raw`^${NO_KEY_RUN}(?:\w{1,100}\/){0,15}\w{1,100}\.(?:py|pyw|ts|tsx|mts|cts|js|jsx|mjs|cjs)$`,
 );
 export const MAX_FILE_LENGTH = 200;
-
 /** An exception's class name (`ZeroDivisionError`) or an error code (`ECONNREFUSED`). */
 export const ERROR_TYPE = new RegExp(String.raw`^${NO_KEY_RUN}[A-Za-z_$][\w$]{0,63}$`);
 /** The name an MCP client gives itself (`Claude Desktop`, `cursor-vscode`): words, no dots. */
 export const CLIENT = new RegExp(String.raw`^${NO_KEY_RUN}[A-Za-z0-9][A-Za-z0-9 _-]{0,63}$`);
+
 /**
  * `value` when it is a string of `shape`, null when there is none, and WITHHELD for anything else:
  * a value outside its shape is never cut down to one, because a cut can halve a credential.
@@ -347,7 +347,7 @@ export function packageUsed(facts: PackageFacts, step: StepFacts): Signal {
 }
 
 /**
- * `package_error`: every time such a step fails: the type of the error and where it
+ * `package_error`: every time such a step, or a source, fails: the type of the error and where it
  * was thrown, never its message. An unsigned package's file is its author's path: only the line
  * is sent.
  */
@@ -563,11 +563,13 @@ export function updateSignal(
 
 /**
  * What the runtime and the services process tell the shell about a signal (the `signal` channel
- * message): the facts only. The shell names the package and builds the event.
+ * message): the facts only. The shell names the package and builds the event. A `step` is one
+ * use (a step a node ran, or a run a source started); a `source-error` is a source's failure
+ * outside any step, an error and no use.
  */
 export type ChildSignal =
   | {
-      readonly kind: "step";
+      readonly kind: "step" | "source-error";
       readonly package: string;
       readonly step: StepFacts;
       readonly failure: StepFailure | null;

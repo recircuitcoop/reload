@@ -414,8 +414,9 @@ const LINE_WORDS: Readonly<Record<string, readonly string[]>> = {
     "only called unsigned",
   ],
   "privacy.sent.errors": [
-    "the kind of error",
+    "a package's source",
     "the same",
+    "the kind of error",
     "the file and line",
     "Never the error's message",
   ],
