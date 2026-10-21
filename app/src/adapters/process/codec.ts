@@ -74,8 +74,11 @@ export type NodeFrame =
   | { t: "present"; in: string; content: ViewContent }
   | { t: "snapshot"; content: ViewContent; state: unknown; in?: string }
   | { t: "closed" }
-  /** `healthy`: the node's own health check's answer, when it has one (spec 4.2). */
-  | { t: "pong"; id: string; healthy?: boolean };
+  /**
+   * `healthy`: the node's own health check's answer, when it has one; `progress`: when, on the
+   * node's own clock, it last did real work (spec 4.2).
+   */
+  | { t: "pong"; id: string; healthy?: boolean; progress?: number };
 
 const RUNTIME_FRAMES = ["start", "input", "cancel", "action", "trigger", "fire", "close", "ping"];
 const NODE_FRAMES = [

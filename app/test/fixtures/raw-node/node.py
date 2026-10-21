@@ -12,8 +12,12 @@ import queue
 import subprocess
 import sys
 import threading
+import time
 
 _write_lock = threading.Lock()
+# The progress marker a pong carries (spec 4.2): when a frame other than a pong or a log was last
+# written, on this process's monotonic clock in ms.
+_progress_at = [time.monotonic() * 1000]
 _out = sys.stdout.buffer
 
 
@@ -23,6 +27,8 @@ def send(frame):
     with _write_lock:
         _out.write(line)
         _out.flush()
+        if frame.get("t") not in ("pong", "log"):
+            _progress_at[0] = time.monotonic() * 1000
 
 
 def sized_emit(input_id, size):
@@ -56,6 +62,7 @@ class Node:
                 send({"t": "error", "in": input_id, "message": "cancelled before it started"})
                 continue
             self.running = input_id
+            _progress_at[0] = time.monotonic() * 1000
             self.running_cancelled.clear()
             try:
                 self.handle(input_id, data)
@@ -100,6 +107,15 @@ class Node:
                 if field in data:
                     frame[field] = data[field]
             send(frame)
+        elif action == "wedge":
+            # Stuck: no frame at all, while the reading loop still answers every ping.
+            threading.Event().wait()
+        elif action == "steps":
+            # A long step that keeps saying how far it got: progress, so never stuck.
+            for step in range(data["steps"]):
+                time.sleep(data["every_s"])
+                send({"t": "status", "text": f"{step + 1} of {data['steps']}", "in": input_id})
+            send({"t": "done", "in": input_id})
         elif action == "slow":
             send({"t": "status", "text": "working", "fill": "blue", "shape": "dot"})
             if self.running_cancelled.wait(timeout=600):
@@ -217,7 +233,9 @@ class Node:
             # Said on stderr too, so a test can wait for the answer before moving its clock.
             print(f"pinged {frame['id']}", file=sys.stderr, flush=True)
             if not self.deaf:
-                pong = {"t": "pong", "id": frame["id"]}
+                # Idle is not wedged: "now"; while an input is worked on, the last frame's time.
+                progress = time.monotonic() * 1000 if self.running is None else _progress_at[0]
+                pong = {"t": "pong", "id": frame["id"], "progress": progress}
                 if self.healthy is not None:
                     pong["healthy"] = self.healthy
                 send(pong)

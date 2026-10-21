@@ -43,7 +43,7 @@ async function runKitchen(): Promise<void> {
   declarePorts(["out"]);
   const info = await start();
   const cancels = new Map<string, () => void>();
-  // What the health check answers (C26): {"do": "health", "value": true | false | "raise"}.
+  // What the health check answers (C26): {"do": "health", "value": true|false|"raise"|"hang"}.
   let health: unknown = true;
 
   await run({
@@ -142,6 +142,9 @@ async function runKitchen(): Promise<void> {
     health: () => {
       if (health === "raise") {
         throw new Error("the index is on fire");
+      }
+      if (health === "hang") {
+        return new Promise<boolean>((resolve) => setTimeout(() => resolve(true), 5_000));
       }
       return health === true;
     },

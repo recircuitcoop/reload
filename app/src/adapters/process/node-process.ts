@@ -24,6 +24,7 @@ import type {
   StepOutcome,
   ViewContent,
 } from "../../ports/node-process";
+import type { Notice } from "../../ports/notifier";
 import {
   decodeFrame,
   encodeFrame,
@@ -40,6 +41,7 @@ import { inputJournalFor, type Admitted, type Input, type InputJournal } from ".
 import { prepareInstance, type NodeProcessDeps } from "./node-process-settings";
 import { readPipes, watchExit } from "./exit-watch";
 import { nodeHeartbeat, type NodeHeartbeat } from "./node-heartbeat";
+import { clearNodeNotices, stoppedFor } from "./node-notices";
 import { RefusedPorts } from "./refused-ports";
 import { NodeResourceGuard } from "./resource-guard";
 import { ViewDeadlines } from "./view-deadlines";
@@ -60,6 +62,8 @@ class ChildNodeProcess implements NodeProcess {
   readonly #journal: InputJournal;
   readonly #deadlines: ViewDeadlines;
   readonly #who: string;
+  /** What its notices are about: its name on the canvas, else its type id. */
+  readonly #subject: string;
   readonly #closeWaiters: (() => void)[] = [];
   readonly #refused: RefusedPorts;
   readonly #guard: NodeResourceGuard;
@@ -79,6 +83,7 @@ class ChildNodeProcess implements NodeProcess {
     this.#deps = deps;
     this.#breaker = new CrashLoopBreaker(deps.settings.crashLoop, () => deps.clock.now());
     this.#who = `[${spec.identity.type} ${spec.identity.id}]`;
+    this.#subject = spec.identity.name || spec.identity.typeId;
     this.#journal = inputJournalFor(spec.identity, deps, (level, message) => {
       this.#log(level, message);
     });
@@ -92,8 +97,8 @@ class ChildNodeProcess implements NodeProcess {
       write: (frame) => this.#write(frame),
       pid: () => this.pid,
     });
-    // Created again (a redeploy): a crash loop from here on is news again.
-    deps.notifier.clear("node-stopped", spec.identity.name || spec.identity.typeId);
+    // Created again (a redeploy): nothing said about the old instance holds any more.
+    clearNodeNotices(deps.notifier, this.#subject);
     this.#refused = new RefusedPorts(spec, deps.notifier, (message) => {
       this.#log("error", message);
     });
@@ -191,6 +196,9 @@ class ChildNodeProcess implements NodeProcess {
       return gone;
     }
     this.#closing = true;
+    if (reason === "removed") {
+      clearNodeNotices(this.#deps.notifier, this.#subject);
+    }
     this.#cancelTimers();
     this.#deadlines.disarmAll();
     // The inputs still open belong to the journal now: it re-sends them to the next instance
@@ -273,6 +281,7 @@ class ChildNodeProcess implements NodeProcess {
     }
     this.#child = null;
     this.ready = false;
+    const stuck = this.#heartbeat?.takeStuckExit() === true;
     this.#cancelTimers();
     if (this.#closing) {
       this.#log("info", `process exited (${how}) on close`);
@@ -283,10 +292,9 @@ class ChildNodeProcess implements NodeProcess {
     this.#host.status({ fill: "red", shape: "dot", text: `process exited (${how})` });
     for (const [id, input] of this.#inputs) {
       if (input.state === "sent") {
-        const label = this.#spec.identity.name || this.#spec.identity.typeId;
         this.#fail(
           id,
-          new Error(`${label}: node process exited (${how}) while handling this event`),
+          new Error(`${this.#subject}: node process exited (${how}) while handling this event`),
         );
       }
     }
@@ -295,20 +303,18 @@ class ChildNodeProcess implements NodeProcess {
     const again = restartable && this.#guard.restartable && this.#breaker.recordCrash();
     this.#deps.crashes?.nodeCrashed(!again);
     if (!again) {
-      this.#stop(
-        restartable
-          ? this.#guard.stopText(this.#deps.settings.crashLoop)
-          : `exited (${how}), and its type says never to restart it`,
-      );
+      const exit = { restartable, how, stuck };
+      this.#stop(stoppedFor(this.#subject, this.#guard.stopText(this.#deps.settings.crashLoop), exit));
       return;
     }
-    this.#after(this.#deps.settings.respawnDelayMs, () => {
+    // A stuck process was stopped at the end of its restart backoff: it comes back at once.
+    this.#after(stuck ? 0 : this.#deps.settings.respawnDelayMs, () => {
       this.#spawn();
     });
   }
 
   /** The crash-loop limit, or a type never restarted: no more processes until re-created. */
-  #stop(text: string): void {
+  #stop({ text, notice }: { readonly text: string; readonly notice: Notice }): void {
     this.#stopped = true;
     this.#log("error", `${text}; no more restarts until it is redeployed`);
     this.#host.status({ fill: "red", shape: "dot", text });
@@ -319,8 +325,7 @@ class ChildNodeProcess implements NodeProcess {
     }
     this.#journal.failHeld(new Error(`the node process ${text}`));
     try {
-      const subject = this.#spec.identity.name || this.#spec.identity.typeId;
-      this.#deps.notifier.raise({ kind: "node-stopped", subject, detail: `Its process ${text}` });
+      this.#deps.notifier.raise(notice);
     } catch (error) {
       this.#log("error", `the crash-loop notice could not be raised: ${String(error)}`);
     }
@@ -424,7 +429,7 @@ class ChildNodeProcess implements NodeProcess {
         this.#log("info", "close acknowledged");
         return;
       case "pong":
-        this.#heartbeat?.pong(frame.id, frame.healthy);
+        this.#heartbeat?.pong(frame.id, frame.healthy, frame.progress);
         return;
     }
   }

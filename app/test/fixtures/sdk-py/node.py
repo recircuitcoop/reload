@@ -44,7 +44,7 @@ def sized_value(input_id: str, size: int) -> str:
 def run_kitchen() -> None:
     node = Node(ports=["out"])
     cancels: dict[str, threading.Event] = {}
-    # What the health check answers (C26): {"do": "health", "value": true | false | "raise"}.
+    # What the health check answers (C26): {"do": "health", "value": true|false|"raise"|"hang"}.
     health: dict[str, object] = {"value": True}
 
     def on_input(input_id: str, event: dict[str, Any]) -> None:
@@ -131,6 +131,8 @@ def run_kitchen() -> None:
     def on_health() -> bool:
         if health["value"] == "raise":
             raise RuntimeError("the index is on fire")
+        if health["value"] == "hang":
+            threading.Event().wait(5)
         return health["value"] is True
 
     node.run(on_input=on_input, on_cancel=on_cancel, on_fire=on_fire, on_health=on_health)

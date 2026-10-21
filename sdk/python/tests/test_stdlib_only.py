@@ -45,6 +45,7 @@ def test_the_module_imports_with_every_third_party_library_blocked() -> None:
         "json",
         "sys",
         "threading",
+        "time",
         "typing",
     }
     for node in ast.walk(tree):

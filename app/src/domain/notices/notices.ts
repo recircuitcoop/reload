@@ -26,6 +26,8 @@ export type NoticeKind =
   | "anytype-over-limit"
   /** The person's own resource limits in the settings file could not be read (plan 0031). */
   | "limits-unreadable"
+  /** A node whose type says never to restart it stopped, and is not started again (spec 2.4.2). */
+  | "node-not-restarted"
   /** A node's process stopped answering its heartbeat and was stopped (spec 2.4.2). */
   | "node-stuck"
   /** A node's own health check says it is not working (spec 4.2 `pong`). */
@@ -84,6 +86,7 @@ export const NOTICE_KINDS: readonly NoticeKind[] = [
   "child-over-limit",
   "anytype-over-limit",
   "limits-unreadable",
+  "node-not-restarted",
   "node-stuck",
   "node-unhealthy",
   "anytype-unreachable",
@@ -219,6 +222,14 @@ function composeWords(notice: Notice): Message {
         body: sentences(
           detail,
           "Until it is fixed, Reload uses its own. Change them in Configuration › General › Advanced.",
+        ),
+      };
+    case "node-not-restarted":
+      return {
+        title: `The node ${subject} stopped`,
+        body: sentences(
+          detail,
+          "Its type asks never to restart it. Redeploy the flow to start it again.",
         ),
       };
     case "node-stuck":

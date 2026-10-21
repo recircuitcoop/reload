@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { INHERITED_VARIABLES } from "../../src/adapters/process/command";
 import { MAX_FRAME_BYTES } from "../../src/adapters/process/codec";
+import { systemClock } from "../../src/adapters/system/clock";
 import { Heartbeat } from "../../src/application/heartbeat";
 import type { HeartbeatFactory, NodeProcess } from "../../src/ports/node-process";
 import { compose } from "../../src/domain/notices/notices";
@@ -455,10 +456,15 @@ describe("an unexpected exit of a node process", () => {
     );
     const text = "exited (signal SIGKILL), and its type says never to restart it";
     expect(node.host.statuses.at(-1)).toEqual({ fill: "red", shape: "dot", text });
-    expect(node.notifier.notices[0]).toMatchObject({
-      kind: "node-stopped",
-      subject: "raw",
-      detail: `Its process ${text}`,
+    // Worded for a type never restarted, not as a crash loop it never had.
+    expect(node.notifier.notices).toEqual([
+      { kind: "node-not-restarted", subject: "raw", detail: "Its process exited (signal SIGKILL)" },
+    ]);
+    expect(compose(node.notifier.notices[0] ?? { kind: "node-stuck", subject: "" })).toEqual({
+      title: "The node raw stopped",
+      body:
+        "Its process exited (signal SIGKILL). Its type asks never to restart it. Redeploy the " +
+        "flow to start it again.",
     });
     expect(node.crashes).toEqual([true]);
     // Nothing is started again, however long the wait.
@@ -516,6 +522,8 @@ describe("an unexpected exit of a node process", () => {
 });
 
 describe("a node process whose type declares a heartbeat (spec 2.4.2)", () => {
+  /** One second, the shortest a type may declare: the window is three of them. */
+  const FAST = { heartbeatIntervalMs: 1_000, staleAfterMs: null };
   const STABILITY = { heartbeatIntervalMs: 30_000, staleAfterMs: null };
 
   /** A raw node whose heartbeat is the application's own, on a fake clock. */
@@ -530,85 +538,142 @@ describe("a node process whose type declares a heartbeat (spec 2.4.2)", () => {
     return { node, clock };
   }
 
+  /** A raw node watched on the real clock at one ping a second, as the runtime watches it. */
+  function live(options: StartOptions = {}): RawNode {
+    return raw({
+      stability: FAST,
+      heartbeat: (watch) => new Heartbeat({ ...watch, clock: systemClock }),
+      ...options,
+    });
+  }
+
   /** How many pings the current and earlier processes of `node` were sent. */
   function pings(node: RawNode): number {
     return node.logger.nodeLines.filter((line) => line.line.startsWith("pinged ")).length;
   }
 
-  it("pings each process once per interval after ready, and one that answers is never judged stuck", async () => {
-    const { node, clock } = beating();
-    await ready(node);
-    const pid = node.node.pid;
-    clock.advance(0);
-    await waitFor("the first ping", () => pings(node) === 1);
-    for (let pass = 2; pass <= 6; pass += 1) {
-      clock.advance(30_000);
-      await waitFor(`ping ${String(pass)}`, () => pings(node) === pass);
-      await flushPongs();
-    }
-    expect(node.node.pid).toBe(pid);
-    expect(node.notifier.notices).toEqual([]);
-    expect(node.logger.has(/did not answer a ping/)).toBe(false);
-  });
+  /** When, on the real clock, the log first matched `pattern`. */
+  async function loggedAt(node: RawNode, pattern: RegExp, timeoutMs: number): Promise<number> {
+    await waitFor(String(pattern), () => node.logger.has(pattern), timeoutMs);
+    return Date.now();
+  }
 
-  it("a process that stops answering is killed after its window, the person told once, and it comes back", async () => {
-    const { node, clock } = beating();
-    await ready(node);
-    const first = node.node.pid as number;
-    clock.advance(0);
-    await waitFor("the first ping", () => pings(node) === 1);
-    await flushPongs();
-    const [, deaf] = send(node.node, { do: "deaf" });
-    await waitFor("deaf", () => deaf.finished);
-    // No pong settles a ping now: only the clock does. Past the window (three intervals) the
-    // first judgement after a missed ping finds it stuck.
-    const silentFrom = clock.now();
-    await untilStuck(node, clock);
-    expect(clock.now() - silentFrom).toBeGreaterThan(90_000);
-    await waitFor("the kill", () => node.node.pid === null);
-    expect(node.logger.has(/stuck: answered no ping for \d+ s; killing it/)).toBe(true);
-    expect(node.notifier.notices).toHaveLength(1);
-    expect(node.notifier.notices[0]).toMatchObject({ kind: "node-stuck", subject: "raw" });
-    expect(node.notifier.notices[0]?.detail).toMatch(
-      /^Its process answered nothing for \d+ s, so Reload stopped it$/,
-    );
-    expect(compose(node.notifier.notices[0] ?? { kind: "node-stuck", subject: "" }).title).toBe(
-      "The node raw stopped answering",
-    );
-    // Its exit is an unexpected exit like any other: restarted after 1 s, not before, and
-    // pinged again.
-    clock.advance(999);
-    expect(node.node.pid).toBeNull();
-    clock.advance(1);
-    await waitFor(
-      "the next ready",
-      () => node.logger.lines.filter((l) => / ready$/.test(l.text)).length === 2,
-    );
-    expect(node.node.pid).not.toBe(first);
-    expect(alive(first)).toBe(false);
-    const before = pings(node);
-    clock.advance(0);
-    await waitFor("a ping to the new process", () => pings(node) === before + 1);
-    expect(node.crashes).toEqual([false]);
-  });
+  it(
+    "an idle process and one whose long step keeps saying how far it got are never judged stuck",
+    { timeout: 15_000 },
+    async () => {
+      const node = live();
+      await ready(node);
+      const pid = node.node.pid;
+      const [, step] = send(node.node, { do: "steps", steps: 10, every_s: 0.4 });
+      await waitFor("the long step", () => step.finished, 8_000);
+      // Idle again for more than a window.
+      await new Promise((resolve) => setTimeout(resolve, 4_000));
+      expect(pings(node)).toBeGreaterThanOrEqual(6);
+      expect(node.node.pid).toBe(pid);
+      expect(node.notifier.notices).toEqual([]);
+      expect(node.logger.has(/stuck/)).toBe(false);
+    },
+  );
 
-  it("a stuck process of a type that says never to restart it stays stopped", async () => {
-    const { node, clock } = beating({ restartable: false });
-    await ready(node);
-    clock.advance(0);
-    await waitFor("the first ping", () => pings(node) === 1);
-    await flushPongs();
-    const [, deaf] = send(node.node, { do: "deaf" });
-    await waitFor("deaf", () => deaf.finished);
-    await untilStuck(node, clock);
-    await waitFor("the stop", () => node.notifier.notices.length === 2);
-    expect(node.notifier.notices.map((notice) => notice.kind)).toEqual([
-      "node-stuck",
-      "node-stopped",
-    ]);
-    clock.advance(60_000);
-    expect(node.node.pid).toBeNull();
-  });
+  it(
+    "a wedged handler whose loop still answers pings is judged stuck at its window, and restarted when its backoff has run out",
+    { timeout: 20_000 },
+    async () => {
+      const node = live();
+      await ready(node);
+      const first = node.node.pid as number;
+      const [, wedged] = send(node.node, { do: "wedge" });
+      const wedgedAt = Date.now();
+      const stuckAt = await loggedAt(
+        node,
+        /stuck: no progress for \d+ s; restarting it in 250 ms/,
+        8_000,
+      );
+      // Judged at the window, three intervals, within one interval of it.
+      expect(stuckAt - wedgedAt).toBeGreaterThanOrEqual(3_000);
+      expect(stuckAt - wedgedAt).toBeLessThan(3_000 + 1_000 + 1_000);
+      // Its pings were answered all along: it is the frozen marker that says stuck.
+      expect(node.logger.has(/did not answer a ping/)).toBe(false);
+      // Nothing is signalled at the verdict: the process is still there until its backoff ends.
+      expect(alive(first)).toBe(true);
+      expect(node.node.pid).toBe(first);
+      expect(node.notifier.notices).toEqual([
+        {
+          kind: "node-stuck",
+          subject: "raw",
+          detail: "Its process made no progress, so Reload restarts it",
+        },
+      ]);
+      expect(compose(node.notifier.notices[0] ?? { kind: "node-stuck", subject: "" }).title).toBe(
+        "The node raw stopped answering",
+      );
+      // Then it is stopped, and the next process starts at once: the wait was the backoff.
+      await waitFor(
+        "the next process",
+        () => node.node.pid !== null && node.node.pid !== first,
+        3_000,
+      );
+      expect(Date.now() - stuckAt).toBeGreaterThanOrEqual(250);
+      expect(alive(first)).toBe(false);
+      expect(wedged.ends[0]?.message).toMatch(/node process exited \(signal SIGKILL\)/);
+      expect(node.crashes).toEqual([false]);
+      // The new process answers: the episode is over, and its notice withdrawn. Said once only.
+      await waitFor(
+        "the withdrawal",
+        () => node.notifier.cleared.includes("node-stuck raw"),
+        3_000,
+      );
+      expect(node.notifier.notices).toHaveLength(1);
+    },
+  );
+
+  it(
+    "a stuck process of a type that says never to restart it is stopped once, with one notice",
+    { timeout: 20_000 },
+    async () => {
+      const node = live({ restartable: false });
+      await ready(node);
+      send(node.node, { do: "wedge" });
+      await waitFor("the stop", () => node.notifier.notices.length === 1, 8_000);
+      await waitFor("no process", () => node.node.pid === null, 3_000);
+      expect(node.notifier.notices).toEqual([
+        {
+          kind: "node-not-restarted",
+          subject: "raw",
+          detail: "Its process made no progress, so Reload stopped it",
+        },
+      ]);
+      expect(compose(node.notifier.notices[0] ?? { kind: "node-stuck", subject: "" })).toEqual({
+        title: "The node raw stopped",
+        body:
+          "Its process made no progress, so Reload stopped it. Its type asks never to restart " +
+          "it. Redeploy the flow to start it again.",
+      });
+      await new Promise((resolve) => setTimeout(resolve, 1_500));
+      expect(node.node.pid).toBeNull();
+      expect(node.notifier.notices).toHaveLength(1);
+    },
+  );
+
+  it(
+    "a process that stops answering pings altogether is judged stuck the same way",
+    { timeout: 20_000 },
+    async () => {
+      const node = live();
+      await ready(node);
+      const first = node.node.pid as number;
+      const [, deaf] = send(node.node, { do: "deaf" });
+      await waitFor("deaf", () => deaf.finished);
+      await loggedAt(node, /stuck: no progress for \d+ s/, 8_000);
+      expect(node.logger.has(/did not answer a ping, so no beat/)).toBe(true);
+      await waitFor(
+        "the next process",
+        () => node.node.pid !== null && node.node.pid !== first,
+        3_000,
+      );
+    },
+  );
 
   it("a node whose own health check says it is not working is said once, kept running, and withdrawn when well", async () => {
     const { node, clock } = beating();
@@ -661,20 +726,28 @@ describe("a node process whose type declares a heartbeat (spec 2.4.2)", () => {
   });
 });
 
-/** Move the clock a second at a time, settling each missed ping, until the node is judged stuck. */
-async function untilStuck(node: RawNode, clock: FakeClock): Promise<void> {
-  for (let step = 0; step < 300 && !node.logger.has(/stuck:/); step += 1) {
-    clock.advance(1_000);
-    await new Promise((resolve) => setImmediate(resolve));
-  }
-}
-
 /** Let a pong written by the process be read and settled before the clock moves again. */
 async function flushPongs(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 50));
 }
 
 describe("closing a node process", () => {
+  it("a node created again, or removed, withdraws everything said about it before", async () => {
+    const node = raw();
+    // Its own notices; refused ports have theirs, withdrawn the same way (refused-ports.ts).
+    const mine = (of: RawNode) => of.notifier.cleared.filter((kind) => kind.startsWith("node-"));
+    const said = ["node-stopped", "node-not-restarted", "node-stuck", "node-unhealthy"];
+    // Created (a deploy or a redeploy, with or without a heartbeat now): all withdrawn.
+    expect(mine(node)).toEqual(said.map((kind) => `${kind} raw`));
+    await ready(node);
+    await node.node.close("redeploy");
+    expect(mine(node)).toHaveLength(4);
+    const removed = raw();
+    await ready(removed);
+    await removed.node.close("removed");
+    expect(mine(removed)).toEqual([...said, ...said].map((kind) => `${kind} raw`));
+  });
+
   it("sends close, reads closed, and waits for the exit", async () => {
     const node = raw();
     await ready(node);

@@ -34,7 +34,7 @@ export interface HeartbeatDeps {
   readonly who: string;
   /** The child's declared profile; its interval is the ping cadence. */
   readonly profile: StabilityProfile;
-  /** Told once when the child is judged stale, with how long it has been silent. */
+  /** Told once when the child is judged stale, with how long it has shown no progress. */
   readonly onStale: (silentForMs: number) => void;
 }
 
@@ -47,6 +47,9 @@ export class Heartbeat implements HeartbeatWatch {
   #waiting = false;
   #beats = 0;
   #lastBeatAt: number | null = null;
+  /** The progress marker of the latest answer (helper/heartbeat.py `progress_at`). */
+  #marker: number | null = null;
+  /** When, on this clock, the marker last moved: what silence is measured from. */
   #silentSince = 0;
 
   constructor(deps: HeartbeatDeps) {
@@ -75,6 +78,7 @@ export class Heartbeat implements HeartbeatWatch {
     this.#judge = new StalenessJudge(this.#deps.profile);
     this.#beats = 0;
     this.#lastBeatAt = null;
+    this.#marker = null;
     const now = this.#deps.clock.now();
     this.#silentSince = now;
     this.#judge.observe(null, now, true);
@@ -113,11 +117,9 @@ export class Heartbeat implements HeartbeatWatch {
     this.#schedule(this.#interval);
     ping
       .then(
-        () => {
+        (answer) => {
           if (session === this.#session) {
-            this.#beats += 1;
-            this.#lastBeatAt = this.#deps.clock.now();
-            this.#silentSince = this.#lastBeatAt;
+            this.#beat(answer);
           }
         },
         (error: unknown) => {
@@ -137,12 +139,28 @@ export class Heartbeat implements HeartbeatWatch {
       });
   }
 
+  /**
+   * An answered ping. Its progress marker, when the child sends one, is when it last did real
+   * work, and only a marker that MOVES is progress (helper/detection.py:364-395): a child that
+   * answers with a frozen marker is wedged. A child that sends none is judged by its answers.
+   */
+  #beat(answer: unknown): void {
+    const now = this.#deps.clock.now();
+    this.#beats += 1;
+    this.#lastBeatAt = now;
+    const marker = typeof answer === "number" && Number.isFinite(answer) ? answer : now;
+    if (marker !== this.#marker) {
+      this.#marker = marker;
+      this.#silentSince = now;
+    }
+  }
+
   #judgeNow(dueAt: number): void {
     const now = this.#deps.clock.now();
     // A ping settles within one interval of being sent (its own bound), and it is sent when
     // its pass is due. Anything later than that means the clock jumped: a slow pass.
     const onTime = now - dueAt <= 2 * this.#interval;
-    const verdict = this.#judge.observe(this.#lastBeatAt, now, onTime);
+    const verdict = this.#judge.observe(this.#marker, now, onTime);
     if (verdict === "deferred" && !onTime) {
       this.#deps.logger.warn(
         `the heartbeat pass ran late (the machine may have slept); ${this.#deps.who}'s ` +
@@ -156,7 +174,7 @@ export class Heartbeat implements HeartbeatWatch {
     const silentFor = now - this.#silentSince;
     this.stop();
     this.#deps.logger.warn(
-      `${this.#deps.who} answered no ping for ${String(Math.round(silentFor))} ms ` +
+      `${this.#deps.who} showed no progress for ${String(Math.round(silentFor))} ms ` +
         `(its window is ${String(staleWindow(this.#deps.profile))} ms): judged stale`,
     );
     this.#deps.onStale(silentFor);

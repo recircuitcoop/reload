@@ -212,7 +212,7 @@ key it does not know.
 
 | Key | Value | Meaning |
 |---|---|---|
-| `heartbeat` | `{"interval_s": number, "stale_after_s"?: number}`, both above 0 | The type promises to answer `ping` (4.1). The runtime pings each of its processes every `interval_s` after `ready`, and records a beat only for a `pong` that comes back before the next ping is due. A process that answers none for `stale_after_s` (default: three intervals) while it is running is stuck: the runtime logs it, tells the person once, and kills it, and the kill is an unexpected exit (6.5), restarted like any other. A pass that runs long after it was due (the machine slept) starts the window again rather than reading the gap as silence. Without `heartbeat`, a process is never judged stuck. |
+| `heartbeat` | `{"interval_s": number, "stale_after_s"?: number}`, each from 1 s to a day (86400 s), and `stale_after_s` no shorter than `interval_s` | The type promises to answer `ping` (4.1). The runtime pings each of its processes every `interval_s` after `ready`, and records a beat only for a `pong` that comes back before the next ping is due. A process that shows no progress (4.2 `pong`) for `stale_after_s` (default: three intervals) while it is running is stuck, judged within one interval of that window: the runtime logs it and tells the person once per episode, and signals nothing then. It stops the process when its restart backoff has run out (250 ms × the stuck restarts in a row, at most 5 s) and starts the next one at once; the stop counts toward the crash-loop limit (6.5). A long step stays legal while it sends `status` or `progress`. A pass that runs long after it was due (the machine slept) starts the window again rather than reading the gap as silence. Without `heartbeat`, a process is never judged stuck. |
 | `restartable` | boolean, default `true` | `false`: a process that exits unexpectedly is never started again, for example because starting it twice would repeat a side effect. The instance is stopped as at the crash-loop limit (6.5): its open inputs fail, and the person is told once. A redeploy creates it again. |
 | `limits` | object | Its own resource limits, as below. |
 
@@ -373,8 +373,8 @@ A type MAY set its own limits in `reload.limits`:
           "type": "object",
           "required": ["interval_s"],
           "properties": {
-            "interval_s": { "type": "number", "exclusiveMinimum": 0 },
-            "stale_after_s": { "type": "number", "exclusiveMinimum": 0 }
+            "interval_s": { "type": "number", "minimum": 1, "maximum": 86400 },
+            "stale_after_s": { "type": "number", "minimum": 1, "maximum": 86400 }
           }
         },
         "restartable": { "type": "boolean" },
@@ -519,7 +519,7 @@ Every frame is a JSON object with a string field `t`.
 | `present` | `in`, `content` | Action views: show this to the person. | Set the journal entry to `awaiting` with `content`, and apply section 8. |
 | `snapshot` | `content`, `state`, optional `in` | Snapshot views: record this. | Store the snapshot with the type's actions, the instance id and the time. |
 | `closed` | — | In answer to `close`. | Stop waiting for the acknowledgement. |
-| `pong` | `id`, optional `healthy` (boolean) | In answer to `ping`. `healthy` is the node's own health check's answer: `false` when the check said so or failed; absent when the node has no check. | Record a heartbeat for the process (2.4.2), whatever `healthy` says: an answer is a sign of life. Carry `healthy` as it is: when it turns `false`, log it and tell the person once that the node says it is not working; when it turns `true` again, withdraw that notice. Absent changes nothing. A `pong` for an `id` it did not send is ignored. |
+| `pong` | `id`, optional `healthy` (boolean), optional `progress` (number) | In answer to `ping`. `healthy` is the node's own health check's answer: `false` when the check said so, failed or took too long; absent when the node has no check. `progress` is when, on the node's own clock, it last did real work: an SDK moves it with every frame a handler sends but `log`, and keeps it at "now" while no input is in flight (an idle node is not wedged). | Record a heartbeat for the process (2.4.2), whatever `healthy` says. Its progress is `progress` when sent, else the answer itself; only a value that MOVES is progress, so a node whose frame loop answers while a handler is wedged is judged stuck. Carry `healthy` as it is: when it turns `false`, log it and tell the person once that the node says it is not working; when it turns `true` again, withdraw that notice. Absent changes nothing. A `pong` for an `id` it did not send is ignored. |
 
 #### 4.2.1 Notes and results on `done` (revision 2.1)
 
@@ -724,7 +724,8 @@ The schemas state the shape a frame has once the runtime has applied the revisio
       "properties": {
         "t": { "const": "pong" },
         "id": { "$ref": "#/$defs/id" },
-        "healthy": { "type": "boolean" }
+        "healthy": { "type": "boolean" },
+        "progress": { "type": "number" }
       }
     },
     "viewContent": {
@@ -1259,8 +1260,9 @@ A node SDK (any language) conforms when it:
 - [ ] (2.1) lets `done` carry `notes` and `results` (4.2.1), and provides
       `progress(in, done, total, eta_s?)`, a `status` with `in` (4.2.2);
 - [ ] answers every `ping` with a `pong` of its `id` itself, from the loop that reads frames,
-      while handlers are running too (2.4.2), and lets the node give a health check whose answer
-      the `pong` carries as `healthy` (`false` when the check fails);
+      while handlers are running too (2.4.2), carrying the progress marker (4.2 `pong`), and lets
+      the node give a health check, asked apart from the frame loop and bounded by 0.5 s, whose
+      answer the `pong` carries as `healthy` (`false` when the check fails or takes longer);
 - [ ] answers `close` with `closed`, then exits 0 within 5 s;
 - [ ] treats EOF on stdin as `close`, and exits without error;
 - [ ] never logs credentials;
@@ -1322,6 +1324,7 @@ Plan 0031 adds:
 |---|---|---|
 | C25 | heartbeat | each `ping` gets one `pong` with its `id`, also while an input is running; on the runtime side, a type that declares `reload.heartbeat` and stops answering is killed, restarted under the usual rules and the person told once, and a type that declares none is never pinged |
 | C26 | health | a node's health check answers in the `pong` as `healthy`, and a check that fails answers `false`; on the runtime side, `healthy: false` tells the person once, without killing anything, and `healthy: true` withdraws it |
+| C27 | progress | each `pong` carries `progress`; it moves while the node is idle and with every frame a handler sends but `log`, and stays still while a handler sends nothing; on the runtime side, a node whose marker stays still for its window while it answers is judged stuck, and one sending `status` or `progress` never is |
 
 C15 binds the runtime, not SDKs. Of these, C1, C4 to C8, C10 to C12, C14 and C15 were exercised
 by the spike, by hand and by script. **[UNPROVEN]** C2, C3, C9 and C13 as automated tests, and

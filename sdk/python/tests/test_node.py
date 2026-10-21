@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 import json
+import threading
 import time
 from collections.abc import Callable
 
@@ -451,6 +452,11 @@ def test_run_ignores_an_unknown_frame_type_and_keeps_going(monkeypatch: pytest.M
     wait_until(lambda: {"t": "done", "in": "after"} in frames_of(out))
 
 
+def pongs(out: io.StringIO) -> list[dict[str, object]]:
+    """The pongs written, in order."""
+    return [frame for frame in frames_of(out) if frame["t"] == "pong"]
+
+
 def test_run_answers_every_ping_with_a_pong_of_its_id_without_any_handler(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -463,24 +469,73 @@ def test_run_answers_every_ping_with_a_pong_of_its_id_without_any_handler(
         {"t": "close"},
     )
     node.run()
-    assert frames_of(out) == [
-        {"t": "ready"},
-        {"t": "pong", "id": "p1"},
-        {"t": "pong", "id": "p2"},
-        {"t": "closed"},
+    assert [(f["id"], sorted(f)) for f in pongs(out)] == [
+        ("p1", ["id", "progress", "t"]),
+        ("p2", ["id", "progress", "t"]),
     ]
+    assert frames_of(out)[-1] == {"t": "closed"}
 
 
-def test_a_health_check_answers_in_the_pong_and_one_that_raises_is_not_healthy(
+def test_the_progress_marker_moves_while_idle_and_freezes_while_a_handler_is_wedged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The old helper's `progress_at`: what moves it is work, never the answering itself."""
+    out, _ = patch_io(monkeypatch)
+    ticks = iter(float(n) for n in range(1, 10_000))
+    monkeypatch.setattr("reload_node.time.monotonic", lambda: next(ticks))
+    release = threading.Event()
+    node = start_node(monkeypatch)
+
+    def on_input(input_id: str, event: dict[str, object]) -> None:
+        if event.get("data") == "step":
+            node.progress(input_id, 1, 2)
+        release.wait(5)
+        node.done(input_id)
+
+    monkeypatch.setattr(
+        "sys.stdin",
+        lines(
+            {"t": "ping", "id": "idle-1"},
+            {"t": "ping", "id": "idle-2"},
+            {"t": "input", "id": "w", "event": {"type": "t.v1", "data": "wedge"}},
+            {"t": "ping", "id": "wedged-1"},
+            {"t": "ping", "id": "wedged-2"},
+        ),
+    )
+    worker = threading.Thread(target=node.run, kwargs={"on_input": on_input})
+    worker.start()
+    wait_until(lambda: len(pongs(out)) == 4)
+    marker = {str(f["id"]): f["progress"] for f in pongs(out)}
+    # Idle: "now" each time, so it moves. Wedged: the input's start, and it stays there.
+    assert marker["idle-1"] != marker["idle-2"]
+    assert marker["wedged-1"] == marker["wedged-2"]
+    # A long step that sends progress moves it, though the step is still running.
+    node._start_work("p")
+    before = node._progress()
+    node.progress("p", 1, 2)
+    assert node._progress() != before
+    # Waiting on a person is not work: after `present` the input no longer holds the marker.
+    node.present("p", {"title": "Check"})
+    assert "p" not in node._working
+    release.set()
+    worker.join(5)
+
+
+def test_a_health_check_answers_in_the_pong_and_one_that_raises_or_hangs_is_not_healthy(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     out, _ = patch_io(monkeypatch)
-    answers: list[object] = [True, False, RuntimeError("the index is on fire")]
+    monkeypatch.setattr("reload_node.HEALTH_TIMEOUT_S", 0.05)
+    hang = threading.Event()
+    answers: list[object] = [True, False, RuntimeError("the index is on fire"), "hang"]
 
     def check() -> bool:
         answer = answers.pop(0)
         if isinstance(answer, Exception):
             raise answer
+        if answer == "hang":
+            hang.wait(5)
+            return True
         return bool(answer)
 
     node = start_node(
@@ -488,19 +543,30 @@ def test_a_health_check_answers_in_the_pong_and_one_that_raises_is_not_healthy(
         {"t": "ping", "id": "p1"},
         {"t": "ping", "id": "p2"},
         {"t": "ping", "id": "p3"},
-        {"t": "close"},
+        {"t": "ping", "id": "p4"},
+        {"t": "input", "id": "after", "event": {"type": "t.v1", "data": 1}},
     )
-    node.run(on_health=check)
+    node.run(on_input=lambda i, e: node.done(i), on_health=check)
+    # The frame loop was never held: the input after a hanging check was read and done.
+    wait_until(lambda: len(pongs(out)) == 4)
+    hang.set()
     frames = frames_of(out)
-    assert [f for f in frames if f["t"] == "pong"] == [
-        {"t": "pong", "id": "p1", "healthy": True},
-        {"t": "pong", "id": "p2", "healthy": False},
-        {"t": "pong", "id": "p3", "healthy": False},
-    ]
+    assert {"t": "done", "in": "after"} in frames
+    assert {str(f["id"]): f["healthy"] for f in pongs(out)} == {
+        "p1": True,
+        "p2": False,
+        "p3": False,
+        "p4": False,
+    }
     assert {
         "t": "log",
         "level": "error",
         "msg": "the health check raised: the index is on fire",
+    } in frames
+    assert {
+        "t": "log",
+        "level": "warn",
+        "msg": "the health check took longer than 0.05 s",
     } in frames
 
 

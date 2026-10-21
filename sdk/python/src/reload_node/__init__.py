@@ -32,6 +32,7 @@ from __future__ import annotations
 import json
 import sys
 import threading
+import time
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any, Literal, NotRequired, TextIO, TypedDict
 
@@ -50,6 +51,9 @@ __all__ = [
 
 #: The largest frame, in encoded UTF-8 bytes, excluding the newline (spec 3.5).
 MAX_FRAME_BYTES = 1_048_576
+# The longest a health check may take before its pong answers ``healthy: false`` (spec 4.2): far
+# inside the shortest interval a type may declare (1 s), so the pong is never late for it.
+HEALTH_TIMEOUT_S = 0.5
 
 # ── view content: the media items (spec 8.1) ──────────────────────────────────────────────
 
@@ -167,6 +171,10 @@ class Node:
         self._out: TextIO = sys.stdout
         self._write_lock = threading.Lock()
         self._ports = None if ports is None else frozenset(ports)
+        # The progress marker a pong carries (spec 4.2): when a handler last sent a frame, on
+        # this process's monotonic clock in ms, and the inputs still being worked on.
+        self._progress_at = time.monotonic() * 1000
+        self._working: set[str] = set()
 
         # From here on, nothing but this class's own send() reaches the real stdout (C3): a
         # library's print()/logging, and even an uncaught exception's traceback (which the
@@ -206,6 +214,25 @@ class Node:
         with self._write_lock:
             self._out.write(line)
             self._out.flush()
+            self._track(frame)
+
+    def _track(self, frame: dict[str, Any]) -> None:
+        """Progress is any frame a handler sends but a log: the marker moves. An input ends its
+        work at its terminal frame, or at ``present``, after which it waits on a person."""
+        kind = frame.get("t")
+        if kind in ("pong", "log", "ready", "closed"):
+            return
+        self._progress_at = time.monotonic() * 1000
+        if kind in ("done", "error", "present"):
+            self._working.discard(str(frame.get("in")))
+
+    def _progress(self) -> float:
+        """The marker now: "now" while no input is being worked on (an idle node is not
+        wedged), else when a handler last sent a frame (spec 4.2 ``pong``)."""
+        with self._write_lock:
+            if not self._working:
+                return time.monotonic() * 1000
+            return self._progress_at
 
     def ready(self) -> None:
         self.send({"t": "ready"})
@@ -290,6 +317,12 @@ class Node:
 
     # ── the conversation ─────────────────────────────────────────────────────────────────
 
+    def _start_work(self, input_id: str) -> None:
+        """An input is being worked on from now: its progress is what its handler sends."""
+        with self._write_lock:
+            self._working.add(input_id)
+            self._progress_at = time.monotonic() * 1000
+
     def _dispatch(
         self,
         handler: Callable[..., None],
@@ -316,12 +349,32 @@ class Node:
         threading.Thread(target=work, daemon=True).start()
 
     def _ask_health(self, on_health: Callable[[], bool]) -> bool:
-        """The node's own answer; a check that raises has answered too: not healthy."""
-        try:
-            return bool(on_health())
-        except Exception as caught:  # noqa: BLE001 - reported, and answered as not healthy
-            self.log(f"the health check raised: {caught}", "error")
+        """The node's own answer, on a thread of its own and bounded by HEALTH_TIMEOUT_S; a
+        check that raises, or takes longer, has answered too: not healthy."""
+        answers: list[bool] = []
+
+        def ask() -> None:
+            try:
+                answers.append(bool(on_health()))
+            except Exception as caught:  # noqa: BLE001 - reported, and answered as not healthy
+                self.log(f"the health check raised: {caught}", "error")
+                answers.append(False)
+
+        worker = threading.Thread(target=ask, daemon=True)
+        worker.start()
+        worker.join(HEALTH_TIMEOUT_S)
+        if not answers:
+            self.log(f"the health check took longer than {HEALTH_TIMEOUT_S} s", "warn")
             return False
+        return answers[0]
+
+    def _pong(self, ping_id: str, on_health: Callable[[], bool] | None) -> None:
+        """One ``pong``: its id, the progress marker, and the health check's answer."""
+        pong: dict[str, Any] = {"t": "pong", "id": ping_id}
+        if on_health is not None:
+            pong["healthy"] = self._ask_health(on_health)
+        pong["progress"] = self._progress()
+        self.send(pong)
 
     def run(
         self,
@@ -357,6 +410,7 @@ class Node:
                 input_id = frame.get("id")
                 event = frame.get("event")
                 if isinstance(input_id, str) and isinstance(event, dict):
+                    self._start_work(input_id)
                     self._dispatch(on_input, (input_id, event), input_id=input_id)
             elif t == "cancel" and on_cancel is not None:
                 cancelled = frame.get("in")
@@ -366,6 +420,7 @@ class Node:
                 acted = frame.get("in")
                 if isinstance(acted, str):
                     values = frame.get("values")
+                    self._start_work(acted)
                     self._dispatch(
                         on_action,
                         (acted, values if isinstance(values, dict) else {}),
@@ -386,14 +441,16 @@ class Node:
                 if isinstance(data, dict):
                     self._dispatch(on_fire, (data,), input_id=None)
             elif t == "ping":
-                # Answered here, on the loop that reads frames, so a heartbeat says that this
-                # loop still reads (spec 2.4.2, 4.1); every handler runs on its own thread.
+                # Answered whatever the handlers are doing (spec 2.4.2, 4.1): at once without a
+                # health check; with one, on a thread of its own, so a slow check never holds
+                # this loop from reading the next frame.
                 ping_id = frame.get("id")
-                if isinstance(ping_id, str):
-                    pong: dict[str, Any] = {"t": "pong", "id": ping_id}
-                    if on_health is not None:
-                        pong["healthy"] = self._ask_health(on_health)
-                    self.send(pong)
+                if isinstance(ping_id, str) and on_health is None:
+                    self._pong(ping_id, None)
+                elif isinstance(ping_id, str):
+                    threading.Thread(
+                        target=self._pong, args=(ping_id, on_health), daemon=True
+                    ).start()
             elif t == "close":
                 if on_close is not None:
                     on_close()

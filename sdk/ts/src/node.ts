@@ -52,24 +52,83 @@ export interface Handlers {
   fire?(data: Readonly<Record<string, unknown>>): void | Promise<void>;
   close?(): void | Promise<void>;
   /**
-   * The node's own health check (spec 2.4.2): asked at each `ping`, on the loop that reads
-   * frames, so it must answer at once. Its answer goes back as the `pong`'s `healthy`; one that
-   * throws is not healthy. Without it, a `pong` carries no answer.
+   * The node's own health check (spec 2.4.2), asked at each `ping` apart from the loop that reads
+   * frames. Its answer goes back as the `pong`'s `healthy`; one that throws, or that takes longer
+   * than HEALTH_TIMEOUT_MS, is not healthy. A check that blocks the event loop holds everything
+   * in this process, so a slow one should be async. Without it, a `pong` carries no answer.
    */
-  health?(): boolean;
+  health?(): boolean | Promise<boolean>;
 }
 
-/** The node's own answer; a check that throws has answered too: not healthy. */
-function askHealth(handlers: Handlers): boolean {
+/** The longest a health check may take before its pong answers `healthy: false` (spec 4.2). */
+export const HEALTH_TIMEOUT_MS = 500;
+
+/** The node's own answer, bounded by HEALTH_TIMEOUT_MS; a check that throws: not healthy. */
+async function askHealth(handlers: Handlers): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<"late">((resolve) => {
+    timer = setTimeout(() => {
+      resolve("late");
+    }, HEALTH_TIMEOUT_MS);
+  });
   try {
-    return handlers.health?.() === true;
+    const answer = await Promise.race([Promise.resolve().then(() => handlers.health?.()), late]);
+    if (answer === "late") {
+      log(`the health check took longer than ${String(HEALTH_TIMEOUT_MS)} ms`, "warn");
+      return false;
+    }
+    return answer === true;
   } catch (caught) {
     log(
       `the health check threw: ${caught instanceof Error ? caught.message : String(caught)}`,
       "error",
     );
     return false;
+  } finally {
+    clearTimeout(timer);
   }
+}
+
+// The progress marker a pong carries (spec 4.2): when a handler last sent a frame, on this
+// process's monotonic clock in ms, and the inputs still being worked on.
+let progressAt = performance.now();
+const working = new Set<string>();
+
+/** An input is being worked on from now: its progress is what its handler sends. */
+function startWork(inputId: string): void {
+  working.add(inputId);
+  progressAt = performance.now();
+}
+
+/** Progress is any frame a handler sends but a log; `present` and a terminal frame end work. */
+function track(frame: Frame): void {
+  const kind = frame["t"];
+  if (kind === "pong" || kind === "log" || kind === "ready" || kind === "closed") {
+    return;
+  }
+  progressAt = performance.now();
+  if (
+    (kind === "done" || kind === "error" || kind === "present") &&
+    typeof frame["in"] === "string"
+  ) {
+    working.delete(frame["in"]);
+  }
+}
+
+/** The marker now: "now" while no input is worked on (idle is not wedged), else the last frame. */
+function progressMarker(): number {
+  return working.size === 0 ? performance.now() : progressAt;
+}
+
+/** One `pong`: its id, the progress marker, and the health check's answer when there is one. */
+async function pong(id: string, handlers: Handlers): Promise<void> {
+  const healthy = handlers.health === undefined ? undefined : await askHealth(handlers);
+  send({
+    t: "pong",
+    id,
+    ...(healthy === undefined ? {} : { healthy }),
+    progress: progressMarker(),
+  });
 }
 
 /** A `media` image (spec 8.1): `src` is a `data:image/(png|jpeg|gif|webp)` URI or a `.png`/
@@ -192,6 +251,7 @@ function send(frame: Frame): void {
     );
   }
   process.stdout.write(line + "\n");
+  track(frame);
 }
 
 export function ready(): void {
@@ -382,6 +442,7 @@ export async function run(handlers: Handlers): Promise<void> {
     if (frame["t"] === "input" && typeof frame["id"] === "string" && isRecord(frame["event"])) {
       const id = frame["id"];
       const event = frame["event"] as unknown as InputEvent;
+      startWork(id);
       Promise.resolve()
         .then(() => handlers.input?.(id, event))
         .catch((caught: unknown) => {
@@ -392,6 +453,7 @@ export async function run(handlers: Handlers): Promise<void> {
     } else if (frame["t"] === "action" && typeof frame["in"] === "string") {
       const id = frame["in"];
       const values = isRecord(frame["values"]) ? frame["values"] : {};
+      startWork(id);
       Promise.resolve()
         .then(() => handlers.action?.(id, values))
         .catch((caught: unknown) => {
@@ -423,12 +485,8 @@ export async function run(handlers: Handlers): Promise<void> {
           log(caught instanceof Error ? caught.message : String(caught), "error");
         });
     } else if (frame["t"] === "ping" && typeof frame["id"] === "string") {
-      // Answered on the loop that reads frames (spec 2.4.2, 4.1): handlers run apart from it.
-      send({
-        t: "pong",
-        id: frame["id"],
-        ...(handlers.health === undefined ? {} : { healthy: askHealth(handlers) }),
-      });
+      // Answered apart from this loop (spec 2.4.2, 4.1): a slow health check never holds it.
+      void pong(frame["id"], handlers);
     } else if (frame["t"] === "close") {
       await handlers.close?.();
       closeAndExit();

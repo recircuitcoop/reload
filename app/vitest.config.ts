@@ -107,6 +107,10 @@ export default defineConfig({
             "src/application/managed-watch.ts",
             "src/adapters/process/resource-guard.ts",
             "src/adapters/process/resource-probe.ts",
+            // Plan 0031: the heartbeat of plugins and the MCP child, and what a node is told.
+            "src/application/heartbeat.ts",
+            "src/adapters/process/node-heartbeat.ts",
+            "src/adapters/process/node-notices.ts",
           ].map((glob) => [glob, { lines: 95, branches: 90, perFile: true }]),
         ),
       },

@@ -99,8 +99,8 @@
           "type": "object",
           "required": ["interval_s"],
           "properties": {
-            "interval_s": { "type": "number", "exclusiveMinimum": 0 },
-            "stale_after_s": { "type": "number", "exclusiveMinimum": 0 }
+            "interval_s": { "type": "number", "minimum": 1, "maximum": 86400 },
+            "stale_after_s": { "type": "number", "minimum": 1, "maximum": 86400 }
           }
         },
         "restartable": { "type": "boolean" },

@@ -255,11 +255,14 @@ describe.each(SDK_LANGUAGES)("conformance: the %s SDK's kitchen reference node",
     await waitFor("working", () => node.frames.some((f) => f.t === "status"));
     node.send({ t: "ping", id: "busy" });
     await waitFor("the busy pong", () => node.frames.filter((f) => f.t === "pong").length === 2);
-    // The kitchen node has a health check (C26), so each pong carries its answer.
-    expect(node.frames.filter((f) => f.t === "pong")).toEqual([
-      { t: "pong", id: "idle", healthy: true },
-      { t: "pong", id: "busy", healthy: true },
+    // The kitchen node has a health check (C26), so each pong carries its answer, and every
+    // pong its progress marker (C27).
+    const pongs = node.frames.flatMap((f) => (f.t === "pong" ? [f] : []));
+    expect(pongs.map(({ id, healthy }) => ({ id, healthy }))).toEqual([
+      { id: "idle", healthy: true },
+      { id: "busy", healthy: true },
     ]);
+    expect(pongs.every((f) => typeof f.progress === "number")).toBe(true);
     expect(node.terminal("running")).toEqual([]);
     expect(node.rejected).toEqual([]);
   });
@@ -269,7 +272,7 @@ describe.each(SDK_LANGUAGES)("conformance: the %s SDK's kitchen reference node",
     node.start();
     await node.ready();
     const answers: unknown[] = [];
-    for (const [index, value] of [false, "raise", true].entries()) {
+    for (const [index, value] of [false, "raise", "hang", true].entries()) {
       const id = `health-${String(index)}`;
       node.send({ t: "input", id, event: { type: "t.v1", data: { do: "health", value } } });
       await waitFor(`health ${String(index)}`, () => node.terminal(id).length === 1);
@@ -279,13 +282,46 @@ describe.each(SDK_LANGUAGES)("conformance: the %s SDK's kitchen reference node",
       );
       answers.push(node.frames.find((f) => f.t === "pong" && f.id === `p${String(index)}`));
     }
-    expect(answers).toEqual([
-      { t: "pong", id: "p0", healthy: false },
-      { t: "pong", id: "p1", healthy: false },
-      { t: "pong", id: "p2", healthy: true },
+    expect(answers.map((f) => (f as { healthy?: boolean }).healthy)).toEqual([
+      false,
+      false,
+      false,
+      true,
     ]);
-    expect(node.frames).toContainEqual(expect.objectContaining({ t: "log", level: "error" }));
+    // A check that fails is said, and one that hangs is cut off without holding the frame loop.
+    const logs = node.frames.flatMap((f) => (f.t === "log" ? [f.level ?? ""] : []));
+    expect(logs).toEqual(expect.arrayContaining(["error", "warn"]));
     expect(node.rejected).toEqual([]);
+  });
+
+  it("C27 progress: the marker moves while idle, stays still while a handler is wedged, and moves with its progress", async () => {
+    const node = session(language);
+    node.start();
+    await node.ready();
+    const marker = async (id: string): Promise<number> => {
+      node.send({ t: "ping", id });
+      await waitFor(`pong ${id}`, () => node.frames.some((f) => f.t === "pong" && f.id === id));
+      const pong = node.frames.find((f) => f.t === "pong" && f.id === id);
+      return pong?.t === "pong" ? (pong.progress ?? Number.NaN) : Number.NaN;
+    };
+    const idle = await marker("idle-1");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(await marker("idle-2")).toBeGreaterThan(idle);
+    // "slow" says one status, then waits: wedged, as far as its progress shows.
+    node.send({ t: "input", id: "slow", event: { type: "t.v1", data: { do: "slow" } } });
+    await waitFor("working", () => node.frames.some((f) => f.t === "status"));
+    const wedged = await marker("wedged-1");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(await marker("wedged-2")).toBe(wedged);
+    // A progress frame from another input moves it.
+    node.send({
+      t: "input",
+      id: "step",
+      event: { type: "t.v1", data: { do: "progress", done: 1, total: 2 } },
+    });
+    await waitFor("the step", () => node.terminal("step").length === 1);
+    expect(await marker("moved")).toBeGreaterThan(wedged);
+    node.send({ t: "cancel", in: "slow" });
   });
 
   it("C12 fire: a fire frame gives an emit with no in (a new run)", async () => {

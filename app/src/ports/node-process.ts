@@ -222,9 +222,12 @@ export interface NodeProcess {
   queue(): QueueReport;
 }
 
-/** What a heartbeat pings (spec 4.1 `ping`; the MCP session's ping): settles on the answer. */
+/**
+ * What a heartbeat pings (spec 4.1 `ping`; the MCP session's ping): settles on the answer, with
+ * the child's progress marker when it sends one (spec 4.2 `pong`), else with nothing.
+ */
 export interface Pingable {
-  ping(timeoutMs: number): Promise<void>;
+  ping(timeoutMs: number): Promise<unknown>;
 }
 
 /** One process's heartbeat (spec 2.4.2): pings from `start`, and says once when it is stale. */

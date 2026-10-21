@@ -491,6 +491,9 @@
         },
         "healthy": {
           "type": "boolean"
+        },
+        "progress": {
+          "type": "number"
         }
       }
     },

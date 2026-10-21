@@ -156,6 +156,14 @@ function beyondTheSchema(declaration: Declaration): string[] {
       problems.push(`${at}/id: ${JSON.stringify(type.id)} is declared twice in this package`);
     }
     typeIds.add(type.id);
+    const beat = type.reload?.heartbeat;
+    if (beat?.stale_after_s !== undefined && beat.stale_after_s < beat.interval_s) {
+      problems.push(
+        `${at}/reload/heartbeat/stale_after_s: ${String(beat.stale_after_s)} s is shorter than ` +
+          `interval_s (${String(beat.interval_s)} s); a process must have at least one interval ` +
+          "to answer before it is judged stuck",
+      );
+    }
     const ports = new Set<string>();
     const named: { port: string; event: string; field: string }[] = [
       ...type.outputs.map((o, i) => ({ ...o, field: `${at}/outputs/${String(i)}` })),

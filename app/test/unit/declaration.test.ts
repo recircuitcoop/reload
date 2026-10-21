@@ -196,7 +196,7 @@ describe("parseDeclaration", () => {
     ]);
   });
 
-  it("accepts a type's heartbeat, judged in ms, and refuses one without a positive interval (spec 2.4.2)", () => {
+  it("accepts a type's heartbeat, judged in ms, and refuses one outside a second to a day (spec 2.4.2)", () => {
     const beat = (heartbeat: unknown) =>
       declaration({ types: [nodeType({ reload: { heartbeat } })] });
     const parsed = parse(beat({ interval_s: 30, stale_after_s: 120 }));
@@ -205,12 +205,24 @@ describe("parseDeclaration", () => {
       heartbeatIntervalMs: 30_000,
       staleAfterMs: 120_000,
     });
-    const plain = parse(beat({ interval_s: 0.5 }));
+    const plain = parse(beat({ interval_s: 1.5 }));
     const half = plain.ok ? plain.declaration.types[0] : undefined;
-    expect(half && stabilityOf(half)).toEqual({ heartbeatIntervalMs: 500, staleAfterMs: null });
+    expect(half && stabilityOf(half)).toEqual({ heartbeatIntervalMs: 1_500, staleAfterMs: null });
     expect(stabilityOf(nodeType() as unknown as DeclaredType)).toBeNull();
-    expect(refused(beat({ interval_s: 0 }))).toEqual([
-      "types/0/reload/heartbeat/interval_s: must be > 0",
+    // From a second to a day: shorter cannot be answered, longer outlasts a timer and a person.
+    expect(refused(beat({ interval_s: 0.5 }))).toEqual([
+      "types/0/reload/heartbeat/interval_s: must be >= 1",
+    ]);
+    expect(refused(beat({ interval_s: 86_401 }))).toEqual([
+      "types/0/reload/heartbeat/interval_s: must be <= 86400",
+    ]);
+    expect(refused(beat({ interval_s: 30, stale_after_s: 86_401 }))).toEqual([
+      "types/0/reload/heartbeat/stale_after_s: must be <= 86400",
+    ]);
+    expect(parse(beat({ interval_s: 30, stale_after_s: 30 })).ok).toBe(true);
+    expect(refused(beat({ interval_s: 60, stale_after_s: 30 }))).toEqual([
+      "types/0/reload/heartbeat/stale_after_s: 30 s is shorter than interval_s (60 s); a " +
+        "process must have at least one interval to answer before it is judged stuck",
     ]);
     expect(refused(beat({ stale_after_s: 90 }))).toEqual([
       "types/0/reload/heartbeat/interval_s: is required",
