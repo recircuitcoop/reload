@@ -10,9 +10,8 @@
 // field never costs the rest of the file.
 //
 // What this deliberately does not carry over, and why, is also recorded: [helper] and [logging]
-// (fixed constants and an environment variable now, not settings), update.check_jitter (no
-// random delay in the new scheduler), and a plugin's `enabled`/`source` fields (the installed
-// package's own record now, not a config.toml line).
+// (fixed constants and an environment variable now, not settings), and a plugin's
+// `enabled`/`source` fields (the installed package's own record now, not a config.toml line).
 
 import { parseCatalogueSources, CatalogueSettingsError } from "../packages/catalogue";
 import { parsePackagePolicy, PackageSettingsError } from "../packages/versions";
@@ -158,12 +157,6 @@ export function buildLegacyImportPlan(document: TomlTable): LegacyImportPlan {
       `update.check_interval: ${String(updateSection["check_interval"])}s (applied to packages.check_interval)`,
     );
   }
-  if ("check_jitter" in updateSection) {
-    ignored.push({
-      key: "update.check_jitter",
-      reason: "the new scheduler has no random delay before a check",
-    });
-  }
 
   const overrides: Record<string, unknown> = {};
   for (const [name, value] of Object.entries(plugins)) {
@@ -220,8 +213,16 @@ export function buildLegacyImportPlan(document: TomlTable): LegacyImportPlan {
   let updateSetting: Readonly<Record<string, unknown>> | null = null;
   const rawChannel = updateSection["channel"];
   const channel: string | undefined = typeof rawChannel === "string" ? rawChannel : undefined;
-  if (typeof document["auto_check_versions"] === "boolean" || channel !== undefined) {
+  const jitter = updateSection["check_jitter"];
+  if (
+    typeof document["auto_check_versions"] === "boolean" ||
+    channel !== undefined ||
+    jitter !== undefined
+  ) {
     const candidate: Record<string, unknown> = {};
+    if (jitter !== undefined) {
+      candidate["check_jitter"] = jitter;
+    }
     if (typeof document["auto_check_versions"] === "boolean") {
       candidate["auto_check"] = document["auto_check_versions"];
     }
@@ -234,10 +235,16 @@ export function buildLegacyImportPlan(document: TomlTable): LegacyImportPlan {
       if (channel !== undefined) {
         imported.push(`update.channel: ${channel}`);
       }
+      if (jitter !== undefined) {
+        imported.push(`update.check_jitter: ${JSON.stringify(jitter)}s`);
+      }
     } catch (error) {
       if (error instanceof UpdateSettingsError) {
         ignored.push({
-          key: "update.channel",
+          key:
+            jitter !== undefined && channel === undefined
+              ? "update.check_jitter"
+              : "update.channel",
           reason: `could not be imported: ${reasonOf(error)}`,
         });
       } else {

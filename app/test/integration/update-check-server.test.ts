@@ -142,6 +142,7 @@ function checker(options: {
     session: {
       clock: { now: () => 0, after: () => () => undefined },
       currentVersion: () => options.currentVersion ?? "1.0.0",
+      random: () => 0,
     },
     publicKey: options.publicKey,
     feedBaseUrl: base,

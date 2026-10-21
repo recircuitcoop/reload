@@ -61,11 +61,16 @@ describe("buildLegacyImportPlan", () => {
     expect(plan.updateSetting).toEqual({ channel: "beta" });
   });
 
-  it("ignores update.check_jitter: the new scheduler has no random delay", () => {
+  it("imports update.check_jitter as the spread of each check, and refuses one out of range", () => {
     const plan = buildLegacyImportPlan({ update: { check_jitter: 60 } });
-    expect(plan.ignored).toContainEqual({
+    expect(plan.updateSetting).toEqual({ check_jitter: 60 });
+    expect(plan.imported).toContain("update.check_jitter: 60s");
+    const refused = buildLegacyImportPlan({ update: { check_jitter: -5 } });
+    expect(refused.updateSetting).toBeNull();
+    expect(refused.ignored).toContainEqual({
       key: "update.check_jitter",
-      reason: "the new scheduler has no random delay before a check",
+      reason:
+        "could not be imported: update.check_jitter must be a number of seconds from 0 to 86400",
     });
   });
 

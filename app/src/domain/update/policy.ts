@@ -13,12 +13,26 @@ export interface UpdatePolicy {
   readonly autoCheck: boolean;
   /** Which per-platform metadata file is asked for: `latest`, or a prerelease channel. */
   readonly channel: string;
+  /**
+   * The most a check waits beyond its due time, drawn afresh for each one (helper/config.py:351
+   * `check_jitter`), so installs do not all ask at the same second. 0: each check at once.
+   */
+  readonly checkJitterSeconds: number;
 }
 
-/** Off is the safer default for a switch nobody has looked at yet. */
-export const DEFAULT_UPDATE_POLICY: UpdatePolicy = { autoCheck: false, channel: "latest" };
+/** The old helper's one hour of spread. */
+export const DEFAULT_CHECK_JITTER_SECONDS = 60 * 60;
+/** A day: past it, the spread would skip whole daily checks. */
+export const MAX_CHECK_JITTER_SECONDS = 24 * 60 * 60;
 
-const POLICY_KEYS = new Set(["auto_check", "channel"]);
+/** Off is the safer default for a switch nobody has looked at yet. */
+export const DEFAULT_UPDATE_POLICY: UpdatePolicy = {
+  autoCheck: false,
+  channel: "latest",
+  checkJitterSeconds: DEFAULT_CHECK_JITTER_SECONDS,
+};
+
+const POLICY_KEYS = new Set(["auto_check", "channel", "check_jitter"]);
 /** A channel becomes half of a file name and a URL path segment: kept to what is safe in both. */
 const CHANNEL = /^[a-z][a-z0-9-]*$/;
 
@@ -29,7 +43,7 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
 /**
  * The `update` setting:
  *
- *     { "auto_check": true, "channel": "latest" }
+ *     { "auto_check": true, "channel": "latest", "check_jitter": 3600 }
  *
  * Absent is the default (off). Anything it cannot account for is refused whole: a channel
  * misspelled and read as the default would silently check somewhere the person did not choose.
@@ -56,8 +70,20 @@ export function parseUpdatePolicy(section: unknown): UpdatePolicy {
         "starting with a letter",
     );
   }
+  const jitter = section["check_jitter"] ?? DEFAULT_CHECK_JITTER_SECONDS;
+  if (
+    typeof jitter !== "number" ||
+    !Number.isFinite(jitter) ||
+    jitter < 0 ||
+    jitter > MAX_CHECK_JITTER_SECONDS
+  ) {
+    throw new UpdateSettingsError(
+      `update.check_jitter must be a number of seconds from 0 to ${String(MAX_CHECK_JITTER_SECONDS)}`,
+    );
+  }
   return {
     autoCheck: autoCheck ?? DEFAULT_UPDATE_POLICY.autoCheck,
     channel: channel ?? DEFAULT_UPDATE_POLICY.channel,
+    checkJitterSeconds: jitter,
   };
 }

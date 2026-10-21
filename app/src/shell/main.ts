@@ -523,7 +523,7 @@ async function start(): Promise<DesktopWired["notices"] | null> {
     settings: new JsonSettingsStore(path.join(userDir, "shell-settings.json")),
     report: { notifier: notices, logger },
     selfUpdater: new ElectronUpdaterInstaller(autoUpdater, source.repo, updateChannel, logger),
-    session: { clock: systemClock, currentVersion: () => app.getVersion() },
+    session: { clock: systemClock, currentVersion: () => app.getVersion(), random: Math.random },
     publicKey: source.publicKey,
     feedBaseUrl: releases.feedBaseUrl,
     tagBaseUrl: releases.tagBaseUrl,

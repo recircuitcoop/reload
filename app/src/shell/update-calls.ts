@@ -200,7 +200,11 @@ export function wireUpdateCalls(deps: UpdateCallsDeps): UpdateCalls {
             return refused("failed", "refused.failed");
           }
           const policy = parseUpdatePolicy(settings.readUpdate());
-          settings.writeUpdate({ auto_check: on, channel: policy.channel });
+          settings.writeUpdate({
+            auto_check: on,
+            channel: policy.channel,
+            check_jitter: policy.checkJitterSeconds,
+          });
           const next = view();
           toPage(IPC.updateStateChanged, next);
           return { ok: true, value: next };

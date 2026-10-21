@@ -16,12 +16,30 @@ describe("parseUpdatePolicy", () => {
     expect(parseUpdatePolicy({ auto_check: true, channel: "beta" })).toEqual({
       autoCheck: true,
       channel: "beta",
+      checkJitterSeconds: 3600,
     });
   });
 
+  it("reads the spread of each check, 0 to a day, an hour when absent", () => {
+    expect(parseUpdatePolicy({ check_jitter: 0 }).checkJitterSeconds).toBe(0);
+    expect(parseUpdatePolicy({ check_jitter: 86_400 }).checkJitterSeconds).toBe(86_400);
+    expect(parseUpdatePolicy({}).checkJitterSeconds).toBe(3600);
+    for (const bad of [-1, 86_401, "1h", Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() => parseUpdatePolicy({ check_jitter: bad })).toThrow(
+        "update.check_jitter must be a number of seconds from 0 to 86400",
+      );
+    }
+  });
+
   it("fills in the default for whichever half is not stored", () => {
-    expect(parseUpdatePolicy({ auto_check: true })).toEqual({ autoCheck: true, channel: "latest" });
-    expect(parseUpdatePolicy({ channel: "beta" })).toEqual({ autoCheck: false, channel: "beta" });
+    expect(parseUpdatePolicy({ auto_check: true })).toMatchObject({
+      autoCheck: true,
+      channel: "latest",
+    });
+    expect(parseUpdatePolicy({ channel: "beta" })).toMatchObject({
+      autoCheck: false,
+      channel: "beta",
+    });
   });
 
   it("refuses a setting that is not an object", () => {

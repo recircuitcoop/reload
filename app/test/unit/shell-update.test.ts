@@ -34,7 +34,7 @@ function options(): WireUpdateOptions {
       logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
     },
     selfUpdater: { checkForUpdates: vi.fn(), downloadRelease: vi.fn(), quitAndInstall: vi.fn() },
-    session: { clock, currentVersion: () => "1.0.0" },
+    session: { clock, currentVersion: () => "1.0.0", random: () => 0 },
     publicKey: null,
     feedBaseUrl: "https://example.invalid",
     tagBaseUrl: (tag) => `https://example.invalid/${tag}`,

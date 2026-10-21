@@ -239,7 +239,11 @@ test("every state sentence", async () => {
     );
     await auto.getByTestId("general-update-auto-switch").click();
     await expect(auto).toHaveAttribute("data-on", "true");
-    expect(settingsOf(userData)["update"]).toEqual({ auto_check: true, channel: "latest" });
+    expect(settingsOf(userData)["update"]).toEqual({
+      auto_check: true,
+      channel: "latest",
+      check_jitter: 3600,
+    });
     await auto.getByTestId("general-update-auto-switch").click();
     await expect(auto).toHaveAttribute("data-on", "false");
 

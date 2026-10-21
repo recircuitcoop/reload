@@ -24,7 +24,11 @@
 
 import { compareVersions } from "../domain/packages/versions";
 import { MinisignError } from "../domain/signature/minisign";
-import { parseUpdatePolicy, type UpdatePolicy } from "../domain/update/policy";
+import {
+  DEFAULT_CHECK_JITTER_SECONDS,
+  parseUpdatePolicy,
+  type UpdatePolicy,
+} from "../domain/update/policy";
 import {
   metadataFileName,
   parseReleaseMetadata,
@@ -52,17 +56,8 @@ export const MAX_SIGNATURE_BYTES = 4096;
 /** electron-builder's mac zip and Linux AppImage artifacts: generous, still bounded. */
 export const MAX_ARTIFACT_BYTES = 500 * 1024 * 1024;
 
-/**
- * The window the first check is spread over (helper/config.py:351 `check_jitter`, one hour):
- * every install starting after a release, or after a power cut, would otherwise ask the release
- * server at the same second.
- */
-export const FIRST_CHECK_SPREAD_MS = 60 * 60 * 1000;
-
-/** When the first check goes: anywhere inside the spread (helper/supervision.py:177 `_spread`). */
-export function firstCheckDelay(random: () => number): number {
-  return Math.floor(random() * FIRST_CHECK_SPREAD_MS);
-}
+/** How often the scheduled check runs, before its spread (helper/config.py:350). */
+export const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 const NOTICE_SUBJECT = "Reload";
 
@@ -86,6 +81,8 @@ export interface UpdateReport {
 export interface UpdateSession {
   readonly clock: Clock;
   readonly currentVersion: () => string;
+  /** A draw in [0, 1) for each check's spread; Math.random in the app. */
+  readonly random: () => number;
 }
 
 export interface UpdateCheckPorts {
@@ -381,8 +378,12 @@ export class UpdateCheck {
     }
   }
 
-  /** The first check, after `firstMs`; then once a day, whatever this check found. */
-  schedule(firstMs: number): void {
+  /**
+   * The scheduled checks, as the old helper made them (helper/supervision.py:527, 646): the
+   * first somewhere inside the spread from now, then each one a day plus a fresh spread after
+   * the last, whatever it found. The spread is read from the settings each time.
+   */
+  schedule(): void {
     const { clock } = this.#ports.session;
     const tick = (): void => {
       void this.check()
@@ -398,10 +399,17 @@ export class UpdateCheck {
           },
         )
         .then(() => {
-          this.#cancelSchedule = clock.after(24 * 60 * 60 * 1000, tick);
+          this.#cancelSchedule = clock.after(CHECK_INTERVAL_MS + this.#spread(), tick);
         });
     };
-    this.#cancelSchedule = clock.after(firstMs, tick);
+    this.#cancelSchedule = clock.after(this.#spread(), tick);
+  }
+
+  /** Anywhere inside the setting's spread (helper/supervision.py:177 `_spread`); 0 at once. */
+  #spread(): number {
+    const policy = this.#policy();
+    const seconds = policy.ok ? policy.value.checkJitterSeconds : DEFAULT_CHECK_JITTER_SECONDS;
+    return Math.floor(this.#ports.session.random() * seconds * 1000);
   }
 
   stop(): void {

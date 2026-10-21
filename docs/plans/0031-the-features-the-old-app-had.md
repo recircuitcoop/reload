@@ -109,7 +109,7 @@ test's id; nothing is marked without a test.
    does not answer; `--log` asks nobody; plain `--quit` names what stopped and what still runs.
    The question goes as a file too: the single-instance lock is never taken, so a stuck Reload
    is said not to answer and is never killed by the asking.
-6. **WI-0031-06 — F,** the spread first check. **DONE** 2026-10-21.
+6. **WI-0031-06 — F,** the spread checks: the update setting's `check_jitter` (default an hour, 0 at once), drawn afresh for every check, the first and each daily one (`due = now + interval + jitter`), as the old helper did. **DONE** 2026-10-21.
 7. **WI-0031-07 — G,** an unreachable Anytype at start is not retried on a timer and costs no attempt; it is asked again on the person's action and when Reload sees the Anytype app start, and the person is told once. (Corrected: the first version added a backoff, which the old test rules out, since waiting does not change a failed start.) **DONE** 2026-10-21.
 8. **WI-0031-08 — H,** the home guard for child processes. **DONE** 2026-10-21.
 9. **WI-0031-09 — I,** log path and "Show log" in General › Advanced; the refused-kind

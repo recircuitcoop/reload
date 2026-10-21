@@ -188,6 +188,7 @@ function checker(signer: Signer) {
     session: {
       clock: { now: () => 0, after: () => () => undefined },
       currentVersion: () => CURRENT,
+      random: () => 0,
     },
     publicKey: signer.publicKeyText,
     feedBaseUrl: base,

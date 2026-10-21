@@ -243,7 +243,8 @@ describe("Reload's own update calls", () => {
     const h = harness({ stored: { update: { channel: "beta" } } });
     const on = await h.call("update.setAutoCheck", { on: true });
     expect(on.value?.autoCheck).toBe(true);
-    expect(h.stored["update"]).toEqual({ auto_check: true, channel: "beta" });
+    // The spread of each check is kept too: the switch changes the switch alone.
+    expect(h.stored["update"]).toEqual({ auto_check: true, channel: "beta", check_jitter: 3600 });
     expect(h.pushed.at(-1)?.autoCheck).toBe(true);
     expect(await h.call("update.setAutoCheck", { on: "yes" })).toMatchObject({ ok: false });
     expect(await h.call("update.releaseNotes")).toEqual({ ok: true, value: null });
