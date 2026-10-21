@@ -59,7 +59,7 @@ function logicalLines(text: string): { line: number; entry: string }[] {
   let parts: string[] = [];
   let start = 0;
   text.split(/\r\n|\r|\n/).forEach((raw, index) => {
-    const line = raw.replace(/#.*/, "").trim();
+    const line = raw.replace(/#.*/s, "").trim(); // `s`: past U+2028/U+2029 too
     if (line === "") {
       return;
     }
