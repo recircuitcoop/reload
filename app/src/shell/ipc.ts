@@ -12,6 +12,8 @@ export const IPC = {
   secretStorage: "reload:secret-storage",
   /** invoke: the Anytype core service's status (WI-0018-18). */
   anytypeStatus: "reload:anytype-status",
+  /** invoke: ask an Anytype that did not answer again (Check again, coming back to the window). */
+  anytypeCheck: "reload:anytype-check",
   /** invoke: "Pair with Anytype": Anytype shows a four-digit code. */
   anytypePairStart: "reload:anytype-pair-start",
   /** invoke: the four-digit code, typed. */

@@ -200,6 +200,8 @@ export interface AppApi extends AppApiV2 {
   restartChild(child: ChildName): Promise<void>;
   /** The Anytype core service now: its state, the MCP child's pid and beats. */
   anytypeStatus(): Promise<AnytypeStatus>;
+  /** Ask an Anytype that did not answer again: the person acted (Check again, coming back). */
+  checkAnytype(): Promise<AnytypeStatus>;
   /** "Pair with Anytype": Anytype shows a four-digit code. Rejects with a sentence. */
   startAnytypePairing(): Promise<AnytypeStatus>;
   /** The code Anytype shows. The key is stored owner-only and never reaches the page. */

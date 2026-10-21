@@ -30,6 +30,8 @@ export type NoticeKind =
   | "node-stuck"
   /** A node's own health check says it is not working (spec 4.2 `pong`). */
   | "node-unhealthy"
+  /** Anytype's local API did not answer at start; asked again on the person's action. */
+  | "anytype-unreachable"
   /** The Anytype MCP child stopped for good after the breaker's limit (§4.1 point 2). */
   | "mcp-child-stopped"
   /** The Anytype MCP child went silent and was restarted (§4.1 point 2). */
@@ -84,6 +86,7 @@ export const NOTICE_KINDS: readonly NoticeKind[] = [
   "limits-unreadable",
   "node-stuck",
   "node-unhealthy",
+  "anytype-unreachable",
   "mcp-child-stopped",
   "mcp-child-restarted",
   "endpoint-degraded",
@@ -228,6 +231,8 @@ function composeWords(notice: Notice): Message {
       return { title: `Reload is running without the ${subject}`, body: sentences(detail) };
     case "mcp-child-restarted":
       return { title: `Reload restarted the ${subject}`, body: sentences(detail) };
+    case "anytype-unreachable":
+      return { title: `Reload cannot reach ${subject}`, body: sentences(detail) };
     case "endpoint-degraded":
       return {
         title: `Reload is running without its ${subject}`,

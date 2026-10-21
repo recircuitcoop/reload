@@ -3,7 +3,8 @@
 
 /**
  * * `no-key` — no key in the canonical file or the legacy one: pair with Anytype.
- * * `unreachable` — Anytype's local API did not answer; checked again on a timer.
+ * * `unreachable` — Anytype's local API did not answer; asked again on the person's action or
+ *   when the Anytype desktop app starts, never on a timer.
  * * `starting` — the MCP child is spawned and its handshake is running.
  * * `ready` — the handshake passed and tools/list matched the committed surface.
  * * `tool-surface-mismatch` — the child lists other tools than the committed surface: named,

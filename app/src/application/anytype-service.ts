@@ -5,8 +5,10 @@
 // * The key is read through the SecretStore (the owner-only file adapter: canonical file, then
 //   the read-only legacy one) and handed to the runtime's redactor over the direct channel.
 // * The MCP child starts only after the health gate passes. Anytype not running is a state,
-//   asked again under the old helper's restart backoff (1, 2, 4, 8, then every 16 s); it is not
-//   a crash.
+//   not retried on a timer (helper/restart.py: a failed start changes nothing by waiting, and
+//   costs no attempt of the crash-loop budget). The person is told once, and Anytype is asked
+//   again when the person acts (Check again, coming back to the window) or Reload sees the
+//   Anytype desktop app start: `checkAgain`.
 // * The handshake runs and tools/list must match the committed surface exactly, or the state
 //   is `tool-surface-mismatch`, named, and the child is not restarted.
 // * A child that exits, or that the heartbeat judges stale, is restarted under the domain
@@ -43,13 +45,8 @@ import { Pairing } from "./pair-anytype";
 
 /** What the service's notices are about. */
 const MCP_CHILD = "Anytype MCP child";
-
-/**
- * When an Anytype that did not answer is asked again (helper/config.py:474, the old helper's
- * restart backoff): the n-th miss in a row waits the n-th delay, and the last one repeats, so the
- * list is a rate to settle at, never an end (helper/restart.py:310).
- */
-export const HEALTH_BACKOFF_MS: readonly number[] = [1_000, 2_000, 4_000, 8_000, 16_000];
+/** What the unreachable notice is about. */
+const ANYTYPE = "Anytype";
 
 /** How long a listed set of spaces, or of one space's types, is answered from memory. */
 export const OPTIONS_CACHE_MS = 30_000;
@@ -65,8 +62,6 @@ export interface AnytypeServiceSettings {
   readonly profile: StabilityProfile;
   /** Where the key is looked for, in words: the no-key state names it. */
   readonly keyLocation: string;
-  /** The waits before the health gate is asked again after misses in a row; the last repeats. */
-  readonly healthBackoffMs: readonly number[];
 }
 
 export interface AnytypeServiceDeps {
@@ -106,6 +101,9 @@ export async function serveAnytypeCall(
         return { ok: true, value: service.status() };
       case "anytype.pair.complete":
         await service.completePairing(args);
+        return { ok: true, value: service.status() };
+      case "anytype.check":
+        service.checkAgain();
         return { ok: true, value: service.status() };
       default:
         return { ok: false, error: `the Reload services process does not serve ${op}` };
@@ -147,8 +145,6 @@ export class AnytypeService {
   #child: McpChild | null = null;
   #tools: readonly McpTool[] = [];
   #crashesInARow = 0;
-  /** Health gates in a row that Anytype did not answer: the health backoff's n. */
-  #missesInARow = 0;
   #retry: Cancel | null = null;
   #stopping = false;
   #attempt = 0;
@@ -207,6 +203,17 @@ export class AnytypeService {
     this.#child = null;
     this.#setState("stopped", null);
     await child?.stop();
+  }
+
+  /**
+   * Ask an Anytype that did not answer again, once: the person acted (Check again, coming back
+   * to the window), or Reload saw the Anytype desktop app start. Any other state is left alone.
+   */
+  checkAgain(): void {
+    if (this.#state === "unreachable" && !this.#stopping) {
+      this.#deps.logger.info("asking Anytype again");
+      void this.#bringUp();
+    }
   }
 
   /** "Pair with Anytype": Anytype shows a four-digit code. */
@@ -310,23 +317,21 @@ export class AnytypeService {
     }
     this.#deps.publishKey(key);
 
-    const { apiBaseUrl, healthBackoffMs } = this.#deps.settings;
+    const { apiBaseUrl } = this.#deps.settings;
     const reachable = await this.#deps.api.reachable(key);
     if (this.#superseded(attempt)) {
       return;
     }
     if (!reachable) {
-      this.#setState(
-        "unreachable",
-        `Anytype's local API did not answer at ${apiBaseUrl}; start the Anytype desktop app`,
-      );
-      this.#missesInARow += 1;
-      const delay = healthBackoffMs[Math.min(this.#missesInARow, healthBackoffMs.length) - 1] ?? 0;
-      this.#deps.logger.info(`asking Anytype again in ${String(delay)} ms`);
-      this.#retry = this.#deps.clock.after(delay, () => void this.#bringUp());
+      // A failed start, not a crash: no timer and no attempt spent. Said once per state.
+      const detail = `Anytype's local API did not answer at ${apiBaseUrl}; start the Anytype desktop app`;
+      if (this.#state !== "unreachable") {
+        this.#notice("anytype-unreachable", detail, ANYTYPE);
+      }
+      this.#setState("unreachable", detail);
       return;
     }
-    this.#missesInARow = 0;
+    this.#deps.notifier.clear("anytype-unreachable", ANYTYPE);
     this.#launch(key);
   }
 
@@ -457,9 +462,13 @@ export class AnytypeService {
     this.#retry = this.#deps.clock.after(delay, () => void this.#bringUp());
   }
 
-  #notice(kind: "mcp-child-stopped" | "mcp-child-restarted", detail: string): void {
+  #notice(
+    kind: "mcp-child-stopped" | "mcp-child-restarted" | "anytype-unreachable",
+    detail: string,
+    subject = MCP_CHILD,
+  ): void {
     try {
-      this.#deps.notifier.raise({ kind, subject: MCP_CHILD, detail });
+      this.#deps.notifier.raise({ kind, subject, detail });
     } catch (error) {
       this.#deps.logger.error(`a notice could not be raised: ${String(error)}`);
     }

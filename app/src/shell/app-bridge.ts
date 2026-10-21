@@ -38,6 +38,7 @@ export function appApiOver(ipc: RendererIpc): AppApi {
       await ipc.invoke(IPC.restartChild, child);
     },
     anytypeStatus: () => ipc.invoke(IPC.anytypeStatus) as Promise<AnytypeStatus>,
+    checkAnytype: () => ipc.invoke(IPC.anytypeCheck) as Promise<AnytypeStatus>,
     startAnytypePairing: () => ipc.invoke(IPC.anytypePairStart) as Promise<AnytypeStatus>,
     completeAnytypePairing: (code: string) =>
       ipc.invoke(IPC.anytypePairComplete, code) as Promise<AnytypeStatus>,

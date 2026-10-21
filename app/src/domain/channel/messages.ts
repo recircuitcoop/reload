@@ -122,6 +122,8 @@ export type CallOp =
   | "anytype.status"
   | "anytype.pair.start"
   | "anytype.pair.complete"
+  /** Ask an Anytype that did not answer again: the person acted, or the Anytype app started. */
+  | "anytype.check"
   | "mcp.endpoint"
   | "mcp.endpoint.move"
   /** Which instances of some packages' types are deployed and ready (WI-0018-17's update). */
@@ -168,6 +170,7 @@ const CALL_OPS: readonly string[] = [
   "anytype.status",
   "anytype.pair.start",
   "anytype.pair.complete",
+  "anytype.check",
   "mcp.endpoint",
   "mcp.endpoint.move",
   "package.ready",

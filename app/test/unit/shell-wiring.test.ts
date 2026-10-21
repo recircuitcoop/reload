@@ -183,8 +183,11 @@ describe("wireQuit, wireServiceCalls, wireDesktop and the e2e hooks", () => {
       },
     } as unknown as Supervisor;
     let kept: string | null = null;
-    wireServiceCalls({ handle }, services, () => kept);
+    wireServiceCalls({ handle }, services, () => kept, Promise.resolve("started"));
     expect(await call(IPC.anytypeStatus)).toBe("anytype.status");
+    expect(await call(IPC.anytypeCheck)).toBe("anytype.check");
+    // Reload saw the Anytype desktop app start: Anytype was asked again, unprompted.
+    expect(asked).toContainEqual(["anytype.check", null]);
     expect(await call(IPC.anytypePairStart)).toBe("anytype.pair.start");
     await expect(call(IPC.anytypePairComplete, "1234")).rejects.toThrow("wrong code");
     expect(await call(IPC.mcpEndpoint)).toBe("mcp.endpoint");

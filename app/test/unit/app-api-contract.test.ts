@@ -44,6 +44,7 @@ const CALLS: Record<string, { call: (api: AppApi) => Promise<unknown>; sent: unk
   childStatus: { call: (api) => api.childStatus(), sent: [IPC.childStatus] },
   restartChild: { call: (api) => api.restartChild("runtime"), sent: [IPC.restartChild, "runtime"] },
   anytypeStatus: { call: (api) => api.anytypeStatus(), sent: [IPC.anytypeStatus] },
+  checkAnytype: { call: (api) => api.checkAnytype(), sent: [IPC.anytypeCheck] },
   startAnytypePairing: { call: (api) => api.startAnytypePairing(), sent: [IPC.anytypePairStart] },
   completeAnytypePairing: {
     call: (api) => api.completeAnytypePairing("1234"),

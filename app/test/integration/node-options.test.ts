@@ -4,11 +4,7 @@
 // the sentence and Anytype is asked nothing. The key is in no answer and no log line.
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AnytypeClient } from "../../src/adapters/anytype/api-client";
-import {
-  AnytypeService,
-  HEALTH_BACKOFF_MS,
-  serveAnytypeOptions,
-} from "../../src/application/anytype-service";
+import { AnytypeService, serveAnytypeOptions } from "../../src/application/anytype-service";
 import { NodeOptions } from "../../src/application/node-options";
 import { answerPeerCalls, PeerCaller } from "../../src/application/peer-link";
 import { NOT_PAIRED_SENTENCE } from "../../src/domain/forms/node-options";
@@ -72,7 +68,6 @@ function linked(key: string | null) {
       crashLoop: { maxCrashes: 5, windowMs: 120_000 },
       profile: MCP_STABILITY,
       keyLocation: "the key file",
-      healthBackoffMs: HEALTH_BACKOFF_MS,
     },
     secrets,
     api: new AnytypeClient({ apiBaseUrl: base }),

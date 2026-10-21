@@ -17,7 +17,7 @@ import {
 } from "../../src/adapters/anytype/mcp-child";
 import { committedToolSurface, toolSignature } from "../../src/adapters/anytype/tool-surface";
 import { systemClock } from "../../src/adapters/system/clock";
-import { AnytypeService, HEALTH_BACKOFF_MS } from "../../src/application/anytype-service";
+import { AnytypeService } from "../../src/application/anytype-service";
 import { readOrCreate, registering } from "../../src/application/secrets";
 import { MCP_CHILD_LOGGER, mcpChildLines, sourceLog } from "../../src/application/source-log";
 import { SessionError, ToolSurfaceMismatchError } from "../../src/domain/anytype/errors";
@@ -378,7 +378,6 @@ describe("the child's stderr in the one log (plan 0015)", () => {
         crashLoop: DEFAULT_CRASH_LOOP,
         profile: MCP_STABILITY,
         keyLocation: "(a test's memory)",
-        healthBackoffMs: HEALTH_BACKOFF_MS,
       },
       secrets,
       api: new FakeAnytypeApi(),
@@ -489,7 +488,6 @@ describe("the service over real children (plan 0019)", () => {
         crashLoop: { maxCrashes: 5, windowMs: 120_000 },
         profile: MCP_STABILITY,
         keyLocation: "a scratch store",
-        healthBackoffMs: HEALTH_BACKOFF_MS,
       },
       secrets,
       api: new FakeAnytypeApi(),

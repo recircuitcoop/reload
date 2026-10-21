@@ -120,7 +120,10 @@ test("the crash-loop limit shows an error with Restart, and Restart brings the r
     expect(output.join("").match(/notice: Reload stopped restarting the runtime/g)).toHaveLength(1);
     const noticeFile = path.join(userData, "notices.json");
     const recorded = (): unknown => JSON.parse(fs.readFileSync(noticeFile, "utf8"));
-    expect(recorded()).toEqual([
+    // Recorded beside whatever else is true now (this run has no Anytype: anytype-unreachable).
+    const stopped = (): unknown[] =>
+      (recorded() as { kind: string }[]).filter((notice) => notice.kind === "child-stopped");
+    expect(stopped()).toEqual([
       expect.objectContaining({ kind: "child-stopped", subject: "runtime" }),
     ]);
     // Only the runtime was stopped: the shell and the services process carry on untouched.
@@ -149,7 +152,7 @@ test("the crash-loop limit shows an error with Restart, and Restart brings the r
     );
     await expect(window.getByTestId("runtime-banner")).toHaveCount(0);
     await expect.poll(async () => (await seen()).at(-1)).toMatch(BACK);
-    expect(recorded()).toEqual([]);
+    expect(stopped()).toEqual([]);
 
     await quit(app);
     await expect.poll(() => processesNaming(userData), { timeout: 10_000 }).toEqual([]);

@@ -116,7 +116,9 @@ export function GeneralScreen({
 
 /**
  * Anytype's state, asked every ANYTYPE_POLL_MS, and its spaces once it is ready; `checkAgain`
- * reads the spaces again from Anytype itself, past the services process's memory of them.
+ * reads the spaces again from Anytype itself, past the services process's memory of them, and
+ * asks an Anytype that did not answer again. Coming back to the window does the same while
+ * Anytype is unreachable: it is never asked again on a timer (helper/restart.py).
  */
 export function useAnytype(api: AppApi) {
   const [status, set] = useState<AnytypeStatus | null>(null);
@@ -147,9 +149,22 @@ export function useAnytype(api: AppApi) {
     }
     return readSpaces(() => api.anytypeSpaces(checked > 0), setSpaces, ANYTYPE_POLL_MS);
   }, [api, ready, checked]);
+  const unreachable = status?.state === "unreachable";
   const checkAgain = useCallback(() => {
     setChecked((times) => times + 1);
-  }, []);
+    if (unreachable) {
+      api.checkAnytype().then(set, () => undefined);
+    }
+  }, [api, unreachable]);
+  useEffect(() => {
+    if (!unreachable) {
+      return;
+    }
+    window.addEventListener("focus", checkAgain);
+    return () => {
+      window.removeEventListener("focus", checkAgain);
+    };
+  }, [unreachable, checkAgain]);
   return { status, spaces, set, checkAgain };
 }
 

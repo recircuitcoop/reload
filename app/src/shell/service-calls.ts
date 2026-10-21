@@ -4,6 +4,7 @@
 // (plan 0018 §2.3).
 
 import type { IpcMain } from "electron";
+import type { AnytypeAppState } from "../application/anytype-app";
 import type { Supervisor } from "../application/supervisor";
 import type { CallOp } from "../domain/channel/messages";
 import { IPC } from "./ipc";
@@ -12,6 +13,7 @@ export function wireServiceCalls(
   ipc: Pick<IpcMain, "handle">,
   services: Supervisor,
   token: () => string | null,
+  anytypeApp: Promise<AnytypeAppState>,
 ): void {
   const callServices = async (op: CallOp, args: unknown): Promise<unknown> => {
     const result = await services.call(op, args);
@@ -21,6 +23,13 @@ export function wireServiceCalls(
     return result.value;
   };
   ipc.handle(IPC.anytypeStatus, () => callServices("anytype.status", null));
+  ipc.handle(IPC.anytypeCheck, () => callServices("anytype.check", null));
+  // Reload saw the Anytype desktop app start (or found it running): Anytype is asked again.
+  void anytypeApp.then((state) => {
+    if (state === "started" || state === "adopted") {
+      void services.call("anytype.check", null);
+    }
+  });
   ipc.handle(IPC.anytypePairStart, () => callServices("anytype.pair.start", null));
   ipc.handle(IPC.anytypePairComplete, (_event, code: unknown) =>
     callServices("anytype.pair.complete", code),

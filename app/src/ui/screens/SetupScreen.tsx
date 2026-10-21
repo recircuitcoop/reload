@@ -298,6 +298,10 @@ function AnytypeStep({ api, move }: StepProps) {
     };
   }, [api, noKey, anytype.status]);
   const connect = () => {
+    if (anytype.status?.state === "unreachable") {
+      anytype.checkAgain();
+      return;
+    }
     if (shown.kind !== "code") {
       api.startAnytypePairing().then(anytype.set, () => {
         setPairingFailed(true);
