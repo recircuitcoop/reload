@@ -61,6 +61,11 @@ export interface TelemetryStatus {
   readonly problem: string | null;
   /** Reports waiting to be sent: none unless the switch is on. */
   readonly queued: number;
+  /**
+   * The answer was a yes to an older privacy notice (plan 0029 WI-07): the frame asks the question
+   * again on launch, as Setup's Reports step asks it.
+   */
+  readonly askAgain: boolean;
 }
 
 /**

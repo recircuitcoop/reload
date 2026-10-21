@@ -32,6 +32,9 @@ class MemoryShellSettings implements ShellSettings {
   writeTelemetry(on: boolean): void {
     this.telemetry = on;
   }
+  askAgain(): boolean {
+    return false;
+  }
   readLaunchAtLogin(): boolean {
     return this.launchAtLogin;
   }

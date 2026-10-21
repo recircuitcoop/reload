@@ -252,14 +252,20 @@ describe("the telemetry switch in shell-settings.json", () => {
       telemetryNotice: NOTICE_VERSION,
     });
     // A yes to an older privacy notice (plan 0029) is asked again; a no stays a no.
+    // The frame asks it on launch only for such a yes (askAgain), never for an unanswered one.
+    expect(store.askAgain()).toBe(false);
     fs.writeFileSync(file, JSON.stringify({ telemetry: true }));
     expect(store.readTelemetry()).toBe("unset");
+    expect(store.askAgain()).toBe(true);
     fs.writeFileSync(file, JSON.stringify({ telemetry: true, telemetryNotice: 1 }));
     expect(store.readTelemetry()).toBe("unset");
+    expect(store.askAgain()).toBe(true);
     fs.writeFileSync(file, JSON.stringify({ telemetry: false, telemetryNotice: 1 }));
     expect(store.readTelemetry()).toBe("off");
+    expect(store.askAgain()).toBe(false);
     store.writeTelemetry(true);
     expect(store.readTelemetry()).toBe("on");
+    expect(store.askAgain()).toBe(false);
     fs.writeFileSync(file, JSON.stringify({ telemetry: "yes" }));
     expect(() => store.readTelemetry()).toThrow("must be true or false");
     fs.writeFileSync(file, "{broken");

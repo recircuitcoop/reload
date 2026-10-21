@@ -58,7 +58,12 @@ describe("the telemetry pipeline: nothing before the question is answered (F2)",
     pipeline.recordCrash(crash());
     pipeline.recordUsage("app_start", usage());
     expect(pipeline.pending()).toEqual([]);
-    expect(pipeline.state()).toEqual({ answer: "unset", problem: null, queued: 0 });
+    expect(pipeline.state()).toEqual({
+      answer: "unset",
+      problem: null,
+      queued: 0,
+      askAgain: false,
+    });
     await pipeline.flush();
     world.clock.advance(60_000);
     await settle();
@@ -100,6 +105,7 @@ describe("the telemetry pipeline: nothing before the question is answered (F2)",
     expect(pipeline.state()).toEqual({
       answer: "unset",
       problem: "shell-settings.json is not JSON",
+      askAgain: false,
       queued: 0,
     });
     expect(world.logger.lines.join("\n")).toContain("the telemetry switch could not be read");
@@ -146,7 +152,7 @@ describe("the telemetry pipeline: the switch is read again, every time", () => {
     expect(pipeline.recordCrash(crash())).toBeNull();
     await pipeline.flush();
     expect(world.poster.sent).toEqual([]);
-    expect(pipeline.state()).toEqual({ answer: "off", problem: null, queued: 0 });
+    expect(pipeline.state()).toEqual({ answer: "off", problem: null, queued: 0, askAgain: false });
     expect(pipeline.pending()).toEqual([]);
   });
 

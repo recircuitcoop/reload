@@ -5,6 +5,8 @@
 // * The pill and the banner are the shell's StatusView (domain/status), pushed whenever a child's
 //   status changes; the banner's Restart (Primary) asks the shell to restart the runtime.
 // * The quit question (WI-0018-12) is a Dialog: Save and quit, Quit without saving, Cancel.
+// * A yes to an older privacy notice is asked again on launch, once Setup is over: Setup's own
+//   Reports step, on its own, in place of the screen until it is answered (plan 0029 WI-07).
 // * Live draws the flow's board (LiveScreen, WI-0022-12); Flows and the canvas are FlowsScreen and
 //   CanvasScreen (WI-0022-14); Run history is RunHistoryScreen (WI-0022-15); General is
 //   GeneralScreen (WI-0022-18); Setup's steps are SetupScreen (WI-0022-16).
@@ -34,6 +36,7 @@ import { GoBackDialog } from "./GeneralUpdates";
 import { LiveScreen } from "./LiveScreen";
 import { RunHistoryScreen } from "./RunHistoryScreen";
 import { SetupScreen } from "./SetupScreen";
+import { ReportsAgain } from "./SetupReports";
 
 /**
  * The pill's look for each state of the status (decided by WI-0022-11; the word always says
@@ -72,6 +75,21 @@ export function Frame({ api }: { readonly api: AppApi }) {
     });
   }, [api]);
 
+  // A yes to an older privacy notice is asked again on launch, as Setup asks it (plan 0029 WI-07).
+  const [askAgain, setAskAgain] = useState(false);
+  const setupDone = setup.status === "ready" && setup.value.completed;
+  useEffect(() => {
+    if (!setupDone) {
+      return;
+    }
+    api.telemetry().then(
+      (status) => {
+        setAskAgain(status.answer === "unset" && status.askAgain);
+      },
+      () => undefined,
+    );
+  }, [api, setupDone]);
+
   const parsed = parseRoute(hash);
   const route = setup.status === "ready" ? settleRoute(parsed, setup.value) : null;
   // An address the frame does not show as written (a first launch, Setup not completed, an old
@@ -105,7 +123,18 @@ export function Frame({ api }: { readonly api: AppApi }) {
     );
   return (
     <div data-testid="frame" data-route={route.screen} className="h-full">
-      <Screen route={route} api={api} pill={pill} banner={banner} badge={view?.badge ?? 0} />
+      {askAgain && route.screen !== "gallery" ? (
+        <ReportsAgain
+          api={api}
+          pill={pill}
+          banner={banner}
+          onAnswered={() => {
+            setAskAgain(false);
+          }}
+        />
+      ) : (
+        <Screen route={route} api={api} pill={pill} banner={banner} badge={view?.badge ?? 0} />
+      )}
       {quitDialog}
     </div>
   );

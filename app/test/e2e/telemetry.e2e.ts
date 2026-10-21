@@ -3,7 +3,8 @@
 // runtime crashes; a question left unanswered asked again on the next launch; a yes that sends this
 // launch's usage report and a crash report to local fake servers; off in Configuration › General's
 // Reports section (WI-0022-18) stopping everything; the question never asked again once
-// answered; and the full privacy notice beside the question while it is unanswered (D25).
+// answered; the full privacy notice beside the question while it is unanswered (D25); and a yes
+// to the older notice asked again on launch, as Setup asks it (plan 0029 WI-07).
 //
 // The servers are a fake GlitchTip and a fake Umami on one local HTTPS server in this test process
 // (test/fixtures/tls). Nothing is ever sent to a real GlitchTip or Umami, and the machine
@@ -466,6 +467,59 @@ test("the full privacy notice is beside the question in Setup's Reports step and
       .poll(() => usageNames(received).sort(), { timeout: 15_000 })
       .toEqual(["app_start", "setup_step"]);
     expect(received.every((request) => request.url.startsWith("/umami/api/"))).toBe(true);
+    await quit(app);
+  } finally {
+    await cleanUp(apps, scratch);
+    await new Promise((resolve) => {
+      server.closeAllConnections();
+      server.close(resolve);
+    });
+  }
+});
+
+test("a yes to the older privacy notice is asked again on launch, as Setup asks it, and nothing is sent before the answer", async () => {
+  test.setTimeout(120_000);
+  const { received, server, port } = await fakeServers();
+  const { scratch, userData, env } = scratchDirectories();
+  // An installation that finished Setup and said yes before the notice listed the signals.
+  fs.mkdirSync(userData, { recursive: true });
+  const settingsFile = path.join(userData, "shell-settings.json");
+  fs.writeFileSync(
+    settingsFile,
+    JSON.stringify({
+      ...FIRST_START_RECORD,
+      telemetry: true,
+      setup: {
+        step: "ready",
+        example: null,
+        formIndex: 0,
+        formCount: 0,
+        starterFlowId: null,
+        completed: true,
+      },
+    }),
+  );
+  const apps: RunningApp["app"][] = [];
+  try {
+    const { app, window } = await launchApp(appEnv(env, port));
+    apps.push(app);
+    // Setup's Reports step, on its own: the question, the full notice, no way back into Setup.
+    await expect(setupStep(window)).toHaveAttribute("data-step", "reports", { timeout: 15_000 });
+    await expect(setupStep(window)).toContainText(STRINGS["setup.reports.title"]);
+    await expectNotice(setupStep(window));
+    await expect(setupStep(window).getByTestId("setup-back")).toHaveCount(0);
+    await quiet();
+    expect(received).toEqual([]);
+    // Yes again: the question goes, the app is where Setup left it, and only now is anything sent.
+    await (await setupButton(window, "setup.reports.send")).click();
+    await expect(setupStep(window)).toHaveCount(0);
+    await expect(window.getByTestId("frame")).toHaveAttribute("data-route", "live");
+    await expect.poll(() => usageNames(received), { timeout: 15_000 }).toContain("app_start");
+    expect(JSON.parse(fs.readFileSync(settingsFile, "utf8"))).toMatchObject({
+      telemetry: true,
+      telemetryNotice: NOTICE_VERSION,
+      setup: expect.objectContaining({ completed: true }),
+    });
     await quit(app);
   } finally {
     await cleanUp(apps, scratch);

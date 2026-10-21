@@ -13,6 +13,11 @@ export interface TelemetrySetting {
   readTelemetry(): TelemetryAnswer;
   /** Store the answer, leaving every other setting as it was. */
   writeTelemetry(on: boolean): void;
+  /**
+   * Whether the stored answer is a yes to an older privacy notice (plan 0029 WI-07): it reads as
+   * unanswered, and the question is asked again on launch. Throws when the file cannot be read.
+   */
+  askAgain(): boolean;
 }
 
 /** Reports on disk, in order, bounded, dropping the oldest when full (telemetry.py:737). */

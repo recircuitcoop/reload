@@ -85,6 +85,8 @@ export interface TelemetryState {
   readonly answer: TelemetryAnswer;
   readonly problem: string | null;
   readonly queued: number;
+  /** Unanswered because the yes answered an older notice: asked again on launch (plan 0029). */
+  readonly askAgain: boolean;
 }
 
 export interface FlushResult {
@@ -162,12 +164,15 @@ export class TelemetryPipeline {
   /** The switch now, read again, and how many reports wait (none unless it is on). */
   state(): TelemetryState {
     let answer: TelemetryAnswer;
+    let askAgain: boolean;
     try {
       answer = this.#deps.setting.readTelemetry();
+      askAgain = answer === "unset" && this.#deps.setting.askAgain();
     } catch (error) {
-      return { answer: "unset", problem: reasonOf(error), queued: 0 };
+      return { answer: "unset", problem: reasonOf(error), queued: 0, askAgain: false };
     }
-    return { answer, problem: null, queued: this.#allows() ? this.#deps.queue.count() : 0 };
+    const queued = this.#allows() ? this.#deps.queue.count() : 0;
+    return { answer, problem: null, queued, askAgain };
   }
 
   /**

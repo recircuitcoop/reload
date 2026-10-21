@@ -107,6 +107,11 @@ export class JsonSettingsStore
     return on === undefined ? "unset" : on ? "on" : "off";
   }
 
+  askAgain(): boolean {
+    const settings = this.#read();
+    return settings["telemetry"] === true && settings["telemetryNotice"] !== NOTICE_VERSION;
+  }
+
   writeTelemetry(on: boolean): void {
     // The answer first: should the notice's version not be written, the yes reads as unset.
     this.#write("telemetry", on);

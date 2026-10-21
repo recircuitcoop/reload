@@ -41,6 +41,14 @@ export class MemorySetting implements TelemetrySetting {
       throw new Error("could not write shell-settings.json: EACCES");
     }
     this.answer = on ? "on" : "off";
+    this.olderYes = false;
+  }
+
+  /** A yes to an older notice: read as unset, and asked again. */
+  olderYes = false;
+
+  askAgain(): boolean {
+    return this.answer === "unset" && this.olderYes;
   }
 }
 

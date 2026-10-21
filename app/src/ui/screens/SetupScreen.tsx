@@ -36,8 +36,8 @@ import { useFlows, useSetup, useStores } from "../store";
 import { t, type PlainKey } from "../strings";
 import { wordRefusal } from "../words";
 import { useAnytype } from "./GeneralScreen";
-import { PrivacyNotice } from "./PrivacyNotice";
 import { Marked, SetupForm } from "./SetupForm";
+import { ReportsStep } from "./SetupReports";
 
 /** The Setup sidebar's labels (ux-writing, the Setup sidebar). */
 const SETUP_NAV_LABEL: Readonly<Record<SetupNavEntry, PlainKey>> = {
@@ -219,51 +219,6 @@ function ExampleStep({ api, move }: StepProps) {
           <InlineMessage kind="warning">{t("setup.example.noSpace")}</InlineMessage>
         </div>
       ) : undefined}
-    </SetupStep>
-  );
-}
-
-function ReportsStep({ api, move, say }: StepProps) {
-  /** The answer, then on: the switch in Configuration › General says the same. */
-  const answer = (on: boolean) => {
-    api.setTelemetry(on).then(
-      () => void move({ kind: "next" }),
-      () => {
-        say({ reason: "failed", sentence: "refused.failed" });
-      },
-    );
-  };
-  return (
-    <SetupStep
-      title={t("setup.reports.title")}
-      body={t("setup.reports.body")}
-      actions={
-        <>
-          <Button kind="quiet" data-testid="setup-back" onClick={() => void move({ kind: "back" })}>
-            {t("setup.back")}
-          </Button>
-          <Button
-            kind="secondary"
-            data-testid="setup-reports-dont-send"
-            onClick={() => {
-              answer(false);
-            }}
-          >
-            {t("setup.reports.dontSend")}
-          </Button>
-          <Button
-            kind="primary"
-            data-testid="setup-reports-send"
-            onClick={() => {
-              answer(true);
-            }}
-          >
-            {t("setup.reports.send")}
-          </Button>
-        </>
-      }
-    >
-      <PrivacyNotice level={2} />
     </SetupStep>
   );
 }
