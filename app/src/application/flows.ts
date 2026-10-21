@@ -16,7 +16,7 @@
 import type { CallOp, OpResult } from "../domain/channel/messages";
 import { remapIds, withoutCredentials, type TabNode } from "../domain/flows/tab";
 import { configOf } from "../domain/forms/coerce";
-import { secretKeys, withoutSecrets } from "../domain/forms/form-model";
+import { describedProblems, secretKeys, withoutSecrets } from "../domain/forms/form-model";
 import type { FieldProblem } from "../domain/packages/declaration";
 import type { Clock } from "../ports/clock";
 import type {
@@ -149,15 +149,6 @@ function checkedName(value: unknown): string {
     return refuse("name", NAME_SENTENCE);
   }
   return name;
-}
-
-/** `{path, message}` problems as one clause: "space_id is required; count must be >= 1". */
-function described(problems: readonly FieldProblem[]): string {
-  return problems
-    .map(
-      (problem) => `${problem.path === "" ? "the form" : problem.path.slice(1)} ${problem.message}`,
-    )
-    .join("; ");
 }
 
 /** What a write deploys, for the guard; and the write itself. */
@@ -504,7 +495,7 @@ export class FlowAdmin {
       }
     }
     if (problems.length > 0) {
-      const params = { step: stepName(node, type), what: described(problems) };
+      const params = { step: stepName(node, type), what: describedProblems(type.config, problems) };
       return refuse("invalid", `${params.step} isn't set up yet: ${params.what}.`, {
         problems,
         params,

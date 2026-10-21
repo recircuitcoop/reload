@@ -30,6 +30,7 @@ import { RELOAD_ANNOTATION } from "../../domain/forms/reload-keyword";
 import {
   ADVANCED_LABEL,
   addRow,
+  describedProblems,
   dynamicSelect,
   formModel,
   moveRow,
@@ -105,9 +106,8 @@ function validate(type: string, node: Values, key: string): true | string {
   const mine = problems(entry.validate).filter(
     ({ path }) => path === `/${key}` || path.startsWith(`/${key}/`),
   );
-  return mine.length === 0
-    ? true
-    : mine.map(({ path, message }) => `${path.slice(1)} ${message}`).join("; ");
+  // In the person's words, by the property's title: never its key.
+  return mine.length === 0 ? true : describedProblems(entry.schema, mine);
 }
 
 // ── drawing ──────────────────────────────────────────────────────────────────────────────

@@ -819,12 +819,12 @@ describe("flow.node.form and flow.node.configure", () => {
       value: {
         refused: {
           reason: "invalid",
-          sentence: "File isn't set up yet: space is required; count must be >= 1.",
+          sentence: "File isn't set up yet: choose a space; count must be >= 1.",
           problems: [
             { path: "/space", message: "is required" },
             { path: "/count", message: "must be >= 1" },
           ],
-          params: { step: "File", what: "space is required; count must be >= 1" },
+          params: { step: "File", what: "choose a space; count must be >= 1" },
         },
       },
     });
@@ -849,7 +849,7 @@ describe("flow.node.form and flow.node.configure", () => {
       value: {
         refused: {
           reason: "invalid",
-          sentence: "Transcribe isn't set up yet: token is required.",
+          sentence: "Transcribe isn't set up yet: fill in token.",
         },
       },
     });

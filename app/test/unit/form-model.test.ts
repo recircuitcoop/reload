@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   addRow,
+  describedProblems,
   formModel,
   isSecret,
   moveRow,
@@ -186,5 +187,38 @@ describe("rows of a table", () => {
     removeRow(rows, 0);
     moveRow(rows, 0, 2);
     expect(rows).toEqual([a, b, c]);
+  });
+});
+
+describe("a refusal in the person's words", () => {
+  const schema = {
+    type: "object",
+    properties: {
+      space_id: { type: "string", title: "Space", reload: { spaces: true } },
+      mode: { enum: ["fast", "slow"], title: "Order" },
+      folder: { type: "string", title: "Folder" },
+      limit: { type: "integer", title: "At most" },
+      body_field: { type: "string" },
+      rows: {
+        type: "array",
+        items: { type: "object", properties: { name: { type: "string", title: "Name" } } },
+      },
+    },
+  };
+
+  it("names each property by its title, never its key", () => {
+    const said = describedProblems(schema, [
+      { path: "/space_id", message: "is required" },
+      { path: "/mode", message: "is required" },
+      { path: "/folder", message: "is required" },
+      { path: "/limit", message: "must be <= 1000" },
+      { path: "/rows/0/name", message: "is required" },
+      { path: "/body_field", message: "must be string" },
+      { path: "", message: "must be object" },
+    ]);
+    expect(said).toBe(
+      "choose a space; choose an order; fill in folder; At most must be <= 1000; fill in name; body field must be string; the form must be object",
+    );
+    expect(said).not.toMatch(/space_id|body_field|\//);
   });
 });

@@ -173,6 +173,59 @@ export function formModel(schema: JsonSchema): FormModel {
   };
 }
 
+// ── a refusal in the person's words ──────────────────────────────────────────────────────
+
+/** The property schema at a problem's JSON Pointer ("/rows/0/name"); null past the schema. */
+function propertyAt(schema: JsonSchema, path: string): JsonSchema | null {
+  let at: JsonSchema | null = schema;
+  for (const segment of path.split("/").slice(1)) {
+    if (at === null) {
+      return null;
+    }
+    const rows: JsonSchema | null = /^\d+$/.test(segment) ? rowSchemaOf(at) : null;
+    const properties: unknown = at["properties"];
+    const next: unknown = rows ?? (isRecord(properties) ? properties[segment] : undefined);
+    at = isRecord(next) ? next : null;
+  }
+  return at;
+}
+
+/** A property's name as the person reads it: its title, else its key with spaces. */
+function nameAt(schema: JsonSchema, path: string): string {
+  const title = propertyAt(schema, path)?.["title"];
+  if (typeof title === "string" && title !== "") {
+    return title;
+  }
+  return (path.split("/").at(-1) ?? "").replaceAll("_", " ");
+}
+
+/**
+ * What a step lacks, as one clause in the person's words, for "*Step* isn't set up yet: ….": a
+ * missing choice is "choose a space", a missing value "fill in folder", anything else the
+ * property's title and what is wrong. Never a schema key (ux-writing, Voice).
+ */
+export function describedProblems(
+  schema: JsonSchema,
+  problems: readonly { readonly path: string; readonly message: string }[],
+): string {
+  return problems
+    .map(({ path, message }) => {
+      if (path === "") {
+        return `the form ${message}`;
+      }
+      const name = nameAt(schema, path);
+      if (message !== "is required") {
+        return `${name} ${message}`;
+      }
+      const lower = name.charAt(0).toLowerCase() + name.slice(1);
+      const property = propertyAt(schema, path) ?? {};
+      const chosen = reloadOptions(property) !== null || Array.isArray(property["enum"]);
+      const article = /^[aeiou]/i.test(lower) ? "an" : "a";
+      return chosen ? `choose ${article} ${lower}` : `fill in ${lower}`;
+    })
+    .join("; ");
+}
+
 /** The same schema without its secret properties: what `config` holds (spec 2.5.2). */
 export function withoutSecrets(schema: JsonSchema): JsonSchema {
   const kept = propertiesOf(schema).filter(([, property]) => !isSecret(property));
