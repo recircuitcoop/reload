@@ -9,31 +9,29 @@
 // at the moment a person most wants to know, when Reload is what is wedged. Plain `--quit` makes
 // sure of the quit (launcher.py:1121): it names what stopped and what still runs after it.
 //
-// The question travels over Electron's single-instance channel (`additionalData`, which reaches
-// the running instance's `second-instance`), never a network port. That channel goes one way, so
-// the answer comes back as a file in the user-data folder, mode 0600, named by an id the asking
-// process made: the folder and the lock in it are this OS user's own, so only the same user can
-// ask or read the answer. The running instance builds the file's path itself from the id; it
-// never writes where the question says.
+// The asking process never takes the single-instance lock: Electron kills a lock holder that
+// does not acknowledge a second launch, so asking would kill the very Reload that is stuck. It
+// learns whether Reload runs from the run-state file and the process table, and asks with a
+// question file in the user-data folder (0600, made new, named by an id it made), which the
+// running instance takes and removes (answerQuestions). The answer comes back as a file named by
+// the same id, which the instance builds itself; it never writes where a question says. The
+// folder is this OS user's own, so only the same user can ask or read an answer; there is no
+// port. A question nobody takes within PICKUP_MS is taken back, so a Reload that wakes later
+// never acts on it.
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import * as path from "node:path";
 import type { App } from "electron";
-import type { AnytypeApp, AnytypeAppState } from "../application/anytype-app";
-import type { QuitOutcome } from "../application/quit";
-import type { Supervisor } from "../application/supervisor";
 import { compose, isNotice, type Notice } from "../domain/notices/notices";
-import type { ChildName, ChildStatus } from "../domain/supervision/child-state";
-import type { Logger } from "../ports/logger";
-import type { Notifier } from "../ports/notifier";
 import {
   confirmQuit,
   forceQuit,
   identityOf,
   readRunState,
   RUN_STATE_FILENAME,
-  stillRunning,
+  stillRuns,
   writePrivateFile,
+  type Identity,
   type RunRecord,
 } from "./run-state";
 
@@ -48,7 +46,14 @@ const FLAGS: Readonly<Record<string, Command>> = {
   "--log": "log",
 };
 
-/** How long the asking process waits: a quit may first put undeployed edits to the person. */
+/** How long a running instance has to take a question; one that does not is not answering. */
+export const PICKUP_MS = 5_000;
+
+/** How often the running instance looks for questions. */
+export const QUESTION_POLL_MS = 200;
+
+/** How long the asking process waits for the answer to a question taken: a quit may first put
+ * undeployed edits to the person. */
 export const WAIT_MS: Readonly<Record<Asked, number>> = {
   status: 10_000,
   quit: 120_000,
@@ -97,6 +102,21 @@ export interface Reply {
 
 export const replyFile = (dir: string, id: string): string => path.join(dir, `command-${id}.reply`);
 
+export const questionFile = (dir: string, id: string): string =>
+  path.join(dir, `command-${id}.question`);
+
+/** Text for the terminal: no control character (C0, DEL, C1) but the newline and the tab. */
+export function plainText(text: string): string {
+  let plain = "";
+  for (const char of text) {
+    const code = char.codePointAt(0) ?? 0;
+    if (code === 9 || code === 10 || (code >= 0x20 && (code < 0x7f || code > 0x9f))) {
+      plain += char;
+    }
+  }
+  return plain;
+}
+
 // ── the asking process ──────────────────────────────────────────────────────────────────────
 
 /** The files `--status` reads when Reload cannot answer, and the log `--log` names. */
@@ -108,26 +128,27 @@ export interface CommandFiles {
 }
 
 export interface AskDeps {
-  readonly app: Pick<App, "requestSingleInstanceLock" | "getPath">;
+  readonly app: Pick<App, "getPath">;
   readonly print: (text: string) => void;
   /** 32 hex digits, new for this question. */
   readonly id: string;
   readonly now: () => number;
   /** Blocks: the asking process does nothing else, and must not run the rest of main.ts. */
   readonly sleep: (ms: number) => void;
-  /** The identity of a pid now (shell/run-state.ts identityOf); null when nothing has it. */
-  readonly identity: (pid: number) => string | null;
+  /** The identity of a pid now (shell/run-state.ts identityOf). */
+  readonly identity: Identity;
   readonly notices: CommandFiles["notices"];
 }
 
 /** Asks the running instance and prints its answer; the exit code. */
 export function ask(command: Asked, deps: AskDeps): number {
-  const { app, print, id } = deps;
-  const dir = app.getPath("userData");
-  // Taken before asking: once the quit is done the run-state file is gone.
-  const before = command === "quit" ? runningBefore(dir, deps) : null;
-  if (app.requestSingleInstanceLock({ command, id } satisfies Question)) {
-    // The lock was free: nothing is running to ask. Exiting gives the lock back.
+  const print = (text: string) => {
+    deps.print(plainText(text));
+  };
+  const dir = deps.app.getPath("userData");
+  const runState = path.join(dir, RUN_STATE_FILENAME);
+  const records = readRunState(runState);
+  if (!mayRun(records, deps.identity)) {
     if (command === "status") {
       print(statusFromFiles(dir, deps));
       return 0;
@@ -135,9 +156,11 @@ export function ask(command: Asked, deps: AskDeps): number {
     print("Reload is not running.\n");
     return 1;
   }
-  const reply = awaitReply(replyFile(dir, id), WAIT_MS[command], deps);
+  // Taken before asking: once the quit is done the run-state file is gone.
+  const before = command === "quit" ? recordedRunning(records, deps.identity) : [];
+  const { reply, unanswered } = askInstance(command, dir, deps);
   if (reply === null) {
-    print(`Reload did not answer within ${String(WAIT_MS[command] / 1000)} seconds.\n`);
+    print(unanswered);
     if (command === "status") {
       print(statusFromFiles(dir, deps));
       return 0;
@@ -148,41 +171,103 @@ export function ask(command: Asked, deps: AskDeps): number {
   if (command !== "quit" || reply.code !== 0) {
     return reply.code;
   }
-  print(
-    typeof before === "string"
-      ? `Reload quit, but what it ran could not be checked: ${before}\n`
-      : confirmQuit(before ?? [], deps).join("\n") + "\n",
-  );
+  // Read again: a child restarted with a new pid while Reload quit is checked too.
+  const after = readRunState(runState);
+  if (typeof records === "string" && typeof after === "string") {
+    print(`Reload quit, but what it ran could not be checked: ${after}\n`);
+    return 0;
+  }
+  const watched = [...before];
+  for (const record of recordedRunning(after, deps.identity)) {
+    if (!watched.some((seen) => seen.id === record.id && seen.pid === record.pid)) {
+      watched.push(record);
+    }
+  }
+  const { lines, off } = confirmQuit(watched, deps);
+  if (off) {
+    // Everything it recorded is gone: so is the record, even of a shell that ended unclean.
+    fs.rmSync(runState, { force: true });
+  }
+  print(lines.join("\n") + "\n");
   return 0;
 }
 
-/** The recorded processes running now; a sentence when the record cannot be read. */
-function runningBefore(dir: string, deps: AskDeps): readonly RunRecord[] | string {
-  const records = readRunState(path.join(dir, RUN_STATE_FILENAME));
-  if (records === null) {
-    return "it had not recorded its processes yet.";
+/** Whether Reload may be running: its shell's record names a live process, or cannot tell. */
+function mayRun(records: ReturnType<typeof readRunState>, identity: Identity): boolean {
+  if (typeof records === "string") {
+    return true;
   }
-  return typeof records === "string" ? records : stillRunning(records, deps.identity);
+  const shell = records?.find((record) => record.id === "shell");
+  return shell !== undefined && stillRuns(shell, identity) !== false;
 }
 
-/** The answer once it is there; null when none came in time. Either way the file is removed. */
-function awaitReply(file: string, ms: number, deps: AskDeps): Reply | null {
-  const deadline = deps.now() + ms;
+/** The recorded processes that still run, or could not be checked. */
+const recordedRunning = (records: ReturnType<typeof readRunState>, identity: Identity) =>
+  Array.isArray(records)
+    ? (records as readonly RunRecord[]).filter((record) => stillRuns(record, identity) !== false)
+    : [];
+
+/**
+ * Puts the question to the running instance and waits for its answer: PICKUP_MS for the
+ * instance to take the question, then the command's own wait. Whatever happens, the question
+ * and the answer file are this process's to remove.
+ */
+function askInstance(
+  command: Asked,
+  dir: string,
+  deps: AskDeps,
+): { readonly reply: Reply | null; readonly unanswered: string } {
+  const question = questionFile(dir, deps.id);
+  const answer = replyFile(dir, deps.id);
+  const unanswered = (ms: number) => `Reload did not answer within ${String(ms / 1000)} seconds.\n`;
   try {
-    for (;;) {
-      const reply = takeReply(file);
-      if (reply !== null) {
-        return reply;
-      }
-      if (deps.now() >= deadline) {
-        return null;
+    try {
+      writePrivateFile(question, JSON.stringify({ command, id: deps.id } satisfies Question));
+    } catch (error) {
+      return { reply: null, unanswered: `Reload could not be asked: ${String(error)}\n` };
+    }
+    const pickup = deps.now() + PICKUP_MS;
+    while (fs.existsSync(question)) {
+      if (deps.now() >= pickup && withdraw(question)) {
+        return { reply: null, unanswered: unanswered(PICKUP_MS) };
       }
       deps.sleep(50);
     }
+    const reply = awaitReply(answer, WAIT_MS[command], deps);
+    return { reply, unanswered: unanswered(WAIT_MS[command]) };
   } finally {
     // An answer that lands after this gave up, or after it was killed, is the instance's to
-    // remove at its next start (removeStaleReplies).
-    fs.rmSync(file, { force: true });
+    // remove (removeStaleReplies).
+    fs.rmSync(question, { force: true });
+    fs.rmSync(answer, { force: true });
+  }
+}
+
+/** Takes the question back; false when the instance took it this very moment. */
+function withdraw(question: string): boolean {
+  try {
+    fs.unlinkSync(question);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return false;
+    }
+    throw error;
+  }
+}
+
+/** The answer once it is there; null when none came in time. */
+function awaitReply(file: string, ms: number, deps: AskDeps): Reply | null {
+  const deadline = deps.now() + ms;
+  for (;;) {
+    const reply = takeReply(file);
+    if (reply !== null) {
+      return reply;
+    }
+    if (deps.now() >= deadline) {
+      return null;
+    }
+    deps.sleep(50);
   }
 }
 
@@ -217,12 +302,19 @@ export function statusFromFiles(dir: string, deps: Pick<AskDeps, "identity" | "n
   if (typeof records === "string") {
     lines.push(records);
   } else {
-    const running = stillRunning(records ?? [], deps.identity);
-    if (running.length === 0) {
-      lines.push("Nothing is running.");
+    let running = 0;
+    for (const record of records ?? []) {
+      const runs = stillRuns(record, deps.identity);
+      const where = `(process ${String(record.pid)})`;
+      if (runs === true) {
+        lines.push(`  ${record.id}: running ${where}`);
+      } else if (runs !== false) {
+        lines.push(`  ${record.id}: could not be checked ${where}: ${runs}`);
+      }
+      running += runs === false ? 0 : 1;
     }
-    for (const record of running) {
-      lines.push(`  ${record.id}: running (process ${String(record.pid)})`);
+    if (running === 0) {
+      lines.push("Nothing is running.");
     }
   }
   lines.push(...noticeLines(path.join(dir, deps.notices)));
@@ -283,170 +375,8 @@ export function runCommandLine(
   process.exit(code);
 }
 
-// ── the running instance ────────────────────────────────────────────────────────────────────
-
-/** What the running instance answers from. */
-export interface Running {
-  readonly supervisors: ReadonlyMap<ChildName, Pick<Supervisor, "status" | "onStatus">>;
-  readonly anytype: Pick<AnytypeApp, "state" | "startedPid" | "onStarted">;
-  readonly notices: CommandFiles["notices"];
-}
-
-/**
- * A file a second launch reads that cannot be written: a notice, told once and not once per
- * write, and cleared once a write works again (the old helper's unopened socket,
- * test_control_channel.py). Before the notices exist (the start not done yet) it is a warning
- * in the log, once.
- */
-export interface Unwritable {
-  readonly failed: (error: unknown) => void;
-  readonly worked: () => void;
-}
-
-export function unwritable(
-  subject: string,
-  notifier: () => Notifier | null,
-  logger: Logger,
-): Unwritable {
-  let told = false;
-  return {
-    failed: (error) => {
-      if (told) {
-        return;
-      }
-      told = true;
-      const board = notifier();
-      if (board === null) {
-        logger.warn(`Reload could not write its ${subject}: ${String(error)}`);
-        return;
-      }
-      board.raise({ kind: "command-line-unwritable", subject, detail: String(error) });
-    },
-    worked: () => {
-      if (!told) {
-        return;
-      }
-      told = false;
-      notifier()?.clear("command-line-unwritable", subject);
-    },
-  };
-}
-
-export interface AnswerDeps {
-  readonly running: Running;
-  readonly app: Pick<App, "getPath" | "getVersion">;
-  /** The Quit menu's own path: undeployed edits are put to the person first. */
-  readonly quit: () => Promise<QuitOutcome>;
-  readonly pid: number;
-  /** The answer files, when they cannot be written. */
-  readonly replies: Unwritable;
-  readonly logger: Logger;
-}
-
-/** Answers a question from a second launch; false when it carried none (an ordinary launch). */
-export function answerQuestion(data: unknown, deps: AnswerDeps): boolean {
-  if (!isQuestion(data)) {
-    return false;
-  }
-  const file = replyFile(deps.app.getPath("userData"), data.id);
-  deps.logger.info(`answering \`reload --${data.command}\` from a second launch`);
-  void replyTo(data, deps).then(
-    (reply) => {
-      writeReply(file, reply, deps.replies);
-    },
-    (error: unknown) => {
-      writeReply(file, { code: 1, text: `${String(error)}\n` }, deps.replies);
-    },
-  );
-  return true;
-}
-
-async function replyTo(question: Question, deps: AnswerDeps): Promise<Reply> {
-  switch (question.command) {
-    case "status":
-      return { code: 0, text: statusText(deps) };
-    case "quit": {
-      const outcome = await deps.quit();
-      if (outcome === "cancelled") {
-        return {
-          code: 1,
-          text: "The quit was cancelled in Reload's window. Reload is still running.\n",
-        };
-      }
-      // What stopped is the asking process's to say: it watches each process go (confirmQuit).
-      return { code: 0, text: outcome === "busy" ? "Reload is already quitting.\n" : "" };
-    }
-  }
-}
-
-/** Written whole or not at all, readable by this user alone (shell/run-state.ts). */
-function writeReply(file: string, reply: Reply, replies: Unwritable): void {
-  try {
-    writePrivateFile(file, JSON.stringify(reply));
-    replies.worked();
-  } catch (error) {
-    // The asking process says it got no answer.
-    replies.failed(error);
-  }
-}
-
-/**
- * Removes the answers nobody took: an asking process killed while it waited never removes its
- * own (it blocks, so no handler of its runs). Only `command-<id>.reply` files and their scratch
- * files, by name; a link is removed itself, never followed.
- */
-export function removeStaleReplies(dir: string, now: number): void {
-  let names: string[];
-  try {
-    names = fs.readdirSync(dir);
-  } catch {
-    return;
-  }
-  for (const name of names) {
-    if (!/^command-[0-9a-f]{32}\.reply(\.tmp)?$/.test(name)) {
-      continue;
-    }
-    const file = path.join(dir, name);
-    try {
-      if (now - fs.lstatSync(file).mtimeMs > STALE_REPLY_MS) {
-        fs.rmSync(file, { force: true });
-      }
-    } catch {
-      // Gone meanwhile, or not a file: nothing of ours to remove.
-    }
-  }
-}
-
-const childLines = (supervisors: Running["supervisors"]) =>
-  [...supervisors.values()]
-    .map((supervisor): ChildStatus => supervisor.status())
-    .sort((a, b) => a.child.localeCompare(b.child));
-
-/** Anytype's line in plain words; null before the launch has decided. */
-const ANYTYPE_WORDS: Readonly<Record<AnytypeAppState, string>> = {
-  started: "started by Reload",
-  adopted: "opened by you; Reload leaves it running",
-  missing: "not found on this machine",
-  failed: "could not be started",
-};
-
-/** What runs, and what was refused or needs the person (helper status, cli.py:1540). */
-export function statusText(deps: Omit<AnswerDeps, "quit" | "logger" | "replies">): string {
-  const { running, app } = deps;
-  const lines = [`Reload ${app.getVersion()} is running (process ${String(deps.pid)}).`];
-  for (const status of childLines(running.supervisors)) {
-    const where = status.pid === null ? "" : ` (process ${String(status.pid)})`;
-    const why = status.error === null ? "" : ` — ${status.error}`;
-    lines.push(`  ${status.child}: ${status.state}${where}${why}`);
-  }
-  const anytype = running.anytype.state;
-  lines.push(`  Anytype: ${anytype === null ? "starting" : ANYTYPE_WORDS[anytype]}`);
-  lines.push(...noticeLines(path.join(app.getPath("userData"), running.notices)));
-  return lines.join("\n") + "\n";
-}
-
 /** The notice file's conditions, in the words the notification uses (cli.py _echo_notices). */
-function noticeLines(file: string): string[] {
+export function noticeLines(file: string): string[] {
   const notices = currentNotices(file);
   if (typeof notices === "string") {
     return [notices];
@@ -491,8 +421,15 @@ const withoutBlanks = (notice: Notice): Notice => ({
   ...(notice.detail === undefined || notice.detail === "" ? {} : { detail: notice.detail }),
 });
 
-/** Where the log is, whether or not it exists yet, and its end (logs, cli.py:692). */
+/**
+ * Where the log is, whether or not it exists yet, and its end (logs, cli.py:692), as plain text:
+ * a line the log took from elsewhere never drives the terminal.
+ */
 export function logText(file: string): string {
+  return plainText(logLines(file).join("\n") + "\n");
+}
+
+function logLines(file: string): string[] {
   const lines = [`Log file: ${file}`];
   let text: string;
   try {
@@ -500,10 +437,10 @@ export function logText(file: string): string {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
       lines.push(`  it could not be read: ${String(error)}`);
-      return lines.join("\n") + "\n";
+      return lines;
     }
     lines.push("  nothing written yet: no Reload process has logged on this machine.");
-    return lines.join("\n") + "\n";
+    return lines;
   }
   lines.push(`  ${String(Buffer.byteLength(text))} bytes; the last lines:`);
   lines.push(
@@ -512,5 +449,5 @@ export function logText(file: string): string {
       .filter((line) => line !== "")
       .slice(-LOG_TAIL_LINES),
   );
-  return lines.join("\n") + "\n";
+  return lines;
 }

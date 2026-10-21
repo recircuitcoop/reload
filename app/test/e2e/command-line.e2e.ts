@@ -1,7 +1,8 @@
 // Reload from a terminal (plan 0031 group E): a second process started with `--status` or
-// `--quit` asks the running instance over the single-instance channel, prints its answer and
-// exits; with none running `--status` answers from the files and `--quit` says so and exits 1.
-// `--log` and `--quit --force` ask nobody.
+// `--quit` asks the running instance with a question file in its user-data folder, never the
+// single-instance lock, prints its answer and exits; with none running, or none answering,
+// `--status` answers from the files and `--quit` says so and exits 1. `--log` and
+// `--quit --force` ask nobody.
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import * as path from "node:path";
@@ -74,7 +75,7 @@ test("reload --status and --quit act on the running instance from a second proce
     expect(log.code).toBe(0);
     expect(log.stdout).toMatch(/^Log file: .+\n {2}\d+ bytes; the last lines:\n/);
     expect(log.stdout.startsWith(`Log file: ${logFile}\n`)).toBe(true);
-    expect(log.stdout).toContain("answering `reload --status` from a second launch");
+    expect(log.stdout).toContain("answering `reload --status` from a terminal");
 
     // Plain --quit names what it watched stop, so it needs the run-state to have recorded it.
     const runState = path.join(userData, "run-state.json");
@@ -89,6 +90,7 @@ test("reload --status and --quit act on the running instance from a second proce
     expect(quit.stdout).toContain(`  shell stopped (process ${String(shellPid)})`);
     expect(await exited).toBe(0);
     await expect.poll(() => processesNaming(userData), { timeout: 10_000 }).toEqual([]);
+    expect(fs.existsSync(runState)).toBe(false);
     // Started from a terminal, it said there what it came up without, and still exited 0.
     expect(output.join("")).toContain("Reload starts without it");
 
@@ -99,7 +101,53 @@ test("reload --status and --quit act on the running instance from a second proce
   }
 });
 
-test("reload --quit --force stops every recorded process itself, without asking the app", async () => {
+test("a stopped Reload survives reload --status and --quit, which say it did not answer", async () => {
+  const { scratch, userData, env } = scratchDirectories();
+  const apps: ElectronApplication[] = [];
+  try {
+    const { app, window } = await launchApp(env);
+    apps.push(app);
+    await waitForRunning(window, "runtime");
+    const shellPid = await app.evaluate(() => process.pid);
+    const runState = path.join(userData, "run-state.json");
+    await expect
+      .poll(() => (fs.existsSync(runState) ? fs.readFileSync(runState, "utf8") : ""))
+      .toContain(`"pid":${String(shellPid)}`);
+    // Stopped, it can answer nothing: asking must neither wait on it for long nor kill it.
+    process.kill(shellPid, "SIGSTOP");
+    try {
+      const status = await reload("--status", env);
+      expect(status.code).toBe(0);
+      expect(status.stdout.startsWith("Reload did not answer within 5 seconds.\n")).toBe(true);
+      expect(status.stdout).toContain(`  shell: running (process ${String(shellPid)})\n`);
+      expect(await reload("--quit", env)).toEqual({
+        code: 1,
+        stdout: "Reload did not answer within 5 seconds.\n",
+      });
+    } finally {
+      process.kill(shellPid, "SIGCONT");
+    }
+    // Woken, it is still the same Reload: it never acts on the questions it did not take, and
+    // answers the next one.
+    expect(isAlive(shellPid)).toBe(true);
+    const again = await reload("--status", env);
+    expect(again.code).toBe(0);
+    expect(again.stdout).toMatch(
+      new RegExp(`^Reload \\S+ is running \\(process ${String(shellPid)}\\)\\.\\n`),
+    );
+    expect(isAlive(shellPid)).toBe(true);
+    expect(fs.readdirSync(userData).filter((name) => name.startsWith("command-"))).toEqual([]);
+    const exited = exitOf(app);
+    expect((await reload("--quit", env)).code).toBe(0);
+    expect(await exited).toBe(0);
+  } finally {
+    await cleanUp(apps, scratch);
+  }
+});
+
+test("reload --quit --force stops every recorded process of a stopped Reload itself, asking nobody", async () => {
+  // The shell is given its polite stop before it is killed.
+  test.setTimeout(120_000);
   const { scratch, userData, env } = scratchDirectories();
   const apps: ElectronApplication[] = [];
   try {
@@ -124,6 +172,8 @@ test("reload --quit --force stops every recorded process itself, without asking 
         `services ${String(services.pid)}`,
       ]);
 
+    // Stopped, it cannot answer anything: the forced quit asks it nothing.
+    process.kill(shellPid, "SIGSTOP");
     const exited = exitOf(app);
     const forced = await reload(["--quit", "--force"], env);
     expect(forced.code).toBe(0);

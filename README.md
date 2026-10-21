@@ -23,7 +23,7 @@ Start Reload a second time with one of these flags, and it answers in the termin
 opening a window:
 
 - `--status`: what runs, and what needs your attention. When Reload is not running, or does not
-  answer within 10 seconds, it says what Reload's own files record.
+  answer, it says what Reload's own files record.
 - `--quit`: quits the way the Quit menu does, then names each process that stopped and any that
   still runs.
 - `--quit --force`: stops every process Reload recorded itself, without asking Reload. Use it when

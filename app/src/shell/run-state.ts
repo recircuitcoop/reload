@@ -4,14 +4,17 @@
 // The running shell records every process it is answerable for (itself, the runtime, the
 // services process, and an Anytype it started; never one it adopted) in its user-data folder,
 // mode 0600, each with its identity: its start time and command line as the process table gives
-// them. `--quit --force` asks nobody: it reads the file and stops each process itself, politely
-// first and forcibly after, and says so out loud when one survived the kill.
+// them, read with one fixed locale and time zone, so a check from a terminal with another reads
+// the same line. `--quit --force` asks nobody: it reads the file and stops each process itself,
+// politely first and forcibly after, and says so out loud when one survived the kill or could
+// not be checked.
 //
 // A record whose pid now belongs to another program fails the identity check and is forgotten,
 // never signalled (processes.py:500). The file is read as untrusted: a record that is not one (a
 // pid that is not a positive integer above all, since it reaches a command line) makes the whole
-// file unreadable, said so, and nothing is signalled. The shell is stopped first, unlike the old helper (last):
-// the shell is the supervisor here, and a child stopped before it would only be restarted.
+// file unreadable, said so by the field that is wrong, and nothing is signalled. The shell is
+// stopped first, unlike the old helper (last): the shell is the supervisor here, and a child
+// stopped before it would only be restarted.
 import { execFile, execFileSync } from "node:child_process";
 import fs from "node:fs";
 
@@ -25,6 +28,14 @@ export interface RunRecord {
   readonly identity: string;
 }
 
+/**
+ * The identity of a pid now; null when nothing has that pid. Throws UncheckedIdentity when the
+ * process table could not be read: that is never taken for "gone".
+ */
+export type Identity = (pid: number) => string | null;
+
+export class UncheckedIdentity extends Error {}
+
 /** How long a polite stop is given: the shell's own quit stops its children first. */
 export const POLITE_MS: ReadonlyMap<string, number> = new Map([["shell", 15_000]]);
 export const DEFAULT_POLITE_MS = 5_000;
@@ -35,49 +46,82 @@ export const KILLED_MS = 5_000;
 export const isPid = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 
+/**
+ * `ps` reads the start time in the locale and time zone it is given: the app started from the
+ * Dock has no LANG, a terminal has its own. One of each, fixed, at record time and check alike.
+ */
+const PS_ENV = { LC_ALL: "C", TZ: "UTC", PATH: "/usr/bin:/bin" };
+
 /** The process table's line for one pid: its start time and command line. */
-export function identityCommand(pid: number, platform: NodeJS.Platform): [string, string[]] {
+export function identityCommand(
+  pid: number,
+  platform: NodeJS.Platform,
+): [string, string[], NodeJS.ProcessEnv | undefined] {
   if (!isPid(pid)) {
     // Never anything but digits into a command line (PowerShell's one, on Windows).
     throw new RangeError(`not a process id: ${String(pid)}`);
   }
   if (platform === "win32") {
+    // The 'o' format is the same in every culture.
     return [
       "powershell.exe",
       [
         "-NoProfile",
         "-Command",
         `Get-CimInstance Win32_Process -Filter "ProcessId=${String(pid)}" | ` +
-          "ForEach-Object { \"$($_.CreationDate.ToString('o')) $($_.CommandLine)\" }",
+          "ForEach-Object { \"$($_.CreationDate.ToUniversalTime().ToString('o')) $($_.CommandLine)\" }",
       ],
+      undefined,
     ];
   }
-  return ["/bin/ps", ["-o", "lstart=,args=", "-p", String(pid)]];
+  return ["/bin/ps", ["-o", "lstart=,args=", "-p", String(pid)], PS_ENV];
 }
 
-/** The identity of `pid` now, or null when nothing has that pid. */
-export function identityOf(pid: number, platform: NodeJS.Platform): string | null {
-  const [command, args] = identityCommand(pid, platform);
-  try {
-    const line = execFileSync(command, args, { encoding: "utf8", timeout: 10_000 }).trim();
+/** The line read, null when no process has the pid, or why the table could not be read. */
+function identityFrom(error: Error | null, stdout: string): string | null {
+  const line = stdout.trim();
+  if (error === null) {
     return line === "" ? null : line;
-  } catch {
-    // ps exits 1 when no process has the pid.
+  }
+  // ps exits 1, printing nothing, when no process has the pid; anything else is not an answer.
+  const status =
+    (error as { status?: unknown; code?: unknown }).status ?? (error as { code?: unknown }).code;
+  if (status === 1 && line === "") {
     return null;
   }
+  throw new UncheckedIdentity(`the process table could not be read: ${String(error)}`);
+}
+
+/** The identity of `pid` now, or null when nothing has that pid; throws UncheckedIdentity. */
+export function identityOf(pid: number, platform: NodeJS.Platform): string | null {
+  const [command, args, env] = identityCommand(pid, platform);
+  let stdout: string;
+  try {
+    stdout = execFileSync(command, args, { encoding: "utf8", timeout: 10_000, env });
+  } catch (error) {
+    const { stdout: printed } = error as { stdout?: unknown };
+    return identityFrom(error as Error, typeof printed === "string" ? printed : "");
+  }
+  return identityFrom(null, stdout);
 }
 
 function identityOfLater(pid: number, platform: NodeJS.Platform): Promise<string | null> {
-  const [command, args] = identityCommand(pid, platform);
-  return new Promise((resolve) => {
-    execFile(command, args, { encoding: "utf8", timeout: 10_000 }, (error, stdout) => {
-      const line = error === null ? stdout.trim() : "";
-      resolve(line === "" ? null : line);
+  const [command, args, env] = identityCommand(pid, platform);
+  return new Promise((resolve, reject) => {
+    execFile(command, args, { encoding: "utf8", timeout: 10_000, env }, (error, stdout) => {
+      try {
+        resolve(identityFrom(error, stdout));
+      } catch (unchecked) {
+        reject(unchecked instanceof Error ? unchecked : new UncheckedIdentity(String(unchecked)));
+      }
     });
   });
 }
 
-/** Writes the run-state: each process with the identity it has now, whole, mode 0600. */
+/**
+ * Writes the run-state: each process with the identity it has now, whole, mode 0600. A process
+ * table that cannot be read fails the write, so the record before it stays.
+ */
 export async function writeRunState(
   file: string,
   processes: readonly { readonly id: string; readonly pid: number }[],
@@ -113,7 +157,7 @@ export function writePrivateFile(file: string, text: string): void {
 
 /**
  * The records in the run-state file: null when there is none, and a sentence saying so when it
- * cannot be read or is not a list of records.
+ * cannot be read or is not a list of records, naming the record and the field that is wrong.
  */
 export function readRunState(file: string): readonly RunRecord[] | string | null {
   let document: unknown;
@@ -125,37 +169,49 @@ export function readRunState(file: string): readonly RunRecord[] | string | null
     }
     return `The run-state file could not be read: ${String(error)}`;
   }
-  if (!Array.isArray(document) || !document.every(isRunRecord)) {
+  if (!Array.isArray(document)) {
     return "The run-state file could not be read: it is not a list of the processes Reload ran.";
   }
-  return document;
+  for (const [index, entry] of document.entries()) {
+    const wrong = wrongField(entry);
+    if (wrong !== null) {
+      return `The run-state file could not be read: record ${String(index + 1)} has no valid ${wrong}.`;
+    }
+  }
+  return document as RunRecord[];
 }
 
-function isRunRecord(value: unknown): value is RunRecord {
-  if (typeof value !== "object" || value === null) {
-    return false;
+/** The first field of a record that is missing or wrong; null when it is a record. */
+function wrongField(value: unknown): "record" | "id" | "pid" | "identity" | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return "record";
   }
   const { id, pid, identity } = value as Record<string, unknown>;
-  return (
-    typeof id === "string" &&
-    // Printed to the terminal: a name, never a control sequence.
-    /^[a-z][a-z0-9-]{0,63}$/.test(id) &&
-    isPid(pid) &&
-    typeof identity === "string" &&
-    identity !== ""
-  );
+  // Printed to the terminal: a name, never a control sequence.
+  if (typeof id !== "string" || !/^[a-z][a-z0-9-]{0,63}$/.test(id)) {
+    return "id";
+  }
+  if (!isPid(pid)) {
+    return "pid";
+  }
+  return typeof identity === "string" && identity !== "" ? null : "identity";
 }
 
-/** Which of the records still name the process they were made for. */
-export const stillRunning = (
-  records: readonly RunRecord[],
-  identity: (pid: number) => string | null,
-): RunRecord[] => records.filter((record) => identity(record.pid) === record.identity);
+/** Whether a record still names its process: true, false, or why that could not be checked. */
+export function stillRuns(record: RunRecord, identity: Identity): boolean | string {
+  try {
+    return identity(record.pid) === record.identity;
+  } catch (error) {
+    if (error instanceof UncheckedIdentity) {
+      return error.message;
+    }
+    throw error;
+  }
+}
 
 export interface ForceDeps {
   readonly file: string;
-  /** The identity of a pid now; null when nothing has it. */
-  readonly identity: (pid: number) => string | null;
+  readonly identity: Identity;
   readonly signal: (pid: number, signal: "SIGTERM" | "SIGKILL") => void;
   readonly now: () => number;
   /** Blocks. */
@@ -165,7 +221,11 @@ export interface ForceDeps {
 
 type Outcome = "terminated" | "killed" | "forgotten" | "already stopped" | "still running";
 
-/** `reload --quit --force`: stops every recorded process itself; the exit code. */
+/**
+ * `reload --quit --force`: stops every recorded process itself; the exit code. A survivor is
+ * said and exits 0, as the old quit did; a process it could not check is said and exits 1.
+ * Either way the record is kept, and Reload is not said to be off.
+ */
 export function forceQuit(deps: ForceDeps): number {
   const records = readRunState(deps.file);
   if (records === null || typeof records === "string") {
@@ -173,52 +233,64 @@ export function forceQuit(deps: ForceDeps): number {
     return 1;
   }
   const lines: string[] = [];
-  const survivors: RunRecord[] = [];
+  const survivors: string[] = [];
+  const unchecked: string[] = [];
   for (const record of shellFirst(records)) {
-    const outcome = stop(record, deps);
+    const named = `${record.id} (process ${String(record.pid)})`;
+    let outcome: Outcome;
+    try {
+      outcome = stop(record, deps);
+    } catch (error) {
+      if (!(error instanceof UncheckedIdentity)) throw error;
+      unchecked.push(`${named} could not be checked: ${error.message}.`);
+      continue;
+    }
     if (outcome === "still running") {
-      survivors.push(record);
+      // The one case where the command did not do what it promised: said, with each process.
+      survivors.push(`${named} is STILL RUNNING after a forced kill.`);
       continue;
     }
     lines.push(`  ${record.id} ${outcome} (process ${String(record.pid)})`);
   }
-  if (survivors.length > 0) {
-    // The one case where the command did not do what it promised: said, with each process.
-    for (const record of survivors) {
-      lines.push(
-        `${record.id} (process ${String(record.pid)}) is STILL RUNNING after a forced kill.`,
-      );
-    }
-  } else {
+  lines.push(...survivors, ...unchecked);
+  if (survivors.length === 0 && unchecked.length === 0) {
     fs.rmSync(deps.file, { force: true });
     lines.push("Reload is off.");
   }
   deps.print(lines.join("\n") + "\n");
-  return 0;
+  return unchecked.length === 0 ? 0 : 1;
 }
 
 /**
- * Plain `reload --quit`, once the running instance said it quit: which of the processes running
- * before it are gone, and which are still running (the old quit's "make sure of it",
- * launcher.py:1121). Each is given the time a polite stop is given; nothing is signalled.
+ * Plain `reload --quit`, once the running instance said it quit: which of the recorded processes
+ * are gone, and which are still running or could not be checked (the old quit's "make sure of
+ * it", launcher.py:1121). Each is given the time a polite stop is given; nothing is signalled.
+ * `off` is whether every one is gone.
  */
-export function confirmQuit(running: readonly RunRecord[], deps: Waiting): string[] {
+export function confirmQuit(
+  running: readonly RunRecord[],
+  deps: Waiting,
+): { readonly lines: string[]; readonly off: boolean } {
   const lines: string[] = [];
-  const survivors: RunRecord[] = [];
+  const left: string[] = [];
   for (const record of shellFirst(running)) {
-    if (goneWithin(record, politeMs(record), deps)) {
-      lines.push(`  ${record.id} stopped (process ${String(record.pid)})`);
-    } else {
-      survivors.push(record);
+    const named = `${record.id} (process ${String(record.pid)})`;
+    try {
+      if (goneWithin(record, politeMs(record), deps)) {
+        lines.push(`  ${record.id} stopped (process ${String(record.pid)})`);
+      } else {
+        left.push(`${named} is still running after the quit.`);
+      }
+    } catch (error) {
+      if (!(error instanceof UncheckedIdentity)) throw error;
+      left.push(`${named} could not be checked: ${error.message}.`);
     }
   }
-  for (const record of survivors) {
-    lines.push(`${record.id} (process ${String(record.pid)}) is still running after the quit.`);
-  }
-  if (survivors.length === 0) {
+  lines.push(...left);
+  if (left.length === 0) {
     lines.push("Reload is off.");
   }
-  return lines;
+  return { lines, off: left.length === 0 };
 }
 
 type Waiting = Pick<ForceDeps, "identity" | "now" | "sleep">;

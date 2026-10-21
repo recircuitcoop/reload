@@ -1,6 +1,6 @@
 // The shell's life (plan 0018 §2.2): one instance, whose second launch brings the first one's
-// window forward, unless it came with a command (`reload --status`, shell/command-line.ts) to
-// answer; closing the window is not quitting; every quit goes through the one QuitFlow, which
+// window forward, and which answers the questions a terminal leaves in its user-data folder
+// (`reload --status`, shell/command-line.ts and command-answers.ts); closing the window is not quitting; every quit goes through the one QuitFlow, which
 // asks about undeployed edits unless a signal asked for the quit (nobody may be at the window to
 // answer). Apart from main.ts so the composition root only constructs.
 import type { App } from "electron";
@@ -10,12 +10,12 @@ import type { Notifier } from "../ports/notifier";
 import fs from "node:fs";
 import * as path from "node:path";
 import {
-  answerQuestion,
+  answerQuestions,
   removeStaleReplies,
   unwritable,
   type Running,
   type Unwritable,
-} from "./command-line";
+} from "./command-answers";
 import { RUN_STATE_FILENAME, writeRunState } from "./run-state";
 
 export interface LifecycleDeps {
@@ -46,13 +46,20 @@ export function runShell(deps: LifecycleDeps): void {
   removeStaleReplies(app.getPath("userData"), Date.now());
   let notices: Notifier | null = null;
   const replies = unwritable("answer to a terminal command", () => notices, logger);
-  app.on("second-instance", (_event, _argv, _directory, data) => {
+  const runState = unwritable("run-state file", () => notices, logger);
+  const recorded = recordRunState(deps, runState);
+  const stopAnswering = answerQuestions({
+    running: deps.running,
+    app,
     // `reload --quit` takes the Quit menu's path: undeployed edits are put to the person.
-    const quit = () => quitFlow.request({ ask: true });
-    const answer = { running: deps.running, app, quit, pid: process.pid, replies, logger };
-    if (!answerQuestion(data, answer)) {
-      bringForward();
-    }
+    quit: () => quitFlow.request({ ask: true }),
+    pid: process.pid,
+    replies,
+    logger,
+  });
+  app.on("quit", stopAnswering);
+  app.on("second-instance", () => {
+    bringForward();
   });
   // macOS: a dock click with no window open. Closing the window is not quitting.
   app.on("activate", () => {
@@ -80,10 +87,9 @@ export function runShell(deps: LifecycleDeps): void {
   deps.start().then(
     (started) => {
       notices = started;
-      recordRunState(
-        deps,
-        unwritable("run-state file", () => notices, logger),
-      );
+      replies.ready();
+      runState.ready();
+      recorded.followChildren();
     },
     (error: unknown) => {
       logger.error(`the shell could not start: ${String(error)}`);
@@ -93,11 +99,14 @@ export function runShell(deps: LifecycleDeps): void {
 }
 
 /**
- * The run-state file `reload --quit --force` reads (shell/run-state.ts): written once the children
- * are supervised, again whenever one changes or Reload starts Anytype, and removed when the shell
- * quits.
+ * The run-state file a terminal command reads (shell/run-state.ts): written with the shell alone
+ * at once, so a terminal can tell Reload runs before its start is done; again once the children
+ * are supervised, whenever one changes or Reload starts Anytype; and removed when the shell quits.
  */
-function recordRunState(deps: LifecycleDeps, trouble: Unwritable): void {
+function recordRunState(
+  deps: LifecycleDeps,
+  trouble: Unwritable,
+): { readonly followChildren: () => void } {
   const { app, running } = deps;
   const file = path.join(app.getPath("userData"), RUN_STATE_FILENAME);
   let writing = Promise.resolve();
@@ -120,13 +129,18 @@ function recordRunState(deps: LifecycleDeps, trouble: Unwritable): void {
       })
       .catch(trouble.failed);
   };
-  for (const supervisor of running.supervisors.values()) {
-    supervisor.onStatus(record);
-  }
-  running.anytype.onStarted(record);
   record();
   app.on("quit", () => {
     quit = true;
     fs.rmSync(file, { force: true });
   });
+  return {
+    followChildren: () => {
+      for (const supervisor of running.supervisors.values()) {
+        supervisor.onStatus(record);
+      }
+      running.anytype.onStarted(record);
+      record();
+    },
+  };
 }

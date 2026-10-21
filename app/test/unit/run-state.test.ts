@@ -9,13 +9,14 @@ import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ChildStatus } from "../../src/domain/supervision/child-state";
 import { runShell } from "../../src/shell/lifecycle";
-import type { Running } from "../../src/shell/command-line";
+import type { Running } from "../../src/shell/command-answers";
 import {
   DEFAULT_POLITE_MS,
   forceQuit,
   identityCommand,
   identityOf,
   RUN_STATE_FILENAME,
+  UncheckedIdentity,
   writeRunState,
   type RunRecord,
 } from "../../src/shell/run-state";
@@ -162,28 +163,108 @@ describe("reload --quit --force", () => {
     DEFAULT_POLITE_MS * 2,
   );
 
-  it("reads a malformed file as unreadable, says so plainly, and signals nothing", () => {
+  it("reads a malformed file as unreadable, names the field that is wrong, and signals nothing", () => {
     const { run, signals, printed } = table({ 10: { identity: "t0 Reload" } });
-    const malformed = [
-      '{"id":"shell","pid":10,"identity":"t0 Reload"}',
-      '[{"id":"shell","identity":"t0 Reload"}]',
-      '[{"id":"shell","pid":"10; Stop-Computer","identity":"t0 Reload"}]',
-      '[{"id":"shell","pid":-1,"identity":"t0 Reload"}]',
-      '[{"id":"shell","pid":10.5,"identity":"t0 Reload"}]',
-      '[{"id":"\\u001b]0;owned\\u0007","pid":10,"identity":"t0 Reload"}]',
-      "[null]",
+    const shell = '{"id":"shell","pid":10,"identity":"t0 Reload"}';
+    const malformed: [string, string][] = [
+      [shell, "it is not a list of the processes Reload ran"],
+      ['[{"id":"shell","identity":"t0 Reload"}]', "record 1 has no valid pid"],
+      ['[{"id":"shell","pid":"4242","identity":"t0 Reload"}]', "record 1 has no valid pid"],
+      [
+        `[${shell},{"id":"runtime","pid":"10; Stop-Computer","identity":"t1"}]`,
+        "record 2 has no valid pid",
+      ],
+      ['[{"id":"shell","pid":-1,"identity":"t0 Reload"}]', "record 1 has no valid pid"],
+      ['[{"id":"shell","pid":10.5,"identity":"t0 Reload"}]', "record 1 has no valid pid"],
+      ['[{"id":"shell","pid":10,"identity":""}]', "record 1 has no valid identity"],
+      ['[{"pid":10,"identity":"t0 Reload"}]', "record 1 has no valid id"],
+      [
+        '[{"id":"\\u001b]0;owned\\u0007","pid":10,"identity":"t0 Reload"}]',
+        "record 1 has no valid id",
+      ],
+      ["[null]", "record 1 has no valid record"],
     ];
-    for (const text of malformed) {
+    for (const [text] of malformed) {
       fs.writeFileSync(file, text);
       expect(run()).toBe(1);
     }
     expect(signals).toEqual([]);
-    expect(new Set(printed)).toEqual(
-      new Set([
-        "The run-state file could not be read: it is not a list of the processes Reload ran.\n",
-      ]),
+    expect(printed).toEqual(
+      malformed.map(([, why]) => `The run-state file could not be read: ${why}.\n`),
     );
   });
+
+  it("never takes a process table it could not read for a process that is gone", () => {
+    write([
+      { id: "shell", pid: 10, identity: "t0 Reload" },
+      { id: "runtime", pid: 11, identity: "t1 Reload runtime" },
+    ]);
+    const printed: string[] = [];
+    const signals: string[] = [];
+    let clock = 0;
+    const code = forceQuit({
+      file,
+      identity: (pid) => {
+        if (pid === 11) throw new UncheckedIdentity("the process table could not be read: ENOENT");
+        return null;
+      },
+      signal: (pid, signal) => signals.push(`${String(pid)} ${signal}`),
+      now: () => clock,
+      sleep: (ms) => {
+        clock += ms;
+      },
+      print: (text) => printed.push(text),
+    });
+    expect(code).toBe(1);
+    expect(signals).toEqual([]);
+    expect(printed.join("")).toBe(
+      "  shell already stopped (process 10)\n" +
+        "runtime (process 11) could not be checked: the process table could not be read: ENOENT.\n",
+    );
+    expect(fs.existsSync(file)).toBe(true);
+  });
+
+  it("says it could not read the process table when the program that reads it is missing", () => {
+    // No powershell.exe on this machine: the same as a missing /bin/ps, or one that timed out.
+    if (process.platform === "win32") return;
+    expect(() => identityOf(process.pid, "win32")).toThrow(UncheckedIdentity);
+  });
+
+  it(
+    "reads the same identity whatever the locale and the time zone of the reader",
+    async () => {
+      const sleeper = spawn(process.execPath, ["-e", "setInterval(() => undefined, 1000)"], {
+        stdio: "ignore",
+      });
+      const pid = sleeper.pid ?? 0;
+      const kept = {
+        LANG: process.env["LANG"],
+        LC_ALL: process.env["LC_ALL"],
+        TZ: process.env["TZ"],
+      };
+      const as = (env: { LANG: string; TZ: string }) => {
+        process.env["LANG"] = env.LANG;
+        process.env["LC_ALL"] = env.LANG;
+        process.env["TZ"] = env.TZ;
+      };
+      try {
+        // Recorded by an app started from the Dock, checked from a terminal in another country.
+        as({ LANG: "", TZ: "Pacific/Kiritimati" });
+        await writeRunState(file, [{ id: "runtime", pid }], process.platform);
+        as({ LANG: "de_DE.UTF-8", TZ: "America/New_York" });
+        expect(identityOf(pid, process.platform)).toBe(records()[0]?.identity);
+        as({ LANG: "en_GB.UTF-8", TZ: "Asia/Tokyo" });
+        expect(identityOf(pid, process.platform)).toBe(records()[0]?.identity);
+      } finally {
+        for (const [name, value] of Object.entries(kept)) {
+          if (value === undefined) Reflect.deleteProperty(process.env, name);
+          else process.env[name] = value;
+        }
+        sleeper.kill("SIGKILL");
+      }
+    },
+    DEFAULT_POLITE_MS * 2,
+  );
 
   it("gives a record named like an object's own property the default polite wait, which ends", () => {
     write([{ id: "constructor", pid: 14, identity: "t4 Reload node" }]);
@@ -200,6 +281,7 @@ describe("reload --quit --force", () => {
     expect(identityCommand(4242, "darwin")).toEqual([
       "/bin/ps",
       ["-o", "lstart=,args=", "-p", "4242"],
+      { LC_ALL: "C", TZ: "UTC", PATH: "/usr/bin:/bin" },
     ]);
     for (const pid of [0, -1, 1.5, Number.NaN, "1; Stop-Computer" as unknown as number]) {
       expect(() => identityCommand(pid, "win32")).toThrow(RangeError);

@@ -1,6 +1,6 @@
-// Reload from a terminal (plan 0031 group E): `reload --status` and `--quit` ask the running
-// instance over the single-instance channel and print its answer, read back from a file of this
-// user's own in the user-data folder; `--status` answers from the files when nothing runs or the
+// Reload from a terminal (plan 0031 group E): `reload --status` and `--quit` leave a question
+// file in the user-data folder, never take the single-instance lock, and read the answer back
+// from a file of this user's own; `--status` answers from the files when nothing runs or the
 // instance does not answer, and `--log` asks nobody.
 import { EventEmitter } from "node:events";
 import fs from "node:fs";
@@ -13,23 +13,34 @@ import type { QuitOutcome } from "../../src/application/quit";
 import { compose, type Notice } from "../../src/domain/notices/notices";
 import type { ChildName, ChildStatus } from "../../src/domain/supervision/child-state";
 import {
-  answerQuestion,
+  removeStaleReplies,
+  takeQuestions,
+  unwritable,
+  type AnswerDeps,
+  type Running,
+} from "../../src/shell/command-answers";
+import {
   ask,
   commandOf,
   LOG_TAIL_LINES,
   logText,
-  removeStaleReplies,
+  PICKUP_MS,
+  plainText,
+  questionFile,
   replyFile,
   STALE_REPLY_MS,
-  unwritable,
   WAIT_MS,
-  type AnswerDeps,
   type Asked,
+  type Question,
   type Reply,
-  type Running,
 } from "../../src/shell/command-line";
 import { runShell } from "../../src/shell/lifecycle";
-import { RUN_STATE_FILENAME, type RunRecord } from "../../src/shell/run-state";
+import {
+  RUN_STATE_FILENAME,
+  UncheckedIdentity,
+  writePrivateFile,
+  type RunRecord,
+} from "../../src/shell/run-state";
 import { RecordingLogger, RecordingNotifier } from "../fakes/children";
 
 const ID = "0123456789abcdef0123456789abcdef";
@@ -90,6 +101,11 @@ function deps(overrides: Partial<AnswerDeps> = {}) {
   return { answer, logger, quits };
 }
 
+/** A question as the asking process leaves it. */
+const put = (command: string, id = ID) => {
+  writePrivateFile(questionFile(userData, id), JSON.stringify({ command, id }));
+};
+
 /** The reply the running instance wrote for the question, once it is there. */
 async function replyFor(id = ID): Promise<Reply> {
   const file = replyFile(userData, id);
@@ -98,9 +114,11 @@ async function replyFor(id = ID): Promise<Reply> {
   return JSON.parse(fs.readFileSync(file, "utf8")) as Reply;
 }
 
+const runStateFile = () => path.join(userData, RUN_STATE_FILENAME);
 const writeRunState = (records: RunRecord[]) => {
-  fs.writeFileSync(path.join(userData, RUN_STATE_FILENAME), JSON.stringify(records));
+  fs.writeFileSync(runStateFile(), JSON.stringify(records));
 };
+const SHELL: RunRecord = { id: "shell", pid: 10, identity: "t0 Reload" };
 
 describe("the command line", () => {
   it("names the command, and none for an ordinary launch", () => {
@@ -112,53 +130,55 @@ describe("the command line", () => {
     expect(commandOf(["electron", "app"])).toBeNull();
     expect(commandOf(["electron", "app", "--inspect"])).toBeNull();
   });
+
+  it("prints plain text: no control character but the newline and the tab", () => {
+    expect(plainText("a\u001b]0;owned\u0007b\tc\r\n\u009bd\u007f")).toBe("a]0;ownedb\tc\nd");
+  });
 });
 
 describe("the asking process", () => {
   /**
-   * A second launch. `alive` is the process table (pid to identity); `onAsk` stands for the
-   * running instance, called with the question when the lock is taken.
+   * A second launch, with no single-instance lock to take (its app has getPath alone). `alive`
+   * is the process table; `instance` stands for the running Reload: called with each question
+   * it takes, it answers with a reply, or null for none. Without it, nobody takes a question.
    */
   function asking(
-    lockFree: boolean,
-    onAsk?: (data: unknown) => void,
-    alive = new Map<number, string>(),
+    options: {
+      alive?: Map<number, string>;
+      instance?: (question: Question) => Reply | null;
+      identity?: (pid: number) => string | null;
+    } = {},
   ) {
+    const alive = options.alive ?? new Map<number, string>();
     const printed: string[] = [];
+    const taken: { question: Question; mode: number }[] = [];
     let clock = 0;
-    const sent: unknown[] = [];
     const code = (command: Asked) =>
       ask(command, {
-        app: {
-          requestSingleInstanceLock: (data?: Record<string, unknown>) => {
-            sent.push(data);
-            onAsk?.(data);
-            return lockFree;
-          },
-          getPath: () => userData,
-        },
+        app: { getPath: () => userData },
         print: (text) => printed.push(text),
         id: ID,
         now: () => clock,
         sleep: (ms) => {
           clock += ms;
+          const file = questionFile(userData, ID);
+          if (options.instance === undefined || !fs.existsSync(file)) return;
+          const question = JSON.parse(fs.readFileSync(file, "utf8")) as Question;
+          taken.push({ question, mode: fs.statSync(file).mode & 0o777 });
+          fs.unlinkSync(file);
+          const reply = options.instance(question);
+          if (reply !== null) fs.writeFileSync(replyFile(userData, ID), JSON.stringify(reply));
         },
-        identity: (pid) => alive.get(pid) ?? null,
+        identity: options.identity ?? ((pid) => alive.get(pid) ?? null),
         notices: NOTICES_FILENAME,
       });
-    return { code, printed, sent, alive };
+    return { code, printed, taken, alive, out: () => printed.join("") };
   }
 
-  const answers = (reply: Reply) => () => {
-    fs.writeFileSync(replyFile(userData, ID), JSON.stringify(reply));
-  };
-
   it("status with nothing running: says nothing is running, from the files, and exits 0", () => {
-    const { code, printed } = asking(true);
+    const { code, out } = asking();
     expect(code("status")).toBe(0);
-    expect(printed.join("")).toBe(
-      "Nothing is running.\nNothing was refused, and nothing is held back.\n",
-    );
+    expect(out()).toBe("Nothing is running.\nNothing was refused, and nothing is held back.\n");
   });
 
   it("status with nothing running still names a stopped child and a staged update, with no notification ever shown", () => {
@@ -170,76 +190,112 @@ describe("the asking process", () => {
     };
     const staged: Notice = { kind: "core-update-available", subject: "Reload", version: "1.5.0" };
     new JsonNoticeFile(path.join(userData, NOTICES_FILENAME)).write([stopped, staged]);
-    const { code, printed } = asking(true);
+    const { code, out } = asking();
     expect(code("status")).toBe(0);
     const words = (notice: Notice) => `  ${compose(notice).title} — ${compose(notice).body}`;
-    expect(printed.join("")).toBe(`Nothing is running.\n${words(stopped)}\n${words(staged)}\n`);
-    expect(printed.join("")).toContain("Reload stopped restarting the runtime");
-    expect(printed.join("")).toContain("Reload 1.5.0 is ready");
+    expect(out()).toBe(`Nothing is running.\n${words(stopped)}\n${words(staged)}\n`);
+    expect(out()).toContain("Reload stopped restarting the runtime");
+    expect(out()).toContain("Reload 1.5.0 is ready");
   });
 
   it("status with nothing running names a recorded process that still runs", () => {
-    writeRunState([
-      { id: "shell", pid: 10, identity: "t0 Reload" },
-      { id: "runtime", pid: 11, identity: "t1 Reload runtime" },
-    ]);
-    const { code, printed } = asking(true, undefined, new Map([[11, "t1 Reload runtime"]]));
+    writeRunState([SHELL, { id: "runtime", pid: 11, identity: "t1 Reload runtime" }]);
+    const { code, out } = asking({ alive: new Map([[11, "t1 Reload runtime"]]) });
     expect(code("status")).toBe(0);
-    expect(printed.join("")).toBe(
+    expect(out()).toBe(
       "  runtime: running (process 11)\nNothing was refused, and nothing is held back.\n",
     );
   });
 
   it("quit with nothing running says plainly that Reload is not running, and exits 1", () => {
-    const { code, printed } = asking(true);
+    // A record left by a Reload that is gone, its pid another program's now: not running.
+    writeRunState([SHELL]);
+    const { code, printed, taken } = asking({ alive: new Map([[10, "t9 somebody's editor"]]) });
     expect(code("quit")).toBe(1);
     expect(printed).toEqual(["Reload is not running.\n"]);
+    expect(taken).toEqual([]);
   });
 
-  it("sends the command and its id, prints the answer, and removes the answer file", () => {
-    const { code, printed, sent } = asking(false, answers({ code: 0, text: "Reload is up.\n" }));
+  it("asks with a question file of its own, never the single-instance lock, prints the answer and removes both files", () => {
+    writeRunState([SHELL]);
+    const { code, printed, taken } = asking({
+      alive: new Map([[10, "t0 Reload"]]),
+      instance: () => ({ code: 0, text: "Reload is up.\n" }),
+    });
     expect(code("status")).toBe(0);
-    expect(sent).toEqual([{ command: "status", id: ID }]);
+    expect(taken).toEqual([{ question: { command: "status", id: ID }, mode: 0o600 }]);
     expect(printed).toEqual(["Reload is up.\n"]);
-    expect(fs.readdirSync(userData)).toEqual([]);
+    expect(fs.readdirSync(userData)).toEqual([RUN_STATE_FILENAME]);
   });
 
-  it("status that gets no answer in time says so, then answers from the files", () => {
-    writeRunState([{ id: "shell", pid: 10, identity: "t0 Reload" }]);
-    const { code, printed } = asking(false, undefined, new Map([[10, "t0 Reload"]]));
-    expect(code("status")).toBe(0);
-    expect(printed.join("")).toBe(
-      `Reload did not answer within ${String(WAIT_MS.status / 1000)} seconds.\n` +
+  it("a Reload that does not take the question in time: said, the question taken back, then what the files say", () => {
+    writeRunState([SHELL]);
+    const stuck = asking({ alive: new Map([[10, "t0 Reload"]]) });
+    expect(stuck.code("status")).toBe(0);
+    expect(stuck.out()).toBe(
+      `Reload did not answer within ${String(PICKUP_MS / 1000)} seconds.\n` +
         "  shell: running (process 10)\n" +
         "Nothing was refused, and nothing is held back.\n",
     );
+    expect(stuck.code("quit")).toBe(1);
+    expect(stuck.printed.at(-1)).toBe(
+      `Reload did not answer within ${String(PICKUP_MS / 1000)} seconds.\n`,
+    );
+    // Taken back: a Reload that wakes later finds no question to act on.
+    expect(fs.readdirSync(userData)).toEqual([RUN_STATE_FILENAME]);
   });
 
-  it("quit that gets no answer in time says so, exits 1, and removes its answer file", () => {
-    // An answer it cannot read yet: given up on, it is removed, not left behind.
-    const { code, printed } = asking(false, () => {
-      fs.writeFileSync(replyFile(userData, ID), "{}", { mode: 0o000 });
+  it("a question taken and never answered: said after the command's wait, and a late answer removed", () => {
+    writeRunState([SHELL]);
+    const { code, out } = asking({
+      alive: new Map([[10, "t0 Reload"]]),
+      instance: () => {
+        // An answer it cannot read: given up on, it is removed, not left behind.
+        fs.writeFileSync(replyFile(userData, ID), "{}", { mode: 0o000 });
+        return null;
+      },
     });
-    expect(code("quit")).toBe(1);
-    expect(printed).toEqual([
-      `Reload did not answer within ${String(WAIT_MS.quit / 1000)} seconds.\n`,
-    ]);
-    expect(fs.readdirSync(userData)).toEqual([]);
+    expect(code("status")).toBe(0);
+    expect(out()).toMatch(
+      new RegExp(`^Reload did not answer within ${String(WAIT_MS.status / 1000)} seconds\\.\\n`),
+    );
+    expect(fs.readdirSync(userData)).toEqual([RUN_STATE_FILENAME]);
   });
 
-  it("an answer that is not one is said, with exit 1", () => {
-    const { code, printed } = asking(false, () => {
-      fs.writeFileSync(replyFile(userData, ID), '{"code":"0"}');
+  it("an answer that is not one is said, with exit 1, and nothing in an answer drives the terminal", () => {
+    writeRunState([SHELL]);
+    const alive = new Map([[10, "t0 Reload"]]);
+    const bad = asking({ alive, instance: () => ({ code: "0", text: "" }) as unknown as Reply });
+    expect(bad.code("status")).toBe(1);
+    expect(bad.printed).toEqual(["Reload's answer could not be read.\n"]);
+    const loud = asking({
+      alive,
+      instance: () => ({ code: 0, text: "\u001b]0;owned\u0007Reload is up.\r\n" }),
     });
-    expect(code("status")).toBe(1);
-    expect(printed).toEqual(["Reload's answer could not be read.\n"]);
+    expect(loud.code("status")).toBe(0);
+    expect(loud.printed).toEqual(["]0;ownedReload is up.\n"]);
+  });
+
+  it("status from the files says a process it could not check, and never takes it for gone", () => {
+    writeRunState([SHELL, { id: "runtime", pid: 11, identity: "t1 Reload runtime" }]);
+    const { code, out } = asking({
+      identity: (pid) => {
+        if (pid === 11) throw new UncheckedIdentity("the process table could not be read: EPERM");
+        return null;
+      },
+    });
+    expect(code("status")).toBe(0);
+    expect(out()).toBe(
+      "  runtime: could not be checked (process 11): the process table could not be read: EPERM\n" +
+        "Nothing was refused, and nothing is held back.\n",
+    );
   });
 
   it("quit: names what stopped, and what still runs after the quit, never a process that had none", () => {
     // Recorded: the shell, the runtime, an Anytype Reload started, and the services process
     // whose pid is another program's by now (it had stopped for good; never named "stopped").
     writeRunState([
-      { id: "shell", pid: 10, identity: "t0 Reload" },
+      SHELL,
       { id: "runtime", pid: 11, identity: "t1 Reload runtime" },
       { id: "services", pid: 12, identity: "t2 Reload services" },
       { id: "anytype", pid: 13, identity: "t3 Anytype" },
@@ -250,61 +306,108 @@ describe("the asking process", () => {
       [12, "t9 somebody's editor"],
       [13, "t3 Anytype"],
     ]);
-    const { code, printed } = asking(
-      false,
-      () => {
+    const { code, out } = asking({
+      alive,
+      instance: () => {
         alive.delete(10);
         alive.delete(11);
-        answers({ code: 0, text: "" })();
+        return { code: 0, text: "" };
       },
-      alive,
-    );
+    });
     expect(code("quit")).toBe(0);
-    expect(printed.join("")).toBe(
+    expect(out()).toBe(
       "  shell stopped (process 10)\n" +
         "  runtime stopped (process 11)\n" +
         "anytype (process 13) is still running after the quit.\n",
     );
+    expect(fs.existsSync(runStateFile())).toBe(true);
   });
 
-  it("quit: says Reload is off once every process it ran is gone", () => {
-    writeRunState([
-      { id: "shell", pid: 10, identity: "t0 Reload" },
-      { id: "anytype", pid: 13, identity: "t3 Anytype" },
+  it("quit: reads the record again after the quit, so a child restarted with a new pid is checked too", () => {
+    writeRunState([SHELL, { id: "runtime", pid: 11, identity: "t1 Reload runtime" }]);
+    const alive = new Map([
+      [10, "t0 Reload"],
+      [11, "t1 Reload runtime"],
     ]);
+    const { code, out } = asking({
+      alive,
+      instance: () => {
+        // The runtime restarted while Reload quit, and the restart outlived the quit.
+        alive.delete(11);
+        alive.set(21, "t5 Reload runtime");
+        writeRunState([SHELL, { id: "runtime", pid: 21, identity: "t5 Reload runtime" }]);
+        alive.delete(10);
+        return { code: 0, text: "" };
+      },
+    });
+    expect(code("quit")).toBe(0);
+    expect(out()).toBe(
+      "  shell stopped (process 10)\n" +
+        "  runtime stopped (process 11)\n" +
+        "runtime (process 21) is still running after the quit.\n",
+    );
+  });
+
+  it("quit: says Reload is off once every process it ran is gone, and no run-state is left", () => {
+    writeRunState([SHELL, { id: "anytype", pid: 13, identity: "t3 Anytype" }]);
     const alive = new Map([
       [10, "t0 Reload"],
       [13, "t3 Anytype"],
     ]);
-    const { code, printed } = asking(
-      false,
-      () => {
-        alive.clear();
-        answers({ code: 0, text: "Reload is already quitting.\n" })();
-      },
+    const { code, out } = asking({
       alive,
-    );
+      instance: () => {
+        // A shell that ended without removing its record: the record goes all the same.
+        alive.clear();
+        return { code: 0, text: "Reload is already quitting.\n" };
+      },
+    });
     expect(code("quit")).toBe(0);
-    expect(printed.join("")).toBe(
+    expect(out()).toBe(
       "Reload is already quitting.\n" +
         "  shell stopped (process 10)\n" +
         "  anytype stopped (process 13)\n" +
         "Reload is off.\n",
     );
+    expect(fs.existsSync(runStateFile())).toBe(false);
   });
 
   it("quit: a cancelled quit is said and checks nothing; an unreadable record is said", () => {
+    writeRunState([SHELL]);
     const cancelled = "The quit was cancelled in Reload's window. Reload is still running.\n";
-    const first = asking(false, answers({ code: 1, text: cancelled }));
+    const first = asking({
+      alive: new Map([[10, "t0 Reload"]]),
+      instance: () => ({ code: 1, text: cancelled }),
+    });
     expect(first.code("quit")).toBe(1);
     expect(first.printed).toEqual([cancelled]);
-    fs.writeFileSync(path.join(userData, RUN_STATE_FILENAME), '[{"id":"shell"}]');
-    const second = asking(false, answers({ code: 0, text: "" }));
+    fs.writeFileSync(runStateFile(), '[{"id":"shell"}]');
+    const second = asking({ instance: () => ({ code: 0, text: "" }) });
     expect(second.code("quit")).toBe(0);
-    expect(second.printed.join("")).toBe(
+    expect(second.out()).toBe(
       "Reload quit, but what it ran could not be checked: The run-state file could not be " +
-        "read: it is not a list of the processes Reload ran.\n",
+        "read: record 1 has no valid pid.\n",
     );
+  });
+
+  it("quit: a process it could not check is said, and Reload is not said to be off", () => {
+    writeRunState([SHELL]);
+    let quit = false;
+    const { code, out } = asking({
+      identity: (pid) => {
+        if (quit) throw new UncheckedIdentity("the process table could not be read: ETIMEDOUT");
+        return pid === 10 ? "t0 Reload" : null;
+      },
+      instance: () => {
+        quit = true;
+        return { code: 0, text: "" };
+      },
+    });
+    expect(code("quit")).toBe(0);
+    expect(out()).toBe(
+      "shell (process 10) could not be checked: the process table could not be read: ETIMEDOUT.\n",
+    );
+    expect(fs.existsSync(runStateFile())).toBe(true);
   });
 });
 
@@ -330,21 +433,45 @@ describe("reload --log asks nobody", () => {
       `Log file: ${file}\n  nothing written yet: no Reload process has logged on this machine.\n`,
     );
   });
+
+  it("never lets a logged line drive the terminal", () => {
+    const file = path.join(userData, "reload.log");
+    fs.writeFileSync(file, "a title \u001b]0;owned\u0007 set\n");
+    expect(logText(file).split("\n").at(-2)).toBe("a title ]0;owned set");
+  });
 });
 
 describe("the running instance answers", () => {
-  it("leaves an ordinary launch, and a question it cannot trust, to bring the window forward", () => {
+  const take = (answer: AnswerDeps) => {
+    takeQuestions(userData, answer, Date.now());
+  };
+
+  it("takes a question and removes it; anything else is removed unanswered", () => {
     const { answer } = deps();
-    expect(answerQuestion(undefined, answer)).toBe(false);
-    expect(answerQuestion({ command: "status", id: "../../elsewhere" }, answer)).toBe(false);
-    expect(answerQuestion({ command: "rm", id: ID }, answer)).toBe(false);
-    expect(answerQuestion({ command: "log", id: ID }, answer)).toBe(false);
-    expect(fs.readdirSync(userData)).toEqual([]);
+    const ids = ["1", "2", "3", "4", "5"].map((digit) => digit.repeat(32));
+    put("rm", ids[0]);
+    put("log", ids[1]);
+    // A question whose id is not its name's.
+    writePrivateFile(
+      questionFile(userData, ids[2] ?? ""),
+      JSON.stringify({ command: "status", id: ID }),
+    );
+    // A link, never followed; and a question its asker gave up on long ago.
+    const elsewhere = path.join(userData, "elsewhere.json");
+    fs.writeFileSync(elsewhere, JSON.stringify({ command: "quit", id: ids[3] }));
+    fs.symlinkSync(elsewhere, questionFile(userData, ids[3] ?? ""));
+    put("quit", ids[4]);
+    const old = (Date.now() - PICKUP_MS * 3) / 1000;
+    fs.utimesSync(questionFile(userData, ids[4] ?? ""), old, old);
+    take(answer);
+    expect(fs.readdirSync(userData)).toEqual(["elsewhere.json"]);
   });
 
   it("status: what runs, and that nothing was refused, when nothing was", async () => {
     const { answer } = deps();
-    expect(answerQuestion({ command: "status", id: ID }, answer)).toBe(true);
+    put("status");
+    take(answer);
+    expect(fs.existsSync(questionFile(userData, ID))).toBe(false);
     expect(await replyFor()).toEqual({
       code: 0,
       text:
@@ -354,6 +481,30 @@ describe("the running instance answers", () => {
         "  Anytype: opened by you; Reload leaves it running\n" +
         "Nothing was refused, and nothing is held back.\n",
     });
+  });
+
+  it("status: what Reload came up without is named in its exact words", async () => {
+    const board = new NoticeBoard({
+      deliver: () => undefined,
+      store: new JsonNoticeFile(path.join(userData, NOTICES_FILENAME)),
+      logger: new RecordingLogger(),
+    });
+    board.raise({
+      kind: "endpoint-degraded",
+      subject: "MCP endpoint",
+      detail: "Port 31010 is used by another app",
+    });
+    const { answer } = deps({ running: running({ anytype: anytype("missing") }) });
+    put("status");
+    take(answer);
+    expect((await replyFor()).text).toBe(
+      "Reload 1.2.3 is running (process 4000).\n" +
+        "  runtime: running (process 4242)\n" +
+        "  services: running (process 4243)\n" +
+        "  Anytype: not found on this machine\n" +
+        "  Reload is running without its MCP endpoint — Port 31010 is used by another app. " +
+        "Choose another address in Settings.\n",
+    );
   });
 
   it("status: a refusal is named once, in the notification's words, however often it was raised", async () => {
@@ -379,7 +530,8 @@ describe("the running instance answers", () => {
         anytype: anytype(null),
       }),
     });
-    answerQuestion({ command: "status", id: ID }, answer);
+    put("status");
+    take(answer);
     const { title, body } = compose(refused);
     expect((await replyFor()).text).toBe(
       "Reload 1.2.3 is running (process 4000).\n" +
@@ -391,47 +543,56 @@ describe("the running instance answers", () => {
 
   it("status: a notice file it cannot read is said, not taken for nothing", async () => {
     fs.writeFileSync(path.join(userData, NOTICES_FILENAME), "{ not json");
-    const { answer } = deps();
-    answerQuestion({ command: "status", id: ID }, answer);
+    put("status");
+    take(deps().answer);
     expect((await replyFor()).text).toContain("What needs your attention could not be read");
   });
 
   it("quit: takes the Quit menu's path, and leaves naming what stopped to the asking process", async () => {
     const { answer, quits } = deps();
-    answerQuestion({ command: "quit", id: ID }, answer);
+    put("quit");
+    take(answer);
     expect(await replyFor()).toEqual({ code: 0, text: "" });
     expect(quits).toEqual(["quit"]);
   });
 
   it("quit: a quit cancelled in the window is said, with exit 1; one under way is said too", async () => {
-    answerQuestion(
-      { command: "quit", id: ID },
-      deps({ quit: () => Promise.resolve("cancelled") }).answer,
-    );
+    put("quit");
+    take(deps({ quit: () => Promise.resolve("cancelled") }).answer);
     expect(await replyFor()).toEqual({
       code: 1,
       text: "The quit was cancelled in Reload's window. Reload is still running.\n",
     });
     const other = "fedcba9876543210fedcba9876543210";
-    answerQuestion(
-      { command: "quit", id: other },
-      deps({ quit: () => Promise.resolve("busy") }).answer,
-    );
+    put("quit", other);
+    take(deps({ quit: () => Promise.resolve("busy") }).answer);
     expect(await replyFor(other)).toEqual({ code: 0, text: "Reload is already quitting.\n" });
   });
 
+  it("each question also removes the answers nobody took", () => {
+    const left = replyFile(userData, "d".repeat(32));
+    fs.writeFileSync(left, "{}");
+    const old = (Date.now() - STALE_REPLY_MS * 2) / 1000;
+    fs.utimesSync(left, old, old);
+    put("status");
+    take(deps().answer);
+    expect(fs.existsSync(left)).toBe(false);
+  });
+
   it("an answer that cannot be written is a notice told once however often it fails, cleared once one is written", async () => {
-    const gone = path.join(userData, "gone");
     const notifier = new RecordingNotifier();
     const logger = new RecordingLogger();
     const replies = unwritable("answer to a terminal command", () => notifier, logger);
+    // The answers' folder is a file: every write fails, and the questions are still read.
+    const answers = path.join(userData, "answers");
+    fs.writeFileSync(answers, "");
     const answer = deps({
-      app: { getPath: () => gone, getVersion: () => "1.2.3" },
+      app: { getPath: () => answers, getVersion: () => "1.2.3" },
       replies,
     }).answer;
-    const ids = ["1", "2", "3"].map((digit) => digit.repeat(32));
-    for (const id of ids) {
-      answerQuestion({ command: "status", id }, answer);
+    for (const digit of ["1", "2", "3"]) {
+      put("status", digit.repeat(32));
+      take(answer);
     }
     await expect.poll(() => notifier.notices.length).toBe(1);
     // The failures after the first change nothing: said once, then silence.
@@ -440,51 +601,65 @@ describe("the running instance answers", () => {
       {
         kind: "command-line-unwritable",
         subject: "answer to a terminal command",
-        detail: expect.stringContaining("ENOENT") as unknown,
+        detail: expect.stringContaining("ENOTDIR") as unknown,
       },
     ]);
     expect(compose(notifier.notices[0] as Notice).title).toBe(
       "Reload could not write its answer to a terminal command",
     );
     expect(logger.lines.filter((line) => !line.startsWith("INFO answering"))).toEqual([]);
-    fs.mkdirSync(gone);
-    answerQuestion({ command: "status", id: ID }, answer);
+    put("status");
+    take(deps({ replies }).answer);
     await expect
       .poll(() => notifier.cleared)
       .toEqual(["command-line-unwritable answer to a terminal command"]);
   });
 
-  it("an answer that cannot be written before the notices exist is a warning in the log, once", async () => {
+  it("a write that fails before the notices exist is a warning, once, and a notice once they do", () => {
     const logger = new RecordingLogger();
-    const replies = unwritable("answer to a terminal command", () => null, logger);
-    const gone = { getPath: () => path.join(userData, "gone"), getVersion: () => "1.2.3" };
-    answerQuestion({ command: "status", id: ID }, deps({ app: gone, replies, logger }).answer);
-    answerQuestion(
-      { command: "status", id: "1".repeat(32) },
-      deps({ app: gone, replies, logger }).answer,
-    );
-    await expect
-      .poll(() => logger.lines.filter((line) => line.startsWith("WARN")))
-      .toEqual([
-        expect.stringContaining("Reload could not write its answer to a terminal command"),
-      ]);
+    let notifier: RecordingNotifier | null = null;
+    const trouble = unwritable("run-state file", () => notifier, logger);
+    trouble.failed(new Error("EACCES"));
+    trouble.failed(new Error("EACCES"));
+    expect(logger.lines).toEqual(["WARN Reload could not write its run-state file: Error: EACCES"]);
+    notifier = new RecordingNotifier();
+    trouble.ready();
+    trouble.failed(new Error("EACCES"));
+    trouble.ready();
+    expect(notifier.notices).toEqual([
+      { kind: "command-line-unwritable", subject: "run-state file", detail: "Error: EACCES" },
+    ]);
+    trouble.worked();
+    expect(notifier.cleared).toEqual(["command-line-unwritable run-state file"]);
+    // Fixed before the notices existed: nothing to tell once they do.
+    const quiet = new RecordingNotifier();
+    let late: RecordingNotifier | null = null;
+    const fixed = unwritable("run-state file", () => late, new RecordingLogger());
+    fixed.failed(new Error("EACCES"));
+    fixed.worked();
+    late = quiet;
+    fixed.ready();
+    expect(quiet.notices).toEqual([]);
   });
 });
 
 describe("answers nobody took", () => {
-  it("are removed at the next start once a few minutes old, by name only, a link never followed", () => {
+  it("are removed once a few minutes old, by name only, a link never followed", () => {
     const now = Date.now();
     const old = (now - STALE_REPLY_MS - 1000) / 1000;
     const stale = replyFile(userData, ID);
     const scratch = `${replyFile(userData, "a".repeat(32))}.tmp`;
+    const question = `${questionFile(userData, "e".repeat(32))}.tmp`;
     const fresh = replyFile(userData, "b".repeat(32));
     const link = replyFile(userData, "c".repeat(32));
     const outside = path.join(userData, "kept", "notes.txt");
     const other = path.join(userData, "settings.json");
     fs.mkdirSync(path.dirname(outside));
-    for (const file of [stale, scratch, fresh, outside, other]) fs.writeFileSync(file, "{}");
+    for (const file of [stale, scratch, question, fresh, outside, other]) {
+      fs.writeFileSync(file, "{}");
+    }
     fs.symlinkSync(outside, link);
-    for (const file of [stale, scratch, outside, other]) fs.utimesSync(file, old, old);
+    for (const file of [stale, scratch, question, outside, other]) fs.utimesSync(file, old, old);
     fs.lutimesSync(link, old, old);
     removeStaleReplies(userData, now);
     expect(fs.readdirSync(userData).sort()).toEqual(
@@ -494,8 +669,8 @@ describe("answers nobody took", () => {
   });
 });
 
-describe("the shell's second launch", () => {
-  it("answers a question instead of bringing the window forward, and quits by the Quit path", async () => {
+describe("the shell", () => {
+  it("answers a question a terminal leaves, brings the window forward on a second launch, and stops looking at quit", async () => {
     // An answer a killed asker left behind long ago: the start removes it.
     const left = replyFile(userData, "d".repeat(32));
     fs.writeFileSync(left, "{}");
@@ -530,10 +705,16 @@ describe("the shell's second launch", () => {
       logger: new RecordingLogger(),
     });
     expect(fs.existsSync(left)).toBe(false);
-    app.emit("second-instance", {}, [], "/", { command: "quit", id: ID });
+    put("quit");
     expect(await replyFor()).toEqual({ code: 0, text: "" });
     expect(requests).toEqual([{ ask: true }]);
     app.emit("second-instance", {}, [], "/", undefined);
     expect(forward).toBe(1);
+    // Once quit, a question is left where it is.
+    app.emit("quit");
+    const other = "fedcba9876543210fedcba9876543210";
+    put("status", other);
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    expect(fs.existsSync(questionFile(userData, other))).toBe(true);
   });
 });

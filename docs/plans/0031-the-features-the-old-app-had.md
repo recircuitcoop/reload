@@ -76,6 +76,8 @@ test's id; nothing is marked without a test.
    `reload --quit --force` (`shell/run-state.ts`) stops each recorded process itself. As the old
    status did, `--status` answers from the run-state and notice files when nothing runs or Reload
    does not answer; `--log` asks nobody; plain `--quit` names what stopped and what still runs.
+   The question goes as a file too: the single-instance lock is never taken, so a stuck Reload
+   is said not to answer and is never killed by the asking.
 6. **WI-0031-06 — F,** the spread first check.
 7. **WI-0031-07 — G,** backoff for an unreachable Anytype at start.
 8. **WI-0031-08 — H,** the home guard for child processes.
@@ -92,5 +94,6 @@ words.
 - **A changes what "a long job" may cost.** Memory and file limits that are too low stop real
   work; the defaults come from the old app (`domain/migration/legacy-import.ts:103` lists them)
   and a package can raise them.
-- **E adds a way in.** The commands act only on the running instance of the same user, over
-  Electron's single-instance channel, never a network port.
+- **E adds a way in.** The commands act only on the running instance of the same user, through
+  0600 question and answer files in its user-data folder, never a network port. They never take
+  Electron's single-instance lock, whose holder Electron kills when it does not answer.
