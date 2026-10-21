@@ -92,6 +92,34 @@ describe("buildLegacyImportPlan", () => {
     expect(plan.ignored.some((item) => item.key === "mcp")).toBe(true);
   });
 
+  it("imports an mcp section with only a host or only a port, the other left to its default", () => {
+    expect(buildLegacyImportPlan({ mcp: { port: 32010 } }).mcpSetting).toEqual({ port: 32010 });
+    expect(buildLegacyImportPlan({ mcp: { host: "127.0.0.1" } }).mcpSetting).toEqual({
+      host: "127.0.0.1",
+    });
+  });
+
+  it("an unknown update mode, a non-boolean launch_at_login and a refused policy are ignored", () => {
+    const plan = buildLegacyImportPlan({
+      launch_at_login: "yes",
+      plugins: { update_mode: "sometimes", monty: { update_mode: "manual" } },
+      update: { check_interval: 5 },
+    });
+    expect(plan.launchAtLoginWanted).toBe(false);
+    expect(plan.packagesSetting).toBeNull();
+    expect(plan.ignored).toEqual(
+      expect.arrayContaining([
+        { key: "launch_at_login", reason: "not true or false; treated as off" },
+        {
+          key: "plugins.update_mode",
+          reason: '"sometimes" is not a recognised update mode',
+        },
+        expect.objectContaining({ key: "plugins" }),
+      ]),
+    );
+    expect(plan.imported).toContain("plugins.monty: packages.overrides.monty.update_mode = manual");
+  });
+
   it("an invalid update.channel is ignored rather than crashing the import", () => {
     const plan = buildLegacyImportPlan({ update: { channel: "Not Safe!" } });
     expect(plan.updateSetting).toBeNull();

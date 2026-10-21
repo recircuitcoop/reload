@@ -387,6 +387,8 @@ describe("the archive: signature, then per-file hashes, then the content hash", 
     expect(notJson.message).toMatch(/^reload-package\.json is not JSON/);
     const none = await refusal(folderOf({ "node.py": "" }), portsWith(unreachable));
     expect(none.message).toBe("the package has no reload-package.json");
+    const old = await refusal(folderOf({ "inny-package.json": "{}" }), portsWith(unreachable));
+    expect(old.message).toContain("rename the file to reload-package.json");
   });
 });
 
@@ -421,6 +423,34 @@ describe("plan 0013: one version, one content", () => {
     const edited = folderOf(pythonPackage("monty", "0.1.0", { "node.py": "print('edited')\n" }));
     const refused = await refusal(edited, quick);
     expect(refused.reason).toBe("content-moved");
+  });
+
+  it("repairs in place only the same content, keeping the record's update facts", async () => {
+    const quick = portsWith(accept);
+    const live = (await buildPackageEnvironment(archiveOf(pythonPackage("monty", "0.1.0")), quick))
+      .record;
+    const facts = {
+      installedAt: 1,
+      left: { version: "0.0.9", at: 2 },
+      updatedAtUnknown: true as const,
+    };
+    const repaired = await buildPackageEnvironment(
+      archiveOf(pythonPackage("monty", "0.1.0")),
+      quick,
+      undefined,
+      undefined,
+      { ...live, ...facts },
+    );
+    expect(repaired.record).toMatchObject(facts);
+    expect(repaired.previous).toBeNull();
+    // A repair with other content under the same version is refused, naming the installed one.
+    const moved = archiveOf(pythonPackage("monty", "0.1.0", { "node.py": "print('moved')\n" }));
+    const refused = await buildPackageEnvironment(moved, quick, undefined, undefined, live).then(
+      () => null,
+      (error: unknown) => error as PackageRefusal,
+    );
+    expect(refused?.reason).toBe("content-moved");
+    expect(refused?.message).toContain("is not what monty 0.1.0 was installed with");
   });
 });
 

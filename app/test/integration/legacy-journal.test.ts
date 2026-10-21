@@ -106,5 +106,39 @@ describe("rewriteLegacyJournal", () => {
     rewriteLegacyJournal(file);
     expect(rewriteLegacyJournal(file)).toBe(0);
     expect(rewriteLegacyJournal(path.join(scratch, "missing.sqlite"))).toBe(0);
+    // A database with neither table: nothing to rename.
+    const empty = path.join(scratch, "empty.sqlite");
+    new DatabaseSync(empty).close();
+    expect(rewriteLegacyJournal(empty)).toBe(0);
+  });
+
+  it("all of it is renamed or none: a broken row rolls back the rows before it", () => {
+    seed();
+    const db = new DatabaseSync(file);
+    // An entry with no type still has its message renamed.
+    db.prepare("INSERT INTO journal (input_id, instance_id, body) VALUES (?, ?, ?)").run(
+      "i2",
+      "n2",
+      JSON.stringify({ inputId: "i2", message: oldMessage }),
+    );
+    db.prepare("INSERT INTO journal (input_id, instance_id, body) VALUES (?, ?, ?)").run(
+      "i3",
+      "n2",
+      "{not json",
+    );
+    db.close();
+    expect(() => rewriteLegacyJournal(file)).toThrow(SyntaxError);
+    const after = new DatabaseSync(file);
+    const bodies = after.prepare("SELECT body FROM journal ORDER BY input_id").all() as {
+      body: string;
+    }[];
+    after.close();
+    expect(bodies.map(({ body }) => body.includes('"inny"'))).toEqual([true, true, false]);
+
+    // Without the broken row, the typeless entry is renamed too.
+    const fixed = new DatabaseSync(file);
+    fixed.prepare("DELETE FROM journal WHERE input_id = 'i3'").run();
+    fixed.close();
+    expect(rewriteLegacyJournal(file)).toBe(3);
   });
 });

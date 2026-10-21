@@ -93,6 +93,13 @@ describe("the crash-loop limit", () => {
       "The Reload runtime stopped unexpectedly 5 times in 2 minutes, so it is no longer " +
         "restarted. Press Restart to try again.",
     );
+    // A one-minute window is said in the singular, and one under a whole minute in seconds.
+    expect(crashLoopMessage("services", { maxCrashes: 3, windowMs: 60_000 })).toContain(
+      "3 times in 1 minute,",
+    );
+    expect(crashLoopMessage("services", { maxCrashes: 3, windowMs: 90_000 })).toContain(
+      "3 times in 90 seconds,",
+    );
     expect(await api.childStatus()).toEqual([
       expect.objectContaining({ child: "runtime", state: "down-for-good", error: message }),
     ]);

@@ -62,6 +62,14 @@ describe("parseLegacyToml", () => {
     });
   });
 
+  it("reads a double-quoted string's escapes, and a single-quoted string as it is", () => {
+    expect(
+      parseLegacyToml(
+        String.raw`a = "q\" s\\ n\n t\t r\r b\b f\f"` + "\n" + String.raw`b = 'raw\n'`,
+      ),
+    ).toEqual({ a: 'q" s\\ n\n t\t r\r b\b f\f', b: "raw\\n" });
+  });
+
   it("an empty section with nothing under it still materialises the table", () => {
     expect(parseLegacyToml("[mcp]")).toEqual({ mcp: {} });
   });
@@ -75,6 +83,9 @@ describe("parseLegacyToml", () => {
     ['unterminated = "no closing quote', "unterminated string"],
     ["number = not-a-value", "cannot read the value"],
     ['escape = "bad \\q"', "unsupported escape"],
+    ['escape = "ends in \\', "unsupported escape in string: \\"],
+    ['quoted = "x" y', "unexpected text after a quoted string"],
+    ["= 1", "not a plain key: = 1"],
   ])("refuses %s", (line, message) => {
     expect(() => parseLegacyToml(line)).toThrow(LegacyTomlError);
     expect(() => parseLegacyToml(line)).toThrow(message);
