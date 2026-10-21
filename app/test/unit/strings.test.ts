@@ -292,7 +292,7 @@ describe("filling a line", () => {
   it("words a Sentence that crossed IPC, and leaves an unfilled slot as written", () => {
     expect(sentence({ key: "flows.refused.dirty" })).toBe(flows.DIRTY_SENTENCE);
     expect(sentence({ key: "error.formIncomplete", params: { step: "*Summarise*" } })).toBe(
-      "**Summarise** isn't set up yet: {what}.",
+      "**Summarise** isn't set up yet. {what}",
     );
   });
 });

@@ -96,7 +96,7 @@ decides (for the example: **Space**, a list of the spaces by name, and **Save as
 that space). The fields the package marks advanced are never shown in Setup. When the spaces cannot be read:
 "Connect Anytype to choose a space." · **Connect Anytype**, back to Setup's Anytype step (never
 Configuration, which Setup cannot reach). A step form's refusal names its fields by their titles:
-"*File in Anytype* isn't set up yet: choose the Space."
+"*File in Anytype* isn't set up yet. Space: choose one."
 
 | Screen | Title | Body | Buttons |
 |---|---|---|---|
@@ -327,7 +327,7 @@ Sections, each with a one-line state:
 | Key refused | "Anytype refused the key. Pair again in Configuration › General." |
 | Transcription key refused | "Mistral refused the key. Check the key in the *Transcribe* step." |
 | Recorder full or unreadable | "Couldn't read *BOYA*. Unplug it and plug it back in." |
-| A step's form incomplete | "*Summarise* isn't set up yet: choose an object type." |
+| A step's form incomplete | "*Summarise* isn't set up yet. Object type: choose one." (each field by its label, then what to do: choose one, fill this in, or what its value must be; a table's field as Properties, row 2, Value from) |
 | Port taken | "Port 31010 is used by another app. Choose another port." |
 | Update download tampered | "The update didn't pass its safety check and wasn't installed. Try again later." |
 | Runtime down for good | "Reload stopped unexpectedly 5 times in 2 minutes, so it's no longer restarted. Press Restart to try again." (kept as is) |

@@ -206,7 +206,43 @@ const TYPE_WORDS: Readonly<Record<string, string>> = {
   null: "empty",
 };
 
-/** What ajv says is wrong (minimum, maximum, minLength, maxLength, pattern, type, enum), plainly. */
+/** A string `format` (ajv-formats' names) in plain words. */
+const FORMAT_WORDS: Readonly<Record<string, string>> = {
+  uri: "a web address",
+  "uri-reference": "a web address",
+  iri: "a web address",
+  "iri-reference": "a web address",
+  "uri-template": "a web address",
+  url: "a web address",
+  email: "an email address",
+  "idn-email": "an email address",
+  hostname: "a computer's name",
+  "idn-hostname": "a computer's name",
+  ipv4: "an IP address",
+  ipv6: "an IP address",
+  date: "a date",
+  time: "a time of day",
+  "date-time": "a date and time",
+  "iso-time": "a time of day",
+  "iso-date-time": "a date and time",
+  duration: "a length of time",
+  uuid: "an ID",
+  regex: "a search pattern",
+  "json-pointer": "a path",
+  "relative-json-pointer": "a path",
+  byte: "encoded data",
+  int32: "a whole number",
+  int64: "a whole number",
+  float: "a number",
+  double: "a number",
+  password: "text",
+  binary: "data",
+};
+
+/**
+ * What ajv says is wrong (minimum, maximum, exclusive bounds, minLength, maxLength, pattern,
+ * format, type, enum, const), plainly; anything else as ajv words it.
+ */
 function plainMessage(message: string): string {
   const words: [RegExp, (found: string) => string][] = [
     [/^must be <= (.+)$/, (n) => `must be ${n} or less`],
@@ -219,7 +255,15 @@ function plainMessage(message: string): string {
     ],
     [/^must NOT have more than (\d+) characters?$/, (n) => `must be at most ${n} characters long`],
     [/^must match pattern .*$/, () => "is not in the form it must have"],
+    [
+      /^must match format "(.+)"$/,
+      (format) => {
+        const kind = FORMAT_WORDS[format];
+        return kind === undefined ? "is not in the form it must have" : `must be ${kind}`;
+      },
+    ],
     [/^must be equal to one of the allowed values$/, () => "must be one of its choices"],
+    [/^must be equal to constant$/, () => "must be the one value it allows"],
     [/^must be (\w+)$/, (type) => `must be ${TYPE_WORDS[type] ?? type}`],
   ];
   for (const [pattern, said] of words) {
@@ -231,45 +275,47 @@ function plainMessage(message: string): string {
   return message;
 }
 
-/** One problem in the person's words, against `schema`, the object its path starts in. */
+/**
+ * One problem as "<Title>: <what to do>.", against `schema`, the object its path starts in. The
+ * title stands as a label, exactly as written, never inside a sentence; a table's row is
+ * "<table title>, row N, <column title>: …".
+ */
 function describedProblem(schema: JsonSchema, path: string, message: string): string {
   if (path === "") {
-    return `the form ${plainMessage(message)}`;
+    return `The form: ${plainMessage(message)}.`;
   }
   const segments = path.split("/").slice(1);
   const row = segments.findIndex((segment) => /^\d+$/.test(segment));
   if (row > 0) {
-    // A table's row: "<table title>, row N: …", the rest judged against the row's own schema.
     const table = `/${segments.slice(0, row).join("/")}`;
     const rest = segments.slice(row + 1);
+    const where = `${nameAt(schema, table)}, row ${String(Number(segments[row]) + 1)}`;
+    if (rest.length === 0) {
+      return `${where}: ${plainMessage(message)}.`;
+    }
     const rows = rowSchemaOf(propertyAt(schema, table) ?? {}) ?? {};
-    const inner =
-      rest.length === 0
-        ? plainMessage(message)
-        : describedProblem(rows, `/${rest.join("/")}`, message);
-    return `${nameAt(schema, table)}, row ${String(Number(segments[row]) + 1)}: ${inner}`;
+    return `${where}, ${describedProblem(rows, `/${rest.join("/")}`, message)}`;
   }
   const name = nameAt(schema, path);
   if (message !== "is required") {
-    return `${name} ${plainMessage(message)}`;
+    return `${name}: ${plainMessage(message)}.`;
   }
   const property = propertyAt(schema, path) ?? {};
   const chosen = reloadOptions(property) !== null || Array.isArray(property["enum"]);
-  return chosen ? `choose the ${name}` : `fill in the ${name}`;
+  return `${name}: ${chosen ? "choose one" : "fill this in"}.`;
 }
 
 /**
- * What a step lacks, as one clause in the person's words, for "*Step* isn't set up yet: ….": a
- * missing choice is "choose the Space", a missing value "fill in the API key", a table's row
- * "Volumes, row 2: fill in the Name", anything else the property's title and what is wrong in
- * plain words ("At most must be 100 or less"). Titles keep their own case; never a schema key
- * (ux-writing, Voice).
+ * What a step lacks, in the person's words, for "*Step* isn't set up yet. …": each field by its
+ * label and what to do ("Space: choose one.", "Name from: fill this in.", "At most: must be 100
+ * or less.", "Properties, row 2, Value from: fill this in."). Never a schema key (ux-writing,
+ * Voice).
  */
 export function describedProblems(
   schema: JsonSchema,
   problems: readonly { readonly path: string; readonly message: string }[],
 ): string {
-  return problems.map(({ path, message }) => describedProblem(schema, path, message)).join("; ");
+  return problems.map(({ path, message }) => describedProblem(schema, path, message)).join(" ");
 }
 
 /** The same schema without its secret properties: what `config` holds (spec 2.5.2). */

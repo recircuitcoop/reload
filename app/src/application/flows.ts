@@ -82,7 +82,7 @@ export interface Refusal {
     readonly sentence: string;
     /** `invalid` only: what is wrong, field by field. */
     readonly problems?: readonly FieldProblem[];
-    /** `invalid` only: the step and what it lacks, for the app page to word ("*{step}* isn't set up yet: {what}."). */
+    /** `invalid` only: the step and what it lacks, for the app page to word ("*{step}* isn't set up yet. {what}"). */
     readonly params?: { readonly step: string; readonly what: string };
   };
 }
@@ -496,7 +496,7 @@ export class FlowAdmin {
     }
     if (problems.length > 0) {
       const params = { step: stepName(node, type), what: describedProblems(type.config, problems) };
-      return refuse("invalid", `${params.step} isn't set up yet: ${params.what}.`, {
+      return refuse("invalid", `${params.step} isn't set up yet. ${params.what}`, {
         problems,
         params,
       });

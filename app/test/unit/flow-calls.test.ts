@@ -160,9 +160,9 @@ describe("the shell's flow relay", () => {
     ).toEqual({ ok: false, refused: { reason: "dirty", sentence: "flows.refused.dirty" } });
     const invalid = {
       reason: "invalid",
-      sentence: "File isn't set up yet: space is required.",
+      sentence: "File isn't set up yet. Space: choose one.",
       problems: [{ path: "/space", message: "is required" }],
-      params: { step: "File", what: "space is required" },
+      params: { step: "File", what: "Space: choose one." },
     };
     expect(
       await refusing(invalid).flowCall({ op: "flow.node.configure", args: { flowId: "t" } }),

@@ -21,9 +21,9 @@ describe("words for an AppApi refusal", () => {
       wordRefusal({
         reason: "invalid",
         sentence: "error.formIncomplete",
-        params: { step: "Summarise", what: "choose an object type" },
+        params: { step: "Summarise", what: "Object type: choose one." },
       }),
-    ).toBe("*Summarise* isn't set up yet: choose an object type.");
+    ).toBe("*Summarise* isn't set up yet. Object type: choose one.");
   });
 
   it("names every flow and step of an in-use refusal (D6)", () => {

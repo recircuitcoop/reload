@@ -195,59 +195,86 @@ describe("a refusal in the person's words", () => {
     type: "object",
     properties: {
       space_id: { type: "string", title: "Space", reload: { spaces: true } },
+      type_key: { type: "string", title: "Save as", reload: { types: { of: "space_id" } } },
+      query: { type: "string", title: "Search for" },
       user: { enum: ["me", "you"], title: "User" },
       folder: { type: "string", title: "Folder", minLength: 1 },
       api_key: { type: "string", title: "API key" },
-      url: { type: "string", title: "URL", pattern: "^https?://" },
+      url: { type: "string", title: "URL", format: "uri" },
       token: { type: "string", title: "OpenAI token", maxLength: 8 },
       limit: { type: "integer", title: "At most", minimum: 1, maximum: 100 },
       body_field: { type: "string" },
-      volumes: {
+      properties: {
         type: "array",
-        title: "Volumes",
-        items: { type: "object", properties: { name: { type: "string", title: "Name" } } },
+        title: "Properties",
+        items: {
+          type: "object",
+          properties: { value_field: { type: "string", title: "Value from" } },
+        },
       },
     },
   };
   const said = (path: string, message: string) => describedProblems(schema, [{ path, message }]);
 
-  it("a missing value: choose or fill in the property, its title exactly as written", () => {
-    expect(said("/space_id", "is required")).toBe("choose the Space");
-    expect(said("/user", "is required")).toBe("choose the User");
-    expect(said("/api_key", "is required")).toBe("fill in the API key");
-    expect(said("/url", "is required")).toBe("fill in the URL");
-    expect(said("/token", "is required")).toBe("fill in the OpenAI token");
+  it("a missing value: the field's label, exactly as written, then choose one or fill this in", () => {
+    expect(said("/space_id", "is required")).toBe("Space: choose one.");
+    expect(said("/type_key", "is required")).toBe("Save as: choose one.");
+    expect(said("/user", "is required")).toBe("User: choose one.");
+    expect(said("/query", "is required")).toBe("Search for: fill this in.");
+    expect(said("/api_key", "is required")).toBe("API key: fill this in.");
+    expect(said("/url", "is required")).toBe("URL: fill this in.");
+    expect(said("/token", "is required")).toBe("OpenAI token: fill this in.");
     // No title: the key, spaced, never as the schema spells it.
-    expect(said("/body_field", "is required")).toBe("fill in the body field");
+    expect(said("/body_field", "is required")).toBe("body field: fill this in.");
   });
 
   it("what is wrong with a value, in plain words, never ajv's", () => {
-    expect(said("/limit", "must be <= 100")).toBe("At most must be 100 or less");
-    expect(said("/limit", "must be >= 1")).toBe("At most must be 1 or more");
-    expect(said("/limit", "must be integer")).toBe("At most must be a whole number");
+    expect(said("/limit", "must be <= 100")).toBe("At most: must be 100 or less.");
+    expect(said("/limit", "must be >= 1")).toBe("At most: must be 1 or more.");
+    expect(said("/limit", "must be integer")).toBe("At most: must be a whole number.");
     expect(said("/folder", "must NOT have fewer than 1 characters")).toBe(
-      "Folder must not be empty",
+      "Folder: must not be empty.",
     );
     expect(said("/token", "must NOT have more than 8 characters")).toBe(
-      "OpenAI token must be at most 8 characters long",
+      "OpenAI token: must be at most 8 characters long.",
+    );
+    expect(said("/url", 'must match format "uri"')).toBe("URL: must be a web address.");
+    const formats: [string, string][] = [
+      ["email", "an email address"],
+      ["date", "a date"],
+      ["date-time", "a date and time"],
+      ["time", "a time of day"],
+      ["hostname", "a computer's name"],
+      ["ipv4", "an IP address"],
+      ["uuid", "an ID"],
+    ];
+    for (const [format, words] of formats) {
+      expect(said("/url", `must match format "${format}"`)).toBe(`URL: must be ${words}.`);
+    }
+    expect(said("/url", 'must match format "made-up"')).toBe(
+      "URL: is not in the form it must have.",
     );
     expect(said("/url", 'must match pattern "^https?://"')).toBe(
-      "URL is not in the form it must have",
+      "URL: is not in the form it must have.",
     );
     expect(said("/user", "must be equal to one of the allowed values")).toBe(
-      "User must be one of its choices",
+      "User: must be one of its choices.",
     );
-    expect(said("", "must be object")).toBe("the form must be a group of values");
+    expect(said("", "must be object")).toBe("The form: must be a group of values.");
   });
 
-  it("a table's row is named by the table and the row's number, from 1", () => {
-    expect(said("/volumes/0", "must be object")).toBe("Volumes, row 1: must be a group of values");
-    expect(said("/volumes/2/name", "is required")).toBe("Volumes, row 3: fill in the Name");
+  it("a table's row: the table, the row's number from 1, then the field", () => {
+    expect(said("/properties/1/value_field", "is required")).toBe(
+      "Properties, row 2, Value from: fill this in.",
+    );
+    expect(said("/properties/0", "must be object")).toBe(
+      "Properties, row 1: must be a group of values.",
+    );
     expect(
       describedProblems(schema, [
         { path: "/space_id", message: "is required" },
         { path: "/limit", message: "must be <= 100" },
       ]),
-    ).toBe("choose the Space; At most must be 100 or less");
+    ).toBe("Space: choose one. At most: must be 100 or less.");
   });
 });

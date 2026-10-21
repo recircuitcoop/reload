@@ -499,7 +499,7 @@ export const STRINGS = {
   "error.keyRefused": "Anytype refused the key. Pair again in Configuration › General.",
   "error.stepKeyRefused": "{service} refused the key. Check the key in the *{step}* step.",
   "error.recorderUnreadable": "Couldn't read *{recorder}*. Unplug it and plug it back in.",
-  "error.formIncomplete": "*{step}* isn't set up yet: {what}.",
+  "error.formIncomplete": "*{step}* isn't set up yet. {what}",
   "error.portTaken": "Port {port} is used by another app. Choose another port.",
   "error.updateTampered":
     "The update didn't pass its safety check and wasn't installed. Try again later.",
