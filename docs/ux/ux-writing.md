@@ -93,7 +93,10 @@ removed, so nothing half set up is left in Configuration › Flows.
 
 A step form shows the step's own description under its title, and only the fields a person
 decides (for the example: **Space**, a list of the spaces by name, and **Save as**, the types of
-that space). The fields the package marks advanced are never shown in Setup.
+that space). The fields the package marks advanced are never shown in Setup. When the spaces cannot be read:
+"Connect Anytype to choose a space." · **Connect Anytype**, back to Setup's Anytype step (never
+Configuration, which Setup cannot reach). A step form's refusal names its fields by their titles:
+"*File in Anytype* isn't set up yet: choose a space."
 
 | Screen | Title | Body | Buttons |
 |---|---|---|---|
@@ -102,6 +105,7 @@ that space). The fields the package marks advanced are never shown in Setup.
 | Anytype | **Connect Anytype** | Running: "Anytype is asking for a code. Type it here." Not running: "Open Anytype, then come back. Reload will notice." | Connect · Skip for now |
 | Anytype, done | | "Connected. Found 8 spaces." | Continue |
 | Example | **Start with an example?** | "The example files every new file in a folder you choose as a page in Anytype. You can change it or delete it later in Configuration › Flows." | Back · Skip the example · Use the example |
+| Example, Anytype not connected | **Start with an example?** | The same, then "The example needs Anytype. Connect it first." | Back · Skip the example · Connect Anytype (back to the Anytype step) |
 | Source folder | **Source folder** | "Choose the folder Reload watches. Every new file in it starts your flow." After choosing: the folder's name, in full, under the button. | Choose a folder… · Back · Skip the example · Continue |
 | Node forms | **Set up: *step name*** (one per step of the starter) | The step's description, then its form. Progress: "Step 1 of 2." | Back · Skip the example · Continue |
 | Ready | **Ready** | "Your flow is on. Drop a file in *folder* to start. Or try it now with a 10-second sample." | Try with a sample · Open Live · I'll build my own (secondary) |

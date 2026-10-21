@@ -146,8 +146,17 @@ function Step(props: StepProps) {
   }
 }
 
-/** Start with an example?: only Use the example installs the starter flow. */
-function ExampleStep({ move }: StepProps) {
+/**
+ * Start with an example?: only Use the example installs the starter flow. The example files into
+ * Anytype, so with Anytype not connected it offers Connect Anytype (Setup's Anytype step) in its
+ * place: a form that cannot list a space is never walked into.
+ */
+function ExampleStep({ api, move }: StepProps) {
+  const anytype = useAnytype(api);
+  const ready = anytype.status?.state === "ready";
+  // Not known yet: Anytype's state, or, once it is ready, its spaces.
+  const known = anytype.status !== null && (!ready || anytype.spaces !== null);
+  const connected = ready && anytype.spaces?.ok === true;
   return (
     <SetupStep
       title={t("setup.example.title")}
@@ -164,16 +173,33 @@ function ExampleStep({ move }: StepProps) {
           >
             {t("setup.example.skip")}
           </Button>
-          <Button
-            kind="primary"
-            data-testid="setup-example-use"
-            onClick={() => void move({ kind: "useExample" })}
-          >
-            {t("setup.example.use")}
-          </Button>
+          {known && !connected ? (
+            <Button
+              kind="primary"
+              data-testid="setup-example-connect"
+              onClick={() => void move({ kind: "connectAnytype" })}
+            >
+              {t("setup.anytype.title")}
+            </Button>
+          ) : (
+            <Button
+              kind="primary"
+              data-testid="setup-example-use"
+              state={known ? "default" : "loading"}
+              onClick={() => void move({ kind: "useExample" })}
+            >
+              {t("setup.example.use")}
+            </Button>
+          )}
         </>
       }
-    />
+    >
+      {known && !connected ? (
+        <div data-testid="setup-example-needs-anytype">
+          <InlineMessage kind="warning">{t("setup.example.needsAnytype")}</InlineMessage>
+        </div>
+      ) : undefined}
+    </SetupStep>
   );
 }
 
@@ -453,6 +479,7 @@ function FormsStep({ api, state, move }: StepProps) {
       onBack={() => void move({ kind: "back" })}
       onSaved={() => void move({ kind: "next" })}
       onSkip={() => void move({ kind: "skipExample" })}
+      onConnect={() => void move({ kind: "connectAnytype" })}
     />
   );
 }

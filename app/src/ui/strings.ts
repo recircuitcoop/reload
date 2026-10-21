@@ -66,12 +66,13 @@ export const STRINGS = {
     "The example files every new file in a folder you choose as a page in Anytype. You can change it or delete it later in Configuration › Flows.",
   "setup.example.use": "Use the example",
   "setup.example.skip": "Skip the example",
-  // Source folder: the chosen folder's name shows in full under the button (the person's own).
+  "setup.example.needsAnytype": "The example needs Anytype. Connect it first.",
   "setup.folder.title": "Source folder",
   "setup.folder.body": "Choose the folder Reload watches. Every new file in it starts your flow.",
   "setup.folder.choose": "Choose a folder…",
   "setup.form.title": "Set up: *{step}*",
   "setup.form.progress": "Step {step} of {of}.",
+  "setup.form.noSpaces": "Connect Anytype to choose a space.",
   "setup.ready.title": "Ready",
   "setup.ready.body":
     "Your flow is on. Drop a file in *{folder}* to start. Or try it now with a 10-second sample.",
@@ -79,7 +80,6 @@ export const STRINGS = {
   "setup.ready.openLive": "Open Live",
   "setup.ready.own": "I'll build my own",
   "setup.ready.none.body": "Reload is set up. Build your first flow in Configuration › Flows.",
-  // The Setup sidebar's labels, in order; the step forms share "Steps".
   "setup.nav.welcome": "Welcome",
   "setup.nav.reports": "Reports",
   "setup.nav.anytype": "Anytype",

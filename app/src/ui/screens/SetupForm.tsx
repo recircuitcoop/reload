@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import type { AppApi } from "../contract";
 import type { Answer, Refusal } from "../answer";
 import type { NodeForm, NodeOptions } from "../flow-contract";
+import { Button } from "../components/atoms/Button";
 import { Select } from "../components/atoms/Select";
 import { Switch } from "../components/atoms/Switch";
 import { TextField } from "../components/atoms/TextField";
@@ -59,10 +60,12 @@ export interface SetupFormProps {
   readonly onSaved: () => void;
   /** Skip the example: no form saved. */
   readonly onSkip: () => void;
+  /** Connect Anytype, when the spaces cannot be listed: Setup's Anytype step. */
+  readonly onConnect: () => void;
 }
 
 export function SetupForm(props: SetupFormProps) {
-  const { api, flowId, step, index, count, onBack, onSaved, onSkip } = props;
+  const { api, flowId, step, index, count, onBack, onSaved, onSkip, onConnect } = props;
   const [form, setForm] = useState<Answer<NodeForm> | null>(null);
   const [draft, setDraft] = useState<Draft>({});
   const [refusal, setRefusal] = useState<Refusal | null>(null);
@@ -116,6 +119,7 @@ export function SetupForm(props: SetupFormProps) {
               field={field}
               draft={draft}
               problem={problems[field.key]}
+              onConnect={onConnect}
               onChange={(value) => {
                 setDraft((before) => ({ ...before, [field.key]: value }));
               }}
@@ -145,10 +149,11 @@ interface FieldProps {
   readonly field: SetupField;
   readonly draft: Draft;
   readonly problem: string | undefined;
+  readonly onConnect: () => void;
   readonly onChange: (value: string | boolean) => void;
 }
 
-function SetupFormField({ api, field, draft, problem, onChange }: FieldProps) {
+function SetupFormField({ api, field, draft, problem, onConnect, onChange }: FieldProps) {
   const value = draft[field.key];
   const text = typeof value === "string" ? value : "";
   return (
@@ -186,7 +191,15 @@ function SetupFormField({ api, field, draft, problem, onChange }: FieldProps) {
             );
           }
           if (field.reload !== null) {
-            return <AnytypeSelect api={api} field={field} draft={draft} onChange={onChange} />;
+            return (
+              <AnytypeSelect
+                api={api}
+                field={field}
+                draft={draft}
+                onConnect={onConnect}
+                onChange={onChange}
+              />
+            );
           }
           return (
             <TextField
@@ -205,8 +218,14 @@ function SetupFormField({ api, field, draft, problem, onChange }: FieldProps) {
   );
 }
 
-/** A field whose options are the paired Anytype's spaces, or one space's types. */
-function AnytypeSelect({ api, field, draft, onChange }: Omit<FieldProps, "problem">) {
+/** A type key as a name, while the space's types are not listed: "page" → "Page". */
+const typeName = (key: string) => key.charAt(0).toUpperCase() + key.slice(1).replaceAll("_", " ");
+
+/**
+ * A field whose options are the paired Anytype's spaces, or one space's types. When the spaces
+ * cannot be read, it says to connect Anytype and offers Setup's own Anytype step for it.
+ */
+function AnytypeSelect({ api, field, draft, onConnect, onChange }: Omit<FieldProps, "problem">) {
   const [options, setOptions] = useState<Answer<NodeOptions> | null>(null);
   const reload = field.reload;
   const spaceId =
@@ -232,11 +251,12 @@ function AnytypeSelect({ api, field, draft, onChange }: Omit<FieldProps, "proble
   }, [api, reload, spaceId]);
   const value = typeof draft[field.key] === "string" ? String(draft[field.key]) : "";
   const listed = options?.ok === true ? options.value.options : [];
-  // The value kept is offered under its own text when the answer lacks it: never dropped.
+  // The value kept is offered when the answer lacks it, never dropped; a type by its name.
+  const kept = reload?.source === "types" ? typeName(value) : value;
   const choices =
     listed.some((option) => option.value === value) || value === ""
       ? listed
-      : [...listed, { value, label: value }];
+      : [...listed, { value, label: kept }];
   const reading = reload?.source === "types" ? t("form.readingTypes") : t("form.readingSpaces");
   return (
     <div className="flex flex-col gap-1">
@@ -256,7 +276,15 @@ function AnytypeSelect({ api, field, draft, onChange }: Omit<FieldProps, "proble
       {options === null && (reload?.source === "spaces" || spaceId !== "") ? (
         <p className="text-caption text-secondary">{reading}</p>
       ) : null}
-      {options?.ok === false ? (
+      {options?.ok === false && reload?.source === "spaces" ? (
+        <div data-testid="setup-form-no-spaces" className="flex flex-col items-start gap-2">
+          <InlineMessage kind="warning">{t("setup.form.noSpaces")}</InlineMessage>
+          <Button kind="secondary" data-testid="setup-form-connect" onClick={onConnect}>
+            {t("setup.anytype.title")}
+          </Button>
+        </div>
+      ) : null}
+      {options?.ok === false && reload?.source === "types" ? (
         <InlineMessage kind="warning">{wordRefusal(options.refused)}</InlineMessage>
       ) : null}
     </div>
