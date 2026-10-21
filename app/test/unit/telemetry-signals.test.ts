@@ -120,7 +120,7 @@ describe("what a field may hold (plan 0029)", () => {
     expect(providerRegistered(facts("https://[::1]/c.json"), null, 0).fields).toMatchObject({
       provider_host: WITHHELD,
     });
-    expect(providerRemoved(facts("https://a.example/x")).fields).toEqual({
+    expect(providerRemoved({ host: "a.example", official: false }).fields).toEqual({
       provider_host: "a.example",
       official: false,
     });
@@ -418,22 +418,42 @@ describe("the launch marker and the telemetry memory on disk", () => {
     expect(marks.readMemory()).toBeNull();
     marks.writeRunning("0.5.0");
     expect(new FsTelemetryMarks(scratch, new RecordingLogger()).readRunning()).toBe("0.5.0");
-    expect(fs.statSync(path.join(scratch, "telemetry-running")).mode & 0o777).toBe(0o600);
+    const state = path.join(scratch, "telemetry-state");
+    expect(fs.statSync(path.join(state, "telemetry-running")).mode & 0o777).toBe(0o600);
+    expect(fs.statSync(state).mode & 0o777).toBe(0o700);
     marks.clearRunning();
     marks.clearRunning();
     expect(marks.readRunning()).toBeNull();
     const memory = {
       reached: ["launched"],
       told: ["launched"],
-      providers: { official: { url: "https://c.example", official: true } },
+      providers: { official: { host: "c.example", official: true } },
     };
     marks.writeMemory(memory);
     expect(marks.readMemory()).toEqual(memory);
   });
 
+  it("tightens a file and a folder that already existed wider to 0600 and 0700", () => {
+    scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-marks-"));
+    const state = path.join(scratch, "telemetry-state");
+    fs.mkdirSync(state, { mode: 0o755 });
+    fs.chmodSync(state, 0o755);
+    const file = path.join(state, "telemetry-memory.json");
+    fs.writeFileSync(file, "{}", { mode: 0o644 });
+    fs.chmodSync(file, 0o644);
+    new FsTelemetryMarks(scratch, new RecordingLogger()).writeMemory({
+      reached: [],
+      told: [],
+      providers: {},
+    });
+    expect(fs.statSync(file).mode & 0o777).toBe(0o600);
+    expect(fs.statSync(state).mode & 0o777).toBe(0o700);
+  });
+
   it("reads a damaged memory as what it can trust, and logs a write it could not make", () => {
     scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-marks-"));
-    const file = path.join(scratch, "telemetry-memory.json");
+    fs.mkdirSync(path.join(scratch, "telemetry-state"));
+    const file = path.join(scratch, "telemetry-state", "telemetry-memory.json");
     fs.writeFileSync(file, "{broken");
     const logger = new RecordingLogger();
     const marks = new FsTelemetryMarks(scratch, logger);
@@ -443,13 +463,19 @@ describe("the launch marker and the telemetry memory on disk", () => {
       JSON.stringify({
         reached: "x",
         told: [1],
-        providers: { a: { url: 1 }, b: null, c: { url: "u", official: false } },
+        providers: {
+          a: { host: 1 },
+          b: null,
+          c: { host: "c.example", official: false },
+          d: { host: null, official: true },
+          e: { url: "https://u:p@e.example", official: false },
+        },
       }),
     );
     expect(marks.readMemory()).toEqual({
       reached: [],
       told: [],
-      providers: { c: { url: "u", official: false } },
+      providers: { c: { host: "c.example", official: false }, d: { host: null, official: true } },
     });
     fs.writeFileSync(file, JSON.stringify({ providers: [] }));
     expect(marks.readMemory()).toEqual({ reached: [], told: [], providers: {} });

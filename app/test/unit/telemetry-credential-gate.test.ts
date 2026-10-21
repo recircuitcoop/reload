@@ -413,7 +413,8 @@ describe("the credential gate: a provider's URL and an install's file (rules 3 a
     const hosts = world.queue.reports.map((report) => report.payload["provider_host"]);
     expect(hosts).toEqual([
       "provider.example",
-      "provider.example",
+      // provider_removed takes the host the memory kept: a whole URL there is not a host.
+      WITHHELD,
       "provider.example",
       "provider.example",
       "file",

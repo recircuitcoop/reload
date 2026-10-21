@@ -20,6 +20,7 @@ import {
   appStart,
   appStop,
   appUncleanStop,
+  providerHost,
   providerRegistered,
   providerRemoved,
   setupStep,
@@ -266,7 +267,7 @@ export function wireTelemetry(deps: TelemetryWiring): ShellTelemetry {
         }
       }
       const now = Object.fromEntries(
-        seen.map(({ name, url, official }) => [name, { url, official }]),
+        seen.map(({ name, url, official }) => [name, { host: providerHost(url), official }]),
       );
       if (JSON.stringify(now) !== JSON.stringify(before)) {
         remember({ ...remembered, providers: now });

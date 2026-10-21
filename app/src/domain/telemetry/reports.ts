@@ -472,11 +472,14 @@ export function providerRegistered(
   };
 }
 
-/** `provider_removed`: a provider is removed. */
-export function providerRemoved(provider: ProviderFacts): Signal {
+/** `provider_removed`: a provider is removed; the telemetry memory kept only its host. */
+export function providerRemoved(provider: {
+  readonly host: string | null;
+  readonly official: boolean;
+}): Signal {
   return {
     name: "provider_removed",
-    fields: { provider_host: providerHost(provider.url), official: provider.official },
+    fields: { provider_host: shaped(provider.host, HOST), official: provider.official },
   };
 }
 

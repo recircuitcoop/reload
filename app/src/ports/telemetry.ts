@@ -52,9 +52,12 @@ export interface NodeCrashSink {
   nodeCrashed(stopped: boolean): void;
 }
 
-/** A provider as the memory keeps it: only what its removal event needs. */
+/**
+ * A provider as the memory keeps it: only what its removal event needs. Its host, never its
+ * address: an address can carry `user:pass@` and a token, and the memory is a file on disk.
+ */
 export interface RememberedProvider {
-  readonly url: string;
+  readonly host: string | null;
   readonly official: boolean;
 }
 
@@ -63,7 +66,7 @@ export interface TelemetryMemory {
   /** The setup steps reached, and which of those a queued event has told. */
   readonly reached: readonly string[];
   readonly told: readonly string[];
-  /** The providers the last listing saw, by name: their address and whether official. */
+  /** The providers the last listing saw, by name: their host and whether official. */
   readonly providers: Readonly<Record<string, RememberedProvider>>;
 }
 

@@ -431,6 +431,16 @@ describe("the launch's own signals (plan 0029)", () => {
     for (const leak of ["fakeuser", "fakepass", "fakeQueryTok", "RWfake", "/c?", "index.json"]) {
       expect(sent).not.toContain(leak);
     }
+    // The memory on disk keeps each provider's host, never its address.
+    expect(marks.memory?.providers).toEqual({
+      official: { host: "catalogue.recircu.it", official: true },
+    });
+    world.telemetry.providers([official, mine]);
+    const remembered = JSON.stringify(marks.memory);
+    expect(remembered).toContain("packages.example");
+    for (const leak of ["fakeuser", "fakepass", "fakeQueryTok", "https:", "/c"]) {
+      expect(remembered).not.toContain(leak);
+    }
   });
 
   it("package and update signals the shell's other parts build are queued with the version fields", () => {

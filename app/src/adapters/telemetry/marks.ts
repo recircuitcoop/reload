@@ -1,7 +1,10 @@
-// The launch marker and the telemetry memory on disk (plan 0029): two small files in userData,
-// readable by this account only. The marker holds the version that is running; a marker found at
-// start means the last launch never queued its app_stop. The memory says which setup steps were
-// reached and told, and which providers were seen, so each is told once. Neither is ever sent.
+// The launch marker and the telemetry memory on disk (plan 0029): two small files in their own
+// folder in userData, written owner-only: 0600 in a 0700 folder, through a scratch file renamed
+// over the old one, so a file or folder that already existed with a wider mode never keeps it
+// (the secret files' rule, owner-only-files.ts). The marker holds the version that is running; a
+// marker found at start means the last launch never queued its app_stop. The memory says which
+// setup steps were reached and told, and which providers were seen (by host only), so each is
+// told once. Neither is ever sent.
 //
 // A file that cannot be read counts as absent, and a write that fails is logged: telemetry never
 // takes a launch down, and the worst outcome is one event told twice or not at all.
@@ -11,6 +14,7 @@ import * as path from "node:path";
 import type { Logger } from "../../ports/logger";
 import type { RememberedProvider, TelemetryMarks, TelemetryMemory } from "../../ports/telemetry";
 
+export const MARKS_DIRNAME = "telemetry-state";
 export const RUNNING_FILENAME = "telemetry-running";
 export const MEMORY_FILENAME = "telemetry-memory.json";
 
@@ -23,14 +27,14 @@ export class FsTelemetryMarks implements TelemetryMarks {
   readonly #logger: Logger;
 
   constructor(userDir: string, logger: Logger) {
-    this.#running = path.join(userDir, RUNNING_FILENAME);
-    this.#memory = path.join(userDir, MEMORY_FILENAME);
+    this.#running = path.join(userDir, MARKS_DIRNAME, RUNNING_FILENAME);
+    this.#memory = path.join(userDir, MARKS_DIRNAME, MEMORY_FILENAME);
     this.#logger = logger;
   }
 
   readRunning(): string | null {
     try {
-      return fs.readFileSync(this.#running, "utf8").trim().slice(0, 64);
+      return fs.readFileSync(this.#running, "utf8").trim();
     } catch {
       return null;
     }
@@ -56,9 +60,9 @@ export class FsTelemetryMarks implements TelemetryMarks {
     const remembered: Record<string, RememberedProvider> = {};
     if (typeof providers === "object" && providers !== null && !Array.isArray(providers)) {
       for (const [name, value] of Object.entries(providers as Record<string, unknown>)) {
-        const { url, official } = (value ?? {}) as Record<string, unknown>;
-        if (typeof url === "string" && typeof official === "boolean") {
-          remembered[name] = { url, official };
+        const { host, official } = (value ?? {}) as Record<string, unknown>;
+        if ((typeof host === "string" || host === null) && typeof official === "boolean") {
+          remembered[name] = { host, official };
         }
       }
     }
@@ -74,10 +78,22 @@ export class FsTelemetryMarks implements TelemetryMarks {
   }
 
   #write(file: string, text: string): void {
+    const scratch = `${file}.${String(process.pid)}.new`;
     try {
-      fs.mkdirSync(path.dirname(file), { recursive: true });
-      fs.writeFileSync(file, text, { mode: 0o600 });
+      const folder = path.dirname(file);
+      fs.mkdirSync(folder, { recursive: true, mode: 0o700 });
+      // mkdir's mode applies only to a folder it made; one somebody widened is tightened.
+      fs.chmodSync(folder, 0o700);
+      fs.writeFileSync(scratch, text, { mode: 0o600 });
+      // The umask can only narrow the mode; a scratch file a crash left keeps its own: exact.
+      fs.chmodSync(scratch, 0o600);
+      fs.renameSync(scratch, file);
     } catch (error) {
+      try {
+        fs.rmSync(scratch, { force: true });
+      } catch {
+        // There is no folder to leave it in.
+      }
       this.#logger.warn(`${path.basename(file)} could not be written: ${String(error)}`);
     }
   }

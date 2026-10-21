@@ -61,7 +61,7 @@ export function everySignal(text: string, signed = true): Signal[] {
     flowDeployed([2, 1], [{ package: text, nodes: 3 }]),
     setupStep("anytype_paired"),
     providerRegistered(provider, text, 4),
-    providerRemoved(provider),
+    providerRemoved({ host: text, official: false }),
     packageInstalled(facts, { kind: "catalogue", url: text }, 2),
     packageUpdated(facts, { kind: "file" }, 2, text),
     packageRemoved(facts),
