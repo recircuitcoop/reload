@@ -4,12 +4,9 @@
 // and `process.arch` are read here, not passed in: shell/telemetry.ts reads them the same way,
 // and only `process.env` is reserved for the composition roots (eslint.architecture.config.mjs).
 
-import { UpdateCheck, type UpdateCheckPorts } from "../application/update-check";
+import { firstCheckDelay, UpdateCheck, type UpdateCheckPorts } from "../application/update-check";
 import type { ReleasePlatform } from "../domain/update/release-metadata";
 import { e2eHooksOn } from "./e2e-hooks";
-
-/** The first check, soon after the start; then once a day (application/update-check.ts). */
-const FIRST_CHECK_MS = 60_000;
 
 export type WireUpdateOptions = Omit<UpdateCheckPorts, "platform" | "arch">;
 
@@ -87,6 +84,8 @@ export function wireUpdate(options: WireUpdateOptions): UpdateCheck | null {
     return null;
   }
   const updates = new UpdateCheck({ ...options, platform, arch: process.arch });
-  updates.schedule(FIRST_CHECK_MS);
+  // The first check somewhere in the next hour, never the same second on every install; then
+  // once a day (application/update-check.ts).
+  updates.schedule(firstCheckDelay(Math.random));
   return updates;
 }

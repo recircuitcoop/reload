@@ -109,7 +109,7 @@ test's id; nothing is marked without a test.
    does not answer; `--log` asks nobody; plain `--quit` names what stopped and what still runs.
    The question goes as a file too: the single-instance lock is never taken, so a stuck Reload
    is said not to answer and is never killed by the asking.
-6. **WI-0031-06 — F,** the spread first check.
+6. **WI-0031-06 — F,** the spread first check. **DONE** 2026-10-21.
 7. **WI-0031-07 — G,** backoff for an unreachable Anytype at start.
 8. **WI-0031-08 — H,** the home guard for child processes.
 9. **WI-0031-09 — I,** log path and "Show log" in General › Advanced; the refused-kind

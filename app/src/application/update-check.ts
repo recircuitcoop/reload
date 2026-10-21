@@ -52,6 +52,18 @@ export const MAX_SIGNATURE_BYTES = 4096;
 /** electron-builder's mac zip and Linux AppImage artifacts: generous, still bounded. */
 export const MAX_ARTIFACT_BYTES = 500 * 1024 * 1024;
 
+/**
+ * The window the first check is spread over (helper/config.py:351 `check_jitter`, one hour):
+ * every install starting after a release, or after a power cut, would otherwise ask the release
+ * server at the same second.
+ */
+export const FIRST_CHECK_SPREAD_MS = 60 * 60 * 1000;
+
+/** When the first check goes: anywhere inside the spread (helper/supervision.py:177 `_spread`). */
+export function firstCheckDelay(random: () => number): number {
+  return Math.floor(random() * FIRST_CHECK_SPREAD_MS);
+}
+
 const NOTICE_SUBJECT = "Reload";
 
 export type UpdateOutcome =

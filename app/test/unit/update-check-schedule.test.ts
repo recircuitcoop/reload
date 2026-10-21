@@ -1,7 +1,12 @@
 // UpdateCheck's own scheduling (WI-0018-24), against a FakeClock: no network at all is needed
 // since the switch is off, which is exactly the point (application/update-check.ts's D14 rule).
 import { describe, expect, it, vi } from "vitest";
-import { UpdateCheck, type UpdateCheckPorts } from "../../src/application/update-check";
+import {
+  FIRST_CHECK_SPREAD_MS,
+  firstCheckDelay,
+  UpdateCheck,
+  type UpdateCheckPorts,
+} from "../../src/application/update-check";
 import { FakeClock } from "../fakes/clock";
 import { RecordingLogger, RecordingNotifier } from "../fakes/children";
 
@@ -62,6 +67,54 @@ describe("UpdateCheck.schedule", () => {
     );
     clock.advance(24 * 60 * 60 * 1000);
     await Promise.resolve();
+    expect(spy).toHaveBeenCalledTimes(2);
+    check.stop();
+  });
+
+  it("spreads the first check over an hour, so installs do not all ask at the same second", async () => {
+    expect(FIRST_CHECK_SPREAD_MS).toBe(60 * 60 * 1000);
+    expect(firstCheckDelay(() => 0)).toBe(0);
+    expect(firstCheckDelay(() => 0.999_999)).toBeLessThan(FIRST_CHECK_SPREAD_MS);
+    // Two installs with different draws check at different moments.
+    expect(firstCheckDelay(() => 0.25)).not.toBe(firstCheckDelay(() => 0.75));
+
+    const clock = new FakeClock();
+    const check = new UpdateCheck(ports(clock));
+    const spy = vi.spyOn(check, "check");
+    check.schedule(firstCheckDelay(() => 0.5));
+    clock.advance(FIRST_CHECK_SPREAD_MS / 2 - 1);
+    await Promise.resolve();
+    expect(spy).not.toHaveBeenCalled();
+    clock.advance(1);
+    await Promise.resolve();
+    expect(spy).toHaveBeenCalledTimes(1);
+    check.stop();
+  });
+
+  it("a check that fails is said, and the next one still comes a day later", async () => {
+    const clock = new FakeClock();
+    const failing = ports(clock);
+    const logger = new RecordingLogger();
+    const check = new UpdateCheck({
+      ...failing,
+      settings: {
+        readUpdate: () => {
+          throw new Error("the settings file is unreadable");
+        },
+        writeUpdate: vi.fn(),
+      },
+      report: { notifier: new RecordingNotifier(), logger },
+    });
+    const spy = vi.spyOn(check, "check");
+    check.schedule(0);
+    clock.advance(0);
+    await vi.waitFor(() => {
+      expect(clock.pending).toBe(1);
+    });
+    expect(logger.lines.some((line) => line.includes("the settings file is unreadable"))).toBe(
+      true,
+    );
+    clock.advance(24 * 60 * 60 * 1000);
     expect(spy).toHaveBeenCalledTimes(2);
     check.stop();
   });
