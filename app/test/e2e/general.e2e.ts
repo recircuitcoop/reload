@@ -585,6 +585,33 @@ test("General shows the queued reports in full, Advanced's status details, Recor
     const revealed = () => first.app.evaluate(() => (globalThis as { revealed?: string }).revealed);
     await expect.poll(revealed).toMatch(/reload\.log$/);
     expect((await revealed())?.startsWith(scratch)).toBe(true);
+    // The command that asks this Reload from a terminal (plan 0031 group E), named in full, and
+    // Copy command puts exactly it on the clipboard (a stub here, never the system's).
+    const commandRow = advanced.getByTestId("general-advanced-command");
+    await expect(commandRow).toContainText(STRINGS["general.advanced.command"]);
+    const executable = await first.app.evaluate(() => process.execPath);
+    await expect(commandRow).toContainText(`${executable} --status`);
+    await window.evaluate(() => {
+      const kept = globalThis as unknown as { copiedCommand?: string };
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: {
+          writeText: (text: string) => {
+            kept.copiedCommand = text;
+            return Promise.resolve();
+          },
+        },
+      });
+    });
+    const copyCommand = commandRow.getByTestId("general-advanced-command-copy");
+    await expect(copyCommand).toHaveText(STRINGS["general.advanced.command.copy"]);
+    await copyCommand.click();
+    await expect(commandRow).toContainText(STRINGS["general.aiApps.copied"]);
+    expect(
+      await window.evaluate(
+        () => (globalThis as unknown as { copiedCommand?: string }).copiedCommand,
+      ),
+    ).toBe(`${executable} --status`);
     // A restart is followed: the runtime's next generation shows without a reload.
     process.kill(runtime.pid, "SIGKILL");
     const next = await waitForRunning(window, "runtime", runtime.generation + 1);

@@ -107,6 +107,8 @@ export interface Retention {
 /** The log this run writes (General › Advanced, for support); null when none could be opened. */
 export interface LogFile {
   readonly path: string | null;
+  /** `reload --status` as typed in a terminal, the executable named in full (plan 0031 group E). */
+  readonly command: string;
 }
 
 /** The days General offers (D8); null is Forever. */

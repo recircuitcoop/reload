@@ -1,7 +1,8 @@
 // General's calls that are no single flow's (plan 0022 §I, D8): the status pill, the runtime
 // banner and the Live badge, pushed whenever a child's status or the questions waiting change;
 // Run history's retention, 90 days unless changed, 7, 30, 90 or 365 days or Forever; and where
-// the log is, with Show log (plan 0031 group I: the person can find the log support needs).
+// the log is, with Show log (plan 0031 group I: the person can find the log support needs), and
+// the command that asks this Reload from a terminal (group E).
 //
 // The badge counts the questions the runtime has waiting (the Inbox's count) until WI-0022-13
 // counts them from run records, hidden places included.
@@ -42,8 +43,16 @@ export interface GeneralCallsDeps {
   readonly platform: NodeJS.Platform;
   readonly retention: RunRetentionSetting;
   readonly toPage: (channel: string, ...args: unknown[]) => void;
-  /** The log this run writes (null: none could be opened), and the file manager that shows it. */
-  readonly log: { readonly file: string | null; readonly shell: Pick<Shell, "showItemInFolder"> };
+  /**
+   * The log this run writes (null: none could be opened), the file manager that shows it, and
+   * this Reload's executable, which a terminal command names in full (a development run's is
+   * Electron's own, which needs the app folder after it).
+   */
+  readonly log: {
+    readonly file: string | null;
+    readonly shell: Pick<Shell, "showItemInFolder">;
+    readonly executable: string;
+  };
   readonly logger: Logger;
 }
 
@@ -97,6 +106,10 @@ export function wireGeneralCalls(deps: GeneralCallsDeps): void {
     const stored = retention.readRunRetentionDays();
     return { days: stored === undefined ? DEFAULT_RETENTION_DAYS : stored };
   };
+  const logFile = (): LogFile => ({
+    path: deps.log.file,
+    command: `${shellWord(deps.log.executable)} --status`,
+  });
   ipc.handle(IPC.generalCall, (_event, call: unknown) => {
     const { op, args } = opOf(call);
     return guarded(
@@ -126,13 +139,13 @@ export function wireGeneralCalls(deps: GeneralCallsDeps): void {
             return { ok: true, value: days() };
           }
           case "log.get":
-            return { ok: true, value: { path: deps.log.file } };
+            return { ok: true, value: logFile() };
           case "log.show":
             if (deps.log.file === null) {
               return refused("failed", "refused.failed");
             }
             deps.log.shell.showItemInFolder(deps.log.file);
-            return { ok: true, value: { path: deps.log.file } };
+            return { ok: true, value: logFile() };
           default:
             return unknownOp(op, "general", logger);
         }
@@ -140,3 +153,10 @@ export function wireGeneralCalls(deps: GeneralCallsDeps): void {
     );
   });
 }
+
+/**
+ * A path as one word a POSIX shell reads back unchanged: as it is when nothing in it is special,
+ * else in single quotes. shortcut: POSIX shells only; Windows' own quoting comes with plan 0025.
+ */
+export const shellWord = (word: string): string =>
+  /^[\w./+-]+$/.test(word) ? word : `'${word.replaceAll("'", `'\\''`)}'`;

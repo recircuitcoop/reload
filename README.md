@@ -17,6 +17,30 @@ InnyTypes, renamed. It is not signed by Apple, so macOS warns on first open. To 
 [docs/INSTALL.md](docs/INSTALL.md); the downloads are on the
 [v0.4.0 release](https://github.com/recircuitcoop/reload/releases/tag/v0.4.0).
 
+## Reload from a terminal
+
+Start Reload a second time with one of these flags, and it answers in the terminal instead of
+opening a window:
+
+- `--status`: what runs, and what needs your attention. When Reload is not running, or does not
+  answer within 10 seconds, it says what Reload's own files record.
+- `--quit`: quits the way the Quit menu does, then names each process that stopped and any that
+  still runs.
+- `--quit --force`: stops every process Reload recorded itself, without asking Reload. Use it when
+  Reload hangs.
+- `--log`: where the log is, and its last 50 lines. It works when Reload is not running too.
+
+Type the full path of the application, then the flag:
+
+```console
+/Applications/Reload.app/Contents/MacOS/Reload --status    # macOS
+/opt/Reload/reload --status                                # Linux, installed from the .deb
+/path/to/Reload.AppImage --status                          # Linux, the AppImage where you keep it
+```
+
+Configuration › General › Advanced shows this exact command for the Reload you run, with a
+**Copy command** button.
+
 ## Run from a checkout (developers)
 
 The application lives in `app/` and is built with npm workspaces from the repository root:

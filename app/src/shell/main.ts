@@ -514,7 +514,7 @@ async function start(): Promise<DesktopWired["notices"] | null> {
     quit: () => {
       app.quit();
     },
-    log: { file: logFile?.path ?? null, shell },
+    log: { file: logFile?.path ?? null, shell, executable: entry.executable },
     clock: systemClock,
     logger,
   });
