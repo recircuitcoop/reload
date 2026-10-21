@@ -10,11 +10,13 @@
 // identifier is the e2e hooks' stand-in, so this machine's own is never read.
 import { createHmac } from "node:crypto";
 import fs from "node:fs";
+import http from "node:http";
 import https from "node:https";
 import type { AddressInfo } from "node:net";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { NOTICE_VERSION } from "../../src/domain/telemetry/reports";
 import { PRIVACY_NOTICE, PRIVACY_NOTICE_OPENING } from "../../src/ui/general";
 import { STRINGS } from "../../src/ui/strings";
 import {
@@ -124,6 +126,111 @@ async function expectNotice(where: Locator): Promise<void> {
   }
 }
 
+/** One Umami event as the fake server received it: its name and its data. */
+interface UsageEvent {
+  readonly name: string;
+  readonly data: Record<string, unknown>;
+}
+
+/** Every usage event received, from `/api/send` and `/api/batch` alike, in order. */
+function usageEvents(received: readonly Received[]): UsageEvent[] {
+  return received
+    .filter((request) => request.url.startsWith("/umami/api/"))
+    .flatMap((request) => {
+      const body = JSON.parse(request.body) as unknown;
+      return (Array.isArray(body) ? body : [body]) as { payload: UsageEvent }[];
+    })
+    .map(({ payload }) => ({ name: payload.name, data: payload.data }));
+}
+
+const usageNames = (received: readonly Received[]): string[] =>
+  usageEvents(received).map((event) => event.name);
+
+/** Fake credentials, written to look like real ones (plan 0029 rule 5), and each saying "fake". */
+const FAKE_TOKEN = "fakeBearer1A2B3C4D5E6F7G8H";
+const FAKE_PASSWORD = "fakepass-W3e4R5";
+const FAKE_QUERY = "fakeQueryTok9Z8Y7X6W5V4U3T2S";
+const FAKE_JWT = "eyJmYWtlIjoxfQ.eyJmYWtlIjoyfQ.ZmFrZS1zaWduYXR1cmU";
+const FAKE_CREDENTIAL = "fake-node-credential-K9j8H7g6";
+const FAKES = [FAKE_TOKEN, FAKE_PASSWORD, FAKE_QUERY, FAKE_JWT, FAKE_CREDENTIAL];
+
+/** The SDK fixture's kitchen node (shipped with the dev build), and where its `undeclared` throws. */
+const KITCHEN = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "fixtures",
+  "sdk-ts",
+  "node.ts",
+);
+const THROWN_LINE =
+  fs
+    .readFileSync(KITCHEN, "utf8")
+    .split("\n")
+    .findIndex((line) => line.includes('emit("nope", 1, id)')) + 1;
+
+/**
+ * A flow of two injects into the kitchen node: one input throws in the node's own code (the SDK
+ * names its file and line), one fails with a message full of fake credentials.
+ */
+const FAILING_FLOW = [
+  { id: "telemetry-flow", type: "tab", label: "Telemetry" },
+  ...[
+    { do: "undeclared" },
+    {
+      do: "fail",
+      message:
+        `Authorization: Bearer ${FAKE_TOKEN} at https://fakeuser:${FAKE_PASSWORD}@provider.example/` +
+        `?token=${FAKE_QUERY} ${FAKE_JWT} ${FAKE_CREDENTIAL}`,
+    },
+  ].map((payload, n) => ({
+    id: `go${String(n)}`,
+    type: "inject",
+    z: "telemetry-flow",
+    props: [{ p: "payload" }],
+    payload: JSON.stringify(payload),
+    payloadType: "json",
+    repeat: "",
+    once: true,
+    onceDelay: 0.5,
+    x: 100,
+    y: 60 + 60 * n,
+    wires: [["kitchen"]],
+  })),
+  {
+    id: "kitchen",
+    type: "reload-sdkts-kitchen",
+    z: "telemetry-flow",
+    name: "My private step name",
+    x: 300,
+    y: 60,
+    wires: [[]],
+  },
+];
+
+/** POST the flows to the runtime's admin API; the status. */
+function deployFlows(port: number, nodes: readonly object[]): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const text = JSON.stringify(nodes);
+    const sent = http.request(
+      {
+        host: "127.0.0.1",
+        port,
+        method: "POST",
+        path: "/red/flows",
+        headers: { "content-type": "application/json", "content-length": Buffer.byteLength(text) },
+      },
+      (response) => {
+        response.resume();
+        response.on("end", () => {
+          resolve(response.statusCode ?? 0);
+        });
+      },
+    );
+    sent.on("error", reject);
+    sent.end(text);
+  });
+}
+
 /** Crash the runtime and wait for its next generation. */
 async function crashRuntime(window: Page): Promise<void> {
   const runtime = await waitForRunning(window, "runtime");
@@ -165,20 +272,72 @@ test("telemetry asks first, sends nothing before a yes, sends only redacted repo
     expect(received).toEqual([]);
     await (await setupButton(window, "setup.reports.send")).click();
     await expect(setupStep(window)).toHaveAttribute("data-step", "connect-anytype");
+    // The yes: this launch's start and its first step (plan 0029), and nothing from launch 1.
     await expect
-      .poll(() => received.map((request) => request.url), { timeout: 15_000 })
-      .toEqual(["/umami/api/send"]);
+      .poll(() => usageNames(received).sort(), { timeout: 15_000 })
+      .toEqual(["app_start", "setup_step"]);
+    expect(received.every((request) => request.url.startsWith("/umami/api/"))).toBe(true);
     await crashRuntime(window);
     await expect
-      .poll(() => received.map((request) => request.url), { timeout: 15_000 })
-      .toEqual(["/umami/api/send", "/api/5/envelope/"]);
+      .poll(() => received.filter((request) => request.url === "/api/5/envelope/").length, {
+        timeout: 15_000,
+      })
+      .toBe(1);
 
-    const [usage, crash] = received;
+    const crash = received.find((request) => request.url === "/api/5/envelope/");
     const machineId = createHmac("sha256", "reload.machine-id.v1").update(MACHINE).digest("hex");
-    expect(JSON.parse(usage?.body ?? "")).toMatchObject({
-      type: "event",
-      payload: { website: "e2e-site", name: "usage", data: { machine_id: machineId } },
+    const start = usageEvents(received).find((event) => event.name === "app_start");
+    expect(start?.data).toMatchObject({
+      machine_id: machineId,
+      first_launch: false,
+      event: "app_start",
     });
+    for (const request of received.filter((one) => one.url.startsWith("/umami/"))) {
+      const body = JSON.parse(request.body) as unknown;
+      for (const event of (Array.isArray(body) ? body : [body]) as { payload: unknown }[]) {
+        expect(event).toMatchObject({ type: "event", payload: { website: "e2e-site" } });
+      }
+    }
+
+    // ── a shipped package's node fails: every use and every failure is told (plan 0029) ─────
+    const port = Number((await waitForRunning(window, "runtime")).port);
+    expect(await deployFlows(port, FAILING_FLOW)).toBe(204);
+    await expect
+      .poll(() => usageEvents(received).filter((event) => event.name === "package_error").length, {
+        timeout: 30_000,
+      })
+      .toBe(2);
+    const events = usageEvents(received);
+    const [thrown, failed] = events.filter((event) => event.name === "package_error");
+    // The source line that threw, in the package's own file, relative to its folder.
+    expect(thrown?.data).toMatchObject({
+      package: "sdkts",
+      source: "shipped",
+      signed: true,
+      environment: "node",
+      node_kind: "node",
+      node_id: "kitchen",
+      ok: false,
+      error_type: "Error",
+      file: "node.ts",
+      line: THROWN_LINE,
+    });
+    expect(THROWN_LINE).toBeGreaterThan(0);
+    // A message full of credentials: scrubbed, or withheld; never sent.
+    expect(failed?.data).toMatchObject({ package: "sdkts", error_type: null, file: null });
+    expect(events.filter((event) => event.name === "package_used").length).toBe(2);
+    expect(events.find((event) => event.name === "flow_deployed")?.data).toMatchObject({
+      flows: 1,
+      nodes: 3,
+      nodes_per_flow: JSON.stringify([3]),
+      nodes_per_package: JSON.stringify([
+        { package: "node-red", nodes: 2 },
+        { package: "sdkts", nodes: 1 },
+      ]),
+    });
+    expect(
+      events.filter((event) => event.name === "setup_step").map((event) => event.data["step"]),
+    ).toEqual(["launched", "first_flow_deployed"]);
     expect(crash?.auth).toContain("sentry_key=e2ekey");
     const event = JSON.parse(crash?.body.split("\n")[2] ?? "") as {
       exception: { values: { type: string; value: string }[] };
@@ -192,11 +351,22 @@ test("telemetry asks first, sends nothing before a yes, sends only redacted repo
       stopped_for_good: false,
       crashes: { runtime: 1, services: 0, node: 0, node_stopped: 0 },
     });
-    // No canary, no home path, no raw identifier in anything that left.
+    // No canary, no home path, no raw identifier, no credential and no step's name in anything
+    // that left: the gate of plan 0029, on the wire.
     const sent = received.map((request) => `${request.auth}\n${request.body}`).join("\n");
-    for (const canary of [canaryKey, LOG_CANARY, MACHINE, scratch, userData]) {
+    for (const canary of [
+      canaryKey,
+      LOG_CANARY,
+      MACHINE,
+      scratch,
+      userData,
+      ...FAKES,
+      "fakeuser",
+      "My private step name",
+    ]) {
       expect(sent).not.toContain(canary);
     }
+    expect(sent).not.toMatch(/bearer\s+\S|authorization\s*:|eyJ[\w-]+\.[\w-]+\./i);
     await expect.poll(queued, { timeout: 10_000 }).toEqual([]);
 
     // ── off in General: the switch answers too, and a crash then reports nothing ──────────
@@ -225,6 +395,8 @@ test("telemetry asks first, sends nothing before a yes, sends only redacted repo
       {
         ...FIRST_START_RECORD,
         telemetry: false,
+        // The notice the earlier yes answered (plan 0029); off stays off whatever it says.
+        telemetryNotice: NOTICE_VERSION,
         setup: expect.objectContaining({ step: "connect-anytype", completed: true }) as unknown,
       },
     );
@@ -291,8 +463,9 @@ test("the full privacy notice is beside the question in Setup's Reports step and
     );
     await expect(section.getByTestId("privacy-notice")).toHaveCount(0);
     await expect
-      .poll(() => received.map((request) => request.url), { timeout: 15_000 })
-      .toEqual(["/umami/api/send"]);
+      .poll(() => usageNames(received).sort(), { timeout: 15_000 })
+      .toEqual(["app_start", "setup_step"]);
+    expect(received.every((request) => request.url.startsWith("/umami/api/"))).toBe(true);
     await quit(app);
   } finally {
     await cleanUp(apps, scratch);

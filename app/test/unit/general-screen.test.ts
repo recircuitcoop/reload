@@ -54,7 +54,14 @@ import {
 import type { AppApiV2 } from "../../src/ui/app-api-v2";
 import { STRINGS, type PlainKey } from "../../src/ui/strings";
 import packageJson from "../../package.json";
-import { usagePayload, USAGE_RETENTION_MONTHS } from "../../src/domain/telemetry/reports";
+import {
+  NOTICE_VERSION,
+  SIGNALS,
+  usagePayload,
+  USAGE_RETENTION_MONTHS,
+  type SignalName,
+} from "../../src/domain/telemetry/reports";
+import { everySignal } from "../fakes/signals";
 import {
   flatten,
   outgoingFor,
@@ -314,6 +321,172 @@ describe("the Reports section's state line", () => {
     expect(reportsLine("on")).toBe("Sending usage counts.");
     expect(reportsLine("off")).toBe("Not sending.");
     expect(reportsLine("unset")).toBe("Not sending.");
+  });
+});
+
+/** Which line of the notice tells each signal (plan 0029), and the fields that line names. */
+const SIGNAL_LINES: Readonly<Record<SignalName, PlainKey>> = {
+  app_start: "privacy.sent.launches",
+  app_stop: "privacy.sent.launches",
+  app_unclean_stop: "privacy.sent.launches",
+  package_used: "privacy.sent.steps",
+  package_error: "privacy.sent.errors",
+  mcp_call: "privacy.sent.aiApps",
+  flow_deployed: "privacy.sent.flows",
+  setup_step: "privacy.sent.setup",
+  provider_registered: "privacy.sent.catalogues",
+  provider_removed: "privacy.sent.catalogues",
+  package_installed: "privacy.sent.installs",
+  package_updated: "privacy.sent.installs",
+  package_removed: "privacy.sent.installs",
+  package_install_failed: "privacy.sent.installs",
+  update_offered: "privacy.sent.updates",
+  update_applied: "privacy.sent.updates",
+};
+const STEP_FIELDS = ["package", "version", "source", "signed", "environment", "node_kind"];
+const LINE_FIELDS: Readonly<Record<string, readonly string[]>> = {
+  "privacy.sent.launches": [
+    "startup_ms",
+    "packages",
+    "unsigned_packages",
+    "first_launch",
+    "uptime_s",
+    "reason",
+    "last_version",
+  ],
+  "privacy.sent.steps": [...STEP_FIELDS, "node_id", "duration_ms", "ok"],
+  "privacy.sent.errors": [
+    ...STEP_FIELDS,
+    "node_id",
+    "duration_ms",
+    "ok",
+    "error_type",
+    "error",
+    "file",
+    "line",
+  ],
+  "privacy.sent.aiApps": [
+    "package",
+    "version",
+    "tool",
+    "client",
+    "duration_ms",
+    "ok",
+    "error_code",
+  ],
+  "privacy.sent.flows": ["flows", "nodes", "nodes_per_flow", "nodes_per_package"],
+  "privacy.sent.setup": ["step"],
+  "privacy.sent.catalogues": [
+    "provider_host",
+    "official",
+    "signer_fingerprint",
+    "packages_offered",
+  ],
+  "privacy.sent.installs": [
+    ...STEP_FIELDS,
+    "provider_host",
+    "node_types",
+    "from_version",
+    "reason",
+  ],
+  "privacy.sent.updates": ["from_version", "to_version", "channel"],
+};
+/** The words each line uses for its fields, so a field cannot be listed and not said. */
+const LINE_WORDS: Readonly<Record<string, readonly string[]>> = {
+  "privacy.sent.launches": [
+    "how long it took to start",
+    "how long it ran",
+    "why it quit",
+    "first start",
+    "the version that last ran",
+  ],
+  "privacy.sent.steps": [
+    "the package",
+    "its version",
+    "where it came from",
+    "signed",
+    "what it runs on",
+    "the kind and type of the step",
+    "never its name",
+    "how long it took",
+    "whether it worked",
+    "only called unsigned",
+  ],
+  "privacy.sent.errors": [
+    "the kind of error",
+    "its message",
+    "the file and line",
+    "is not sent",
+    "quote your own words",
+  ],
+  "privacy.sent.aiApps": [
+    "which tool",
+    "the name the AI app gives itself",
+    "how long it took",
+    "whether it worked",
+    "never what it asked",
+  ],
+  "privacy.sent.flows": [
+    "how many flows",
+    "how many steps each one has",
+    "how many steps of each package",
+  ],
+  "privacy.sent.setup": ["Reload started", "Anytype paired", "a first flow deployed"],
+  "privacy.sent.catalogues": [
+    "only its server's name",
+    "Reload's own",
+    "fingerprint of its signing key",
+    "how many packages it offers",
+  ],
+  "privacy.sent.installs": [
+    "installed, updated, removed or refused",
+    "its versions",
+    "server name",
+    "from a file",
+    "signed",
+    "what it runs on",
+    "how many step types",
+    "the reason's code, never its words",
+  ],
+  "privacy.sent.updates": ["offered or installed", "the versions", "the update channel"],
+};
+
+describe("the privacy notice lists every field of every signal (plan 0029)", () => {
+  const listed = PRIVACY_NOTICE.flatMap((part) => part.listed ?? []);
+  const common = ["app_version", "os", "os_version", "arch"];
+
+  it("names a line for every signal, and every line it names is in the notice", () => {
+    expect(Object.keys(SIGNAL_LINES).sort()).toEqual([...SIGNALS].sort());
+    for (const key of new Set(Object.values(SIGNAL_LINES))) {
+      expect(listed, key).toContain(key);
+    }
+  });
+
+  it("every field a builder makes is one its line says, in words", () => {
+    const built = [...everySignal("x"), ...everySignal("x", false)];
+    expect(new Set(built.map((signal) => signal.name))).toEqual(new Set(SIGNALS));
+    for (const signal of built) {
+      const line = SIGNAL_LINES[signal.name];
+      for (const field of Object.keys(signal.fields)) {
+        expect(LINE_FIELDS[line], `${signal.name}.${field}`).toContain(field);
+      }
+      expect(common.some((field) => field in signal.fields)).toBe(false);
+    }
+    for (const [line, words] of Object.entries(LINE_WORDS)) {
+      for (const word of words) {
+        expect(STRINGS[line as PlainKey], `${line}: ${word}`).toContain(word);
+      }
+    }
+  });
+
+  it("no longer claims an error's message is never sent, and says what it can quote", () => {
+    const notice = Object.values(STRINGS).join("\n");
+    expect(notice).not.toMatch(/never[^.]*error'?s? message/i);
+    expect(STRINGS["privacy.never.line"]).toContain("unless a failing step's message quotes them");
+    expect(STRINGS["privacy.never.line"]).toContain(
+      "Your Anytype key or any other key, token or password.",
+    );
+    expect(NOTICE_VERSION).toBe(2);
   });
 });
 

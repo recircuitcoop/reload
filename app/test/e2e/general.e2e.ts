@@ -12,6 +12,7 @@ import http from "node:http";
 import net from "node:net";
 import * as path from "node:path";
 import { expect, test, type ElectronApplication, type Locator } from "@playwright/test";
+import { NOTICE_VERSION } from "../../src/domain/telemetry/reports";
 import { toolSignature } from "../../src/adapters/anytype/tool-surface";
 import { ANYTYPE_VERSION, PACKAGE_VERSION } from "../../src/domain/anytype/pins";
 import { STRINGS } from "../../src/ui/strings";
@@ -530,6 +531,8 @@ test("General shows the queued reports in full, Advanced's status details, Recor
     path.join(userData, "shell-settings.json"),
     JSON.stringify({
       telemetry: true,
+      // The yes answered this version's privacy notice (plan 0029): it is not asked again.
+      telemetryNotice: NOTICE_VERSION,
       setup: { step: "welcome", formIndex: 0, formCount: 0, completed: true },
     }),
   );
@@ -566,7 +569,9 @@ test("General shows the queued reports in full, Advanced's status details, Recor
         }
       ).reload.app.telemetryReports(),
     );
-    expect(queued.map((report) => report.kind)).toEqual(["usage"]);
+    // This launch's usage events (plan 0029: its first step, and app_start once both are up).
+    expect(queued.length).toBeGreaterThan(0);
+    expect(new Set(queued.map((report) => report.kind))).toEqual(new Set(["usage"]));
     // In full: each report's every field, exactly as it would leave.
     await expect(sent.getByTestId("general-reports-report")).toHaveText(
       queued.map((report) => JSON.stringify(report.payload, null, 2)),

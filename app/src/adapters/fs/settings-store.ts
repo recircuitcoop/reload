@@ -12,7 +12,7 @@ import fs from "node:fs";
 import * as path from "node:path";
 import type { StoredEndpoint } from "../../domain/endpoint/address";
 import { limitsProblem, type DeclaredLimits } from "../../domain/supervision/resources";
-import type { TelemetryAnswer } from "../../domain/telemetry/reports";
+import { NOTICE_VERSION, type TelemetryAnswer } from "../../domain/telemetry/reports";
 import type {
   LaunchAtLoginSetting,
   LimitDefaultsStore,
@@ -91,17 +91,28 @@ export class JsonSettingsStore
     this.#write("launchAtLogin", on);
   }
 
-  // The telemetry switch (WI-0018-22): absent is the question not answered yet, never a no.
+  // The telemetry switch (WI-0018-22): absent is the question not answered yet, never a no. A
+  // yes counts only for the privacy notice it answered (`telemetryNotice`, plan 0029): a yes to
+  // an older notice is the question unanswered again, since what a yes covers changed. A no
+  // stays a no.
   readTelemetry(): TelemetryAnswer {
-    const on = this.#read()["telemetry"];
+    const settings = this.#read();
+    const on = settings["telemetry"];
     if (on !== undefined && typeof on !== "boolean") {
       throw new SettingsFileError(`the telemetry setting in ${this.#file} must be true or false`);
+    }
+    if (on === true && settings["telemetryNotice"] !== NOTICE_VERSION) {
+      return "unset";
     }
     return on === undefined ? "unset" : on ? "on" : "off";
   }
 
   writeTelemetry(on: boolean): void {
+    // The answer first: should the notice's version not be written, the yes reads as unset.
     this.#write("telemetry", on);
+    if (on) {
+      this.#write("telemetryNotice", NOTICE_VERSION);
+    }
   }
 
   // The package settings (WI-0018-17), raw: domain/packages judges them.
