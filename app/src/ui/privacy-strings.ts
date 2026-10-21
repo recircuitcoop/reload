@@ -28,7 +28,7 @@ export const PRIVACY_STRINGS = {
   "privacy.sent.aiApps":
     "every time an AI app uses Reload's Anytype tools or reads a file through them: the Anytype package and its version, whether it called a tool or read a file, which tool, the name the AI app gives itself, how long it took, whether it worked and the error's code, never what it asked, which file, or what it was answered", // plan 0029
   "privacy.sent.flows":
-    "every time flows are deployed: how many flows, how many steps each one has, and how many steps of each package", // plan 0029
+    "every time flows are deployed: how many flows and steps in all, how many steps each flow has, and how many steps of each package", // plan 0029
   "privacy.sent.setup":
     "which first steps you reached: Reload started, Anytype paired, a first flow deployed", // plan 0029
   "privacy.sent.catalogues":

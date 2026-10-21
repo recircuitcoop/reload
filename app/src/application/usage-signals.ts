@@ -126,7 +126,9 @@ export class UsageSignals {
         this.record(mcpCall(this.facts(MCP_PACKAGE)?.version ?? null, signal.call));
         return;
       case "deployed":
-        this.record(flowDeployed(signal.nodesPerFlow, this.#named(signal.perPackage)));
+        for (const event of flowDeployed(signal.nodesPerFlow, this.#named(signal.perPackage))) {
+          this.record(event);
+        }
         return;
     }
   }

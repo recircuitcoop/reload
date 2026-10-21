@@ -158,6 +158,7 @@ export const SIGNALS = [
   "package_error",
   "mcp_call",
   "flow_deployed",
+  "package_deployed",
   "setup_step",
   "provider_registered",
   "provider_removed",
@@ -408,26 +409,28 @@ export interface PackageCount {
 }
 
 /**
- * `flow_deployed`: every deploy, with exact counts (the owner makes the buckets). The packages
- * are listed as `{package, nodes}` pairs, never as keys: a key made of a name would be a field
- * name nobody chose.
+ * `flow_deployed` and `package_deployed`: every deploy, with exact counts (the owner makes the
+ * buckets). One `flow_deployed` per flow, its own node count beside the deploy's totals, and one
+ * `package_deployed` per package: Umami cuts an array to 500 characters, so no count is ever sent
+ * as a list. A deploy of no flows is one `flow_deployed` whose `nodes` is null.
  */
 export function flowDeployed(
   nodesPerFlow: readonly number[],
   perPackage: readonly PackageCount[],
-): Signal {
-  return {
-    name: "flow_deployed",
-    fields: {
-      flows: nodesPerFlow.length,
-      nodes: nodesPerFlow.reduce((sum, count) => sum + count, 0),
-      nodes_per_flow: [...nodesPerFlow],
-      nodes_per_package: perPackage.map((entry) => ({
-        package: shaped(entry.package, IDENTIFIER),
-        nodes: entry.nodes,
-      })),
-    },
-  };
+): Signal[] {
+  const flows = nodesPerFlow.length;
+  const total = nodesPerFlow.reduce((sum, count) => sum + count, 0);
+  const each: readonly (number | null)[] = flows === 0 ? [null] : nodesPerFlow;
+  return [
+    ...each.map((nodes): Signal => ({
+      name: "flow_deployed",
+      fields: { flows, total_nodes: total, nodes },
+    })),
+    ...perPackage.map((entry): Signal => ({
+      name: "package_deployed",
+      fields: { package: shaped(entry.package, IDENTIFIER), nodes: entry.nodes },
+    })),
+  ];
 }
 
 export const SETUP_STEPS = ["launched", "anytype_paired", "first_flow_deployed"] as const;

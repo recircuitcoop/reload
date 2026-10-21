@@ -454,7 +454,7 @@ describe("the launch's own signals (plan 0029)", () => {
     ]);
   });
 
-  it("a child's facts become package_used, package_error, mcp_call and flow_deployed", () => {
+  it("a child's facts become package_used, package_error, mcp_call, flow_deployed and package_deployed", () => {
     const world = wired("on");
     const step = { nodeKind: "node" as const, nodeId: "probe", durationMs: 12.4, ok: true };
     world.runtime.tell({ kind: "step", package: "probekit", step, failure: null });
@@ -579,16 +579,13 @@ describe("the launch's own signals (plan 0029)", () => {
       }),
     ]);
     expect(payloads(world, "flow_deployed")).toEqual([
-      expect.objectContaining({
-        flows: 2,
-        nodes: 5,
-        nodes_per_flow: [3, 2],
-        nodes_per_package: [
-          { package: "probekit", nodes: 2 },
-          { package: "unsigned", nodes: 2 },
-          { package: "node-red", nodes: 1 },
-        ],
-      }),
+      expect.objectContaining({ flows: 2, total_nodes: 5, nodes: 3 }),
+      expect.objectContaining({ flows: 2, total_nodes: 5, nodes: 2 }),
+    ]);
+    expect(payloads(world, "package_deployed")).toEqual([
+      expect.objectContaining({ package: "probekit", nodes: 2 }),
+      expect.objectContaining({ package: "unsigned", nodes: 2 }),
+      expect.objectContaining({ package: "node-red", nodes: 1 }),
     ]);
     expect(JSON.stringify(world.queue.reports)).not.toMatch(
       /my-private-thing|secret-type|lib\/mine/,

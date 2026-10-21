@@ -335,6 +335,7 @@ const SIGNAL_LINES: Readonly<Record<SignalName, PlainKey>> = {
   package_error: "privacy.sent.errors",
   mcp_call: "privacy.sent.aiApps",
   flow_deployed: "privacy.sent.flows",
+  package_deployed: "privacy.sent.flows",
   setup_step: "privacy.sent.setup",
   provider_registered: "privacy.sent.catalogues",
   provider_removed: "privacy.sent.catalogues",
@@ -376,7 +377,7 @@ const LINE_FIELDS: Readonly<Record<string, readonly string[]>> = {
     "ok",
     "error_code",
   ],
-  "privacy.sent.flows": ["flows", "nodes", "nodes_per_flow", "nodes_per_package"],
+  "privacy.sent.flows": ["flows", "total_nodes", "nodes", "package"],
   "privacy.sent.setup": ["step"],
   "privacy.sent.catalogues": [
     "provider_host",
@@ -432,8 +433,8 @@ const LINE_WORDS: Readonly<Record<string, readonly string[]>> = {
     "never what it asked",
   ],
   "privacy.sent.flows": [
-    "how many flows",
-    "how many steps each one has",
+    "how many flows and steps in all",
+    "how many steps each flow has",
     "how many steps of each package",
   ],
   "privacy.sent.setup": ["Reload started", "Anytype paired", "a first flow deployed"],

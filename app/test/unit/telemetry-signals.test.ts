@@ -17,6 +17,7 @@ import {
   appUncleanStop,
   CLIENT,
   ERROR_TYPE,
+  flowDeployed,
   lineOf,
   mcpCall,
   packageInstallFailed,
@@ -200,6 +201,38 @@ describe("what a field may hold (plan 0029)", () => {
 });
 
 describe("a deploy's exact counts", () => {
+  it("is one event per flow and one per package, every count exact, never a list", () => {
+    const perFlow = Array.from({ length: 150 }, (_, n) => n + 1);
+    const perPackage = Array.from({ length: 120 }, (_, n) => ({
+      package: `p${String(n)}`,
+      nodes: n,
+    }));
+    const events = flowDeployed(perFlow, perPackage);
+    const flows = events.filter((event) => event.name === "flow_deployed");
+    const packages = events.filter((event) => event.name === "package_deployed");
+    const total = perFlow.reduce((sum, count) => sum + count, 0);
+    expect(flows.map((event) => event.fields)).toEqual(
+      perFlow.map((nodes) => ({ flows: 150, total_nodes: total, nodes })),
+    );
+    expect(packages.map((event) => event.fields)).toEqual(perPackage);
+    for (const event of events) {
+      expect(Object.values(event.fields).some(Array.isArray), event.name).toBe(false);
+    }
+    expect(flowDeployed([], [])).toEqual([
+      { name: "flow_deployed", fields: { flows: 0, total_nodes: 0, nodes: null } },
+    ]);
+  });
+
+  it("every flow's count reaches the queue exactly, past the redaction's list bound", () => {
+    const world = telemetryWorld("on");
+    const pipeline = new TelemetryPipeline(world.deps);
+    const perFlow = Array.from({ length: 150 }, (_, n) => n);
+    for (const event of flowDeployed(perFlow, [])) {
+      pipeline.recordUsage(event.name, event.fields);
+    }
+    expect(world.queue.reports.map((report) => report.payload["nodes"])).toEqual(perFlow);
+  });
+
   it("counts every node on each flow, in order, by package, Node-RED's own as node-red", () => {
     const packageOf = (type: string) =>
       type.startsWith("reload-probekit-") ? "probekit" : undefined;
