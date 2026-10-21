@@ -20,8 +20,9 @@ attribution. when a plugin is used get the metadata of the plugin in the message
   time a plugin is used**, one event.
 - **Flow size is the exact number of nodes.** No buckets in the app: "It is my job to make the
   buckets."
-- **Errors are reported every time a plugin is used and fails: time, error, file, line.** This
-  replaces plan 0003's rule that an error report never carries the exception's message.
+- **Errors are reported every time a plugin is used and fails: time, error, file, line.** As
+  built, "error" is the error's type (its class's name or code), never its message: see "As
+  built", free text.
 - The suggested setup funnel, package lifecycle and update adoption signals are taken.
 - Also missing: **a plugin provider registered** (and removed), and **a plugin installed /
   removed** as events of their own.
@@ -57,13 +58,13 @@ Every rule is checked by a test in the gate.
 3. **URLs are reduced to their host.** A provider's address, an update channel's address:
    only `hostname` is sent. Userinfo (`user:pass@`), path, query and fragment are dropped,
    because each can carry a token. A local file source is sent as `file`, never its path.
-4. **Free text is scrubbed, then withheld if in doubt.** The only free text is
-   `package_error`'s `error` (and `mcp_call`'s `client`). It passes the one redaction (every
-   registered secret: Anytype API keys, the MCP proxy token, Node-RED credentials, package
-   secrets), then a pattern scrub (`Bearer …`, `Authorization:`, `key=…` / `token=…` /
-   `password=…` pairs, JWTs, URLs with userinfo, runs of 24+ hex or base64 characters). If
-   anything still looks like a credential, the field becomes `"[withheld]"`: the event is sent,
-   the text is not.
+4. **No free text, ever.** No event carries an error's message or any other text a package or a
+   person wrote. Every string a package, a client or a person could choose is an identifier held
+   to a strict shape (`reports.ts` `shaped`): a package name, a version, a type id, a tool name,
+   a host, a relative source file, an error's class name, an MCP client's name, the version
+   fields. A value outside its shape is sent as `"[withheld]"`, never cut to fit. What passes
+   still goes through the one redaction (every registered secret) and the pattern scrub, which
+   remain a second line, not the guarantee.
 5. **The gate proves it.** A test registers a set of fake credentials, puts one into every
    input each signal's hook can see (node config, payload, error message, stack, tool
    arguments, provider URL, file path), fires every signal, and fails if any queued byte
@@ -93,12 +94,13 @@ The Umami event name is the signal's name.
 | Event | When | Fields |
 |---|---|---|
 | `app_start` | Every launch, after the children are up | `startup_ms`, `packages` (id, version, as `usage` today), `unsigned_packages`, `first_launch` |
-| `app_stop` | Every quit, queued before the children stop | `uptime_s`, `reason` (`quit`, `update`, `restart`) |
+| `app_stop` | Every quit, queued before the children stop | `uptime_s`, `reason` (`quit`, `update`) |
 | `app_unclean_stop` | At start, when the last launch left no `app_stop` | `last_version` |
-| `package_used` | Every time a node of a package runs one step | `package`, `version`, `source` (`shipped`, `catalogue`, `file`), `signed`, `environment` (`uv-python`, `node`, `executable`), `node_kind`, `node_id` (the declared id, not the instance), `duration_ms`, `ok` |
-| `package_error` | Every time such a step fails | the `package_used` fields, plus `error_type`, `error` (the message, redacted), `file`, `line` |
-| `mcp_call` | Every `tools/call` on the loopback endpoint | `package` (`reload_anytype`), `version`, `tool` (only names from the validated set), `client` (the `clientInfo.name` from `initialize`, cut to 40 characters), `duration_ms`, `ok`, `error_code` |
-| `flow_deployed` | Every deploy | `flows`, `nodes` (exact total), `nodes_per_flow` (exact, one number per flow), `nodes_per_package` (`package` → exact count) |
+| `package_used` | Every time a node of a package runs one step, and every run a source starts | `package`, `version`, `source` (`shipped`, `catalogue`, `file`), `signed`, `environment` (`uv-python`, `node`, `executable`), `node_kind`, `node_id` (the declared id, not the instance), `duration_ms`, `ok` |
+| `package_error` | Every time such a step fails, and every error a source sends outside any step | the `package_used` fields, plus `error_type` (the class's name or a code), `file`, `line`; never the message |
+| `mcp_call` | Every `tools/call` and `resources/read` on the loopback endpoint (not `initialize`, `ping` or the lists) | `package` (`reload_anytype`), `version`, `method`, `tool` (only names from the validated set; null for a read), `client` (the `clientInfo.name` from `initialize`, held to its shape, never cut), `duration_ms`, `ok`, `error_code` |
+| `flow_deployed` | Every deploy, one per flow | `flows` (in the deploy), `total_nodes` (exact), `nodes` (this flow's, exact) |
+| `package_deployed` | Every deploy, one per package | `package`, `nodes` (exact) |
 | `setup_step` | Each first-run step reached | `step` (`launched`, `anytype_paired`, `first_flow_deployed`) |
 | `provider_registered` | A package provider (catalogue) is added | `provider_host` (hostname only), `official` (the shipped catalogue or not), `key_fingerprint` (the public signing key's fingerprint), `packages_offered` |
 | `provider_removed` | A provider is removed | `provider_host`, `official` |
@@ -183,31 +185,30 @@ Where the build differs from the text above, and why:
 - **`key_fingerprint` is `signer_fingerprint`.** Rule 2 refuses any field whose name contains
   `key`, so the table's own name would refuse `provider_registered`. It is the first 12 hex
   digits of the sha256 of the public signing key.
-- **`nodes_per_package` is a list of `{package, nodes}` pairs**, not a map: a key made of a
-  package name would be a field name nobody chose (rule 2), and the one redaction blanks the value
-  of a key such as `reload_notes`. Node-RED's own nodes count as `node-red`; unsigned and unknown
-  packages are merged under `unsigned`.
+- **Per-package counts are `package_deployed` events of `{package, nodes}`**, not a map: a key
+  made of a package name would be a field name nobody chose (rule 2), and the one redaction
+  blanks the value of a key such as `reload_notes`. Node-RED's own nodes count as `node-red`;
+  unsigned and unknown packages are merged under `unsigned`.
 - **`file`, `environment` and `provider_host` are vouched fields** (`reports.ts VOUCHED_FIELDS`):
   their names contain `file`, `env` and `host`, which the one redaction blanks. Their values are
   made by the builders from a closed form (a package-relative path, one of three kinds, a
   hostname) and still pass the credential removal, the path reduction and the scrub.
-- **Every string is scrubbed, `tool` included.** `mcp_call`'s `tool` is lowercased so a long
+- **Every string is shaped, then scrubbed, `tool` included.** `mcp_call`'s `tool` is lowercased so a long
   capitalised tool name is not read as a key; there is no exemption from rule 4.
 - **`file`, `line`, `error_type` ride on the `error` frame** as optional fields both SDKs add when
   a handler throws (spec §4.2 says so). They are not in the §4.5 schema, so a node that sends
   them malformed still fails its input; the runtime reads them only when well formed. Only a
   failure the node's own `error` frame states carries facts; a failure the runtime words (a
-  cancellation, a crash) is told with `error_type`, `error`, `file` and `line` all null, since its
-  words can name the step.
+  cancellation, a crash) is told with `error_type`, `file` and `line` all null.
 - **Steps are heard in the process adapter** (`adapters/process/node-process.ts`), where each
   input's `done` or `error` and the node's type are known, and told over the runtime's channel
   as the `signal` message, as `node-crash` is.
 - **Providers are found by difference.** The app has no "add a source" screen (the owner kept
   registering sources out, plan 0022), so a provider counts as registered the first time a
   listing sees it (the official one included) and removed when a listing no longer does; the
-  telemetry memory (`userData/telemetry-memory.json`) keeps what was seen. A listing whose
+  telemetry memory (`userData/telemetry-state/telemetry-memory.json`) keeps what was seen. A listing whose
   settings could not be read changes nothing.
-- **The marker is `userData/telemetry-running`**, holding the version; `first_launch` and the
+- **The marker is `userData/telemetry-state/telemetry-running`**, holding the version; `first_launch` and the
   setup steps told are kept in the same memory file. A step reached before the yes is told at it.
 - **Asked again:** a yes is stored with `telemetryNotice: 2`; a yes without it reads as
   unanswered, so nothing is sent and General › Reports shows the question and the notice again.
@@ -216,13 +217,51 @@ Where the build differs from the text above, and why:
   `/api/send`, two to fifty to `/api/batch`; whether Umami Cloud's account accepts it is checked
   on the first real send, not by a test.
 
+### As built, after the credential review (2026-10-21)
+
+- **Free-text error messages are never sent.** Free text cannot be proved credential-free: a
+  verifier got credentials past every scrub (`pass=`, `bob:hunter2`, Cyrillic look-alikes, half a
+  key an SDK's 2000-character cut left). `package_error` carries the time, `error_type`, `file`
+  and `line`; the `error` frame keeps its message for the app's own log and canvas only. Every
+  other string is an identifier held to a strict shape, `"[withheld]"` when it fails (rule 4).
+- **Redact first, cut second, everywhere.** No telemetry string is cut before the redaction:
+  the MCP client's name and a step's file and error type are sent whole or withheld, the SDKs no
+  longer cut `file` or `error_type`, and the codec and the channel only bound, never cut.
+- **`file`** is a strict relative path: folders and a name of word characters, a known source
+  extension, no dot but the extension's (so no dotted, key-like segment), no 25-character run of
+  letters and digits; then the scrub.
+- **Sources are counted.** Each run a source starts is one `package_used`; a source's `error`
+  frame with no input is one `package_error` and no use (the channel's `source-error`).
+- **Exact counts, never a list.** Umami's event data keeps a string or an array (stringified) to
+  500 characters and an object to 50 properties (docs.umami.is, "Event Data Limits"), and the
+  redaction caps a list at 100: `flow_deployed` is one event per flow and `package_deployed` one
+  per package, every count a number. Umami's "Sending stats" API documents `/api/batch` beside
+  `/api/send`, with the same body per event and no token; nothing there says Umami Cloud refuses
+  it, and the first real send still checks it (above).
+- **Asked again on launch.** A yes to the older notice reads as unset; once Setup is over, the
+  frame shows Setup's own Reports step, on its own, until it is answered (`ReportsAgain`).
+- **The queue keeps its index in memory.** A status query and the sender's wake read only the
+  count and the next request's reports, never the whole queue; turning reports off renames the
+  queue folder aside and deletes it in the background, so it never blocks for a second. A purge a
+  crash interrupted is finished at the next launch's first look.
+- **The telemetry memory keeps a provider's host only**, never its address, and the marker and
+  memory live in `userData/telemetry-state/`, 0600 files in a 0700 folder, rewritten through a
+  scratch file so a wider mode never survives.
+- **Source maps for the shipped packages.** Their bundles are built with `--sourcemap
+  --sources-content=false` and run with `node --enable-source-maps`, so `file` and `line` are
+  the source's (`src/operations.ts`), not the bundle's. `@recircuit/reload-node` exports `fail`,
+  which the Anytype package uses for the errors it catches, so they carry where they were thrown.
+- **The TS SDK reads stack paths with spaces** (`~/Library/Application Support/…`) and decodes
+  `file://` URLs; the Python SDK treats a frame on another Windows drive as outside the package.
+- **`StopReason` `restart` and `usagePayload` are gone**: nothing sent or called them.
+
 ## Risks
 
-- **Error messages can carry the person's data** (a note title in a Python exception).
-  Credentials never leave (rule 4 withholds the text when in doubt), but other free text can.
-  That is the owner's decision above; the notice says so plainly.
-- **Rule 4 withholds some harmless messages** (a long hash in an error looks like a key).
-  Accepted: a withheld message costs a diagnosis, a sent credential costs the person.
+- **An identifier-shaped secret is still sent as the identifier it claims to be**: a signed
+  package whose name, version or error class is a short secret word would send it. Identifiers
+  come from signed manifests, code and the validated tool set, never from a person's typing.
+- **Some harmless values are withheld** (an error class of 25 letters, a client name with a dot).
+  Accepted: a withheld value costs a diagnosis, a sent credential costs the person.
 - **`at` versus Umami's time.** Umami counts an event when it arrives. Events sent after a time
   offline show on the day they arrive; `at` in the data is the real time.
 - **The asking-again in WI-0029-07** means everyone who said yes to 0.4.0 is asked once more.
