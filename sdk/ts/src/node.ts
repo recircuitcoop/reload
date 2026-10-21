@@ -18,6 +18,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as readline from "node:readline";
+import { fileURLToPath } from "node:url";
 
 export interface StartInfo {
   readonly node: { readonly id: string; readonly type: string; readonly name: string };
@@ -368,8 +369,12 @@ export interface ThrownAt {
   line?: number;
 }
 
-/** A stack line's location: `at fn (/a/b.js:12:3)`, `at /a/b.js:12:3`, or a `file://` URL. */
-const STACK_FRAME = /\(?((?:file:\/\/)?[^\s()]+):(\d+):\d+\)?$/;
+/**
+ * A stack line's location: `at fn (/a/b.js:12:3)`, `at /a/b.js:12:3`, or a `file://` URL. The
+ * path may hold spaces (`~/Library/Application Support/…` on macOS): it is everything between
+ * `at `, or the `(` after the function's name, and the `:line:column` at the end.
+ */
+const STACK_FRAME = /^at (?:.*? \()?(.+?):(\d+):\d+\)?$/;
 
 /**
  * Where `caught` was thrown: its class's name, and the innermost stack frame inside the
@@ -388,7 +393,7 @@ export function thrownAt(caught: unknown, root: string = process.cwd()): ThrownA
     if (found === null) {
       continue;
     }
-    const file = (found[1] ?? "").replace(/^file:\/\//, "");
+    const file = decodeFileUrl(found[1] ?? "");
     const relative = path.relative(root, file);
     if (
       !path.isAbsolute(file) ||
@@ -404,6 +409,18 @@ export function thrownAt(caught: unknown, root: string = process.cwd()): ThrownA
     break;
   }
   return where;
+}
+
+/** A stack frame's path: a `file://` URL decoded (its spaces are `%20`), a plain path as it is. */
+function decodeFileUrl(location: string): string {
+  if (!location.startsWith("file://")) {
+    return location;
+  }
+  try {
+    return fileURLToPath(location);
+  } catch {
+    return location;
+  }
 }
 
 /** Fail `inputId` with what a handler threw: its message, and where it was thrown. */

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import pathlib
 import sys
 import threading
@@ -446,6 +447,58 @@ def test_thrown_at_names_the_package_s_own_last_frame_and_never_a_library_s(
         sys.path.remove(str(tmp_path))
         sys.modules.pop("pkg", None)
         sys.modules.pop("lib", None)
+
+
+def test_thrown_at_reads_a_folder_with_spaces_and_never_cuts_a_long_name(
+    tmp_path: pathlib.Path,
+) -> None:
+    folder = tmp_path / "Application Support" / "pkg"
+    folder.mkdir(parents=True)
+    own = folder / "spaced_mod.py"
+    long_name = "E" + "x" * 150
+    own.write_text(
+        f"class {long_name}(Exception):\n    pass\ndef run():\n    raise {long_name}()\n"
+    )
+    sys.path.insert(0, str(folder))
+    try:
+        import spaced_mod  # type: ignore[import-not-found]
+
+        try:
+            spaced_mod.run()
+        except Exception as caught:  # noqa: BLE001 - the class is made above
+            assert _thrown_at(caught, root=str(folder)) == {
+                "error_type": long_name,
+                "file": "spaced_mod.py",
+                "line": 4,
+            }
+    finally:
+        sys.path.remove(str(folder))
+        sys.modules.pop("spaced_mod", None)
+
+
+def test_a_frame_on_another_drive_still_sends_the_error_frame(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    out, _ = patch_io(monkeypatch)
+
+    def two_drives(paths: object) -> str:
+        # What Windows says for C:\\pkg beside D:\\lib.
+        raise ValueError("Paths don't have the same drive")
+
+    def on_input(input_id: str, event: dict[str, object]) -> None:
+        raise ValueError("went wrong")
+
+    node = start_node(
+        monkeypatch,
+        {"t": "input", "id": "i1", "event": {"type": "t.v1", "data": {}}},
+        {"t": "close"},
+    )
+    monkeypatch.setattr(os.path, "commonpath", two_drives)
+    node.run(on_input=on_input)
+    wait_until(lambda: any(f.get("t") == "error" for f in frames_of(out)))
+    monkeypatch.undo()
+    error = next(f for f in frames_of(out) if f.get("t") == "error")
+    assert error == {"t": "error", "in": "i1", "message": "went wrong", "error_type": "ValueError"}
 
 
 def test_run_dispatches_cancel_action_trigger_and_fire(monkeypatch: pytest.MonkeyPatch) -> None:

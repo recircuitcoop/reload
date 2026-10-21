@@ -166,7 +166,11 @@ def _thrown_at(caught: BaseException, root: str | None = None) -> dict[str, Any]
     where: dict[str, Any] = {"error_type": type(caught).__name__}
     for frame in reversed(traceback.extract_tb(caught.__traceback__)):
         file = os.path.realpath(frame.filename)
-        inside = os.path.commonpath([folder, file]) == folder if os.path.isabs(file) else False
+        try:
+            inside = os.path.commonpath([folder, file]) == folder if os.path.isabs(file) else False
+        except ValueError:
+            # Windows: a file on another drive than the package's folder is not inside it.
+            inside = False
         if not inside or "site-packages" in file.split(os.sep) or frame.lineno is None:
             continue
         where["file"] = os.path.relpath(file, folder).replace(os.sep, "/")

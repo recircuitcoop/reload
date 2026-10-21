@@ -2,11 +2,19 @@
 // half (the Python SDK's is sdk/python/tests/test_node.py). The class's name, and the innermost
 // stack frame inside the package's folder, relative to it; a library's frame gives way to the
 // package's own; outside the folder, only the type.
+import fs from "node:fs";
 import * as path from "node:path";
 import { describe, expect, it } from "vitest";
 import { thrownAt } from "../../../sdk/ts/src/node";
 
 class CatalogueGone extends Error {}
+
+/** The line of this file that throws in the real-stack test below. */
+const THROWN_LINE =
+  fs
+    .readFileSync(import.meta.filename, "utf8")
+    .split("\n")
+    .findLastIndex((line) => line.includes("// the line this test finds")) + 1;
 
 const stackOf = (...frames: string[]): Error => {
   const error = new CatalogueGone("gone");
@@ -33,6 +41,46 @@ describe("thrownAt", () => {
     );
   });
 
+  it("reads a package folder whose path has spaces, as macOS's Application Support has", () => {
+    const root = path.resolve("/Users/fake person/Library/Application Support/Reload/packages/p");
+    const caught = stackOf(
+      `    at Object.<anonymous> (${path.join(root, "node_modules", "lib", "index.js")}:3:9)`,
+      `    at async handle (${path.join(root, "src", "main.ts")}:12:5)`,
+      `    at ${path.join(root, "dist", "main.cjs")}:7:1`,
+    );
+    expect(thrownAt(caught, root)).toEqual({
+      error_type: "CatalogueGone",
+      file: "src/main.ts",
+      line: 12,
+    });
+    const bare = stackOf(`    at ${path.join(root, "dist", "main.cjs")}:7:1`);
+    expect(thrownAt(bare, root)).toEqual({
+      error_type: "CatalogueGone",
+      file: "dist/main.cjs",
+      line: 7,
+    });
+    const url = stackOf(`    at file://${encodeURI(path.join(root, "src", "a b.mjs"))}:9:1`);
+    expect(thrownAt(url, root)).toEqual({
+      error_type: "CatalogueGone",
+      file: "src/a b.mjs",
+      line: 9,
+    });
+  });
+
+  it("never cuts a long name or path: the app withholds what does not fit", () => {
+    const root = path.resolve("/pkg");
+    const deep = path.join(root, ...Array.from({ length: 40 }, () => "folder"), "x.js");
+    class AVeryLongErrorClassNameThatGoesOnAndOnPastAHundredCharactersOfTextForSureYesItDoesIndeedOkay extends Error {}
+    const caught =
+      new AVeryLongErrorClassNameThatGoesOnAndOnPastAHundredCharactersOfTextForSureYesItDoesIndeedOkay(
+        "x",
+      );
+    caught.stack = ["x", `    at f (${deep}:1:1)`].join("\n");
+    const where = thrownAt(caught, root);
+    expect(where.error_type).toBe(caught.constructor.name);
+    expect(where.file).toBe(path.relative(root, deep));
+  });
+
   it("is the type only when no frame is inside the folder, and nothing for what is not an Error", () => {
     const caught = stackOf("    at /elsewhere/x.js:1:1", "    at native", "    at (/pkg:1:1)");
     expect(thrownAt(caught, path.resolve("/pkg"))).toEqual({ error_type: "CatalogueGone" });
@@ -45,14 +93,14 @@ describe("thrownAt", () => {
   it("finds this very line in a real stack, from the working directory", () => {
     let caught: unknown;
     try {
-      throw new TypeError("real");
+      throw new TypeError("real"); // the line this test finds
     } catch (error) {
       caught = error;
     }
     expect(thrownAt(caught)).toEqual({
       error_type: "TypeError",
       file: "test/unit/sdk-thrown-at.test.ts",
-      line: 48,
+      line: THROWN_LINE,
     });
   });
 });
