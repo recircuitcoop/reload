@@ -15,6 +15,11 @@ the move.
 **Goal:** the new application builds, installs and passes every proof on Windows x64, so that the
 old application can be deleted ([plan 0026](0026-delete-the-old-application.md)).
 
+**Since 2026-10-21 (owner: "drop the windows condition now but reinstate it after"):** the old
+application is deleted before Windows is proven. The condition moved here: **1.0.0 is not
+published until every proof is green on Windows**, and the parity ledger's Windows rows stay
+pending until this plan closes them.
+
 ## Why it is its own plan
 
 Plan 0017 requires every proof to pass on macOS, Linux **and** Windows before the cutover. macOS
