@@ -26,7 +26,7 @@ export const PRIVACY_STRINGS = {
   "privacy.sent.errors":
     "every time such a step, or a package's source, fails: the same, the kind of error (its class's name or code), and the file and line in the package where it happened. Never the error's message", // plan 0029
   "privacy.sent.aiApps":
-    "every time an AI app uses Reload's Anytype tools: which tool, the name the AI app gives itself, how long it took and whether it worked, never what it asked or what it was answered", // plan 0029
+    "every time an AI app uses Reload's Anytype tools or reads a file through them: the Anytype package and its version, whether it called a tool or read a file, which tool, the name the AI app gives itself, how long it took, whether it worked and the error's code, never what it asked, which file, or what it was answered", // plan 0029
   "privacy.sent.flows":
     "every time flows are deployed: how many flows, how many steps each one has, and how many steps of each package", // plan 0029
   "privacy.sent.setup":

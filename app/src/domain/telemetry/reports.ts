@@ -363,9 +363,14 @@ export function packageError(facts: PackageFacts, step: StepFacts, failure: Step
   };
 }
 
-/** One tools/call on the loopback endpoint, as the services process saw it. */
+/** The MCP requests that do a client's work: each one is an `mcp_call`. */
+export const MCP_WORK = ["tools/call", "resources/read"] as const;
+export type McpWork = (typeof MCP_WORK)[number];
+
+/** One request that did a client's work on the loopback endpoint, as the services process saw it. */
 export interface McpCallFacts {
-  /** The tool's name, only when the validated set holds it. */
+  readonly method: McpWork;
+  /** A tools/call's tool, only when the validated set holds it; null for a resources/read. */
   readonly tool: string | null;
   readonly client: string | null;
   readonly durationMs: number;
@@ -377,13 +382,14 @@ export interface McpCallFacts {
 /** The package that answers the loopback MCP endpoint. */
 export const MCP_PACKAGE = "reload_anytype";
 
-/** `mcp_call`: every tools/call on the loopback endpoint. */
+/** `mcp_call`: every tools/call and resources/read on the loopback endpoint. */
 export function mcpCall(version: string | null, call: McpCallFacts): Signal {
   return {
     name: "mcp_call",
     fields: {
       package: MCP_PACKAGE,
       version: shaped(version, VERSION),
+      method: call.method,
       // Lowercased: a long capitalised name (`API-get-collection-views`) would read as a key to
       // the scrub, which every string passes, this one too.
       tool: shaped(call.tool?.toLowerCase(), IDENTIFIER),

@@ -34,7 +34,7 @@ import { DOWNLOAD_TOOL, type FileDownloads, isOwnFileContents } from "./anytype-
 import type { McpSession, McpTool } from "../ports/anytype";
 import type { Clock } from "../ports/clock";
 import type { Logger } from "../ports/logger";
-import type { McpCallFacts } from "../domain/telemetry/reports";
+import type { McpCallFacts, McpWork } from "../domain/telemetry/reports";
 import type { McpAnswer, McpHandler } from "../ports/mcp-gateway";
 import { dataviewShim, type DataviewRefusal } from "./dataview-shim";
 import { unwrapMintedBody } from "./minted-body-shim";
@@ -57,8 +57,9 @@ export interface McpDispatchDeps {
   /** What answers API-download-file and resources/read, instead of the child. */
   readonly files: FileDownloads;
   /**
-   * Told of every tools/call once it is answered, for the usage signals (plan 0029): the tool
-   * only when the validated set holds it, never its arguments or its result.
+   * Told of every request that does a client's work (tools/call, resources/read) once it is
+   * answered, for the usage signals (plan 0029): the tool only when the validated set holds it,
+   * never its arguments, its uri or its result. initialize, ping and the lists are not work.
    */
   readonly observe?: (call: McpCallFacts) => void;
 }
@@ -122,8 +123,12 @@ function clientOf(request: unknown): string | null {
   return typeof name === "string" ? name : null;
 }
 
-/** A tools/call's facts: its tool when the validated set holds it, and how it was answered. */
+/**
+ * A call's facts: its method, a tools/call's tool when the validated set holds it, and how it was
+ * answered.
+ */
 function callFacts(
+  method: McpWork,
   params: unknown,
   served: ServedMcp | null,
   client: string | null,
@@ -132,11 +137,14 @@ function callFacts(
 ): McpCallFacts {
   const name = isObject(params) ? params["name"] : undefined;
   const tool =
-    served?.tools.some((listed) => listed.name === name) === true ? (name as string) : null;
+    method === "tools/call" && served?.tools.some((listed) => listed.name === name) === true
+      ? (name as string)
+      : null;
   const body = isObject(sent.body) ? sent.body : {};
   const failure = isObject(body["error"]) ? body["error"]["code"] : undefined;
   const answered = isObject(body["result"]) ? body["result"] : null;
   return {
+    method,
     tool,
     client,
     durationMs,
@@ -166,9 +174,7 @@ export function mcpDispatch(deps: McpDispatchDeps): McpHandler {
       const params = (request as Json)["params"];
       const took = deps.clock.now() - started;
       logCall(deps, method, params, took, sent);
-      if (method === "tools/call") {
-        deps.observe?.(callFacts(params, deps.served(), client, took, sent));
-      }
+      deps.observe?.(callFacts(method, params, deps.served(), client, took, sent));
     }
     return sent;
   };

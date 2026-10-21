@@ -44,7 +44,14 @@ export function everySignal(text: string, signed = true): Signal[] {
   };
   const step = { nodeKind: "node" as const, nodeId: text, durationMs: 5, ok: true };
   const failure = { errorType: text, file: text, line: 3 };
-  const call = { tool: text, client: text, durationMs: 9, ok: false, errorCode: -32000 };
+  const call = {
+    method: "tools/call" as const,
+    tool: text,
+    client: text,
+    durationMs: 9,
+    ok: false,
+    errorCode: -32000,
+  };
   const provider = { url: text, official: false };
   return [
     appStart({

@@ -624,7 +624,7 @@ describe("a file download", () => {
   });
 });
 
-describe("every tools/call is told for the usage signals (plan 0029)", () => {
+describe("every tools/call and resources/read is told for the usage signals (plan 0029)", () => {
   const call = (id: number, name: unknown, args: unknown = {}) => ({
     jsonrpc: "2.0",
     id,
@@ -658,19 +658,37 @@ describe("every tools/call is told for the usage signals (plan 0029)", () => {
     await send(call(3, "get_object"));
     await send(call(4, "API-delete-everything-fake-unknown"));
     await send(call(5, 42));
+    // A file read is a use too: its method, never its uri.
+    await send({
+      jsonrpc: "2.0",
+      id: 9,
+      method: "resources/read",
+      params: { uri: "anytype-file://fake-private-file-id" },
+    });
     served = null;
     await send(call(6, "get_object"));
-    // Not a tools/call: nothing told.
+    // Not work: initialize, ping and the lists are told nothing.
     await send({ jsonrpc: "2.0", id: 7, method: "ping" });
     await send({ jsonrpc: "2.0", id: 8, method: "initialize", params: {} });
+    await send({ jsonrpc: "2.0", id: 10, method: "tools/list" });
+    await send({ jsonrpc: "2.0", id: 11, method: "resources/list" });
+    const tools = { method: "tools/call", durationMs: 0 };
     expect(told).toEqual([
-      { tool: "get_object", client: null, durationMs: 0, ok: true, errorCode: null },
-      { tool: "get_object", client: "fake-client-A", durationMs: 0, ok: false, errorCode: null },
-      { tool: null, client: "fake-client-A", durationMs: 0, ok: false, errorCode: -32602 },
-      { tool: null, client: "fake-client-A", durationMs: 0, ok: false, errorCode: -32602 },
-      { tool: null, client: "fake-client-A", durationMs: 0, ok: false, errorCode: -32000 },
+      { ...tools, tool: "get_object", client: null, ok: true, errorCode: null },
+      { ...tools, tool: "get_object", client: "fake-client-A", ok: false, errorCode: null },
+      { ...tools, tool: null, client: "fake-client-A", ok: false, errorCode: -32602 },
+      { ...tools, tool: null, client: "fake-client-A", ok: false, errorCode: -32602 },
+      {
+        method: "resources/read",
+        durationMs: 0,
+        tool: null,
+        client: "fake-client-A",
+        ok: false,
+        errorCode: -32601,
+      },
+      { ...tools, tool: null, client: "fake-client-A", ok: false, errorCode: -32000 },
     ]);
-    // Never the arguments, the result or an unknown name.
-    expect(JSON.stringify(told)).not.toMatch(/fake-argument-token|delete-everything/);
+    // Never the arguments, the uri, the result or an unknown name.
+    expect(JSON.stringify(told)).not.toMatch(/fake-argument-token|delete-everything|fake-private/);
   });
 });

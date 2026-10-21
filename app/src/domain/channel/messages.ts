@@ -8,7 +8,7 @@
 // INTERNAL: this is not the node protocol; node authors never see it.
 
 import { isNotice, isNoticeKind, type Notice, type NoticeKind } from "../notices/notices";
-import type { ChildSignal, StepFailure } from "../telemetry/reports";
+import { MCP_WORK, type ChildSignal, type McpWork, type StepFailure } from "../telemetry/reports";
 
 /** The version both ends speak. A message with any other `v` is refused. */
 export const CHANNEL_VERSION = 1;
@@ -421,6 +421,7 @@ export function parseChildSignal(value: unknown): ChildSignal | null {
       const call = value["call"];
       if (
         !isRecord(call) ||
+        !MCP_WORK.includes(call["method"] as McpWork) ||
         !isNumber(call["durationMs"]) ||
         typeof call["ok"] !== "boolean" ||
         !(
@@ -433,8 +434,9 @@ export function parseChildSignal(value: unknown): ChildSignal | null {
       return {
         kind: "mcp-call",
         call: {
-          tool: nullOr(call["tool"], (item) => isTextUpTo(item, 200)),
-          client: nullOr(call["client"], (item) => isTextUpTo(item, 200)),
+          method: call["method"] as McpWork,
+          tool: nullOr(call["tool"], (item) => isTextUpTo(item, 2000)),
+          client: nullOr(call["client"], (item) => isTextUpTo(item, 2000)),
           durationMs: call["durationMs"],
           ok: call["ok"],
           errorCode: call["errorCode"],

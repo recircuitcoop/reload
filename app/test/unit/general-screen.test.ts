@@ -369,6 +369,7 @@ const LINE_FIELDS: Readonly<Record<string, readonly string[]>> = {
   "privacy.sent.aiApps": [
     "package",
     "version",
+    "method",
     "tool",
     "client",
     "duration_ms",
@@ -421,10 +422,13 @@ const LINE_WORDS: Readonly<Record<string, readonly string[]>> = {
     "Never the error's message",
   ],
   "privacy.sent.aiApps": [
+    "the Anytype package and its version",
+    "whether it called a tool or read a file",
     "which tool",
     "the name the AI app gives itself",
     "how long it took",
     "whether it worked",
+    "the error's code",
     "never what it asked",
   ],
   "privacy.sent.flows": [

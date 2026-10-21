@@ -492,9 +492,21 @@ describe("the launch's own signals (plan 0029)", () => {
     world.services.tell({
       kind: "mcp-call",
       call: {
+        method: "tools/call",
         tool: "API-list-spaces",
         client: "claude-ai",
         durationMs: 30,
+        ok: true,
+        errorCode: null,
+      },
+    });
+    world.services.tell({
+      kind: "mcp-call",
+      call: {
+        method: "resources/read",
+        tool: null,
+        client: "cursor ×4 sk-Ab12Cd34Ef56Gh78Ij90Kl",
+        durationMs: 8,
         ok: true,
         errorCode: null,
       },
@@ -553,10 +565,17 @@ describe("the launch's own signals (plan 0029)", () => {
       expect.objectContaining({
         package: "reload_anytype",
         version: null,
+        method: "tools/call",
         tool: "api-list-spaces",
         client: "claude-ai",
         ok: true,
         error_code: null,
+      }),
+      expect.objectContaining({
+        method: "resources/read",
+        tool: null,
+        client: "[withheld]",
+        ok: true,
       }),
     ]);
     expect(payloads(world, "flow_deployed")).toEqual([
@@ -629,7 +648,14 @@ describe("a child's facts reach the shell over the channel (plan 0029)", () => {
       },
       {
         kind: "mcp-call",
-        call: { tool: null, client: null, durationMs: 1, ok: false, errorCode: -32602 },
+        call: {
+          method: "tools/call",
+          tool: null,
+          client: null,
+          durationMs: 1,
+          ok: false,
+          errorCode: -32602,
+        },
       },
       {
         kind: "source-error",
@@ -663,6 +689,11 @@ describe("a child's facts reach the shell over the channel (plan 0029)", () => {
       { kind: "mcp-call", call: { durationMs: "1", ok: true, errorCode: null } },
       { kind: "mcp-call", call: { durationMs: 1, ok: 1, errorCode: null } },
       { kind: "mcp-call", call: { durationMs: 1, ok: true, errorCode: 1.5 } },
+      // initialize, ping and the lists do no work: no mcp_call names them.
+      {
+        kind: "mcp-call",
+        call: { method: "tools/list", durationMs: 1, ok: true, errorCode: null },
+      },
       { kind: "deployed", nodesPerFlow: "1", perPackage: [] },
       { kind: "deployed", nodesPerFlow: [-1], perPackage: [] },
       { kind: "deployed", nodesPerFlow: [1], perPackage: {} },

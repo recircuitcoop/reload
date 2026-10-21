@@ -329,7 +329,7 @@ const HOOKS: readonly {
       ),
   },
   {
-    name: "an MCP tools/call: its arguments, its result, its client's name",
+    name: "an MCP tools/call and resources/read: arguments, uri, result, the client's name",
     facts: async (planted) => {
       const told: ChildSignal[] = [];
       const session = {
@@ -362,6 +362,7 @@ const HOOKS: readonly {
         params: { name: "API-get-object", arguments: { key: planted, query: planted } },
       });
       await send({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: planted } });
+      await send({ jsonrpc: "2.0", id: 4, method: "resources/read", params: { uri: planted } });
       return told;
     },
   },

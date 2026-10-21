@@ -132,6 +132,7 @@ describe("what a field may hold (plan 0029)", () => {
     expect(packageInstallFailed(where, "the server said no").fields["reason"]).toBe("other");
     expect(packageInstallFailed(where, "x").fields["provider_host"]).toBeNull();
     const call = {
+      method: "tools/call" as const,
       tool: "API-get-collection-views",
       client: null,
       durationMs: -3,
@@ -143,6 +144,9 @@ describe("what a field may hold (plan 0029)", () => {
       duration_ms: 0,
     });
     expect(mcpCall(null, { ...call, tool: null }).fields["tool"]).toBeNull();
+    expect(
+      mcpCall("1.0.0", { ...call, method: "resources/read", tool: null }).fields,
+    ).toMatchObject({ method: "resources/read", tool: null, package: "reload_anytype" });
   });
 
   it("an unsigned package's update names no version it came from", () => {
