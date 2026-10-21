@@ -515,6 +515,7 @@ async function start(): Promise<void> {
     quit: () => {
       app.quit();
     },
+    log: { file: logFile?.path ?? null, shell },
     clock: systemClock,
     logger,
   });

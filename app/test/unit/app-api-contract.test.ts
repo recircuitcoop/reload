@@ -253,6 +253,14 @@ const CALLS: Record<string, { call: (api: AppApi) => Promise<unknown>; sent: unk
     call: (api) => api.setRetention(null),
     sent: [IPC.generalCall, { op: "retention.set", args: { days: null } }],
   },
+  logFile: {
+    call: (api) => api.logFile(),
+    sent: [IPC.generalCall, { op: "log.get", args: null }],
+  },
+  showLog: {
+    call: (api) => api.showLog(),
+    sent: [IPC.generalCall, { op: "log.show", args: null }],
+  },
   editorPalette: { call: (api) => api.editorPalette(), sent: [IPC.editorPalette] },
   answerQuit: { call: (api) => api.answerQuit("cancel"), sent: [IPC.quitAnswer, "cancel"] },
   launchAtLogin: {

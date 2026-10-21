@@ -3,8 +3,7 @@
 // sentences (eslint-rules/no-jsx-text.mjs); the domain stays structured and words nothing;
 // ui/words.ts turns the domain's values into these sentences.
 //
-// * A slot is `{name}`, filled by `t(key, {name: …})`; the compiler knows each key's slots, so a
-//   missing or misspelt one fails tsc.
+// * A slot is `{name}`, filled by `t(key, {name: …})`; tsc fails on a missing or misspelt one.
 // * `*…*` marks a name the person gave or chose (a flow, a step, a space); the component draws
 //   it in italics, as ux-writing does.
 // * Plurals are two keys, `….one` and `….other`; `plural(n, …)` picks one.
@@ -400,6 +399,8 @@ export const STRINGS = {
   "general.advanced.secrets.file": "In files only this account can read", // decided
   "general.advanced.legacy": "Left from the old installation", // decided
   "general.advanced.legacy.delete": "Delete them", // decided
+  "general.advanced.log": "Log file", // decided (plan 0031): where the log is, for support
+  "general.advanced.log.show": "Show log", // decided (plan 0031): shows the file in its folder
   "general.aiApps.host": "Address", // decided: the endpoint's host field (owner, 2026-10-15)
   "general.aiApps.port": "Port", // decided: the endpoint's port field
   "general.aiApps.change": "Change", // decided: the one button that moves both

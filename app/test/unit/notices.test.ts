@@ -173,6 +173,25 @@ describe("NoticeBoard: the once-only rule", () => {
     expect(subject.current()).toEqual([reworded]);
   });
 
+  it("tells a refusal once however often it is refused, and again only once it was withdrawn", () => {
+    const { subject, shown, logger } = board();
+    const refused: Notice = {
+      kind: "package-update-refused",
+      subject: "reload_folder",
+      version: "2.0.0",
+      detail: "Its signature does not match the catalogue",
+    };
+    for (let check = 0; check < 5; check += 1) {
+      subject.raise({ ...refused });
+    }
+    expect(shown).toEqual([compose(refused)]);
+    expect(logger.lines.filter((line) => line.includes("is being held back"))).toHaveLength(1);
+    // Withdrawn once the package is fixed: nothing more is said, and a new refusal is news.
+    subject.clear("package-update-refused", "reload_folder");
+    subject.raise(refused);
+    expect(shown).toEqual([compose(refused), compose(refused)]);
+  });
+
   it("keeps one condition per kind and subject: two children are two notices", () => {
     const { subject, shown } = board();
     subject.raise(crashLoop);

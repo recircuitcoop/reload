@@ -568,6 +568,23 @@ test("General shows the queued reports in full, Advanced's status details, Recor
       "data-backend",
       /^(keychain|file)$/,
     );
+    // Where the log is, for support (plan 0031 group I); Show log reveals that very file, through
+    // a stand-in for shell.showItemInFolder so no file manager opens on the machine running this.
+    const logRow = advanced.getByTestId("general-advanced-log");
+    await expect(logRow).toContainText(STRINGS["general.advanced.log"]);
+    await expect(logRow).toContainText(scratch);
+    await first.app.evaluate(({ shell }) => {
+      shell.showItemInFolder = (file) => {
+        (globalThis as { revealed?: string }).revealed = file;
+      };
+    });
+    await expect(logRow.getByTestId("general-advanced-log-show")).toHaveText(
+      STRINGS["general.advanced.log.show"],
+    );
+    await logRow.getByTestId("general-advanced-log-show").click();
+    const revealed = () => first.app.evaluate(() => (globalThis as { revealed?: string }).revealed);
+    await expect.poll(revealed).toMatch(/reload\.log$/);
+    expect((await revealed())?.startsWith(scratch)).toBe(true);
     // A restart is followed: the runtime's next generation shows without a reload.
     process.kill(runtime.pid, "SIGKILL");
     const next = await waitForRunning(window, "runtime", runtime.generation + 1);

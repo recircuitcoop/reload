@@ -1,10 +1,11 @@
 // General's calls that are no single flow's (plan 0022 §I, D8): the status pill, the runtime
 // banner and the Live badge, pushed whenever a child's status or the questions waiting change;
-// and Run history's retention, 90 days unless changed, 7, 30, 90 or 365 days or Forever.
+// Run history's retention, 90 days unless changed, 7, 30, 90 or 365 days or Forever; and where
+// the log is, with Show log (plan 0031 group I: the person can find the log support needs).
 //
 // The badge counts the questions the runtime has waiting (the Inbox's count) until WI-0022-13
 // counts them from run records, hidden places included.
-import type { IpcMain } from "electron";
+import type { IpcMain, Shell } from "electron";
 import { DEFAULT_RETENTION_DAYS } from "../application/runs";
 import type { NoticeBoard } from "../application/notices";
 import type { Supervisor } from "../application/supervisor";
@@ -15,7 +16,12 @@ import type { ChildStatus } from "../domain/supervision/child-state";
 import type { Logger } from "../ports/logger";
 import type { RunRetentionSetting } from "../ports/settings-store";
 import type { Answer } from "../ui/answer";
-import { RETENTION_CHOICES, type Retention, type StatusView } from "../ui/general-contract";
+import {
+  RETENTION_CHOICES,
+  type LogFile,
+  type Retention,
+  type StatusView,
+} from "../ui/general-contract";
 import { guarded, opOf, refused, unknownOp } from "./answer";
 import { IPC } from "./ipc";
 import type { PendingQuestions } from "./views";
@@ -36,6 +42,8 @@ export interface GeneralCallsDeps {
   readonly platform: NodeJS.Platform;
   readonly retention: RunRetentionSetting;
   readonly toPage: (channel: string, ...args: unknown[]) => void;
+  /** The log this run writes (null: none could be opened), and the file manager that shows it. */
+  readonly log: { readonly file: string | null; readonly shell: Pick<Shell, "showItemInFolder"> };
   readonly logger: Logger;
 }
 
@@ -91,32 +99,44 @@ export function wireGeneralCalls(deps: GeneralCallsDeps): void {
   };
   ipc.handle(IPC.generalCall, (_event, call: unknown) => {
     const { op, args } = opOf(call);
-    return guarded(op, logger, async (): Promise<Answer<StatusView | Retention | null>> => {
-      switch (op) {
-        case "status.get":
-          await readAnytype();
-          return { ok: true, value: view() };
-        case "flowsFile.show": {
-          const shown = flowsFileNotice();
-          if (shown !== undefined) {
-            deps.showInFolder(shown.subject);
+    return guarded(
+      op,
+      logger,
+      async (): Promise<Answer<StatusView | Retention | LogFile | null>> => {
+        switch (op) {
+          case "status.get":
+            await readAnytype();
+            return { ok: true, value: view() };
+          case "flowsFile.show": {
+            const shown = flowsFileNotice();
+            if (shown !== undefined) {
+              deps.showInFolder(shown.subject);
+            }
+            return { ok: true, value: null };
           }
-          return { ok: true, value: null };
-        }
-        case "retention.get":
-          return { ok: true, value: days() };
-        case "retention.set": {
-          const chosen = args["days"];
-          if (!RETENTION_CHOICES.some((choice) => choice === chosen)) {
-            logger.warn(`retention.set: ${String(chosen)} is not one of General's choices`);
-            return refused("failed", "refused.failed");
+          case "retention.get":
+            return { ok: true, value: days() };
+          case "retention.set": {
+            const chosen = args["days"];
+            if (!RETENTION_CHOICES.some((choice) => choice === chosen)) {
+              logger.warn(`retention.set: ${String(chosen)} is not one of General's choices`);
+              return refused("failed", "refused.failed");
+            }
+            retention.writeRunRetentionDays(chosen as number | null);
+            return { ok: true, value: days() };
           }
-          retention.writeRunRetentionDays(chosen as number | null);
-          return { ok: true, value: days() };
+          case "log.get":
+            return { ok: true, value: { path: deps.log.file } };
+          case "log.show":
+            if (deps.log.file === null) {
+              return refused("failed", "refused.failed");
+            }
+            deps.log.shell.showItemInFolder(deps.log.file);
+            return { ok: true, value: { path: deps.log.file } };
+          default:
+            return unknownOp(op, "general", logger);
         }
-        default:
-          return unknownOp(op, "general", logger);
-      }
-    });
+      },
+    );
   });
 }

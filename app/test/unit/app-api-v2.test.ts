@@ -123,7 +123,10 @@ class FakeBoard {
   };
 }
 
-function harness() {
+/** Where the harness's log is, unless a test says none could be opened. */
+const LOG_FILE = "/Users/me/Library/Logs/reload/reload.log";
+
+function harness(options: { readonly logFile?: string | null } = {}) {
   const handlers = new Map<string, Handler>();
   const pageListeners = new Map<string, Listener[]>();
   const ipcMain: Pick<IpcMain, "handle"> = {
@@ -195,6 +198,7 @@ function harness() {
   const logger = new RecordingLogger();
   const dialogs = { folder: "/Users/me/packages/reload_summarize" as string | null };
   const quits: number[] = [];
+  const revealed: string[] = [];
   const board = new FakeBoard();
   /** The editor's canvas: deployed nodes and steps not saved yet, with their names. */
   const canvas = { nodes: null as EditorNode[] | null };
@@ -247,6 +251,10 @@ function harness() {
     toPage: push.toPage,
     currentVersion: () => "0.3.0",
     quit: () => quits.push(1),
+    log: {
+      file: options.logFile === undefined ? LOG_FILE : options.logFile,
+      shell: { showItemInFolder: (file) => revealed.push(file) },
+    },
     clock: { now: () => new Date(2026, 9, 2, 9, 30).getTime() },
     logger,
   });
@@ -263,6 +271,7 @@ function harness() {
     settings,
     dialogs,
     quits,
+    revealed,
     sent,
     flush,
     push,
@@ -825,6 +834,20 @@ describe("AppApi v2 calls, through the shell to its processes", () => {
     expect(await h.api.setRetention(null)).toEqual({ ok: true, value: { days: null } });
     expect(await h.api.setRetention(45)).toEqual(FAILED);
     expect(h.settings.stored["retention"]).toBeNull();
+  });
+
+  it("the log: where it is, and Show log reveals it in the file manager", async () => {
+    const h = harness();
+    expect(await h.api.logFile()).toEqual({ ok: true, value: { path: LOG_FILE } });
+    expect(await h.api.showLog()).toEqual({ ok: true, value: { path: LOG_FILE } });
+    expect(h.revealed).toEqual([LOG_FILE]);
+  });
+
+  it("the log: none could be opened, so there is no place to name and nothing to show", async () => {
+    const h = harness({ logFile: null });
+    expect(await h.api.logFile()).toEqual({ ok: true, value: { path: null } });
+    expect(await h.api.showLog()).toEqual(FAILED);
+    expect(h.revealed).toEqual([]);
   });
 
   it("answers an op no channel knows, and a handler that throws, as a refusal", async () => {

@@ -18,7 +18,7 @@ import type {
 import type { TelemetrySetting } from "../ports/telemetry";
 import { wireBoard } from "./board";
 import { wireFlowCalls } from "./flow-calls";
-import { wireGeneralCalls } from "./general-calls";
+import { wireGeneralCalls, type GeneralCallsDeps } from "./general-calls";
 import { wirePackageCalls, type PackageCallsDeps } from "./package-calls";
 import { wireRunCalls } from "./run-calls";
 import { wireSetup } from "./setup";
@@ -60,6 +60,8 @@ export interface AppCallsDeps {
   readonly toPage: (channel: string, ...args: unknown[]) => void;
   readonly currentVersion: () => string;
   readonly quit: () => void;
+  /** General › Advanced's log line and Show log. */
+  readonly log: GeneralCallsDeps["log"];
   readonly clock: Pick<Clock, "now">;
   readonly logger: Logger;
 }
@@ -102,6 +104,7 @@ export function wireAppCalls(deps: AppCallsDeps): UpdateCalls {
     platform: deps.platform,
     retention: settings,
     toPage,
+    log: deps.log,
     logger,
   });
   return wireUpdateCalls({

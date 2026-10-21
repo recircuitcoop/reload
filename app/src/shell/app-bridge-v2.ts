@@ -105,5 +105,7 @@ export function appApiV2Over(ipc: RendererIpc): AppApiV2 {
     retention: () => general("retention.get"),
     setRetention: (days) => general("retention.set", { days }),
     showFlowsFile: () => general("flowsFile.show"),
+    logFile: () => general("log.get"),
+    showLog: () => general("log.show"),
   };
 }

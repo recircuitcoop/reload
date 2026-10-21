@@ -104,6 +104,11 @@ export interface Retention {
   readonly days: number | null;
 }
 
+/** The log this run writes (General › Advanced, for support); null when none could be opened. */
+export interface LogFile {
+  readonly path: string | null;
+}
+
 /** The days General offers (D8); null is Forever. */
 export const RETENTION_CHOICES: readonly (number | null)[] = [7, 30, 90, 365, null];
 

@@ -79,6 +79,7 @@ test's id; nothing is marked without a test.
 8. **WI-0031-08 — H,** the home guard for child processes.
 9. **WI-0031-09 — I,** log path and "Show log" in General › Advanced; the refused-kind
    once-only rule proved by a test.
+   **DONE 2026-10-21:** the log's path and Show log (`shell.showItemInFolder`) in Advanced.
 10. **WI-0031-10 — the macOS proofs,** login and refusal-notices, with evidence.
 
 Retired groups skip their WI; their rows get the owner's answer in `owner_ack`, in the owner's

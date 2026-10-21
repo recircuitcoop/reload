@@ -63,4 +63,6 @@ export const V2_UNUSED: AppApiV2 = {
   retention: never,
   setRetention: never,
   showFlowsFile: never,
+  logFile: never,
+  showLog: never,
 };

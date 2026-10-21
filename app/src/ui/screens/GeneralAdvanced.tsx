@@ -2,8 +2,9 @@
 // live here, for support"). What the old status and Settings pages showed for support: each
 // supervised child's state with its process, port and generation, Anytype's state and its
 // bridge's process, the MCP endpoint served against saved, where secrets are kept, and the old
-// installation's leftovers with their Delete button. These are the only internals General shows,
-// as values beside a label, never inside a sentence.
+// installation's leftovers with their Delete button, and where the log is, with Show log (plan 0031
+// group I). These are the only internals General shows, as values beside a label, never inside a
+// sentence.
 import { useCallback, useEffect, useState } from "react";
 import type {
   AnytypeStatus,
@@ -73,9 +74,19 @@ export function AdvancedSection({
   const children = useChildren();
   const [secrets, setSecrets] = useState<SecretStorageStatus | null>(null);
   const [legacy, setLegacy] = useState<readonly string[]>([]);
+  const [log, setLog] = useState<string | null>(null);
   useEffect(() => {
     api.secretStorage().then(setSecrets, () => undefined);
     api.legacyPackages().then(setLegacy, () => undefined);
+    api.logFile().then(
+      (answer) => {
+        if (answer.ok) setLog(answer.value.path);
+      },
+      () => undefined,
+    );
+  }, [api]);
+  const showLog = useCallback(() => {
+    void api.showLog();
   }, [api]);
   const deleteLegacy = useCallback(() => {
     api.deleteLegacyPackages().then(
@@ -131,6 +142,16 @@ export function AdvancedSection({
               </span>
             }
           />
+        )}
+        {log === null ? null : (
+          <div data-testid="general-advanced-log" className="flex flex-col gap-2">
+            <KeyValue kind="mono" label={t("general.advanced.log")} value={log} />
+            <div>
+              <Button kind="secondary" onClick={showLog} data-testid="general-advanced-log-show">
+                {t("general.advanced.log.show")}
+              </Button>
+            </div>
+          </div>
         )}
         {legacy.length === 0 ? null : (
           <div data-testid="general-advanced-legacy" className="flex flex-col gap-2">

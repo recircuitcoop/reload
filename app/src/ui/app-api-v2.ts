@@ -25,6 +25,7 @@ import type {
   BoardChanged,
   BoardView,
   ChosenFolder,
+  LogFile,
   PackagesChanged,
   PackagesView,
   Retention,
@@ -184,4 +185,8 @@ export interface AppApiV2 {
   setRetention(days: number | null): Promise<Answer<Retention>>;
   /** The banner's Show in Finder: the refused flows file, in its folder. */
   showFlowsFile(): Promise<Answer<null>>;
+  /** Where the log is (General › Advanced). */
+  logFile(): Promise<Answer<LogFile>>;
+  /** Show the log in the file manager; refused when there is none. */
+  showLog(): Promise<Answer<LogFile>>;
 }
