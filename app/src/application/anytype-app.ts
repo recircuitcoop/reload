@@ -24,6 +24,7 @@ export class AnytypeApp {
   #state: AnytypeAppState | null = null;
   #started: StartedApp | null = null;
   #quitting = false;
+  readonly #onStarted: (() => void)[] = [];
 
   constructor(deps: AnytypeAppDeps) {
     this.#deps = deps;
@@ -37,6 +38,11 @@ export class AnytypeApp {
   /** The process of the Anytype Reload started; null when it adopted one, or started none. */
   get startedPid(): number | null {
     return this.#started?.pid ?? null;
+  }
+
+  /** Called whenever Reload starts Anytype, so the run-state records it (shell/lifecycle.ts). */
+  onStarted(listener: () => void): void {
+    this.#onStarted.push(listener);
   }
 
   /** Start Anytype, or adopt the one already running. Never throws. */
@@ -63,7 +69,9 @@ export class AnytypeApp {
       }
       this.#started = apps.launch(executable);
       logger.info(`started the Anytype desktop app (process ${String(this.#started.pid)})`);
-      return (this.#state = "started");
+      this.#state = "started";
+      for (const listener of this.#onStarted) listener();
+      return this.#state;
     } catch (error) {
       logger.error(`the Anytype desktop app could not be started: ${String(error)}`);
       return (this.#state = "failed");

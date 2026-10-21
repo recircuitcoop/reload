@@ -202,11 +202,10 @@ function lifecycle(lock = true) {
     windowOpen: () => state.open,
     running: {
       supervisors,
-      anytype: { state: null, startedPid: null },
-      log: null,
+      anytype: { state: null, startedPid: null, onStarted: () => undefined },
       notices: "notices.json",
     },
-    start: () => (state.startFails ? Promise.reject(new Error("no")) : Promise.resolve()),
+    start: () => (state.startFails ? Promise.reject(new Error("no")) : Promise.resolve(null)),
     logger,
   });
   return { app, signals, quitFlow, requests, state, supervisors, logger };
@@ -262,6 +261,7 @@ describe("the shell's life", () => {
       },
       isReady: () => true,
       quit: () => undefined,
+      getPath: () => scratch,
     });
     const logger = new RecordingLogger();
     runShell({
@@ -272,8 +272,7 @@ describe("the shell's life", () => {
       windowOpen: () => false,
       running: {
         supervisors: new Map(),
-        anytype: { state: null, startedPid: null },
-        log: null,
+        anytype: { state: null, startedPid: null, onStarted: () => undefined },
         notices: "",
       },
       start: () => Promise.reject(new Error("no port")),

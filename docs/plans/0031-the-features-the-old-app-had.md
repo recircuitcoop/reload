@@ -73,7 +73,9 @@ test's id; nothing is marked without a test.
 4. **WI-0031-04 — C,** `restartable: false` in the declaration, honoured by the supervisor.
 5. **WI-0031-05 — E,** `reload --status`, `--quit`, `--log` on the single running instance.
    **DONE 2026-10-21:** `shell/command-line.ts`; the answer returns as a 0600 file in userData.
-   `reload --quit --force` (`shell/run-state.ts`) stops each recorded process itself.
+   `reload --quit --force` (`shell/run-state.ts`) stops each recorded process itself. As the old
+   status did, `--status` answers from the run-state and notice files when nothing runs or Reload
+   does not answer; `--log` asks nobody; plain `--quit` names what stopped and what still runs.
 6. **WI-0031-06 — F,** the spread first check.
 7. **WI-0031-07 — G,** backoff for an unreachable Anytype at start.
 8. **WI-0031-08 — H,** the home guard for child processes.

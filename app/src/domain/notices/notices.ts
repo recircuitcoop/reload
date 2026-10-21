@@ -50,6 +50,8 @@ export type NoticeKind =
   | "flows-file-refused"
   /** A flows file broken while Reload runs: the flows still run; kept, never saved over. */
   | "flows-file-damaged"
+  /** A file `reload --status` or `--quit` reads could not be written (plan 0031 group E). */
+  | "command-line-unwritable"
   /** A run started (plan 0022 §I, ux-writing "Notifications"); stops after five good runs. */
   | "run-started"
   /** A run finished: what the flow did. */
@@ -76,6 +78,7 @@ export const NOTICE_KINDS: readonly NoticeKind[] = [
   "old-data-left",
   "flows-file-refused",
   "flows-file-damaged",
+  "command-line-unwritable",
   "run-started",
   "run-done",
   "run-failed",
@@ -250,6 +253,11 @@ function composeWords(notice: Notice): Message {
       return { title: "Reload didn't load your flows", body: sentences(detail) };
     case "flows-file-damaged":
       return { title: "Your flows file is damaged", body: sentences(detail) };
+    case "command-line-unwritable":
+      return {
+        title: `Reload could not write its ${subject}`,
+        body: sentences(detail, "Commands typed in a terminal may not work until it can."),
+      };
     case "run-started":
     case "run-done":
     case "run-failed":

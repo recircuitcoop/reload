@@ -57,9 +57,13 @@ describe("the Anytype desktop app", () => {
   it("is started when it is not running, and quit on Quit because Reload started it", async () => {
     const { fake, journal } = apps(null);
     const { anytype, logger } = subject(fake);
+    // The run-state records it the moment it starts (shell/lifecycle.ts).
+    const recorded: (number | null)[] = [];
+    anytype.onStarted(() => recorded.push(anytype.startedPid));
     expect(anytype.state).toBeNull();
     expect(await anytype.start()).toBe("started");
     expect(anytype.startedPid).toBe(4242);
+    expect(recorded).toEqual([4242]);
     await anytype.quitIfOurs();
     expect(anytype.startedPid).toBeNull();
     await anytype.quitIfOurs();
@@ -70,8 +74,11 @@ describe("the Anytype desktop app", () => {
   it("is adopted when it is already running, and never quit", async () => {
     const { fake, journal } = apps({ pid: 777 });
     const { anytype, logger } = subject(fake);
+    const recorded: (number | null)[] = [];
+    anytype.onStarted(() => recorded.push(anytype.startedPid));
     expect(await anytype.start()).toBe("adopted");
     expect(anytype.startedPid).toBeNull();
+    expect(recorded).toEqual([]);
     await anytype.quitIfOurs();
     expect(journal).toEqual([`find ${ANYTYPE}`]);
     expect(logger.lines.join("\n")).toContain(

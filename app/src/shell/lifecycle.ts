@@ -6,9 +6,16 @@
 import type { App } from "electron";
 import type { QuitFlow } from "../application/quit";
 import type { Logger } from "../ports/logger";
+import type { Notifier } from "../ports/notifier";
 import fs from "node:fs";
 import * as path from "node:path";
-import { answerQuestion, type Running } from "./command-line";
+import {
+  answerQuestion,
+  removeStaleReplies,
+  unwritable,
+  type Running,
+  type Unwritable,
+} from "./command-line";
 import { RUN_STATE_FILENAME, writeRunState } from "./run-state";
 
 export interface LifecycleDeps {
@@ -24,7 +31,8 @@ export interface LifecycleDeps {
   readonly windowOpen: () => boolean;
   /** What runs, for `reload --status`; its children are supervised once the start got that far. */
   readonly running: Running;
-  readonly start: () => Promise<void>;
+  /** The start; it hands back the notices (null when a quit came before it got that far). */
+  readonly start: () => Promise<Notifier | null>;
   readonly logger: Logger;
 }
 
@@ -35,10 +43,14 @@ export function runShell(deps: LifecycleDeps): void {
     app.exit(0);
     return;
   }
+  removeStaleReplies(app.getPath("userData"), Date.now());
+  let notices: Notifier | null = null;
+  const replies = unwritable("answer to a terminal command", () => notices, logger);
   app.on("second-instance", (_event, _argv, _directory, data) => {
     // `reload --quit` takes the Quit menu's path: undeployed edits are put to the person.
     const quit = () => quitFlow.request({ ask: true });
-    if (!answerQuestion(data, { running: deps.running, app, quit, pid: process.pid, logger })) {
+    const answer = { running: deps.running, app, quit, pid: process.pid, replies, logger };
+    if (!answerQuestion(data, answer)) {
       bringForward();
     }
   });
@@ -66,8 +78,12 @@ export function runShell(deps: LifecycleDeps): void {
     });
   }
   deps.start().then(
-    () => {
-      recordRunState(deps);
+    (started) => {
+      notices = started;
+      recordRunState(
+        deps,
+        unwritable("run-state file", () => notices, logger),
+      );
     },
     (error: unknown) => {
       logger.error(`the shell could not start: ${String(error)}`);
@@ -78,16 +94,15 @@ export function runShell(deps: LifecycleDeps): void {
 
 /**
  * The run-state file `reload --quit --force` reads (shell/run-state.ts): written once the children
- * are supervised and again whenever one changes, and removed when the shell quits.
+ * are supervised, again whenever one changes or Reload starts Anytype, and removed when the shell
+ * quits.
  */
-function recordRunState(deps: LifecycleDeps): void {
-  const { app, running, logger } = deps;
+function recordRunState(deps: LifecycleDeps, trouble: Unwritable): void {
+  const { app, running } = deps;
   const file = path.join(app.getPath("userData"), RUN_STATE_FILENAME);
   let writing = Promise.resolve();
   let quit = false;
   const record = (): void => {
-    // shortcut: an Anytype started after the children's last change is recorded only at their
-    // next one; record on AnytypeApp's own start if that is ever missed.
     const processes = [{ id: "shell", pid: process.pid }];
     for (const supervisor of running.supervisors.values()) {
       const { child, pid } = supervisor.status();
@@ -101,14 +116,14 @@ function recordRunState(deps: LifecycleDeps): void {
       .then(() => {
         // A write that was under way when the shell quit leaves nothing behind.
         if (quit) fs.rmSync(file, { force: true });
+        trouble.worked();
       })
-      .catch((error: unknown) => {
-        logger.warn(`the run-state file could not be written: ${String(error)}`);
-      });
+      .catch(trouble.failed);
   };
   for (const supervisor of running.supervisors.values()) {
     supervisor.onStatus(record);
   }
+  running.anytype.onStarted(record);
   record();
   app.on("quit", () => {
     quit = true;

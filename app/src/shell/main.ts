@@ -91,7 +91,7 @@ import {
 import type { ForkSpec } from "../ports/process-launcher";
 import type * as Contract from "../ui/contract";
 import packageJson from "../../package.json";
-import { anytypeAppPath, wireDesktop } from "./desktop";
+import { anytypeAppPath, type DesktopWired, wireDesktop } from "./desktop";
 import { DeliveredNotices, e2eHooksOn, exposeE2eHooks } from "./e2e-hooks";
 import { noticeHandlers, wireRunNotices } from "./run-notices";
 import { IPC } from "./ipc";
@@ -119,7 +119,8 @@ const userData = process.env["RELOAD_USER_DATA"];
 if (userData !== undefined && userData !== "") {
   app.setPath("userData", userData);
 }
-runCommandLine(app, process.argv); // --status, --quit, --log: ask the running Reload, then exit
+const logFilePath = logPath({ platform: process.platform, home: os.homedir(), env: process.env });
+runCommandLine(app, process.argv, { log: logFilePath, notices: NOTICES_FILENAME });
 // The e2e gate's hooks (never set in an ordinary run, and never on in an installed build).
 const e2eHooks = e2eHooksOn({ packaged: app.isPackaged, env: process.env });
 // The first start over a 0.3.0 installation (plan 0028 step 1), before the single-instance lock;
@@ -160,9 +161,7 @@ try {
   // A misspelled verbosity is said in the log, written at the default (logs.py:438-442).
   levelProblem = (error as Error).message;
 }
-const logFile = RotatingLogFile.open(
-  logPath({ platform: process.platform, home: os.homedir(), env: process.env }),
-);
+const logFile = RotatingLogFile.open(logFilePath);
 const secretRegistry = new SecretRegistry();
 const oneLog = new OneLog({
   registry: secretRegistry,
@@ -246,12 +245,12 @@ const quitFlow = new QuitFlow({
   },
   logger,
 });
-async function start(): Promise<void> {
+async function start(): Promise<DesktopWired["notices"] | null> {
   await app.whenReady();
   // One port for the whole session: every runtime generation is given this one (§2.2).
   const port = await pickFreeLoopbackPort();
   if (!quitFlow.idle) {
-    return;
+    return null;
   }
   editorUrl = `http://127.0.0.1:${String(port)}/red/`;
   logger.info(`the runtime's port for this session is ${String(port)}`);
@@ -585,6 +584,7 @@ async function start(): Promise<void> {
   for (const supervisor of supervisors.values()) {
     supervisor.start();
   }
+  return notices;
 }
 
 // ── single instance; a quit, by the window or a signal, goes through the one QuitFlow ─────
@@ -595,7 +595,7 @@ if (firstStart.problem === null) {
     quitFlow,
     bringForward,
     windowOpen: () => appWindow.current !== null,
-    running: { supervisors, anytype: anytypeApp, log: logFile, notices: NOTICES_FILENAME },
+    running: { supervisors, anytype: anytypeApp, notices: NOTICES_FILENAME },
     start,
     logger,
   });

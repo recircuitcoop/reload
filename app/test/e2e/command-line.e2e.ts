@@ -1,6 +1,7 @@
-// Reload from a terminal (plan 0031 group E): a second process started with `--status`, `--log`
-// or `--quit` asks the running instance over the single-instance channel, prints its answer and
-// exits; with none running it says so and exits 1. `--quit --force` asks nobody.
+// Reload from a terminal (plan 0031 group E): a second process started with `--status` or
+// `--quit` asks the running instance over the single-instance channel, prints its answer and
+// exits; with none running `--status` answers from the files and `--quit` says so and exits 1.
+// `--log` and `--quit --force` ask nobody.
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import * as path from "node:path";
@@ -40,10 +41,14 @@ test("reload --status and --quit act on the running instance from a second proce
   const { scratch, userData, env } = scratchDirectories();
   const apps: ElectronApplication[] = [];
   try {
-    expect(await reload("--status", env)).toEqual({
-      code: 1,
-      stdout: "Reload is not running.\n",
-    });
+    const nothing = "Nothing is running.\nNothing was refused, and nothing is held back.\n";
+    expect(await reload("--status", env)).toEqual({ code: 0, stdout: nothing });
+    // The log is named with nothing running, before anything was written to it.
+    const unwritten = await reload("--log", env);
+    expect(unwritten.code).toBe(0);
+    expect(unwritten.stdout).toMatch(/^Log file: .+reload\.log\n {2}nothing written yet: /);
+    const logFile = /^Log file: (.+)$/m.exec(unwritten.stdout)?.[1] ?? "";
+    expect(logFile.startsWith(scratch)).toBe(true);
 
     const { app, window, output } = await launchApp(env);
     apps.push(app);
@@ -68,19 +73,27 @@ test("reload --status and --quit act on the running instance from a second proce
     const log = await reload("--log", env);
     expect(log.code).toBe(0);
     expect(log.stdout).toMatch(/^Log file: .+\n {2}\d+ bytes; the last lines:\n/);
+    expect(log.stdout.startsWith(`Log file: ${logFile}\n`)).toBe(true);
     expect(log.stdout).toContain("answering `reload --status` from a second launch");
 
+    // Plain --quit names what it watched stop, so it needs the run-state to have recorded it.
+    const runState = path.join(userData, "run-state.json");
+    await expect
+      .poll(() => (fs.existsSync(runState) ? fs.readFileSync(runState, "utf8") : ""))
+      .toContain(`"pid":${String(runtime.pid)}`);
     const exited = exitOf(app);
     const quit = await reload("--quit", env);
     expect(quit.code).toBe(0);
     expect(quit.stdout.endsWith("Reload is off.\n")).toBe(true);
     expect(quit.stdout).toContain(`  runtime stopped (process ${String(runtime.pid)})`);
+    expect(quit.stdout).toContain(`  shell stopped (process ${String(shellPid)})`);
     expect(await exited).toBe(0);
     await expect.poll(() => processesNaming(userData), { timeout: 10_000 }).toEqual([]);
     // Started from a terminal, it said there what it came up without, and still exited 0.
     expect(output.join("")).toContain("Reload starts without it");
 
     expect(await reload("--quit", env)).toEqual({ code: 1, stdout: "Reload is not running.\n" });
+    expect(await reload("--status", env)).toEqual({ code: 0, stdout: nothing });
   } finally {
     await cleanUp(apps, scratch);
   }
