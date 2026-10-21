@@ -169,11 +169,30 @@ const THROWN_LINE =
     .split("\n")
     .findIndex((line) => line.includes('emit("nope", 1, id)')) + 1;
 
+/** The shipped Anytype package's source, and the line its payload check throws from. */
+const OPERATIONS = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+  "..",
+  "packages",
+  "reload_anytype",
+  "src",
+  "operations.ts",
+);
+const PAYLOAD_THROWN_LINE =
+  fs
+    .readFileSync(OPERATIONS, "utf8")
+    .split("\n")
+    .findIndex((line) => line.includes("the payload has no object id at")) + 1;
+
 /**
  * A flow of two injects into the kitchen node: one input throws in the node's own code (the SDK
- * names its file and line), one fails with a message full of fake credentials.
+ * names its file and line), one fails with a message full of fake credentials. A third inject
+ * feeds the shipped, bundled Anytype package an input that names no object, which it refuses by
+ * throwing before any call to Anytype; and the shipped folder package watches `inbox`.
  */
-const FAILING_FLOW = [
+const failingFlow = (inbox: string): object[] => [
   { id: "telemetry-flow", type: "tab", label: "Telemetry" },
   ...[
     { do: "undeclared" },
@@ -204,6 +223,40 @@ const FAILING_FLOW = [
     name: "My private step name",
     x: 300,
     y: 60,
+    wires: [[]],
+  },
+  {
+    id: "go-anytype",
+    type: "inject",
+    z: "telemetry-flow",
+    props: [{ p: "payload" }],
+    payload: JSON.stringify({ nothing: "here" }),
+    payloadType: "json",
+    repeat: "",
+    once: true,
+    onceDelay: 0.5,
+    x: 100,
+    y: 200,
+    wires: [["anytype"]],
+  },
+  {
+    id: "anytype",
+    type: "reload-reload_anytype-read-object",
+    z: "telemetry-flow",
+    space_id: "fake-space",
+    // Port 9 (discard): never an Anytype, though the missing object fails it before any call.
+    api_base_url: "http://127.0.0.1:9",
+    x: 300,
+    y: 200,
+    wires: [[]],
+  },
+  {
+    id: "watch",
+    type: "reload-reload_folder-watch",
+    z: "telemetry-flow",
+    folder: inbox,
+    x: 100,
+    y: 260,
     wires: [[]],
   },
 ];
@@ -301,15 +354,51 @@ test("telemetry asks first, sends nothing before a yes, sends only redacted repo
     }
 
     // ── a shipped package's node fails: every use and every failure is told (plan 0029) ─────
+    const inbox = path.join(scratch, "inbox");
+    fs.mkdirSync(inbox);
     const port = Number((await waitForRunning(window, "runtime")).port);
-    expect(await deployFlows(port, FAILING_FLOW)).toBe(204);
+    expect(await deployFlows(port, failingFlow(inbox))).toBe(204);
+    const named = (name: string) => usageEvents(received).filter((event) => event.name === name);
+    await expect.poll(() => named("package_error").length, { timeout: 30_000 }).toBe(3);
+    // The folder source: every run it starts is one use of its package.
     await expect
-      .poll(() => usageEvents(received).filter((event) => event.name === "package_error").length, {
+      .poll(() => second.output.join(""), { timeout: 20_000 })
+      .toMatch(/\[reload-reload_folder-watch watch\] ready/);
+    await quiet();
+    fs.writeFileSync(path.join(inbox, "first.txt"), "one");
+    await expect
+      .poll(() => named("package_used").filter((e) => e.data["package"] === "reload_folder"), {
         timeout: 30_000,
       })
-      .toBe(2);
+      .toEqual([
+        expect.objectContaining({
+          data: expect.objectContaining({
+            package: "reload_folder",
+            source: "shipped",
+            node_kind: "source",
+            node_id: "watch",
+            ok: true,
+          }),
+        }),
+      ]);
     const events = usageEvents(received);
-    const [thrown, failed] = events.filter((event) => event.name === "package_error");
+    const errors = events.filter((event) => event.name === "package_error");
+    const [thrown, failed] = errors.filter((event) => event.data["package"] === "sdkts");
+    // The shipped, bundled Anytype package: its file and line are its source's, not the
+    // bundle's, through the bundle's source map.
+    expect(errors.find((event) => event.data["package"] === "reload_anytype")?.data).toMatchObject({
+      source: "shipped",
+      signed: true,
+      environment: "node",
+      node_kind: "node",
+      node_id: "read-object",
+      error_type: "InputProblem",
+      file: "src/operations.ts",
+      line: PAYLOAD_THROWN_LINE,
+    });
+    expect(PAYLOAD_THROWN_LINE).toBeGreaterThan(0);
+    // Never an error's message: no event has the field.
+    expect(errors.every((event) => !("error" in event.data))).toBe(true);
     // The source line that threw, in the package's own file, relative to its folder.
     expect(thrown?.data).toMatchObject({
       package: "sdkts",
@@ -326,16 +415,23 @@ test("telemetry asks first, sends nothing before a yes, sends only redacted repo
     expect(THROWN_LINE).toBeGreaterThan(0);
     // A message full of credentials: scrubbed, or withheld; never sent.
     expect(failed?.data).toMatchObject({ package: "sdkts", error_type: null, file: null });
-    expect(events.filter((event) => event.name === "package_used").length).toBe(2);
-    expect(events.find((event) => event.name === "flow_deployed")?.data).toMatchObject({
-      flows: 1,
-      nodes: 3,
-      nodes_per_flow: JSON.stringify([3]),
-      nodes_per_package: JSON.stringify([
-        { package: "node-red", nodes: 2 },
-        { package: "sdkts", nodes: 1 },
-      ]),
-    });
+    expect(
+      events.filter((e) => e.name === "package_used" && e.data["node_kind"] === "node").length,
+    ).toBe(3);
+    // Exact counts, one event per flow and one per package: never a list Umami would cut.
+    expect(events.filter((event) => event.name === "flow_deployed").map((e) => e.data)).toEqual([
+      expect.objectContaining({ flows: 1, total_nodes: 6, nodes: 6 }),
+    ]);
+    expect(
+      events
+        .filter((event) => event.name === "package_deployed")
+        .map((event) => [event.data["package"], event.data["nodes"]]),
+    ).toEqual([
+      ["node-red", 3],
+      ["sdkts", 1],
+      ["reload_anytype", 1],
+      ["reload_folder", 1],
+    ]);
     expect(
       events.filter((event) => event.name === "setup_step").map((event) => event.data["step"]),
     ).toEqual(["launched", "first_flow_deployed"]);

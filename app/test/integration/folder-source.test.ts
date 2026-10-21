@@ -154,7 +154,7 @@ describe("packages/reload_folder: the declaration and how it ships", () => {
       [
         "watch",
         "source",
-        ["{node}", "{package}/dist/folder.cjs"],
+        ["{node}", "--enable-source-maps", "{package}/dist/folder.cjs"],
         [{ port: "created", event: "reload_folder.file.created.v1" }],
       ],
     ]);
@@ -168,7 +168,7 @@ describe("packages/reload_folder: the declaration and how it ships", () => {
       }
     ).scripts;
     expect(scripts["build:packages"]).toContain(
-      "esbuild ../packages/reload_folder/src/main.ts --bundle --platform=node --target=node22 --format=cjs --outfile=../packages/reload_folder/dist/folder.cjs",
+      "esbuild ../packages/reload_folder/src/main.ts --bundle --platform=node --target=node22 --format=cjs --sourcemap --sources-content=false --outfile=../packages/reload_folder/dist/folder.cjs",
     );
     expect(scripts["types"]).toContain("tsc -p ../packages/reload_folder");
   });

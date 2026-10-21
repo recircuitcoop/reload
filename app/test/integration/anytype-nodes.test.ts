@@ -280,7 +280,11 @@ describe("packages/reload_anytype", () => {
       ["search", "node", [{ port: "results", event: "reload_anytype.search.results.v1" }]],
     ]);
     for (const type of declaredTypes) {
-      expect(type.command).toEqual(["{node}", "{package}/dist/anytype.cjs"]);
+      expect(type.command).toEqual([
+        "{node}",
+        "--enable-source-maps",
+        "{package}/dist/anytype.cjs",
+      ]);
       // The key is neither config nor a credential (§4.2): no property could carry it.
       const properties = Object.keys(
         (type.config as { properties: Record<string, unknown> }).properties,

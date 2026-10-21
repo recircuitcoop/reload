@@ -423,8 +423,11 @@ function decodeFileUrl(location: string): string {
   }
 }
 
-/** Fail `inputId` with what a handler threw: its message, and where it was thrown. */
-function fail(inputId: string, caught: unknown): void {
+/**
+ * Fail `inputId` with what was thrown: its message, and where it was thrown (`thrownAt`). The SDK
+ * does this for a handler that throws; a node that catches an error itself calls it too.
+ */
+export function fail(inputId: string, caught: unknown): void {
   const message = (caught instanceof Error ? caught.message : String(caught)).slice(0, 2000);
   send({ t: "error", in: inputId, message, ...thrownAt(caught) });
 }

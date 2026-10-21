@@ -22,6 +22,7 @@ import {
   done,
   emit,
   error,
+  fail,
   log,
   redact,
   run,
@@ -75,7 +76,8 @@ async function main(): Promise<void> {
           log(message, "warn");
         }
         status(message.slice(0, 60), "red", "ring");
-        error(id, message);
+        // With where it was thrown, for the app's usage signals (plan 0029).
+        fail(id, caught);
       }
     },
   });

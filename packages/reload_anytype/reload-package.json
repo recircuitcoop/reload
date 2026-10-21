@@ -10,7 +10,7 @@
       "label": "Create Anytype object",
       "description": "Adds an object to Anytype for each item that reaches this step, in the space you choose: a page, or any other type the space has.",
       "icon": "font-awesome/fa-plus-square",
-      "command": ["{node}", "{package}/dist/anytype.cjs"],
+      "command": ["{node}", "--enable-source-maps", "{package}/dist/anytype.cjs"],
       "config": {
         "type": "object",
         "required": ["space_id"],
@@ -59,7 +59,7 @@
       "label": "Update Anytype object",
       "description": "Changes properties of an object in Anytype, each from what reaches this step.",
       "icon": "font-awesome/fa-pencil-square-o",
-      "command": ["{node}", "{package}/dist/anytype.cjs"],
+      "command": ["{node}", "--enable-source-maps", "{package}/dist/anytype.cjs"],
       "config": {
         "type": "object",
         "required": ["space_id"],
@@ -110,7 +110,7 @@
       "label": "Read Anytype object",
       "description": "Reads an object from Anytype, with its properties, and passes it on.",
       "icon": "font-awesome/fa-file-text-o",
-      "command": ["{node}", "{package}/dist/anytype.cjs"],
+      "command": ["{node}", "--enable-source-maps", "{package}/dist/anytype.cjs"],
       "config": {
         "type": "object",
         "required": ["space_id"],
@@ -145,7 +145,7 @@
       "label": "Read Anytype space",
       "description": "Lists the objects of an Anytype space, only those of one type if you choose one.",
       "icon": "font-awesome/fa-th-list",
-      "command": ["{node}", "{package}/dist/anytype.cjs"],
+      "command": ["{node}", "--enable-source-maps", "{package}/dist/anytype.cjs"],
       "config": {
         "type": "object",
         "required": ["space_id"],
@@ -186,7 +186,7 @@
       "label": "Search Anytype",
       "description": "Searches Anytype, in one space or in all of them, for the words set here or the words that reach this step.",
       "icon": "font-awesome/fa-search",
-      "command": ["{node}", "{package}/dist/anytype.cjs"],
+      "command": ["{node}", "--enable-source-maps", "{package}/dist/anytype.cjs"],
       "config": {
         "type": "object",
         "properties": {
