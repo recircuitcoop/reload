@@ -37,7 +37,7 @@ addopts = "-q --cov=reload_node --cov-report=term-missing"
 branch = true
 
 [tool.coverage.report]
-fail_under = 90
+fail_under = 80
 skip_covered = true
 
 [tool.ruff]

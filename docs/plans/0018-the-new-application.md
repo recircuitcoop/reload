@@ -481,12 +481,40 @@ Python host stages are deleted and the SDK stages remain.
 | lint | `eslint .` + `prettier --check .` | any finding |
 | architecture | `depcruise app/src` | any layer-rule violation (§2.3), a file over 600 lines, or `process.env` outside a composition root |
 | licences | `license-checker --onlyAllow` (OSI list) over production dependencies | a non-OSI licence |
-| unit + integration | `vitest run --project unit --project integration --coverage` | a failure. Thresholds: `domain/**` and `application/**` 95% lines, 90% branches; everything else 85 / 80; global 90 / 85. |
+| unit + integration | `vitest run --project unit --project integration --coverage` | a failure, or coverage under the thresholds of §6.1. |
 | conformance | `vitest run --project conformance` | any of spec C1–C15 fails for the runtime codec against: the Python SDK reference node, the TS SDK reference node, and a raw executable node that uses no SDK. Frame shapes are validated by ajv against the spec's §4.5 schemas, extracted to `docs/specs/node-protocol-v2.schema.json`. |
 | e2e | `playwright test` (dev build, hidden windows, temp userData) | a failure. Machine-only specs are tagged `@machine` and excluded. |
-| SDK (Python) | in `sdk/python`: `uv sync --frozen`, `ruff check`, `ruff format --check`, `mypy --strict`, `pytest --cov --cov-fail-under=90` | any |
+| SDK (Python) | in `sdk/python`: `uv sync --frozen`, `ruff check`, `ruff format --check`, `mypy --strict`, `pytest --cov --cov-fail-under=80` | any |
 | key-leak scan | `tools/leakscan.ts` | any canary value is found, in bytes, in the e2e userData dirs, logs, SQLite journal, `flows.json`, **plaintext** in `flows_cred.json`, snapshots, the telemetry queue, crash dumps, the working tree or `git log -p` (test fixtures that define canaries are allow-listed by path). Canaries are the Anytype key, the proxy token and a node credential. The real-key scan (the spike's `tools/key_leak_scan.py`, ported) runs in machine proofs, never in the gate, so the gate stays hermetic. |
 | parity | `tools/parity/check.ts` (normal mode; `--final` from WI-27 on) | §5.3 |
+
+### 6.1 Coverage thresholds
+
+Coverage is held to the common targets overall and strictly only where a bug costs the person
+their data, their secrets or their trust. This replaced the earlier blanket limits (global 90 / 85,
+`domain/**` and `application/**` 95 / 90, everything else 85 / 80), which pushed tests into
+trivial code and let one well-tested file hide a weak critical one.
+
+- **Overall:** 80% lines, 70% branches (`app/vitest.config.ts`); the Python SDK `fail_under = 80`.
+- **Critical set, per file:** 95% lines, 90% branches, each file on its own (`perFile: true`):
+  - *secrets and redaction* (a miss leaks a secret into a log, report or telemetry):
+    `domain/redaction/**`, `application/secrets.ts`, `domain/telemetry/**`,
+    `application/telemetry.ts`;
+  - *package and update trust* (a miss installs code whose signature or digest was not checked):
+    `domain/signature/**`, `adapters/signature/**`, `domain/packages/**`,
+    `application/install-package.ts`, `application/package-environment.ts`,
+    `application/remove-package.ts`, `domain/update/**`, `domain/updates/**`, `adapters/update/**`;
+  - *data integrity* (a miss loses or corrupts the journal, runs or migrated data):
+    `domain/journal/**`, `adapters/sqlite/**`, `domain/migration/**`, `adapters/fs/legacy-move.ts`,
+    `application/journal-replay.ts`, `application/runs.ts`;
+  - *trust boundaries* (a miss lets an MCP call, channel message or form reach code it should not,
+    or deploys over the person's flow): `application/mcp-dispatch.ts`, `application/mcp-endpoint.ts`,
+    `domain/channel/**`, `domain/forms/**`, `application/deploy-guard.ts`;
+  - *supervision* (a miss leaves a crashed child dead or restarts it in a loop):
+    `domain/supervision/**`, `application/supervisor.ts`.
+
+A critical limit is never lowered and a critical file is never added to `coverage.exclude`: a file
+under its limit gets tests for its uncovered branches.
 
 ---
 
