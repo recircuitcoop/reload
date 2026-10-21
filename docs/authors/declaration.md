@@ -59,15 +59,15 @@ One of three kinds (`docs/authors/packaging.md` covers building each):
 
 ## Resource limits
 
-Reload watches every process of your types: 1024 MB of memory, 1024 open files and 32 child
-processes, each allowed over for 60 s before Reload stops the process and starts it again; and
-90 % of one core over 2 minutes, which only tells the person (a long job is fine). If your node
-really needs more, say so at the top level of the declaration (spec §2.3.6); any key may be left
-out:
+Reload watches every process of your types: 1024 MB of memory, 90 % of one core over 2 minutes,
+1024 open files and 32 child processes, each allowed over for 60 s before Reload stops the
+process and starts it again (the person may change these defaults for their machine). If a type
+really needs more, say so on the type itself (spec §2.4.2). Any key may be left out, every number
+must be greater than zero, and a key that is not one of these is refused:
 
 ```json
-"reload": { "limits": { "memory_mb": 4096, "open_files": 4096, "children": 64,
-                        "cpu_percent": 200, "cpu_window_s": 300, "grace_s": 120 } }
+"reload": { "limits": { "memory_mb": 4096, "cpu_percent": 150, "cpu_window_s": 300,
+                        "open_files": 4096, "children": 64, "grace_s": 120 } }
 ```
 
 ## Event type names

@@ -73,6 +73,8 @@ import { pickFreeLoopbackPort } from "../adapters/net/free-port";
 import { systemClock } from "../adapters/system/clock";
 import { ElectronUpdaterInstaller } from "../adapters/update/electron-updater-installer";
 import { AnytypeApp } from "../application/anytype-app";
+import { watchManaged } from "../application/managed-watch";
+import { resourceProbeFor } from "../adapters/process/resource-probe";
 import { OneLog } from "../application/one-log";
 import { linkPeers } from "../application/peer-link";
 import { credentialSecretOf, openSecretStore } from "../application/secrets";
@@ -99,7 +101,7 @@ import { wireMigration } from "./migration";
 import { SHIPPED_MANIFEST } from "../application/shipped-manifest";
 import { catalogueSource, wirePackages } from "./packages";
 import { quitQuestion, wireQuit } from "./quit-question";
-import { childEnvironment, LOG_CANARY_VARIABLE } from "./child-environment";
+import { forkSpecFor, LOG_CANARY_VARIABLE } from "./child-environment";
 import { wireRuntimeCalls } from "./runtime-calls";
 import { wireServiceCalls } from "./service-calls";
 import { wireTelemetry } from "./telemetry";
@@ -255,7 +257,8 @@ async function start(): Promise<DesktopWired["notices"] | null> {
   editorUrl = `http://127.0.0.1:${String(port)}/red/`;
   logger.info(`the runtime's port for this session is ${String(port)}`);
   // Anytype first, as the old helper did (launcher.py:894), so its API is up sooner.
-  void anytypeApp.start();
+  const anytypeStarted = anytypeApp.start();
+
   // ── the secret store (WI-0018-06): safeStorage is usable only once Electron is ready ────
   const userDir = app.getPath("userData");
   const secrets = openSecretStore({
@@ -346,17 +349,9 @@ async function start(): Promise<DesktopWired["notices"] | null> {
       oneLog.ingest(childOf.get(spec) ?? spec.serviceName, pid, stream, line);
     },
   );
+  const given = { home: os.homedir(), env: process.env, runtimesDir: RUNTIMES_DIR, e2eHooks };
   for (const child of CHILD_NAMES) {
-    const fork: ForkSpec = {
-      modulePath: path.join(__dirname, "..", child, "main.cjs"),
-      serviceName: `Reload ${child}`,
-      env: childEnvironment(child, {
-        home: os.homedir(),
-        env: process.env,
-        runtimesDir: RUNTIMES_DIR,
-        e2eHooks,
-      }),
-    };
+    const fork = forkSpecFor(child, __dirname, given);
     childOf.set(fork, child);
     const supervisor = new Supervisor({
       child,
@@ -376,6 +371,16 @@ async function start(): Promise<DesktopWired["notices"] | null> {
     supervisors.set(child, supervisor);
   }
   wireChildCalls(ipcMain, supervisors, toPage);
+  watchManaged({
+    probe: resourceProbeFor(process.platform),
+    settings: new JsonSettingsStore(path.join(userDir, "shell-settings.json")),
+    clock: systemClock,
+    logger,
+    notifier: notices,
+    signal: process.kill.bind(process),
+    children: supervisors.values(),
+    anytype: anytypeStarted.then(() => anytypeApp),
+  });
   // ── Anytype (WI-0018-18): the services process answers; the page never sees the key ─────
   const services = supervisors.get("services");
   const runtime = supervisors.get("runtime");

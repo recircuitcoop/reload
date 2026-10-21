@@ -197,6 +197,20 @@ export class Supervisor {
   }
 
   /**
+   * The resource watchdog found it over a limit (plan 0031): end it politely (SIGTERM). Its exit
+   * is then a crash like any other, so the breaker counts it and decides whether it comes back.
+   * False, and nothing done, when the child is not running.
+   */
+  stopOverLimit(): boolean {
+    if (this.#state !== "running" || this.#handle === null) {
+      return false;
+    }
+    this.#deps.logger.warn(`stopping the ${this.#deps.child}: it is over its resource limits`);
+    this.#handle.kill();
+    return true;
+  }
+
+  /**
    * Call the child (spec 10.2–10.3). Answers at once with a typed error when the child is not
    * running; otherwise the child's reply, `timeout`, or `stopped` if it exits first.
    */

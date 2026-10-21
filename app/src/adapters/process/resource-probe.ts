@@ -14,10 +14,7 @@ import { execFile } from "node:child_process";
 import { readdir } from "node:fs/promises";
 import { promisify } from "node:util";
 
-import type { ResourceSample } from "../../domain/supervision/resources";
-
-/** One sample of `pid`; null when this platform is not measured or the process is gone. */
-export type ResourceProbe = (pid: number) => Promise<ResourceSample | null>;
+import type { ResourceProbe } from "../../ports/resource-watch";
 
 /** Runs a command and answers its stdout; rejects when it cannot run or fails. */
 export type CommandRunner = (file: string, args: readonly string[]) => Promise<string>;
@@ -31,7 +28,7 @@ const countFds = async (pid: number): Promise<number> =>
   (await readdir(`/proc/${String(pid)}/fd`)).length;
 
 /** `ps` CPU time, `[[dd-]hh:]mm:ss[.cc]` (Linux and macOS spell it differently), in seconds. */
-export function cpuSecondsOf(time: string): number | null {
+function cpuSecondsOf(time: string): number | null {
   const match = /^(?:(\d+)-)?([\d:.]+)$/.exec(time);
   if (match === null) {
     return null;

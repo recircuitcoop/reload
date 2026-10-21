@@ -140,23 +140,6 @@ never by number.
    (the sha256 of the sorted `sha256sum` lines of the files) against the one recorded for the
    same package and version, refusing a different one (plan 0013). A path install has no
    signature and is compared by content hash in the same way.
-6. **Resource limits** (plan 0031). The runtime watches every node process against limits on
-   memory, CPU, open files and child processes, defaulting to 1024 MB of resident memory, 90 %
-   of one core over 120 s, 1024 open files and 32 child processes, with 60 s of grace. A
-   package MAY set its own, for every process of its types, in a top-level `reload` object:
-
-   ```json
-   "reload": { "limits": { "memory_mb": 4096, "open_files": 4096, "children": 64,
-                           "cpu_percent": 200, "cpu_window_s": 300, "grace_s": 120 } }
-   ```
-
-   Every key is optional, and one left out keeps its default; an unknown key is refused. A
-   value over its limit for longer than `grace_s` is acted on: over memory, open files or
-   children, the runtime stops the process (SIGTERM to its process group, then SIGKILL after
-   10 s), restarts it as after an unexpected exit (6.5) and tells the person. Over CPU, it only
-   tells the person: a long job is legal. A platform that cannot measure a number leaves it
-   unjudged (Windows is not measured yet).
-
 ### 2.4 Type fields
 
 | Field | Applies to | Required | Meaning |
@@ -176,6 +159,7 @@ never by number.
 | `answer` | views | MAY | A JSON Schema 2020-12 for what the view sends back: an action view's submission, and the values of a snapshot view's action press. The runtime judges every answer by it, after the bounds of 8.5.7. Without it, an answer must have the default shape of 8.5.7. A dismissal (8.2.2) is never judged by it. |
 | `props` | action views | MAY | A JSON Schema 2020-12 for the input an action view hands its own web component, `content.component.props` (8.1.3). The runtime judges props at present, by the bounds of 8.5.7 and then by this schema (8.1.5). Without it, props are judged by the bounds only. A development build's **Preview a view…** draws the type without a flow: the element `<package>-<id>` (underscores as hyphens), handed the first of this schema's `examples` as its props (`{}` without one); the answer is logged, never sent. |
 | `window` | views | via `config` | Views SHOULD declare a config property `window` with enum `["inline", "popout"]`, so that each instance chooses (8.5). |
+| `reload` | all | MAY | How Reload watches the type's process: `limits` (2.4.2). Every key is optional, and an unknown key is refused. |
 
 Types MUST NOT declare an output port named after a Node-RED internal (`_msgid`, `topic`).
 
@@ -217,6 +201,31 @@ of any type.
    revision that lets a new key stand alone relaxes rule 1 for it, as `advanced` did.
 4. Reload-specific schema keys are never spelled as separate `x-` prefixed keywords; only
    `x-secret` (2.5), which predates this rule, remains.
+
+#### 2.4.2 Resource limits (plan 0031)
+
+The runtime watches every node process, and the runtime and services processes and an Anytype
+app it started itself, against limits on memory, CPU over a window, open files and child
+processes. Over a limit for LONGER than the grace window, a process is stopped: SIGTERM (to its
+process group, for a node process), then SIGKILL after 10 s. A node process then comes back as
+after an unexpected exit (6.5), and the stop counts against the crash-loop limit; an Anytype app
+is not started again. The person is told each time. A platform that cannot measure a number
+leaves it unjudged (Windows is not measured yet).
+
+A type MAY set its own limits in `reload.limits`:
+
+```json
+"reload": { "limits": { "memory_mb": 4096, "cpu_percent": 150, "cpu_window_s": 300,
+                        "open_files": 4096, "children": 64, "grace_s": 120 } }
+```
+
+1. Every number MUST be greater than zero; `open_files` and `children` MUST be whole numbers.
+   There is no upper bound. A key not listed here is refused.
+2. A type without `reload` is watched under the person's defaults: the documented ones (1024 MB,
+   90 % of one core over 120 s, 1024 open files, 32 children, 60 s of grace), each of which the
+   person MAY change under `limits` in Reload's settings file, with the same keys.
+3. A type with `reload` gets what it declares and the documented default for every other limit,
+   except `children`, which, left out, is the person's.
 
 ### 2.5 Config and credentials
 
@@ -270,25 +279,7 @@ of any type.
         }
       }
     },
-    "types": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/type" } },
-    "reload": {
-      "type": "object",
-      "properties": {
-        "limits": {
-          "type": "object",
-          "minProperties": 1,
-          "properties": {
-            "memory_mb": { "type": "integer", "minimum": 1 },
-            "cpu_percent": { "type": "number", "exclusiveMinimum": 0 },
-            "cpu_window_s": { "type": "number", "exclusiveMinimum": 0 },
-            "open_files": { "type": "integer", "minimum": 1 },
-            "children": { "type": "integer", "minimum": 0 },
-            "grace_s": { "type": "number", "minimum": 0 }
-          },
-          "additionalProperties": false
-        }
-      }
-    }
+    "types": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/type" } }
   },
   "$defs": {
     "argv": { "type": "array", "minItems": 1, "items": { "type": "string" } },
@@ -353,6 +344,24 @@ of any type.
         "form": { "type": "object" }
       }
     },
+    "typeReload": {
+      "type": "object",
+      "properties": {
+        "limits": {
+          "type": "object",
+          "properties": {
+            "memory_mb": { "type": "number", "exclusiveMinimum": 0 },
+            "cpu_percent": { "type": "number", "exclusiveMinimum": 0 },
+            "cpu_window_s": { "type": "number", "exclusiveMinimum": 0 },
+            "open_files": { "type": "integer", "minimum": 1 },
+            "children": { "type": "integer", "minimum": 1 },
+            "grace_s": { "type": "number", "exclusiveMinimum": 0 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "type": {
       "type": "object",
       "required": ["id", "kind", "label", "command", "config", "outputs"],
@@ -371,7 +380,8 @@ of any type.
         "event": { "$ref": "#/$defs/eventName" },
         "payload": { "type": "object" },
         "answer": { "type": "object" },
-        "props": { "type": "object" }
+        "props": { "type": "object" },
+        "reload": { "$ref": "#/$defs/typeReload" }
       },
       "allOf": [
         { "if": { "properties": { "kind": { "const": "view" } } }, "then": { "required": ["view"] } },

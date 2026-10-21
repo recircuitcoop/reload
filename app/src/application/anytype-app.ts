@@ -78,6 +78,31 @@ export class AnytypeApp {
     }
   }
 
+  /** The process of the Anytype Reload started; null when it adopted one, or started none. */
+  get startedPid(): number | null {
+    return this.#started?.pid ?? null;
+  }
+
+  /**
+   * The resource watchdog found the Anytype Reload started over a limit (plan 0031,
+   * detection.py D5): quit it, politely and then forced. It is not started again. An adopted
+   * Anytype has no handle here, so it can never be stopped this way.
+   */
+  stopOverLimit(): void {
+    const started = this.#started;
+    if (started === null) {
+      return;
+    }
+    this.#started = null;
+    this.#deps.logger.warn(
+      `stopping the Anytype desktop app Reload started (process ${String(started.pid)}): ` +
+        `it is over its resource limits`,
+    );
+    void started.quit().catch((error: unknown) => {
+      this.#deps.logger.error(`the Anytype desktop app did not stop: ${String(error)}`);
+    });
+  }
+
   /** On Quit: quit Anytype when Reload started it, and leave it running otherwise. */
   async quitIfOurs(): Promise<void> {
     this.#quitting = true;

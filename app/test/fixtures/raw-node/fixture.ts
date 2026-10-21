@@ -15,10 +15,10 @@ import {
   type NodeProcessSettings,
 } from "../../../src/adapters/process/node-process";
 import { processTreeFor, type ProcessTree } from "../../../src/adapters/process/process-tree";
-import type { ResourceProbe } from "../../../src/adapters/process/resource-probe";
 import { systemClock } from "../../../src/adapters/system/clock";
 import type { ResourceLimits } from "../../../src/domain/supervision/resources";
 import type { Clock } from "../../../src/ports/clock";
+import type { ResourceWatchdog } from "../../../src/ports/resource-watch";
 import type { JournalStore } from "../../../src/ports/journal-store";
 import type { Logger, NodeLineLevel, NodeSource, SecretSink } from "../../../src/ports/logger";
 import type {
@@ -234,8 +234,8 @@ export interface StartOptions {
   readonly ports?: NodeProcessSpec["ports"];
   /** The notifier it raises to, to see a notice outlive the process that raised it. */
   readonly notifier?: RecordingNotifier;
-  /** The resource watchdog's probe; absent: the process is not watched. */
-  readonly probe?: ResourceProbe;
+  /** The resource watchdog; absent: the process is not watched. */
+  readonly watchdog?: ResourceWatchdog;
   /** The resource limits it is watched against, as its package would declare them. */
   readonly limits?: ResourceLimits;
 }
@@ -266,7 +266,7 @@ export function startRaw(options: StartOptions = {}): RawNode {
     newId: randomUUID,
     journal,
     settings: { ...DEFAULT_NODE_PROCESS, ...options.settings },
-    ...(options.probe === undefined ? {} : { probe: options.probe }),
+    ...(options.watchdog === undefined ? {} : { watchdog: options.watchdog }),
   });
   const node = launcher.start(spec, host);
   return { node, host, logger, notifier, secrets, spec, journal, crashes };

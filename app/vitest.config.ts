@@ -103,6 +103,10 @@ export default defineConfig({
             // supervision
             "src/domain/supervision/**",
             "src/application/supervisor.ts",
+            "src/application/resource-watch.ts",
+            "src/application/managed-watch.ts",
+            "src/adapters/process/resource-guard.ts",
+            "src/adapters/process/resource-probe.ts",
           ].map((glob) => [glob, { lines: 95, branches: 90, perFile: true }]),
         ),
       },

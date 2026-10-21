@@ -136,19 +136,32 @@ describe("parseDeclaration", () => {
     ]);
   });
 
-  it("accepts resource limits a package raises, and refuses an unknown or a bad one (spec 2.3.6)", () => {
-    const limits = { memory_mb: 4096, open_files: 4096, children: 64, grace_s: 120 };
-    const parsed = parse(declaration({ reload: { limits } }));
-    expect(parsed.ok && parsed.declaration.reload?.limits).toEqual(limits);
-    expect(refused(declaration({ reload: { limits: { memory: 4096 } } }))).toEqual([
-      "reload/limits/memory: is not a declared property",
+  it("accepts resource limits on a type, and refuses an unknown key or a bad value (spec 2.4.2)", () => {
+    const limits = {
+      memory_mb: 1536.5,
+      cpu_percent: 150,
+      open_files: 4096,
+      children: 64,
+      grace_s: 120,
+    };
+    const parsed = parse(declaration({ types: [nodeType({ reload: { limits } })] }));
+    expect(parsed.ok && parsed.declaration.types[0]?.reload?.limits).toEqual(limits);
+    expect(parse(declaration({ types: [nodeType({ reload: {} })] })).ok).toBe(true);
+    expect(refused(declaration({ types: [nodeType({ reload: { limit: {} } })] }))).toEqual([
+      "types/0/reload/limit: is not a declared property",
     ]);
-    expect(refused(declaration({ reload: { limits: { memory_mb: 0 } } }))).toEqual([
-      "reload/limits/memory_mb: must be >= 1",
-    ]);
-    expect(refused(declaration({ reload: { limits: {} } }))).toEqual([
-      "reload/limits: must NOT have fewer than 1 properties",
-    ]);
+    expect(
+      refused(declaration({ types: [nodeType({ reload: { limits: { memory: 4096 } } })] })),
+    ).toEqual(["types/0/reload/limits/memory: is not a declared property"]);
+    expect(
+      refused(declaration({ types: [nodeType({ reload: { limits: { children: 0 } } })] })),
+    ).toEqual(["types/0/reload/limits/children: must be >= 1"]);
+    expect(
+      refused(declaration({ types: [nodeType({ reload: { limits: { grace_s: 0 } } })] })),
+    ).toEqual(["types/0/reload/limits/grace_s: must be > 0"]);
+    expect(
+      refused(declaration({ types: [nodeType({ reload: { limits: { open_files: 1.5 } } })] })),
+    ).toEqual(["types/0/reload/limits/open_files: must be integer"]);
   });
 
   it("refuses a protocol that is not the integer 2", () => {

@@ -27,25 +27,7 @@
         }
       }
     },
-    "types": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/type" } },
-    "reload": {
-      "type": "object",
-      "properties": {
-        "limits": {
-          "type": "object",
-          "minProperties": 1,
-          "properties": {
-            "memory_mb": { "type": "integer", "minimum": 1 },
-            "cpu_percent": { "type": "number", "exclusiveMinimum": 0 },
-            "cpu_window_s": { "type": "number", "exclusiveMinimum": 0 },
-            "open_files": { "type": "integer", "minimum": 1 },
-            "children": { "type": "integer", "minimum": 0 },
-            "grace_s": { "type": "number", "minimum": 0 }
-          },
-          "additionalProperties": false
-        }
-      }
-    }
+    "types": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/type" } }
   },
   "$defs": {
     "argv": { "type": "array", "minItems": 1, "items": { "type": "string" } },
@@ -110,6 +92,24 @@
         "form": { "type": "object" }
       }
     },
+    "typeReload": {
+      "type": "object",
+      "properties": {
+        "limits": {
+          "type": "object",
+          "properties": {
+            "memory_mb": { "type": "number", "exclusiveMinimum": 0 },
+            "cpu_percent": { "type": "number", "exclusiveMinimum": 0 },
+            "cpu_window_s": { "type": "number", "exclusiveMinimum": 0 },
+            "open_files": { "type": "integer", "minimum": 1 },
+            "children": { "type": "integer", "minimum": 1 },
+            "grace_s": { "type": "number", "exclusiveMinimum": 0 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "type": {
       "type": "object",
       "required": ["id", "kind", "label", "command", "config", "outputs"],
@@ -128,7 +128,8 @@
         "event": { "$ref": "#/$defs/eventName" },
         "payload": { "type": "object" },
         "answer": { "type": "object" },
-        "props": { "type": "object" }
+        "props": { "type": "object" },
+        "reload": { "$ref": "#/$defs/typeReload" }
       },
       "allOf": [
         { "if": { "properties": { "kind": { "const": "view" } } }, "then": { "required": ["view"] } },

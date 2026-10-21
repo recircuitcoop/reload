@@ -33,7 +33,7 @@ Reload's state is from the code on main (2026-10-21), cited by file.
 
 | # | What the old app did | Rows | Reload today | If Reload doesn't do it | Default |
 |---|---|---|---|---|---|
-| A | **Resource watchdog.** Watched each plugin's memory, CPU over a window, open files and child processes; over a limit for longer than a grace window it stopped the plugin politely, then forced it, then restarted it. A plugin could declare higher limits. The Anytype app was watched for resources too, never judged frozen. | ~25 | **No.** No limits anywhere (`domain/supervision/staleness.ts:41` says they were not carried over). | A runaway plugin (memory leak, CPU loop, file leak) slows or freezes the Mac until the person notices. | **Port** |
+| A | **Resource watchdog.** Watched each plugin's memory, CPU over a window, open files and child processes; over a limit for longer than a grace window it stopped the plugin politely, then forced it, then restarted it. A plugin could declare higher limits, and the person could change the defaults. The host process and the Anytype app were watched for resources too: Anytype was stopped politely then forced under the same rule, never judged frozen. | ~25 | **No.** No limits anywhere (`domain/supervision/staleness.ts:41` says they were not carried over). | A runaway plugin (memory leak, CPU loop, file leak) slows or freezes the Mac until the person notices. | **Port** |
 | B | **Frozen-process detection.** A process still running but no longer answering is restarted. | ~12 | **MCP server: yes** (`application/mcp-heartbeat.ts:95-161`, restart with notice `anytype-service.ts:391-400`). **Plugins: no.** | A plugin that hangs (deadlock, stuck network call) stays hung; its flow stops quietly. | **Port** for plugins that declare a heartbeat |
 | C | **Crash-loop stop.** Five crashes in a short window: stopped for good, the person told. A plugin could say "never restart me" (`restartable: false`). | 5 | **Crash loop: yes** (`domain/supervision/breaker.ts:23`, `application/supervisor.ts:336-359`). **"Never restart me": no.** | A plugin that must not be restarted (it would repeat a side effect) is restarted anyway. | **Port** `restartable: false` |
 | D | **Anytype start, adopt, quit-if-ours.** Starts Anytype when needed; never quits an Anytype the person opened. | 3 | **Yes** (`application/anytype-app.ts:47-84`, quit path `shell/main.ts:237-238`, Quit menu `shell/lifecycle.ts:41-46`). | — | **Record as ported**, with its test named |
@@ -65,20 +65,24 @@ test's id; nothing is marked without a test.
 
 1. **WI-0031-01 — reopen.** WI-0018-27/28/29 set back from DONE with a note; the ledger rows
    for D marked ported with their tests named.
-2. **WI-0031-02 — A, the resource watchdog** (the largest): limits per node process on memory,
-   open files and children, grace window, polite stop then kill, restart through the existing
-   breaker, a notice; limits a package may raise in its declaration; CPU warns, never kills
-   (long jobs are legal); the Anytype app is never stopped.
-   **DONE 2026-10-21.** `domain/supervision/resources.ts` judges, `adapters/process/resource-probe.ts`
-   measures (`ps`, `lsof`, `/proc`; Windows not measured), `adapters/process/resource-guard.ts`
-   acts on each node process; a package raises its limits in `reload.limits` (spec 2.3.6). The
-   old helper's defaults: 1024 MB, 90 % over 120 s, 1024 files, 32 children, 60 s grace, 10 s
-   to stop. Ledger: 20 rows ported, 4 replaced. Left for WI-0031-03 or the owner, since they are
-   about the MCP child's own limits or the heartbeat: `test_helper_tick.py` rows
-   `test_the_mcp_child_is_watched_against_its_own_limits_and_not_the_helper_wide_ones`,
+2. **WI-0031-02 — A, the resource watchdog** (the largest), as the old app did it: limits on
+   memory, CPU over a window, open files and children for every node process, the runtime and
+   the services process, and an Anytype Reload started; over a limit past the grace window,
+   polite stop then kill; a node process or a child restarted through its crash-loop breaker,
+   which counts the stop; a notice. A type may set its own limits in its declaration, and the
+   person may change the defaults in the settings file, as `[helper.defaults]` allowed. CPU stops
+   a process like any other limit, as the old app did. An adopted Anytype is never stopped.
+   **Implemented 2026-10-21, waiting on its verifier.** `domain/supervision/resources.ts` judges;
+   `adapters/process/resource-probe.ts` measures (`ps`, `lsof`, `/proc`; Windows not measured);
+   `application/resource-watch.ts` samples and stops; `adapters/process/resource-guard.ts` (node
+   processes) and `application/managed-watch.ts` (the children and Anytype) hand processes to
+   it. A type's limits are `types[i].reload.limits` (spec 2.4.2); the person's are `limits` in
+   `shell-settings.json`. Defaults are the old app's: 1024 MB, 90 % over 120 s, 1024 files, 32
+   children, 60 s of grace, a sample every 10 s, 10 s from SIGTERM to SIGKILL. Four rows that
+   need this branch and WI-0031-03's together go to WI-0031-03 after the merge:
+   `test_helper_tick.py` `test_the_mcp_child_is_watched_against_its_own_limits_and_not_the_helper_wide_ones`,
    `test_one_lookup_answers_for_every_managed_process_and_not_only_for_plugins`,
-   `test_one_pass_reads_the_heartbeats_and_samples_every_managed_process`,
-   `test_a_plugin_is_watched_against_the_profile_its_manifest_published`, and
+   `test_one_pass_reads_the_heartbeats_and_samples_every_managed_process`, and
    `test_helper_detection.py::test_the_anytype_desktop_app_is_never_judged_stale`.
 3. **WI-0031-03 — B,** a heartbeat a package may declare, judged like the MCP child's.
 4. **WI-0031-04 — C,** `restartable: false` in the declaration, honoured by the supervisor.

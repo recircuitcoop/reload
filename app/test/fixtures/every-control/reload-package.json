@@ -3,7 +3,6 @@
   "package": "everycontrol",
   "version": "0.0.0",
   "environment": { "kind": "executable" },
-  "reload": { "limits": { "memory_mb": 2048 } },
   "types": [
     {
       "id": "ticker",
@@ -27,6 +26,7 @@
       "label": "Probe",
       "description": "Writes its start frame to its data folder, and answers each input on its second port.",
       "command": ["{package}/node.py", "probe"],
+      "reload": { "limits": { "memory_mb": 2048 } },
       "config": {
         "type": "object",
         "required": ["label", "count", "volumes", "token"],

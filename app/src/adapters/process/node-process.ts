@@ -48,7 +48,7 @@ import { inputJournalFor, type Admitted, type Input, type InputJournal } from ".
 import type { NodeProcessDeps } from "./node-process-settings";
 import { watchExit } from "./exit-watch";
 import { RefusedPorts } from "./refused-ports";
-import { guardResources } from "./resource-guard";
+import { NodeResourceGuard } from "./resource-guard";
 import { ViewDeadlines } from "./view-deadlines";
 
 export * from "./node-process-settings";
@@ -69,6 +69,7 @@ class ChildNodeProcess implements NodeProcess {
   readonly #who: string;
   readonly #closeWaiters: (() => void)[] = [];
   readonly #refused: RefusedPorts;
+  readonly #guard: NodeResourceGuard;
 
   #child: ChildProcess | null = null;
   ready = false;
@@ -87,6 +88,7 @@ class ChildNodeProcess implements NodeProcess {
     this.#journal = inputJournalFor(spec.identity, deps, (level, message) => {
       this.#log(level, message);
     });
+    this.#guard = new NodeResourceGuard(spec, deps);
     this.#deadlines = new ViewDeadlines(deps.clock, (inputId) => {
       this.#timedOut(inputId);
     });
@@ -261,11 +263,7 @@ class ChildNodeProcess implements NodeProcess {
       log: this.#log.bind(this, "error"),
       exited: this.#onExit.bind(this, child),
     });
-    guardResources(child.pid, this.#spec, this.#deps, {
-      after: this.#after.bind(this),
-      current: () => child === this.#child && !this.#closing,
-      log: this.#log.bind(this),
-    });
+    this.#guard.spawned(child.pid, () => child === this.#child && !this.#closing);
 
     this.#host.status({ fill: "grey", shape: "ring", text: "starting" });
     const { identity, config, credentials, dataDir } = this.#spec;
@@ -585,6 +583,7 @@ class ChildNodeProcess implements NodeProcess {
   }
 
   #cancelTimers(): void {
+    this.#guard.ended();
     for (const cancel of this.#timers.splice(0)) {
       cancel();
     }

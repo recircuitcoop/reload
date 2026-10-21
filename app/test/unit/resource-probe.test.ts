@@ -3,11 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import {
-  cpuSecondsOf,
-  resourceProbeFor,
-  type CommandRunner,
-} from "../../src/adapters/process/resource-probe";
+import { resourceProbeFor, type CommandRunner } from "../../src/adapters/process/resource-probe";
 
 // pid ppid rss(KB) time — 100 is the node process; 101 its child, 102 a grandchild, 200 not its.
 const TABLE = [
@@ -80,11 +76,20 @@ describe("a sample", () => {
 });
 
 describe("ps CPU time", () => {
-  it("is read in both platforms' spellings", () => {
-    expect(cpuSecondsOf("1:02.50")).toBe(62.5);
-    expect(cpuSecondsOf("01:02:03")).toBe(3723);
-    expect(cpuSecondsOf("2-00:00:01")).toBe(172_801);
-    expect(cpuSecondsOf("n/a")).toBeNull();
-    expect(cpuSecondsOf("1.2.3:00")).toBeNull();
+  /** The CPU seconds the probe reads from one `time` column. */
+  async function cpu(time: string): Promise<number | null | undefined> {
+    const table = `  100     1  1024   ${time}\n`;
+    const reading = await resourceProbeFor("linux", runner({ ps: table }), () =>
+      Promise.resolve(1),
+    )(100);
+    return reading?.cpuSeconds;
+  }
+
+  it("is read in both platforms' spellings, and unread when it is neither", async () => {
+    expect(await cpu("1:02.50")).toBe(62.5);
+    expect(await cpu("01:02:03")).toBe(3723);
+    expect(await cpu("2-00:00:01")).toBe(172_801);
+    expect(await cpu("n/a")).toBeNull();
+    expect(await cpu("1.2.3:00")).toBeNull();
   });
 });

@@ -116,6 +116,40 @@ describe("the Anytype desktop app", () => {
     expect(journal).toEqual([`find ${ANYTYPE}`]);
   });
 
+  it("Reload started is stopped over its limits by its own quit, once, and not started again", async () => {
+    const { fake, journal } = apps(null);
+    const { anytype, logger } = subject(fake);
+    await anytype.start();
+    expect(anytype.startedPid).toBe(4242);
+    anytype.stopOverLimit();
+    anytype.stopOverLimit();
+    await anytype.quitIfOurs();
+    expect(anytype.startedPid).toBeNull();
+    expect(journal).toEqual([`find ${ANYTYPE}`, `launch ${ANYTYPE}`, "quit 4242"]);
+    expect(logger.lines.join("\n")).toContain("it is over its resource limits");
+  });
+
+  it("adopted has no process to stop over its limits, and is left alone", async () => {
+    const { fake, journal } = apps({ pid: 777 });
+    const { anytype } = subject(fake);
+    await anytype.start();
+    expect(anytype.startedPid).toBeNull();
+    anytype.stopOverLimit();
+    expect(journal).toEqual([`find ${ANYTYPE}`]);
+  });
+
+  it("a stop over its limits that fails is logged, never thrown", async () => {
+    const fake: DesktopApps = {
+      find: () => Promise.resolve(null),
+      launch: () => ({ pid: 1, quit: () => Promise.reject(new Error("EPERM")) }),
+    };
+    const { anytype, logger } = subject(fake);
+    await anytype.start();
+    anytype.stopOverLimit();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(logger.lines.join("\n")).toContain("did not stop: Error: EPERM");
+  });
+
   it("a quit that fails is logged, never thrown into the quit flow", async () => {
     const fake: DesktopApps = {
       find: () => Promise.resolve(null),

@@ -1,24 +1,23 @@
-// What a node process is using, and whether it has used too much for too long (plan 0031 group
-// A, kept from the old helper's detection.py:399-468 and its profile defaults).
+// What a managed process is using, and whether it has used too much for too long (plan 0031
+// group A, kept from the old helper's detection.py:399-468, watch.py resolve_profile and the
+// manifest's stability defaults).
 //
-// Each node process is watched against four limits: memory (RSS), CPU over a window, open files
-// and child processes. A value over its line must stay over it for LONGER than the grace window
+// Each process is watched against four limits: memory (RSS), CPU over a window, open files and
+// child processes. A value over its line must stay over it for LONGER than the grace window
 // before anything happens: a short spike is not a breach, and that is the whole reason the grace
-// window exists (a node loading a model would otherwise be stopped on its first sample).
-//
-// What happens then differs by limit, which is the one change from the old helper the owner
-// asked for (plan 0031): memory, open files and children over their grace window stop the
-// process (politely, then forced) and it is restarted through the crash-loop breaker; CPU only
-// warns, because a long job is legal and a busy process is not a broken one.
+// window exists (a node loading a model would otherwise be stopped on its first sample). A
+// sustained breach of any of the four stops the process, politely and then forced, as the old
+// helper did; what comes back afterwards is the supervisor's restart policy, not this file's.
 //
 // CPU is a rate, so it is measured here from two totals: the cumulative CPU seconds of this
 // sample and of the oldest sample still inside the window, over the time between them. Until two
 // samples exist CPU is unknown, and an unknown value is never a breach. A reading the platform
 // did not give (null) is not a reading of zero either: it is not judged, and its clock is kept.
 //
-// Pure: no I/O, no timers. The adapter measures (adapters/process/resource-probe.ts) and acts.
+// Pure: no I/O, no timers. An adapter measures (adapters/process/resource-probe.ts) and the
+// watch acts (application/resource-watch.ts).
 
-/** The limits one node process is watched against. */
+/** The limits one process is watched against. */
 export interface ResourceLimits {
   /** Resident memory, in MB. */
   readonly memoryMb: number;
@@ -26,14 +25,14 @@ export interface ResourceLimits {
   readonly cpuPercent: number;
   readonly cpuWindowMs: number;
   readonly openFiles: number;
-  /** Processes started by the node process, at any depth. */
+  /** Processes started by the process, at any depth. */
   readonly children: number;
   /** How long a value may stay over its line before it is acted on (strictly longer). */
   readonly graceMs: number;
 }
 
 /**
- * The old helper's defaults (addons/manifest.py StabilityProfile, helper/config.py
+ * The documented defaults (addons/manifest.py StabilityProfile, helper/config.py
  * DEFAULT_MAX_CHILDREN): 1 GB, 90 % over 2 minutes, 1024 files, 32 children, 60 s of grace.
  */
 export const DEFAULT_LIMITS: ResourceLimits = {
@@ -45,7 +44,11 @@ export const DEFAULT_LIMITS: ResourceLimits = {
   graceMs: 60_000,
 };
 
-/** What a package may declare under `reload.limits` (spec 2.3.5); every key is optional. */
+/**
+ * Limits as they are written: a type's `reload.limits` (spec 2.4.2), or the person's own
+ * defaults under `limits` in the settings file (the old `[helper.defaults]`). Every key is
+ * optional.
+ */
 export interface DeclaredLimits {
   readonly memory_mb?: number;
   readonly cpu_percent?: number;
@@ -55,18 +58,63 @@ export interface DeclaredLimits {
   readonly grace_s?: number;
 }
 
-/** The limits in force: each declared value, and the default for each one left out. */
-export function limitsFor(declared: DeclaredLimits | undefined): ResourceLimits {
-  const seconds = (value: number | undefined): number | undefined =>
-    value === undefined ? undefined : value * 1000;
-  return {
-    memoryMb: declared?.memory_mb ?? DEFAULT_LIMITS.memoryMb,
-    cpuPercent: declared?.cpu_percent ?? DEFAULT_LIMITS.cpuPercent,
-    cpuWindowMs: seconds(declared?.cpu_window_s) ?? DEFAULT_LIMITS.cpuWindowMs,
-    openFiles: declared?.open_files ?? DEFAULT_LIMITS.openFiles,
-    children: declared?.children ?? DEFAULT_LIMITS.children,
-    graceMs: seconds(declared?.grace_s) ?? DEFAULT_LIMITS.graceMs,
-  };
+const NUMBERS = ["memory_mb", "cpu_percent", "cpu_window_s", "grace_s"] as const;
+const COUNTS = ["open_files", "children"] as const;
+
+/**
+ * Why `value` is not a set of limits, in plain words; null when it is one. The old manifest's
+ * rules (manifest.py _optional_number, _optional_count, _check_fields): every number greater than
+ * zero, the two counts whole numbers, no upper bound, and no key it does not know.
+ */
+export function limitsProblem(value: unknown): string | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return "must be an object of limits";
+  }
+  for (const [key, number] of Object.entries(value)) {
+    const count = (COUNTS as readonly string[]).includes(key);
+    if (!count && !(NUMBERS as readonly string[]).includes(key)) {
+      return `${key} is not a limit (the limits are ${[...NUMBERS, ...COUNTS].join(", ")})`;
+    }
+    if (typeof number !== "number" || !(number > 0) || (count && !Number.isInteger(number))) {
+      return `${key} must be ${count ? "a whole number" : "a number"} greater than zero`;
+    }
+  }
+  return null;
+}
+
+const fromDeclared = (declared: DeclaredLimits): Partial<ResourceLimits> => {
+  const ms = (seconds: number | undefined): number | undefined =>
+    seconds === undefined ? undefined : seconds * 1000;
+  const entries = Object.entries({
+    memoryMb: declared.memory_mb,
+    cpuPercent: declared.cpu_percent,
+    cpuWindowMs: ms(declared.cpu_window_s),
+    openFiles: declared.open_files,
+    children: declared.children,
+    graceMs: ms(declared.grace_s),
+  }).filter(([, value]) => value !== undefined);
+  return Object.fromEntries(entries);
+};
+
+/** The person's own defaults: what the settings file sets, the documented defaults for the rest. */
+export function personalLimits(settings: DeclaredLimits | undefined): ResourceLimits {
+  return { ...DEFAULT_LIMITS, ...fromDeclared(settings ?? {}) };
+}
+
+/**
+ * The limits in force for one process (watch.py resolve_profile). A type that declared no
+ * `reload` is watched under the person's defaults. One that did gets what it declared, the
+ * documented defaults for every other limit, and the person's child limit: `children` is the one
+ * limit a declaration may leave to the person.
+ */
+export function limitsFor(
+  declared: DeclaredLimits | undefined,
+  personal: ResourceLimits = DEFAULT_LIMITS,
+): ResourceLimits {
+  if (declared === undefined) {
+    return personal;
+  }
+  return { ...DEFAULT_LIMITS, children: personal.children, ...fromDeclared(declared) };
 }
 
 /** One reading of a process. A null field is one the platform could not measure. */
@@ -80,30 +128,16 @@ export interface ResourceSample {
 
 export type Limit = "memory" | "cpu" | "open-files" | "children";
 
-/** One limit a process is over, and for how long, with the numbers that tell it. */
+/** One limit a process has been over for longer than its grace window, with the numbers. */
 export interface Breach {
   readonly limit: Limit;
   readonly value: number;
   readonly allowed: number;
   /** Since the value went over its line; it starts again at zero once it comes back under. */
   readonly durationMs: number;
-  /** Over for longer than the grace window: acted on (memory, files, children) or warned of. */
-  readonly sustained: boolean;
 }
 
-/** What one sample says about a process. */
-export interface Verdict {
-  /** CPU over the window, in % of a core; null until two samples exist. */
-  readonly cpuPercent: number | null;
-  /** Every limit over its line right now, sustained or not. */
-  readonly breaches: readonly Breach[];
-  /** The sustained breaches that stop the process: never CPU. */
-  readonly stop: readonly Breach[];
-  /** Sustained CPU: told to the person, and the process left running. */
-  readonly busy: Breach | null;
-}
-
-/** The judge of one node process's samples, stateful between them (grace and CPU windows). */
+/** The judge of one process's samples, stateful between them (grace and CPU windows). */
 export class ResourceWatch {
   readonly #limits: ResourceLimits;
   /** The CPU samples still inside the window (and one from before it): [when, seconds]. */
@@ -115,8 +149,8 @@ export class ResourceWatch {
     this.#limits = limits;
   }
 
-  /** Judge one sample taken at `now`. */
-  observe(sample: ResourceSample, now: number): Verdict {
+  /** Judge one sample taken at `now`: the breaches that outlasted their grace window. */
+  observe(sample: ResourceSample, now: number): readonly Breach[] {
     const limits = this.#limits;
     const cpuPercent = this.#cpuOverWindow(sample.cpuSeconds, now);
     const readings: [Limit, number | null, number][] = [
@@ -138,15 +172,12 @@ export class ResourceWatch {
       const since = this.#overSince.get(limit) ?? now;
       this.#overSince.set(limit, since);
       const durationMs = now - since;
-      breaches.push({ limit, value, allowed, durationMs, sustained: durationMs > limits.graceMs });
+      // Strictly longer than the grace window: exactly as long is still a spike.
+      if (durationMs > limits.graceMs) {
+        breaches.push({ limit, value, allowed, durationMs });
+      }
     }
-    const sustained = breaches.filter((breach) => breach.sustained);
-    return {
-      cpuPercent,
-      breaches,
-      stop: sustained.filter((breach) => breach.limit !== "cpu"),
-      busy: sustained.find((breach) => breach.limit === "cpu") ?? null,
-    };
+    return breaches;
   }
 
   #cpuOverWindow(seconds: number | null, now: number): number | null {

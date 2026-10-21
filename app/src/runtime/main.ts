@@ -54,6 +54,11 @@ import { loadNodeTypes, unregisteredNames } from "../application/load-node-types
 import { watchParent } from "../application/parent-watchdog";
 import { NodeOptions } from "../application/node-options";
 import { PeerCaller, receiveKeys } from "../application/peer-link";
+import {
+  DEFAULT_WATCH_PACE,
+  readPersonalLimits,
+  resourceWatchdog,
+} from "../application/resource-watch";
 import { serveShell, shellNodeCrashes, shellNotifier } from "../application/serve-shell";
 import { printCanary, sourceLog } from "../application/source-log";
 import { ViewService } from "../application/views";
@@ -258,7 +263,14 @@ function generateNodeTypes(
         notifier,
         tree: processTreeFor(process.platform),
         // The resource watchdog of every node process (plan 0031 group A).
-        probe: resourceProbeFor(process.platform),
+        watchdog: resourceWatchdog({
+          probe: resourceProbeFor(process.platform),
+          clock: systemClock,
+          pace: DEFAULT_WATCH_PACE,
+          log: (level, message) => {
+            logger[level](message);
+          },
+        }),
         newId: randomUUID,
         secrets: logger,
         journal: store,
@@ -273,6 +285,7 @@ function generateNodeTypes(
   );
   const registration = new TypeRegistration({
     types,
+    personalLimits: readPersonalLimits(settings, logger),
     launcher,
     validator,
     replay: {

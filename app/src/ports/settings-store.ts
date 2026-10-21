@@ -3,6 +3,7 @@
 // arrives with WI-0018-25.
 
 import type { StoredEndpoint } from "../domain/endpoint/address";
+import type { DeclaredLimits } from "../domain/supervision/resources";
 
 /**
  * The package settings (WI-0018-17): the update policy (`packages`) and the registered catalogue
@@ -50,6 +51,16 @@ export interface UpdateHistoryStore {
   readUpdateHistory(): unknown;
   /** Store it, leaving every other setting as it was. */
   writeUpdateHistory(record: Readonly<Record<string, unknown>>): void;
+}
+
+/**
+ * The person's own resource limits (plan 0031 group A, the old config.toml `[helper.defaults]`):
+ * the `limits` setting, with the keys of a type's `reload.limits` (spec 2.4.2). Edited in the
+ * file only, as the old one was; read once when a process tree starts.
+ */
+export interface LimitDefaultsSetting {
+  /** The `limits` setting; undefined when unset. Throws when unreadable or not limits. */
+  readLimitDefaults(): DeclaredLimits | undefined;
 }
 
 /**

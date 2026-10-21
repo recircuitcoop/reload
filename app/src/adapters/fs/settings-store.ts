@@ -11,9 +11,11 @@
 import fs from "node:fs";
 import * as path from "node:path";
 import type { StoredEndpoint } from "../../domain/endpoint/address";
+import { limitsProblem, type DeclaredLimits } from "../../domain/supervision/resources";
 import type { TelemetryAnswer } from "../../domain/telemetry/reports";
 import type {
   LaunchAtLoginSetting,
+  LimitDefaultsSetting,
   PackageSettingsStore,
   RunRetentionSetting,
   SettingsStore,
@@ -37,6 +39,7 @@ export class JsonSettingsStore
   implements
     SettingsStore,
     LaunchAtLoginSetting,
+    LimitDefaultsSetting,
     PackageSettingsStore,
     RunRetentionSetting,
     SetupSetting,
@@ -138,6 +141,18 @@ export class JsonSettingsStore
   }
 
   // Run history's retention (plan 0022 §C): `runs: {retentionDays}`, days or null for Forever.
+  readLimitDefaults(): DeclaredLimits | undefined {
+    const limits = this.#read()["limits"];
+    if (limits === undefined) {
+      return undefined;
+    }
+    const problem = limitsProblem(limits);
+    if (problem !== null) {
+      throw new SettingsFileError(`the limits setting in ${this.#file}: ${problem}`);
+    }
+    return limits as DeclaredLimits;
+  }
+
   readRunRetentionDays(): number | null | undefined {
     const runs = this.#read()["runs"];
     if (runs === undefined) {

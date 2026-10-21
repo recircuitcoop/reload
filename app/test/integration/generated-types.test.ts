@@ -38,6 +38,8 @@ import {
 const FIXTURE = path.resolve(import.meta.dirname, "..", "fixtures", "every-control");
 const PROBE = "reload-everycontrol-probe";
 const TICKER = "reload-everycontrol-ticker";
+/** The person's own defaults, as the settings file's `limits` would set them. */
+const PERSONAL = { ...DEFAULT_LIMITS, memoryMb: 4096, children: 4 };
 
 let scratch: string;
 let journal: MemoryJournal;
@@ -128,6 +130,7 @@ function setUp(commandFor?: () => never): TypeRegistration {
       })),
     dataDirFor: (id) => path.join(scratch, "instances", id),
     closeReason: () => closeReason,
+    personalLimits: PERSONAL,
   });
   registration.register(red, PROBE);
   registration.register(red, TICKER);
@@ -217,11 +220,16 @@ describe("a generated type's instance", () => {
     });
   });
 
-  it("is watched against the resource limits its package declared, and defaults for the rest", async () => {
+  it("is watched against the resource limits its type declared, and defaults for the rest", async () => {
     setUp();
     create(PROBE, probeConfig("p1"), { token: "s3cret" });
-    await waitFor("its process", () => started.includes("p1"));
-    expect(limits.get("p1")).toEqual({ ...DEFAULT_LIMITS, memoryMb: 2048 });
+    create(TICKER, { id: "t1", greeting: "hi", delay_ms: "0" });
+    await waitFor("both processes", () => started.includes("p1") && started.includes("t1"));
+    // The probe type declared reload.limits: its own memory, the documented defaults for the
+    // rest, and the person's child limit, the one a declaration may leave to the person.
+    expect(limits.get("p1")).toEqual({ ...DEFAULT_LIMITS, memoryMb: 2048, children: 4 });
+    // The ticker declared no reload: it is watched under the person's own defaults.
+    expect(limits.get("t1")).toEqual(PERSONAL);
   });
 
   it("registers every secret as a password credential with Node-RED", () => {

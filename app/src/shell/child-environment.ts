@@ -2,6 +2,10 @@
 // shell/main.ts, unchanged but for the e2e gate's templates folder, to keep the composition
 // root under its 600 lines. The shell reads its own environment and hands it in.
 
+import * as path from "node:path";
+
+import type { ForkSpec } from "../ports/process-launcher";
+
 /** What the services process is handed besides HOME: Anytype's local API address, the e2e gate's substitutes, the MCP endpoint's variables (WI-0018-18, -19), and XDG_RUNTIME_DIR for the old helper.lock path (WI-0018-25). */
 export const SERVICES_VARIABLES = [
   "ANYTYPE_API_BASE_URL",
@@ -28,6 +32,19 @@ export interface ChildEnvironmentInput {
   readonly runtimesDir: string | null;
   /** The e2e gate's hooks are on (RELOAD_E2E_HOOKS=1). */
   readonly e2eHooks: boolean;
+}
+
+/** A child's fork: its bundled entry beside the shell's (`dir`), its name, its environment. */
+export function forkSpecFor(
+  child: "runtime" | "services",
+  dir: string,
+  input: ChildEnvironmentInput,
+): ForkSpec {
+  return {
+    modulePath: path.join(dir, "..", child, "main.cjs"),
+    serviceName: `Reload ${child}`,
+    env: childEnvironment(child, input),
+  };
 }
 
 export function childEnvironment(

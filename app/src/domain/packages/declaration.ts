@@ -8,10 +8,10 @@
 //
 // Pure: no I/O, no library.
 
-/** The one protocol version this runtime implements (spec 1.2). */
 import type { DeclaredLimits } from "../supervision/resources";
 import { oldKeywordAt, oldKeywordProblem } from "./old-names";
 
+/** The one protocol version this runtime implements (spec 1.2). */
 export const PROTOCOL = 2;
 
 /** Spec 2.4: output ports that would shadow a Node-RED message field. */
@@ -64,6 +64,8 @@ export interface DeclaredType {
   readonly answer?: JsonSchema;
   /** An action view's props schema (spec 2.4); without one, its props get the bounds only. */
   readonly props?: JsonSchema;
+  /** How Reload watches its process (spec 2.4.2): its own resource limits. */
+  readonly reload?: { readonly limits?: DeclaredLimits };
 }
 
 /** An executable package's binary for one platform: its path in the package, and its sha256. */
@@ -84,8 +86,6 @@ export interface Declaration {
     readonly binaries?: Readonly<Record<string, DeclaredBinary>>;
   };
   readonly types: readonly DeclaredType[];
-  /** Resource limits for every process of its types, raised from the defaults (spec 2.3.6). */
-  readonly reload?: { readonly limits?: DeclaredLimits };
 }
 
 /** A type of a loaded package, and the folder its package is in (spec 2.3.4). */

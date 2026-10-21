@@ -8,9 +8,9 @@ import type { JournalStore } from "../../ports/journal-store";
 import type { Logger, SecretSink } from "../../ports/logger";
 import type { HeldInputs } from "../../ports/node-process";
 import type { Notifier } from "../../ports/notifier";
+import type { ResourceWatchdog } from "../../ports/resource-watch";
 import type { NodeCrashSink } from "../../ports/telemetry";
 import type { ProcessTree } from "./process-tree";
-import type { ResourceProbe } from "./resource-probe";
 
 /** Every number a node process is run by (spec 4.4, 6.3, 6.5). */
 export interface NodeProcessSettings {
@@ -29,13 +29,6 @@ export interface NodeProcessSettings {
   readonly exitGraceMs: number;
   /** The bound on outstanding inputs and what happens at it (spec 7.6). */
   readonly queue: QueueSettings;
-  /** The resource watchdog's pace (plan 0031 group A): the old helper's tick and stop_timeout. */
-  readonly resources: {
-    /** One sample of the process this often. */
-    readonly sampleEveryMs: number;
-    /** SIGTERM → exit, or SIGKILL. */
-    readonly stopTimeoutMs: number;
-  };
 }
 
 export const DEFAULT_NODE_PROCESS: NodeProcessSettings = {
@@ -45,7 +38,6 @@ export const DEFAULT_NODE_PROCESS: NodeProcessSettings = {
   crashLoop: DEFAULT_CRASH_LOOP,
   exitGraceMs: 500,
   queue: DEFAULT_QUEUE,
-  resources: { sampleEveryMs: 10_000, stopTimeoutMs: 10_000 },
 };
 
 export interface NodeProcessDeps {
@@ -62,8 +54,8 @@ export interface NodeProcessDeps {
   readonly settings: NodeProcessSettings;
   /** Told of every unexpected exit, for the crash reports (WI-0018-22); absent in most tests. */
   readonly crashes?: NodeCrashSink;
-  /** Measures a node process for the resource watchdog; absent: not watched (most tests). */
-  readonly probe?: ResourceProbe;
+  /** The resource watchdog every process is handed to (plan 0031); absent: not watched. */
+  readonly watchdog?: ResourceWatchdog;
   /** Told which runs have inputs held at the queue bound (plan 0022 §C); absent in most tests. */
   readonly held?: HeldInputs;
 }

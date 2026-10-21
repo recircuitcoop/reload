@@ -354,3 +354,35 @@ describe("the runtime's view messages (WI-0018-10)", () => {
     ]);
   });
 });
+
+describe("a stop over a resource limit (plan 0031)", () => {
+  it("asks the running child to end, and is refused while none runs", () => {
+    const { supervisor, launcher, clock } = supervised(obedient);
+    expect(supervisor.stopOverLimit()).toBe(false);
+    supervisor.start();
+    clock.advance(1);
+    expect(supervisor.stopOverLimit()).toBe(true);
+    expect(launcher.current.kills).toBe(1);
+  });
+
+  it("counts like any other crash, until the breaker stops restarting and says so", () => {
+    const crashLoop = { maxCrashes: 3, windowMs: 600_000 };
+    const { supervisor, launcher, clock, notifier } = supervised(obedient, {
+      settings: { ...DEFAULT_SUPERVISION, crashLoop },
+    });
+    supervisor.start();
+    for (let stop = 1; stop <= 3; stop += 1) {
+      clock.advance(1);
+      expect(supervisor.status().state).toBe("running");
+      supervisor.stopOverLimit();
+      launcher.current.exit(143);
+      if (stop < 3) {
+        expect(supervisor.status().state).toBe("down");
+        clock.advance(60_000); // past the backoff: the next generation
+      }
+    }
+    expect(supervisor.status().state).toBe("down-for-good");
+    expect(launcher.children).toHaveLength(3);
+    expect(notifier.notices.map((notice) => notice.kind)).toEqual(["child-stopped"]);
+  });
+});

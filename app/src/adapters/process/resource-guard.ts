@@ -1,95 +1,65 @@
-// The resource watchdog of one node process (plan 0031 group A), apart from node-process.ts so
-// that file stays under the 600-line limit (plan 0018 §2.3).
+// A node instance's side of the resource watchdog (plan 0031 group A), apart from
+// node-process.ts so that file stays under the 600-line limit (plan 0018 §2.3).
 //
-// Every `sampleEveryMs` the probe measures the process and the domain judges the sample
-// (domain/supervision/resources.ts). A sustained memory, open-files or children breach stops it
-// politely (SIGTERM to its process group), then forced (SIGKILL) after `stopTimeoutMs`; its exit
-// is then an unexpected exit like any other, so it is restarted through the crash-loop breaker
-// and counts as an attempt. The person is told in plain words. Sustained CPU is only told: a long
-// job is legal. Only the process this instance spawned is ever signalled; nothing else (the
-// Anytype app included) is watched or stopped here.
+// Each process the instance spawns is handed to the watchdog with its type's limits, and is
+// stopped through its own process group: SIGTERM, then SIGKILL. Its exit is then an unexpected
+// exit like any other, so the crash-loop breaker counts it and decides whether it comes back.
+// The person is told only once that is known: "started it again" when the next process starts,
+// and the breaker's own notice (node-stopped) when it does not.
 
-import {
-  DEFAULT_LIMITS,
-  describeBreach,
-  ResourceWatch,
-  type Breach,
-} from "../../domain/supervision/resources";
+import { DEFAULT_LIMITS } from "../../domain/supervision/resources";
 import type { NodeProcessSpec } from "../../ports/node-process";
 import type { NodeProcessDeps } from "./node-process-settings";
 
-/** The instance's side of the watch: its own timers, and whether its process is still current. */
-export interface GuardHost {
-  /** Schedule on the instance's own timers, which a close or an exit cancels. */
-  readonly after: (ms: number, callback: () => void) => void;
-  /** False once the watched process exited or the instance closed. */
-  readonly current: () => boolean;
-  readonly log: (level: "info" | "warn" | "error", message: string) => void;
-}
+export class NodeResourceGuard {
+  readonly #spec: NodeProcessSpec;
+  readonly #deps: NodeProcessDeps;
+  /** Why the last process was stopped, until the next one has started. */
+  #stoppedFor: string | null = null;
+  #cancel: (() => void) | null = null;
 
-/** Watch `pid` until it exits; does nothing when no probe was given or the spawn failed. */
-export function guardResources(
-  pid: number | undefined,
-  spec: NodeProcessSpec,
-  deps: NodeProcessDeps,
-  host: GuardHost,
-): void {
-  const probe = deps.probe;
-  if (probe === undefined || pid === undefined) {
-    return;
+  constructor(spec: NodeProcessSpec, deps: NodeProcessDeps) {
+    this.#spec = spec;
+    this.#deps = deps;
   }
-  const { sampleEveryMs, stopTimeoutMs } = deps.settings.resources;
-  // A fresh watch per process: a restarted process gets its whole grace window again.
-  const watch = new ResourceWatch(spec.limits ?? DEFAULT_LIMITS);
-  const subject = spec.identity.name || spec.identity.typeId;
-  let busy = false;
 
-  const stop = (breaches: readonly Breach[]): void => {
-    const why = breaches.map(describeBreach).join("; ");
-    host.log("warn", `over its limits (${why}); stopping pid ${String(pid)} politely`);
-    deps.notifier.raise({
-      kind: "node-over-limit",
-      subject,
-      detail: `Its process used ${why}, so Reload stopped it and started it again`,
-    });
-    deps.tree.stop(pid);
-    host.after(stopTimeoutMs, () => {
-      if (host.current()) {
-        host.log("warn", `did not stop within ${String(stopTimeoutMs)} ms; sending SIGKILL`);
-        deps.tree.kill(pid);
-      }
-    });
-  };
-
-  const tell = (cpu: Breach | null): void => {
-    if (cpu !== null) {
-      busy = true;
-      host.log("warn", `busy: ${describeBreach(cpu)}; left running`);
-      deps.notifier.raise({
-        kind: "node-busy",
-        subject,
-        detail: `Its process used ${describeBreach(cpu)}`,
+  /** A process of this instance started: watched, and told of if it replaces a stopped one. */
+  spawned(pid: number | undefined, current: () => boolean): void {
+    const { identity } = this.#spec;
+    if (this.#stoppedFor !== null && pid !== undefined) {
+      const name =
+        identity.name === "" ? identity.typeId : `"${identity.name}" (${identity.typeId})`;
+      // Keyed by the instance id: two unnamed nodes of one type are two notices.
+      this.#deps.notifier.raise({
+        kind: "node-over-limit",
+        subject: identity.id,
+        detail: `The node ${name} used ${this.#stoppedFor}, so Reload stopped it and started it again`,
       });
-    } else if (busy) {
-      busy = false;
-      deps.notifier.clear("node-busy", subject);
+      this.#stoppedFor = null;
     }
-  };
-
-  const sample = async (): Promise<void> => {
-    const reading = await probe(pid);
-    if (!host.current()) {
+    const watchdog = this.#deps.watchdog;
+    if (watchdog === undefined || pid === undefined) {
       return;
     }
-    if (reading !== null) {
-      const verdict = watch.observe(reading, deps.clock.now());
-      tell(verdict.busy);
-      if (verdict.stop.length > 0) {
-        stop(verdict.stop);
-        return; // its exit ends this watch; the next process gets its own
-      }
-    }
-    host.after(sampleEveryMs, () => void sample());
-  };
-  host.after(sampleEveryMs, () => void sample());
+    this.#cancel = watchdog({
+      pid,
+      limits: this.#spec.limits ?? DEFAULT_LIMITS,
+      stop: () => {
+        this.#deps.tree.stop(pid);
+      },
+      kill: () => {
+        this.#deps.tree.kill(pid);
+      },
+      current,
+      stopped: (why) => {
+        this.#stoppedFor = why;
+      },
+    });
+  }
+
+  /** The process exited or the instance closed: nothing more is sampled or signalled. */
+  ended(): void {
+    this.#cancel?.();
+    this.#cancel = null;
+  }
 }
