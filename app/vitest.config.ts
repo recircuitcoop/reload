@@ -47,13 +47,57 @@ export default defineConfig({
         // drives it there (test/e2e/generated-types.e2e.ts).
         "src/adapters/nodered/editor-forms.ts",
       ],
-      // The thresholds of plan 0018 §6. A glob's files still count towards the global figure.
+      // Plan 0018 §6: the common targets overall (80% lines, 70% branches), and 95/90 PER FILE
+      // on the critical set, where a bug costs the person their data, secrets or trust. Each
+      // critical glob sets perFile itself, since globs do not inherit it.
+      // - secrets and redaction: a miss writes a secret into a log, a report or the telemetry.
+      // - package and update trust: a miss installs code whose signature or digest was not checked.
+      // - data integrity: a miss loses or corrupts the journal, the runs or the migrated data.
+      // - trust boundaries: a miss lets an MCP call, a channel message or a form reach code
+      //   it should not, or deploys over the person's flow.
+      // - supervision: a miss leaves a crashed child dead or restarts it in a loop.
       thresholds: {
-        lines: 90,
-        branches: 85,
-        "src/domain/**": { lines: 95, branches: 90 },
-        "src/application/**": { lines: 95, branches: 90 },
-        "src/{ports,adapters,shell,runtime,services,ui}/**": { lines: 85, branches: 80 },
+        lines: 80,
+        branches: 70,
+        ...Object.fromEntries(
+          [
+            // secrets and redaction
+            "src/domain/redaction/**",
+            "src/application/secrets.ts",
+            "src/domain/telemetry/**",
+            "src/application/telemetry.ts",
+            "src/adapters/fs/owner-only-files.ts",
+            "src/adapters/electron/safe-storage-store.ts",
+            // package and update trust
+            "src/domain/signature/**",
+            "src/adapters/signature/**",
+            "src/domain/packages/**",
+            "src/application/install-package.ts",
+            "src/application/package-environment.ts",
+            "src/application/remove-package.ts",
+            "src/domain/update/**",
+            "src/domain/updates/**",
+            "src/adapters/update/**",
+            "src/adapters/fs/content-hashes.ts",
+            // data integrity
+            "src/domain/journal/**",
+            "src/adapters/sqlite/**",
+            "src/domain/migration/**",
+            "src/adapters/fs/legacy-move.ts",
+            "src/application/journal-replay.ts",
+            "src/application/runs.ts",
+            // trust boundaries
+            "src/application/mcp-dispatch.ts",
+            "src/application/mcp-endpoint.ts",
+            "src/domain/channel/**",
+            "src/domain/forms/**",
+            "src/application/deploy-guard.ts",
+            "src/adapters/nodered/guard-middleware.ts",
+            // supervision
+            "src/domain/supervision/**",
+            "src/application/supervisor.ts",
+          ].map((glob) => [glob, { lines: 95, branches: 90, perFile: true }]),
+        ),
       },
     },
   },

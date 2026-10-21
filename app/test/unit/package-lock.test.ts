@@ -39,6 +39,17 @@ describe("parseLock", () => {
     ]);
   });
 
+  it("drops a comment whole, across U+2028 and U+2029, so no hash inside one counts", () => {
+    for (const separator of ["\u2028", "\u2029"]) {
+      expect(parseLock(`foo==1.0 --hash=${HASH_A}  # note${separator}bar`).requirements).toEqual([
+        { name: "foo", version: "1.0", hashes: [HASH_A] },
+      ]);
+      expect(refusal(`foo==1.0  # note${separator}--hash=${HASH_A}`)).toMatch(
+        /locked with no hash/,
+      );
+    }
+  });
+
   it("judges a lock that ends mid-continuation", () => {
     expect(parseLock(`click==8.5.0 \\\n    --hash=${HASH_A} \\`).requirements).toHaveLength(1);
     expect(refusal("click==8.5.0 \\")).toMatch(/locked with no hash/);

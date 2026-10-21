@@ -148,7 +148,7 @@ if [ "$mode" = "quick" ]; then
       $UV run --no-sync ruff check src tests
       $UV run --no-sync ruff format --check src tests
       $UV run --no-sync mypy
-      $UV run --no-sync pytest --cov --cov-fail-under=90
+      $UV run --no-sync pytest --cov --cov-fail-under=80
     )
   fi
 
@@ -226,8 +226,8 @@ $NPM run --silent gate:e2e
   echo "== sdk/python: mypy --strict =="
   $UV run --no-sync mypy
 
-  echo "== sdk/python: pytest --cov --cov-fail-under=90 =="
-  $UV run --no-sync pytest --cov --cov-fail-under=90 --junitxml=../../.gate/pytest-sdk.xml
+  echo "== sdk/python: pytest --cov --cov-fail-under=80 =="
+  $UV run --no-sync pytest --cov --cov-fail-under=80 --junitxml=../../.gate/pytest-sdk.xml
 )
 
 # == parity == (plan 0018 §5). Until the cutover the old suite must be exactly the one

@@ -167,6 +167,8 @@ describe("the key over the channel", () => {
       { v: 2, t: "anytype-key", key: KEY },
       { v: 1, t: "anytype-key", key: "" },
       { v: 1, t: "other" },
+      { v: 1, t: "answer", id: "a", result: "ok" },
+      { v: 1, t: "answer", id: "a", result: { ok: false } },
     ]) {
       expect(parsePeerMessage(raw)).toBeNull();
     }

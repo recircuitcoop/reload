@@ -11,9 +11,12 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { JsonLegacyImportReportStore } from "../../src/adapters/fs/legacy-import-report";
 import {
+  dropInstallRecord,
+  firstStartIn,
   firstStartMove,
   holdsAppData,
   LEGACY_USER_DATA_NAME,
+  legacyCredentialsDirectory,
   moveLegacySecrets,
   relocatedAfterMove,
   renamedNodeType,
@@ -313,6 +316,123 @@ describe("helpers", () => {
       path.join(userData, "config.toml"),
     );
     expect(relocatedAfterMove(lower, legacy, userData, "linux")).toBe(lower);
+  });
+});
+
+describe("what the move does when something is not as expected", () => {
+  it("moves past a lock that names no process", () => {
+    fixture03();
+    fs.symlinkSync("not-a-pid", path.join(legacy, "SingletonLock"));
+    expect(firstStartMove(options()).movedUserData).toBe(true);
+  });
+
+  it("says a userData it could not move, and the start does not go on", () => {
+    fixture03();
+    // Into a directory inside itself: the rename is refused.
+    const outcome = firstStartMove(options({ userData: path.join(legacy, "Reload") }));
+    expect(outcome.problem).toMatch(/could not be moved to .*: EINVAL$/);
+    expect(outcome.movedUserData).toBe(false);
+  });
+
+  it("says a move record it cannot write, and the start does not go on", () => {
+    fixture03();
+    write(path.join(userData, "settings.json"), "{}");
+    write(path.join(userData, "legacy-import-report.json", "in-the-way"), "");
+    expect(firstStartMove(options()).problem).toMatch(
+      /^the move from InnyTypes could not be recorded: /,
+    );
+  });
+
+  it("moves the old app's secrets once on a first install with no 0.3.0 before it", () => {
+    write(path.join(oldSecrets(), "mcp_proxy_token"), "token");
+    const outcome = firstStartMove(options({ legacyUserData: null }));
+    expect(outcome.moved).toEqual([expect.stringMatching(/^mcp_proxy_token: /)]);
+    expect(outcome.movedUserData).toBe(false);
+    expect(fs.readFileSync(path.join(newSecrets(), "mcp_proxy_token"), "utf8")).toBe("token");
+    // With no legacy directory, a path is never relocated.
+    expect(outcome.relocate("/a/b")).toBe("/a/b");
+  });
+
+  it("moves no secrets when told not to, and counts the journal rows renamed", () => {
+    fixture03();
+    write(path.join(legacy, "shell-settings.json"), "{}");
+    write(path.join(legacy, "node-red", "flows.json"), "[]");
+    const outcome = firstStartMove(options({ secrets: null, rewriteJournal: () => 2 }));
+    expect(outcome.moved).toEqual([`userData: ${legacy} -> ${userData}`, "2 journal rows renamed"]);
+    expect(fs.existsSync(path.join(oldSecrets(), "anytype_api_key"))).toBe(true);
+    // A path of the old directory is followed into the moved one; the credentials set aside.
+    expect(outcome.relocate(path.join(legacy, "config.toml"))).toBe(
+      path.join(userData, "config.toml"),
+    );
+    write(path.join(userData, "node-red", "flows_cred.json"), "{}");
+    expect(outcome.credentialReplacement(() => undefined)?.setAside()).toMatch(
+      /flows_cred\.unreadable-.*\.json$/,
+    );
+  });
+
+  it("refuses a flows file that is not a list, and skips nodes with no type", () => {
+    const flows = path.join(scratch, "flows.json");
+    write(flows, "{}");
+    expect(() => rewriteLegacyNodeTypes(flows)).toThrow("does not hold a list of nodes");
+    write(flows, JSON.stringify([null, 1, { id: "x" }, { id: "w", type: "inny-folder-watch" }]));
+    expect(rewriteLegacyNodeTypes(flows)).toBe(1);
+  });
+
+  it("drops no install record when there is no settings file, or none in it", () => {
+    expect(dropInstallRecord(scratch)).toBe(false);
+    write(path.join(scratch, "shell-settings.json"), "{}");
+    expect(dropInstallRecord(scratch)).toBe(false);
+  });
+
+  it("spells the old secret directory and the moved files the Windows way on Windows", () => {
+    expect(legacyCredentialsDirectory("C:\\Users\\a", "win32")).toBe(
+      "C:\\Users\\a\\.config\\innytypes",
+    );
+    expect(moveLegacySecrets({ platform: "win32", home: "C:\\Users\\a", env: {} })).toEqual([]);
+  });
+});
+
+describe("firstStartIn", () => {
+  const app = (isPackaged: boolean) => ({
+    isPackaged,
+    getPath: (name: "appData" | "userData") => (name === "appData" ? appData : userData),
+  });
+
+  function start(isPackaged: boolean, e2eHooks: boolean): { outcome: unknown; errors: string[] } {
+    const errors: string[] = [];
+    const outcome = firstStartIn(
+      app(isPackaged),
+      e2eHooks,
+      { RELOAD_TEST_APP_DATA: appData },
+      () => 0,
+      { showErrorBox: (title, text) => errors.push(`${title}: ${text}`) },
+    );
+    return { outcome, errors };
+  }
+
+  it("moves nothing in a development run without the e2e hooks", () => {
+    fixture03();
+    expect(start(false, false).errors).toEqual([]);
+    expect(fs.existsSync(legacy)).toBe(true);
+  });
+
+  it("shows the problem that stops the start", () => {
+    fixture03();
+    fs.symlinkSync(`somehost-${String(process.pid)}`, path.join(legacy, "SingletonLock"));
+    expect(start(false, true).errors).toEqual([
+      expect.stringMatching(/^Reload did not start: InnyTypes is still running/),
+    ]);
+  });
+
+  it("shows the steps that failed, to be tried again at the next start", () => {
+    fixture03();
+    write(path.join(legacy, "node-red", "flows.json"), "{ not json");
+    const { errors } = start(true, false);
+    expect(errors).toEqual([
+      expect.stringMatching(
+        /^Reload could not finish moving the data of InnyTypes: flows: .*tries these again/s,
+      ),
+    ]);
   });
 });
 

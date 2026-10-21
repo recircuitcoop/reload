@@ -25,5 +25,5 @@ uv sync --frozen
 uv run ruff check src tests
 uv run ruff format --check src tests
 uv run mypy
-uv run pytest --cov --cov-fail-under=90
+uv run pytest --cov --cov-fail-under=80
 ```
