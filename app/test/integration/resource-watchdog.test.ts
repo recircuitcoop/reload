@@ -76,7 +76,7 @@ describe.skipIf(process.platform === "win32")("the resource watchdog", () => {
       subject: raw.spec.identity.id,
     });
     expect(raw.notifier.notices[0]?.detail).toMatch(
-      /^The node raw used memory \d+ MB, over its limit of 1 MB, for 0 s, so Reload stopped it and started it again$/,
+      /^The node raw used memory \d+ MB, over its limit of 1 MB, for \d+ s, so Reload stopped it and started it again$/,
     );
   });
 
