@@ -167,7 +167,7 @@ export class TelemetryPipeline {
     } catch (error) {
       return { answer: "unset", problem: reasonOf(error), queued: 0 };
     }
-    return { answer, problem: null, queued: this.pending().length };
+    return { answer, problem: null, queued: this.#allows() ? this.#deps.queue.count() : 0 };
   }
 
   /**
@@ -194,16 +194,19 @@ export class TelemetryPipeline {
 
   /**
    * Send what is queued, in order, and say how many went. Never throws. Reads the switch again
-   * BEFORE EVERY REPORT, so turning it off mid-drain stops the drain at that report.
+   * BEFORE EVERY REQUEST, so turning it off mid-drain stops the drain there. Reads only the next
+   * request's reports off the queue, never the whole of it.
    */
   async flush(): Promise<FlushResult> {
     let sent = 0;
-    const waiting = [...this.pending()];
-    while (waiting.length > 0) {
+    for (;;) {
       if (this.#halted || !this.#allows()) {
         return { sent, retryInMs: null };
       }
-      const group = nextGroup(waiting);
+      const group = nextGroup([...this.#deps.queue.head(MAX_BATCH)]);
+      if (group.length === 0) {
+        return { sent, retryInMs: null };
+      }
       const kind = (group[0] as QueuedReport).kind;
       let outgoing: Outgoing;
       try {
@@ -233,7 +236,6 @@ export class TelemetryPipeline {
       }
       sent += group.length;
     }
-    return { sent, retryInMs: null };
   }
 
   /** Start sending in the background. Idempotent. */

@@ -62,6 +62,14 @@ export class MemoryQueue implements ReportQueue {
     return [...this.reports];
   }
 
+  head(limit: number): readonly QueuedReport[] {
+    return this.reports.slice(0, limit);
+  }
+
+  count(): number {
+    return this.reports.length;
+  }
+
   remove(report: QueuedReport): void {
     this.reports = this.reports.filter((queued) => queued.sequence !== report.sequence);
   }

@@ -21,9 +21,16 @@ export interface ReportQueue {
   enqueue(kind: ReportKind, payload: JsonObject): QueuedReport;
   /** Every queued report, oldest first; one that cannot be read is deleted, not skipped. */
   pending(): readonly QueuedReport[];
+  /** The oldest `limit` reports, read without reading the rest; unreadable ones as `pending`. */
+  head(limit: number): readonly QueuedReport[];
+  /** How many reports wait, without reading any of them. */
+  count(): number;
   /** Forget one report, because it has been sent. */
   remove(report: QueuedReport): void;
-  /** Delete every queued report and say how many there were. */
+  /**
+   * Take every queued report out of the queue at once and say how many there were: none is ever
+   * read or sent after this returns, and their files are deleted in the background.
+   */
   purge(): number;
 }
 

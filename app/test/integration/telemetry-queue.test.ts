@@ -73,7 +73,7 @@ describe("the telemetry queue", () => {
     expect(pending.at(-1)?.payload).toEqual({ n: 128 + 5 });
   });
 
-  it("20 001 reports drop exactly the oldest one, and off empties all of them", () => {
+  it("20 001 reports drop exactly the oldest one, and off empties all of them", async () => {
     const queue = new DiskReportQueue(root, new RecordingLogger());
     for (let n = 1; n <= DEFAULT_MAX_REPORTS + 1; n += 1) {
       queue.enqueue("usage", { n });
@@ -83,12 +83,36 @@ describe("the telemetry queue", () => {
     const pending = queue.pending();
     expect(pending[0]?.payload).toEqual({ n: 2 });
     expect(pending.at(-1)?.payload).toEqual({ n: DEFAULT_MAX_REPORTS + 1 });
-    // Off, through the pipeline's one gate: every one of them deleted, none sent.
+    // A status query and the sender's wake read no report, or only the next request's.
     const world = telemetryWorld("on", { queue });
     const pipeline = new TelemetryPipeline(world.deps);
+    const reads = vi.spyOn(fs, "readFileSync");
+    try {
+      expect(pipeline.state().queued).toBe(DEFAULT_MAX_REPORTS);
+      expect(reads).not.toHaveBeenCalled();
+      expect(queue.head(50).map((report) => report.payload["n"])).toEqual(
+        Array.from({ length: 50 }, (_, n) => n + 2),
+      );
+      expect(reads).toHaveBeenCalledTimes(50);
+    } finally {
+      reads.mockRestore();
+    }
+    // Off, through the pipeline's one gate: every one of them gone at once, none sent, and the
+    // answer does not wait for 20 000 deletions.
+    const started = performance.now();
     pipeline.answer(false);
-    expect(files()).toEqual([]);
+    expect(performance.now() - started).toBeLessThan(1_000);
+    expect(fs.existsSync(root)).toBe(false);
+    expect(queue.pending()).toEqual([]);
+    expect(pipeline.state().queued).toBe(0);
     expect(world.poster.sent).toEqual([]);
+    // Deleted in the background, folder and all.
+    await vi.waitFor(
+      () => {
+        expect(fs.readdirSync(scratch)).toEqual([]);
+      },
+      { timeout: 60_000, interval: 100 },
+    );
   }, 120_000);
 
   it("a queue that knew its files still sees a removal and another writer's file at its next scan", () => {
@@ -156,15 +180,46 @@ describe("the telemetry queue", () => {
     expect(one.pending().map((report) => report.payload["from"])).toEqual(["one", "two", "three"]);
   });
 
-  it("purge deletes every report and says how many; remove forgets one", () => {
+  it("purge deletes every report and says how many; remove forgets one", async () => {
     const queue = new DiskReportQueue(root, new RecordingLogger());
     expect(queue.purge()).toBe(0);
     const first = queue.enqueue("usage", { n: 1 });
     queue.enqueue("usage", { n: 2 });
     queue.remove(first);
     expect(queue.pending().map((report) => report.payload["n"])).toEqual([2]);
+    expect(queue.count()).toBe(1);
     expect(queue.purge()).toBe(1);
     expect(queue.pending()).toEqual([]);
+    expect(queue.count()).toBe(0);
+    // Writable again at once, owner-only as before.
+    queue.enqueue("usage", { n: 3 });
+    expect(fs.statSync(root).mode & 0o777).toBe(0o700);
+    expect(queue.head(5).map((report) => report.payload["n"])).toEqual([3]);
+    await vi.waitFor(() => {
+      expect(fs.readdirSync(scratch)).toEqual(["telemetry-queue"]);
+    });
+  });
+
+  it("a purge a crash interrupted is finished by the next launch's first look", async () => {
+    const left = `${root}.purged-1-2`;
+    fs.mkdirSync(left);
+    fs.writeFileSync(path.join(left, "000000000001-usage.json"), "{}");
+    expect(new DiskReportQueue(root, new RecordingLogger()).count()).toBe(0);
+    await vi.waitFor(() => {
+      expect(fs.existsSync(left)).toBe(false);
+    });
+  });
+
+  it("the head skips and drops an unreadable report, and still gives as many as asked", () => {
+    const logger = new RecordingLogger();
+    const queue = new DiskReportQueue(root, logger);
+    queue.enqueue("usage", { n: 1 });
+    queue.enqueue("usage", { n: 2 });
+    queue.enqueue("usage", { n: 3 });
+    fs.writeFileSync(path.join(root, "000000000002-usage.json"), "{not json");
+    expect(queue.head(2).map((report) => report.payload["n"])).toEqual([1, 3]);
+    expect(queue.count()).toBe(2);
+    expect(logger.lines.join("\n")).toContain("dropping an unreadable telemetry report");
   });
 
   it("a queue that could hold nothing is refused", () => {

@@ -6,10 +6,13 @@
 // (plan 0029: an event every time a package is used, so a week offline fits), and past either
 // bound the OLDEST report is deleted (the newest describes what is happening now).
 //
-// At that size the folder is not listed and every file is not measured on each write: the queue
-// keeps an index of its files and their sizes, made by the first scan and made again by every
-// `pending` (which reads them all anyway). A file another writer adds is found by its name being
-// taken, and joins the index at the next scan.
+// At that size nothing reads the whole queue on its own: the queue keeps an index of its files and
+// their sizes in memory, made by the first scan and made again by every `pending` (which reads
+// them all anyway). Its count and its head (the next request's reports, all the sender reads) come
+// from the index, and turning reports off moves the whole folder aside in one rename and deletes
+// it in the background, so 20 000 reports cost the shell's main process no full read and no
+// second-long block. A file another writer adds is found by its name being taken, and joins the
+// index at the next scan.
 //
 // One file per report, named with a zero-padded sequence, so insertion order is the order the
 // names sort in and no index file can disagree with the folder. A report is written to a scratch
@@ -34,6 +37,8 @@ export const DEFAULT_MAX_REPORTS = 20_000;
 export const DEFAULT_MAX_QUEUE_BYTES = 16 * 1024 * 1024;
 
 const QUEUE_FILENAME = /^(\d{12})-(usage|error)\.json$/;
+/** A purged queue folder, moved aside until its files are deleted: `telemetry-queue.purged-…`. */
+const TRASH_INFIX = ".purged-";
 
 interface QueueFile {
   readonly sequence: number;
@@ -94,9 +99,36 @@ export class DiskReportQueue implements ReportQueue {
   }
 
   pending(): readonly QueuedReport[] {
-    const reports: QueuedReport[] = [];
     const index: Indexed[] = [];
-    for (const { sequence, kind, file } of this.#files()) {
+    const reports = this.#read(this.#files(), index);
+    // Every file was just read: the index is the folder as it is now.
+    this.#index = index;
+    return reports;
+  }
+
+  head(limit: number): readonly QueuedReport[] {
+    const index = this.#indexed();
+    const kept: Indexed[] = [];
+    const reports: QueuedReport[] = [];
+    // Read off the front until `limit` are readable: an unreadable one leaves the index too.
+    let next = 0;
+    while (reports.length < limit && next < index.length) {
+      const batch = index.slice(next, next + limit - reports.length);
+      next += batch.length;
+      reports.push(...this.#read(batch, kept));
+    }
+    this.#index = [...kept, ...index.slice(next)];
+    return reports;
+  }
+
+  count(): number {
+    return this.#indexed().length;
+  }
+
+  /** Read `files`; each readable one is returned and pushed to `readable` with its size. */
+  #read(files: readonly QueueFile[], readable: Indexed[]): QueuedReport[] {
+    const reports: QueuedReport[] = [];
+    for (const { sequence, kind, file } of files) {
       let document: unknown;
       let size: number;
       try {
@@ -117,10 +149,8 @@ export class DiskReportQueue implements ReportQueue {
         continue;
       }
       reports.push({ sequence, kind, payload: document as JsonObject });
-      index.push({ sequence, kind, file, size });
+      readable.push({ sequence, kind, file, size });
     }
-    // Every file was just read: the index is the folder as it is now.
-    this.#index = index;
     return reports;
   }
 
@@ -132,18 +162,46 @@ export class DiskReportQueue implements ReportQueue {
   }
 
   purge(): number {
-    const files = this.#files();
-    for (const { file } of files) {
-      fs.rmSync(file, { force: true });
-    }
+    const count = this.#files().length;
     this.#index = [];
-    return files.length;
+    if (count > 0) {
+      // One rename takes every report out of the queue at once: nothing in the trash is ever read
+      // or sent, and deleting thousands of files does not block the caller.
+      const trash = `${this.#root}${TRASH_INFIX}${String(process.pid)}-${String(Date.now())}`;
+      fs.renameSync(this.#root, trash);
+    }
+    this.#emptyTrash();
+    return count;
+  }
+
+  /**
+   * Delete, in the background, every folder a purge moved aside, this one's and any a crash left
+   * behind. A failure is logged and the next purge tries again.
+   */
+  #emptyTrash(): void {
+    const parent = path.dirname(this.#root);
+    const prefix = `${path.basename(this.#root)}${TRASH_INFIX}`;
+    let names: string[];
+    try {
+      names = fs.readdirSync(parent).filter((name) => name.startsWith(prefix));
+    } catch {
+      return;
+    }
+    for (const name of names) {
+      fs.promises
+        .rm(path.join(parent, name), { recursive: true, force: true })
+        .catch((error: unknown) => {
+          this.#logger.warn(`a purged telemetry folder could not be deleted yet: ${String(error)}`);
+        });
+    }
   }
 
   /** The index, made by a scan the first time it is needed. */
   #indexed(): Indexed[] {
     if (this.#index === null) {
       this.#index = this.#files().map((entry) => ({ ...entry, size: sizeOf(entry.file) }));
+      // The first touch of a launch: a purge a crash interrupted finishes now.
+      this.#emptyTrash();
     }
     return this.#index;
   }
