@@ -201,10 +201,11 @@ describe("the telemetry pipeline: what is queued", () => {
       ...crash(),
       exception_type: `Error at ${HOME_PATH} with ${ANYTYPE_KEY}`,
       detail: [`Bearer ${PROXY_TOKEN}`, { deeper: `node said ${NODE_CREDENTIAL}` }],
-      anytype_api_key: ANYTYPE_KEY,
       where: `file://${HOME_PATH}`,
     };
     pipeline.recordCrash(hostile);
+    // A field NAMED like a credential is refused outright (plan 0029 rule 2): nothing is queued.
+    expect(pipeline.recordCrash({ ...hostile, anytype_api_key: ANYTYPE_KEY })).toBeNull();
     pipeline.recordUsage({ ...usage(), note: HOME_PATH, arch: HOME_PATH });
     const queued = JSON.stringify(world.queue.reports);
     await pipeline.flush();
@@ -224,11 +225,13 @@ describe("the telemetry pipeline: what is queued", () => {
   });
 
   it("the leak check itself can fail", () => {
-    // The same payload WITHOUT the registry armed: the canary survives, so the check above sees.
+    // WITHOUT the registry armed, a canary in no credential's shape survives (the shaped ones
+    // are scrubbed by plan 0029's gate either way), so the check above sees.
+    const unshaped = "canaryanytypeunshaped";
     const world = telemetryWorld("on");
     const pipeline = new TelemetryPipeline(world.deps);
-    pipeline.recordCrash({ ...crash(), exception_type: `with ${ANYTYPE_KEY}` });
-    expect(JSON.stringify(world.queue.reports)).toContain(ANYTYPE_KEY);
+    pipeline.recordCrash({ ...crash(), exception_type: `with ${unshaped}` });
+    expect(JSON.stringify(world.queue.reports)).toContain(unshaped);
   });
 
   it("a build with no endpoint queues nothing", () => {

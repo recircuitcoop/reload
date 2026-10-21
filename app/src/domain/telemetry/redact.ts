@@ -265,3 +265,185 @@ export function packageRelative(path: string): string {
   }
   return REDACTED;
 }
+
+// ── no credentials, ever (plan 0029) ─────────────────────────────────────────────────────
+//
+// The redaction above removes what is KNOWN: the registered credentials, the machine identifier,
+// the paths. What follows makes sure nothing UNKNOWN gets through either. The pipeline applies
+// the field-name rule and the scrub to every payload after the redaction and before the queue,
+// so no builder, old or new, can go around them; `hostOnly` and `scrubFreeText` are also
+// exported for the builders, which use them on the one URL or the one free text they carry.
+
+/**
+ * Plan 0029 rule 2: a field whose lowercased name CONTAINS any of these is not sent at all. The
+ * whole report is refused, not just the value: a report that has such a field was built wrong,
+ * and the person deserves the event lost rather than the guess that only its value was a risk.
+ */
+export const CREDENTIAL_NAME_FRAGMENTS: readonly string[] = [
+  "token",
+  "key",
+  "secret",
+  "password",
+  "passwd",
+  "auth",
+  "credential",
+  "cookie",
+  "session",
+  "dsn",
+  "bearer",
+  "api",
+];
+
+/** What free text becomes when it still looks like it carries a credential after the scrub. */
+export const WITHHELD = "[withheld]";
+
+/**
+ * The first fragment of CREDENTIAL_NAME_FRAGMENTS found in any field name of `payload`, at any
+ * depth (inside objects and inside arrays), or null when there is none. The fragment, never the
+ * name itself, is what a caller may log: a name built from data could hold anything.
+ */
+export function credentialFieldName(payload: Readonly<Record<string, unknown>>): string | null {
+  return credentialNameIn(payload, 0);
+}
+
+function credentialNameIn(value: unknown, depth: number): string | null {
+  // Deeper than redaction looks is never queued (it becomes REDACTED), and a cycle ends here.
+  if (depth > MAX_DEPTH) {
+    return null;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = credentialNameIn(item, depth + 1);
+      if (found !== null) {
+        return found;
+      }
+    }
+    return null;
+  }
+  if (!isPlainObject(value)) {
+    return null;
+  }
+  for (const [key, item] of Object.entries(value)) {
+    const lowered = key.toLowerCase();
+    const fragment = CREDENTIAL_NAME_FRAGMENTS.find((candidate) => lowered.includes(candidate));
+    if (fragment !== undefined) {
+      return fragment;
+    }
+    const found = credentialNameIn(item, depth + 1);
+    if (found !== null) {
+      return found;
+    }
+  }
+  return null;
+}
+
+/**
+ * Plan 0029 rule 3: a URL reduced to its host. Userinfo (`user:pass@`), port, path, query and
+ * fragment are dropped, because each can carry a token. Null for anything that does not parse
+ * as a URL, and for a URL with no host (a `file:` URL): a builder sends `file` for that, never
+ * the path.
+ */
+export function hostOnly(url: string): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  return parsed.hostname === "" ? null : parsed.hostname;
+}
+
+/**
+ * Whether a long run of key-alphabet characters is random enough to be a key: hex, or with a
+ * digit or a capital in it. A long kebab-case or snake_case name (`node-red-contrib-something`)
+ * is a name, not a key, and stays readable.
+ */
+function looksRandom(run: string): boolean {
+  return /^[A-Fa-f0-9]+$/.test(run) || /[0-9A-Z]/.test(run);
+}
+
+/**
+ * The shapes a credential travels in, each replaced in place. In order: the header names come
+ * first so the token after them goes with them; the long runs (KEY_RUN, below) go last, so they
+ * do not eat what a named rule here removes more readably.
+ */
+const CREDENTIAL_SHAPES: readonly (readonly [RegExp, string])[] = [
+  // An Authorization header or field: everything after it on the line, whatever the scheme.
+  [/\bauthorization["']?\s*[:=][^\r\n]*/gi, `Authorization: ${REDACTED}`],
+  // A bearer token, even without the header.
+  [/\bbearer\s+[^\s"',;]+/gi, `Bearer ${REDACTED}`],
+  // A URL's userinfo (`https://user:pass@host`), up to its last `@`: dropped, so the host stays.
+  [/\b([a-z][a-z0-9+.-]*:\/\/)[^\s/?#]*@/gi, "$1"],
+  // `key=…`, `token: …`, `"password": "…"`, `?access_token=…`: the name stays, the value goes.
+  [
+    /\b([\w.-]*(?:key|token|secret|password|passwd|pwd|auth|credential|cookie|session|dsn|signature)[\w.-]*)(["']?\s*[=:]\s*)("[^"]*"|'[^']*'|[^\s&,;"']+)/gi,
+    `$1$2${REDACTED}`,
+  ],
+  // A JWT: three base64url parts, the first a JSON header (`{"` is `eyJ`).
+  [/\beyJ[\w-]+\.[\w-]+\.[\w-]*/g, REDACTED],
+];
+
+/** A run of hex, base64 or base64url characters: 24 or more that look random are scrubbed. */
+const KEY_RUN = /[A-Za-z0-9+/_-]{24,}={0,2}/g;
+
+/** A run of letters and digits long enough to be a short key, which the scrub leaves. */
+const SHORT_KEY_RUN = /[A-Za-z0-9+/_-]{16,}/g;
+
+/**
+ * A word that names a credential. Left after the scrub, it says one was there (`Bearer
+ * [redacted]`, `token=[redacted]`), or that one sits nearby in a shape no rule knows.
+ */
+const CREDENTIAL_WORD =
+  /bearer|authorization|passw|passphrase|secret|token|api[_-]?key|private[_ -]?key|credential|cookie|\bdsn\b|session[_-]?id/i;
+
+/** What still looks like a credential after the scrub: a credential word, or a short key. */
+function stillLooksLikeACredential(text: string): boolean {
+  if (CREDENTIAL_WORD.test(text)) {
+    return true;
+  }
+  return [...text.matchAll(SHORT_KEY_RUN)].some(
+    ([run]) => /[0-9]/.test(run) && /[A-Za-z]/.test(run),
+  );
+}
+
+/**
+ * Plan 0029 rule 4: free text with every credential shape scrubbed out, or WITHHELD when
+ * anything credential-like remains. The pipeline runs it on every string of every payload after
+ * the one redaction (so a registered secret is already gone); a builder may run it on its free
+ * text first, which changes nothing it would not change anyway. A withheld message costs a
+ * diagnosis; a sent credential costs the person (the plan's risks).
+ */
+export function scrubFreeText(text: string): string {
+  let scrubbed = text;
+  for (const [shape, replacement] of CREDENTIAL_SHAPES) {
+    scrubbed = scrubbed.replace(shape, replacement);
+  }
+  scrubbed = scrubbed.replace(KEY_RUN, (run) => (looksRandom(run) ? REDACTED : run));
+  return stillLooksLikeACredential(scrubbed) ? WITHHELD : scrubbed;
+}
+
+/**
+ * Every string of a redacted payload, at any depth, through `scrubFreeText`, except the values
+ * of the top-level fields named in `exempt`: the pipeline's own identifiers, which are hex by
+ * construction and were never anybody's input.
+ */
+export function scrubPayload(payload: JsonObject, exempt: readonly string[] = []): JsonObject {
+  const scrubbed: JsonObject = {};
+  for (const [key, item] of Object.entries(payload)) {
+    scrubbed[key] = exempt.includes(key) ? item : scrubJson(item);
+  }
+  return scrubbed;
+}
+
+function scrubJson(value: Json): Json {
+  if (typeof value === "string") {
+    return scrubFreeText(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map(scrubJson);
+  }
+  if (value !== null && typeof value === "object") {
+    return scrubPayload(value);
+  }
+  return value;
+}

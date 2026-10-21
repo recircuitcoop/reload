@@ -165,7 +165,7 @@ const hostile = (): Record<string, unknown> => ({
     VERSIONS,
   ),
   exception_type: `ServicesCrashed near ${HOME} holding ${CANARIES[0] ?? ""}`,
-  anytype_api_key: CANARIES[0],
+  // No field named like a credential: the pipeline refuses such a report whole (plan 0029).
   context: [`Bearer ${CANARIES[1] ?? ""}`, { deeper: CANARIES[2], at: `file://${HOME}` }],
 });
 

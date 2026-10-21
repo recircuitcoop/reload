@@ -13,14 +13,21 @@
 //   a machine whose owner has not answered has not had its identifier looked at. The raw value is
 //   registered with the log's redactor the moment it is read, and removed from every payload.
 // * Every payload passes the one redaction (domain/telemetry/redact.ts) before it is queued, and
-//   a transport renders only what was queued.
+//   a transport renders only what was queued. After it, the credential gate of plan 0029: a
+//   field named like a credential refuses the report, and every string is scrubbed.
 // * Reporting never waits on a server: `recordUsage` and `recordCrash` write one small file and
 //   schedule the sender. The sender posts with a timeout and backs off between failures on the
 //   injected clock, so a GlitchTip that is down, slow or gone costs a restart nothing.
 
-import { redactPayload, type CredentialRedactor } from "../domain/telemetry/redact";
+import {
+  credentialFieldName,
+  redactPayload,
+  scrubPayload,
+  type CredentialRedactor,
+} from "../domain/telemetry/redact";
 import {
   checkIdentifier,
+  TelemetryError,
   type QueuedReport,
   type ReportKind,
   type TelemetryAnswer,
@@ -77,6 +84,12 @@ export interface FlushResult {
 
 const reasonOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
+
+/**
+ * The identifiers the pipeline stamps itself: hex by construction, never anybody's input, so the
+ * scrub would only mistake them for keys.
+ */
+const OWN_IDENTIFIERS: readonly string[] = ["machine_id", "report_id"];
 
 /** A kind of report, in the log's words: an `error` report is about a crash. */
 const named = (kind: ReportKind): string => (kind === "error" ? "crash report" : "usage report");
@@ -286,10 +299,16 @@ export class TelemetryPipeline {
         report_id: this.#deps.newId(),
         at: new Date(this.#deps.now()).toISOString(),
       };
-      const report = this.#deps.queue.enqueue(
-        kind,
-        redactPayload(stamped, this.#deps.credentials, this.#raw),
-      );
+      // No credentials, ever (plan 0029): a field named like one refuses the whole report, and
+      // every string is scrubbed after the one redaction, for every report any builder makes.
+      const named = credentialFieldName(stamped);
+      if (named !== null) {
+        throw new TelemetryError(
+          `a field's name contains "${named}", which no report may carry (plan 0029)`,
+        );
+      }
+      const redacted = redactPayload(stamped, this.#deps.credentials, this.#raw);
+      const report = this.#deps.queue.enqueue(kind, scrubPayload(redacted, OWN_IDENTIFIERS));
       this.#wake();
       return report;
     } catch (error) {
