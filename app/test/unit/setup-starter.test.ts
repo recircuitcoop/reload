@@ -36,20 +36,31 @@ function starterRow(on: boolean, ready: boolean): FlowSummary {
   };
 }
 
-function harness() {
+/** The fake runtime's one flow, the starter, as the harness keeps it. */
+interface FakeFlow {
+  installed: boolean;
+  on: boolean;
+  ready: boolean;
+  folder: string;
+  status: { text: string; fill: string; shape: string } | null;
+  lostAnswer: boolean;
+}
+
+/** Setup wired to a fake runtime; given `previous`, its settings and flows, as after a quit. */
+function harness(previous?: { stored: Record<string, unknown>; flow: FakeFlow }) {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-setup-"));
   const folder = path.join(scratch, "Inbox");
   fs.mkdirSync(folder);
   const sampleFile = path.join(scratch, "sample-10s.wav");
   fs.writeFileSync(sampleFile, "RIFF-sample");
   const calls: [string, Record<string, unknown>][] = [];
-  const flow = {
+  const flow: FakeFlow = previous?.flow ?? {
     installed: false,
     on: false,
     ready: false,
     folder: "",
     /** The folder source's last status, as node.status answers it. */
-    status: null as { text: string; fill: string; shape: string } | null,
+    status: null,
     /** flow.fromTemplate makes the flow, then its answer is lost (a timeout). */
     lostAnswer: false,
   };
@@ -114,7 +125,7 @@ function harness() {
       if (channel === IPC.setupCall) handler = given as typeof handler;
     },
   };
-  const stored: Record<string, unknown> = {};
+  const stored: Record<string, unknown> = previous?.stored ?? {};
   const pushed: unknown[] = [];
   const chooser = { folder: folder as string | null };
   const sleeps: number[] = [];
@@ -242,6 +253,53 @@ describe("the example, skipped", () => {
       ["flow.delete", { id: STARTER, canvasDirty: false }],
     ]);
     expect(h.flow.installed).toBe(false);
+  });
+
+  it("on Source folder, with the removal refused: kept, and removed on the next read", async () => {
+    const h = harness();
+    await toSourceFolder(h);
+    const real = h.answers["flow.delete"];
+    if (real === undefined) throw new Error("the fake runtime answers no flow.delete");
+    h.answers["flow.delete"] = () => ({ ok: false, code: "down", error: "down" });
+    await h.call("setup.move", { kind: "skipExample" });
+    // Not gone, so not forgotten: still recorded, with the example skipped.
+    expect(h.flow.installed).toBe(true);
+    expect(h.stored["setup"]).toMatchObject({ example: "skip", starterFlowId: STARTER });
+    h.answers["flow.delete"] = real;
+    await h.call("setup.get");
+    await h.settle();
+    expect(h.flow.installed).toBe(false);
+    expect(h.stored["setup"]).toMatchObject({ example: "skip", starterFlowId: null });
+  });
+
+  it("while its install is under way, then a quit: recorded, and removed on the next launch", async () => {
+    const h = harness();
+    await toExample(h);
+    let answer: () => void = () => undefined;
+    h.held["flow.fromTemplate"] = new Promise((resolve) => {
+      answer = resolve;
+    });
+    await h.call("setup.move", { kind: "useExample" });
+    await h.call("setup.move", { kind: "skipExample" });
+    // The removal cannot happen before the quit.
+    h.answers["flow.delete"] = () => ({ ok: false, code: "down", error: "down" });
+    answer();
+    await h.settle();
+    await h.settle();
+    expect(h.flow.installed).toBe(true);
+    expect(h.stored["setup"]).toMatchObject({ example: "skip", starterFlowId: STARTER });
+
+    // The next launch: the window reads Setup as it opens, and the starter is removed.
+    const relaunched = harness(h);
+    await relaunched.call("setup.get");
+    await relaunched.settle();
+    expect(relaunched.calls.filter(([op]) => op === "flow.delete")).toHaveLength(1);
+    expect(h.flow.installed).toBe(false);
+    expect(h.stored["setup"]).toMatchObject({ example: "skip", starterFlowId: null });
+    // Once gone, nothing more to remove.
+    await relaunched.call("setup.get");
+    await relaunched.settle();
+    expect(relaunched.calls.filter(([op]) => op === "flow.delete")).toHaveLength(1);
   });
 
   it("while its install is under way: the flow it made is removed, never recorded", async () => {

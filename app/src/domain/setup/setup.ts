@@ -134,7 +134,8 @@ export function useExample(state: SetupState): SetupState {
 
 /**
  * Skip, on the choice or on any screen of the example's own: straight to Ready, with no starter.
- * A starter already recorded is forgotten here; removing the flow itself is the shell's.
+ * A starter already recorded stays recorded until the shell has removed it (`withStarterRemoved`),
+ * so a quit before that removes it on the next launch.
  */
 export function skipExample(state: SetupState): SetupState {
   const offered = ["example", "source-folder", "node-forms"].includes(state.step);
@@ -147,8 +148,29 @@ export function skipExample(state: SetupState): SetupState {
     step: "ready",
     formIndex: 0,
     formCount: 0,
-    starterFlowId: null,
   };
+}
+
+/** Whether the example was skipped with a starter still recorded: the shell is to remove it. */
+export function starterToRemove(state: SetupState): string | null {
+  return state.example === "skip" ? state.starterFlowId : null;
+}
+
+/** The starter `flowId` removed: forgotten, at any step, completed or not. */
+export function withStarterRemoved(state: SetupState, flowId: string): SetupState {
+  return state.starterFlowId === flowId ? { ...state, starterFlowId: null } : state;
+}
+
+/**
+ * Connect Anytype, from the example's own screens when Anytype cannot list its spaces: back to
+ * Setup's Anytype step, the example and its starter kept.
+ */
+export function connectAnytype(state: SetupState): SetupState {
+  const offered = ["example", "source-folder", "node-forms"].includes(state.step);
+  if (state.completed || !offered) {
+    return state;
+  }
+  return { ...state, step: "connect-anytype", formIndex: 0 };
 }
 
 /** Whether Back is offered on this step. */
@@ -171,12 +193,16 @@ export function withStarterForms(state: SetupState, formCount: number): SetupSta
 
 /**
  * The starter flow, installed: its id, and its step forms (`withStarterForms`, before Ready).
- * Recorded at whatever step the install finished, so it is never installed again; never once
- * Setup is completed, never over a starter already recorded, never an empty id, and never once
- * the example is no longer chosen (an install that finished after Skip).
+ * Recorded at whatever step the install finished, so it is never installed again; never over a
+ * starter already recorded, and never an empty id. An install that finished after Skip is
+ * recorded too, completed or not, so the shell can remove it (`starterToRemove`); otherwise never
+ * once Setup is completed.
  */
 export function withStarter(state: SetupState, flowId: string, formCount: number): SetupState {
-  if (state.completed || state.starterFlowId !== null || flowId === "" || state.example !== "use") {
+  if (state.starterFlowId !== null || flowId === "" || state.example === null) {
+    return state;
+  }
+  if (state.completed && state.example !== "skip") {
     return state;
   }
   return { ...withStarterForms(state, formCount), starterFlowId: flowId };
@@ -269,7 +295,7 @@ export function resume(saved: unknown): SetupState {
   const example = exampleOf(record["example"], step);
   if (example === "skip" && (step === "source-folder" || step === "node-forms")) {
     // The example's own screens with the example skipped: Ready, as Skip left it.
-    return skipExample({ ...FIRST_SETUP, step });
+    return skipExample({ ...FIRST_SETUP, step, starterFlowId });
   }
   const index = isCount(formIndex) ? formIndex : 0;
   const count = isCount(formCount) ? formCount : 0;

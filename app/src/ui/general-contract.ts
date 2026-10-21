@@ -67,6 +67,7 @@ export type SetupMove =
   | { readonly kind: "back" }
   | { readonly kind: "useExample" }
   | { readonly kind: "skipExample" }
+  | { readonly kind: "connectAnytype" }
   | { readonly kind: "starterForms"; readonly formCount: number }
   | { readonly kind: "finish" };
 

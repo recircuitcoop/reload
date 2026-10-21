@@ -16,9 +16,11 @@ import {
   setupForExistingInstall,
   shouldShowSetup,
   skipExample,
+  starterToRemove,
   useExample,
   withStarter,
   withStarterForms,
+  withStarterRemoved,
   waitsForStarter,
   type SetupState,
 } from "../../../src/domain/setup/setup";
@@ -113,23 +115,34 @@ describe("the example", () => {
     const skipped = skipExample(forward(3));
     expect(skipped).toMatchObject({ step: "ready", example: "skip", starterFlowId: null });
     expect(needsStarter(skipped)).toBe(false);
-    expect(withStarter(skipped, "late", 1)).toBe(skipped);
+    // An install that finished after Skip is recorded, to be removed, then forgotten.
+    const late = withStarter(skipped, "late", 1);
+    expect(starterToRemove(late)).toBe("late");
+    expect(withStarterRemoved(late, "late")).toEqual(skipped);
+    expect(withStarterRemoved(late, "other")).toBe(late);
+    expect(starterToRemove(finish(late))).toBe("late");
+    expect(starterToRemove(withStarter(finish(skipped), "late", 1))).toBe("late");
     // Ready without the example goes back to the choice; there, it can still be used.
     expect(back(skipped)).toMatchObject({ step: "example", example: "skip" });
     expect(useExample(back(skipped))).toMatchObject({ step: "source-folder", example: "use" });
     expect(finish(skipped).completed).toBe(true);
   });
 
-  it("skipped on its own screens: the starter forgotten, and Ready", () => {
+  it("skipped on its own screens: Ready, the starter kept until the shell has removed it", () => {
     for (const state of [atFolder(2), next(atFolder(2)), next(next(atFolder(2)))]) {
-      expect(skipExample(state)).toMatchObject({
+      const skipped = skipExample(state);
+      expect(skipped).toMatchObject({
         step: "ready",
         example: "skip",
-        starterFlowId: null,
+        starterFlowId: "starter-1",
         formCount: 0,
         formIndex: 0,
       });
+      expect(starterToRemove(skipped)).toBe("starter-1");
+      expect(starterToRemove(withStarterRemoved(skipped, "starter-1"))).toBeNull();
     }
+    // A starter in use is never one to remove.
+    expect(starterToRemove(atFolder(2))).toBeNull();
   });
 
   it("is offered only on its own screens, and never once completed", () => {
@@ -271,9 +284,11 @@ describe("resumes at the same step", () => {
       formCount: 2,
     });
     // The example's own screens with the example skipped: Ready, as Skip leaves it.
-    expect(
-      resume({ step: "node-forms", example: "skip", formCount: 2, starterFlowId: "s" }),
-    ).toEqual(skipExample(atFolder(2)));
+    const cutShort = { step: "node-forms", example: "skip", formCount: 2, starterFlowId: "s" };
+    expect(resume(cutShort)).toEqual({ ...skipExample(atFolder(2)), starterFlowId: "s" });
+    expect(starterToRemove(resume({ step: "ready", example: "skip", starterFlowId: "s" }))).toBe(
+      "s",
+    );
     expect(resume({ step: "example", example: "maybe" }).example).toBeNull();
     expect(resume({ step: "nonsense", completed: true }).completed).toBe(true);
     expect(resume({ step: "reports", completed: true })).toEqual({
