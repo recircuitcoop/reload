@@ -285,7 +285,7 @@ function generateNodeTypes(
   );
   const registration = new TypeRegistration({
     types,
-    personalLimits: readPersonalLimits(settings, logger),
+    personalLimits: readPersonalLimits(settings, logger, notifier),
     launcher,
     validator,
     replay: {

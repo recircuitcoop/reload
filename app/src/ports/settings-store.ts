@@ -54,13 +54,18 @@ export interface UpdateHistoryStore {
 }
 
 /**
- * The person's own resource limits (plan 0031 group A, the old config.toml `[helper.defaults]`):
- * the `limits` setting, with the keys of a type's `reload.limits` (spec 2.4.2). Edited in the
- * file only, as the old one was; read once when a process tree starts.
+ * The person's own resource limits (plan 0031 group A, the old config.toml `[helper.defaults]`
+ * and its "Stability defaults" form): the `limits` setting, with the keys of a type's
+ * `reload.limits` (spec 2.4.2), edited in General › Advanced. Read when a process tree starts.
  */
 export interface LimitDefaultsSetting {
   /** The `limits` setting; undefined when unset. Throws when unreadable or not limits. */
   readLimitDefaults(): DeclaredLimits | undefined;
+}
+
+/** The same setting, written: General's form, judged before it gets here. */
+export interface LimitDefaultsStore extends LimitDefaultsSetting {
+  writeLimitDefaults(limits: DeclaredLimits): void;
 }
 
 /**

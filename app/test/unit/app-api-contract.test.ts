@@ -30,6 +30,15 @@ function recording() {
 }
 
 /** Each call: what the page calls, and the IPC it must make. */
+const LIMITS = {
+  memory_mb: 2048,
+  cpu_percent: 90,
+  cpu_window_s: 120,
+  open_files: 1024,
+  children: 32,
+  grace_s: 60,
+};
+
 const CALLS: Record<string, { call: (api: AppApi) => Promise<unknown>; sent: unknown[] }> = {
   secretStorage: { call: (api) => api.secretStorage(), sent: [IPC.secretStorage] },
   childStatus: { call: (api) => api.childStatus(), sent: [IPC.childStatus] },
@@ -248,6 +257,14 @@ const CALLS: Record<string, { call: (api: AppApi) => Promise<unknown>; sent: unk
   retention: {
     call: (api) => api.retention(),
     sent: [IPC.generalCall, { op: "retention.get", args: null }],
+  },
+  limits: {
+    call: (api) => api.limits(),
+    sent: [IPC.generalCall, { op: "limits.get", args: null }],
+  },
+  setLimits: {
+    call: (api) => api.setLimits(LIMITS),
+    sent: [IPC.generalCall, { op: "limits.set", args: { limits: LIMITS } }],
   },
   setRetention: {
     call: (api) => api.setRetention(null),

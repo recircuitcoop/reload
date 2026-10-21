@@ -16,8 +16,12 @@ import type {
 } from "../contract";
 import { Button } from "../components/atoms/Button";
 import { StatusPill, type StatusPillState } from "../components/atoms/StatusPill";
+import { NumberField } from "../components/atoms/NumberField";
+import { Field } from "../components/molecules/Field";
 import { KeyValue } from "../components/molecules/KeyValue";
 import { GeneralSection } from "../components/organisms/GeneralSection";
+import { LIMIT_FIELDS, limitErrors, limitsToSave, limitsTyped } from "../general";
+import type { LimitValues } from "../general-contract";
 import { useChildren } from "../store";
 import { t, type PlainKey } from "../strings";
 
@@ -153,6 +157,7 @@ export function AdvancedSection({
             </div>
           </div>
         )}
+        <LimitsForm api={api} />
         {legacy.length === 0 ? null : (
           <div data-testid="general-advanced-legacy" className="flex flex-col gap-2">
             <KeyValue kind="mono" label={t("general.advanced.legacy")} value={legacy.join(", ")} />
@@ -187,5 +192,88 @@ function EndpointRows({ status }: { readonly status: McpEndpointStatus }) {
         <KeyValue kind="text" label={t("general.advanced.endpoint")} value={status.problem} />
       )}
     </div>
+  );
+}
+
+/**
+ * Stability defaults (plan 0031, the old helper form's group): the person's own resource limits,
+ * every field refused in words by the shell's rules before anything is written.
+ */
+function LimitsForm({ api }: { readonly api: AppApi }) {
+  const [typed, setTyped] = useState<Record<keyof LimitValues, string> | null>(null);
+  const [errors, setErrors] = useState<Partial<Record<keyof LimitValues, string>>>({});
+  const [said, say] = useState<PlainKey | null>(null);
+  useEffect(() => {
+    api.limits().then(
+      (answer) => {
+        if (answer.ok) setTyped(limitsTyped(answer.value));
+      },
+      () => undefined,
+    );
+  }, [api]);
+  if (typed === null) {
+    return null;
+  }
+  const save = () => {
+    say(null);
+    api.setLimits(limitsToSave(typed)).then(
+      (answer) => {
+        if (answer.ok) {
+          setTyped(limitsTyped(answer.value));
+          setErrors({});
+          say("general.limits.saved");
+        } else {
+          setErrors(limitErrors(answer.refused));
+          say("general.limits.refused");
+        }
+      },
+      () => undefined,
+    );
+  };
+  return (
+    <form
+      data-testid="general-limits"
+      className="flex flex-col gap-3 pt-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        save();
+      }}
+    >
+      <KeyValue kind="text" label={t("general.limits")} value={t("general.limits.line")} />
+      <div className="grid grid-cols-2 gap-3">
+        {LIMIT_FIELDS.map(({ key, label }) => (
+          <Field
+            key={key}
+            label={t(label)}
+            state={errors[key] === undefined ? "default" : "error"}
+            {...(errors[key] === undefined ? {} : { error: errors[key] })}
+          >
+            {(control) => (
+              <NumberField
+                id={control.id}
+                testId={`general-limits-${key}`}
+                state={control.state === "error" ? "error" : "default"}
+                value={typed[key]}
+                onValueChange={(value) => {
+                  setTyped({ ...typed, [key]: value });
+                }}
+                incrementLabel={t("general.port.more")}
+                decrementLabel={t("general.port.less")}
+              />
+            )}
+          </Field>
+        ))}
+      </div>
+      <div>
+        <Button kind="secondary" type="submit" data-testid="general-limits-save">
+          {t("general.limits.save")}
+        </Button>
+      </div>
+      {said === null ? null : (
+        <p data-testid="general-limits-message" className="text-caption text-secondary">
+          {t(said)}
+        </p>
+      )}
+    </form>
   );
 }

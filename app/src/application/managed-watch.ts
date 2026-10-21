@@ -71,7 +71,7 @@ export function managedWatch(parts: ManagedWatchParts): ManagedWatchDeps {
         logger[level](message);
       },
     }),
-    limits: readPersonalLimits(parts.settings, logger),
+    limits: readPersonalLimits(parts.settings, logger, parts.notifier),
     notifier: parts.notifier,
     now: () => parts.clock.now(),
     kill: (pid) => {

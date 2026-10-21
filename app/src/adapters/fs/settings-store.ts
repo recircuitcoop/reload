@@ -15,7 +15,7 @@ import { limitsProblem, type DeclaredLimits } from "../../domain/supervision/res
 import type { TelemetryAnswer } from "../../domain/telemetry/reports";
 import type {
   LaunchAtLoginSetting,
-  LimitDefaultsSetting,
+  LimitDefaultsStore,
   PackageSettingsStore,
   RunRetentionSetting,
   SettingsStore,
@@ -39,7 +39,7 @@ export class JsonSettingsStore
   implements
     SettingsStore,
     LaunchAtLoginSetting,
-    LimitDefaultsSetting,
+    LimitDefaultsStore,
     PackageSettingsStore,
     RunRetentionSetting,
     SetupSetting,
@@ -151,6 +151,10 @@ export class JsonSettingsStore
       throw new SettingsFileError(`the limits setting in ${this.#file}: ${problem}`);
     }
     return limits as DeclaredLimits;
+  }
+
+  writeLimitDefaults(limits: DeclaredLimits): void {
+    this.#write("limits", { ...limits });
   }
 
   readRunRetentionDays(): number | null | undefined {

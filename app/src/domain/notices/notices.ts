@@ -24,6 +24,8 @@ export type NoticeKind =
   | "child-over-limit"
   /** The Anytype app Reload started stayed over a resource limit and was stopped. */
   | "anytype-over-limit"
+  /** The person's own resource limits in the settings file could not be read (plan 0031). */
+  | "limits-unreadable"
   /** The Anytype MCP child stopped for good after the breaker's limit (§4.1 point 2). */
   | "mcp-child-stopped"
   /** The Anytype MCP child went silent and was restarted (§4.1 point 2). */
@@ -73,6 +75,7 @@ export const NOTICE_KINDS: readonly NoticeKind[] = [
   "node-over-limit",
   "child-over-limit",
   "anytype-over-limit",
+  "limits-unreadable",
   "mcp-child-stopped",
   "mcp-child-restarted",
   "endpoint-degraded",
@@ -196,6 +199,15 @@ function composeWords(notice: Notice): Message {
       return {
         title: "Reload stopped the Anytype app",
         body: sentences(detail, "Open Anytype again to keep working."),
+      };
+    case "limits-unreadable":
+      // The detail names the file and what is wrong in it (the old HelperConfigError).
+      return {
+        title: "Reload could not read your limits",
+        body: sentences(
+          detail,
+          "Until it is fixed, Reload uses its own. Change them in Configuration › General › Advanced.",
+        ),
       };
     case "mcp-child-stopped":
       // The body is the service's sentence and nothing else: it already says why, and a remedy

@@ -6,6 +6,7 @@ import fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { IpcMain } from "electron";
+import type { DeclaredLimits } from "../../src/domain/supervision/resources";
 import { describe, expect, it } from "vitest";
 import { JsonBoardStore } from "../../src/adapters/fs/board-store";
 import { GONE_SENTENCE, NO_STEP_SENTENCE } from "../../src/application/flows";
@@ -178,6 +179,12 @@ function harness(options: { readonly logFile?: string | null } = {}) {
     },
     writeRunRetentionDays(days: number | null) {
       this.stored["retention"] = days;
+    },
+    readLimitDefaults() {
+      return this.stored["limits"] as DeclaredLimits | undefined;
+    },
+    writeLimitDefaults(limits: DeclaredLimits) {
+      this.stored["limits"] = limits;
     },
     readTelemetry() {
       return this.telemetry;
@@ -848,6 +855,40 @@ describe("AppApi v2 calls, through the shell to its processes", () => {
     expect(await h.api.logFile()).toEqual({ ok: true, value: { path: null } });
     expect(await h.api.showLog()).toEqual(FAILED);
     expect(h.revealed).toEqual([]);
+  });
+
+  it("stability defaults: the documented limits until the person saves their own, each bad field refused in words, nothing written", async () => {
+    const h = harness();
+    const documented = {
+      memory_mb: 1024,
+      cpu_percent: 90,
+      cpu_window_s: 120,
+      open_files: 1024,
+      children: 32,
+      grace_s: 60,
+    };
+    expect(await h.api.limits()).toEqual({ ok: true, value: documented });
+    const raised = { ...documented, memory_mb: 4096, children: 64 };
+    expect(await h.api.setLimits(raised)).toEqual({ ok: true, value: raised });
+    expect(h.settings.stored["limits"]).toEqual(raised);
+    expect(await h.api.limits()).toEqual({ ok: true, value: raised });
+    // The old form's refusals: max_children 2.5, a zero; and nothing is written.
+    expect(await h.api.setLimits({ ...raised, children: 2.5, grace_s: 0 })).toEqual({
+      ok: false,
+      refused: {
+        reason: "invalid",
+        sentence: "general.limits.refused",
+        problems: [
+          { path: "children", message: "not-whole" },
+          { path: "grace_s", message: "not-positive" },
+        ],
+      },
+    });
+    expect(h.settings.stored["limits"]).toEqual(raised);
+    expect(await h.raw(IPC.generalCall, { op: "limits.set", args: { limits: "lots" } })).toEqual({
+      ok: false,
+      refused: { reason: "invalid", sentence: "general.limits.refused", problems: [] },
+    });
   });
 
   it("answers an op no channel knows, and a handler that throws, as a refusal", async () => {

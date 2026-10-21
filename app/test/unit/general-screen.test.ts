@@ -13,6 +13,10 @@ import {
   codeParts,
   FOLDER_SOURCE_TYPE,
   folderName,
+  LIMIT_FIELDS,
+  limitErrors,
+  limitsToSave,
+  limitsTyped,
   folderSteps,
   recorderLine,
   moveRefusal,
@@ -663,5 +667,54 @@ describe("every action a Package row draws has its call", () => {
       "check-for-changes": "checkFolder",
       "go-back": "confirm-go-back",
     });
+  });
+});
+
+describe("Stability defaults (plan 0031, the old helper form's six numbers)", () => {
+  const values = {
+    memory_mb: 1024,
+    cpu_percent: 90,
+    cpu_window_s: 120,
+    open_files: 1024,
+    children: 32,
+    grace_s: 60,
+  };
+
+  it("asks for all six limits, each with its strings.ts label, the two counts whole", () => {
+    expect(LIMIT_FIELDS.map((field) => field.key)).toEqual(Object.keys(values));
+    expect(LIMIT_FIELDS.filter((field) => field.whole).map((field) => field.key)).toEqual([
+      "open_files",
+      "children",
+    ]);
+    for (const field of LIMIT_FIELDS) {
+      expect(STRINGS[field.label]).toBeTruthy();
+    }
+  });
+
+  it("shows the values in force, and sends what was typed, an empty field as zero for the shell to refuse", () => {
+    const typed = limitsTyped(values);
+    expect(typed.memory_mb).toBe("1024");
+    expect(limitsToSave({ ...typed, memory_mb: "2048.5", grace_s: " " })).toEqual({
+      ...values,
+      memory_mb: 2048.5,
+      grace_s: 0,
+    });
+  });
+
+  it("says what is wrong with each refused field, and what to enter", () => {
+    const errors = limitErrors({
+      reason: "invalid",
+      sentence: "general.limits.refused",
+      problems: [
+        { path: "children", message: "not-whole" },
+        { path: "grace_s", message: "not-positive" },
+        { path: "nonsense", message: "not-a-limit" },
+      ],
+    });
+    expect(errors).toEqual({
+      children: STRINGS["general.limits.notWhole"],
+      grace_s: STRINGS["general.limits.notPositive"],
+    });
+    expect(limitErrors({ reason: "failed", sentence: "refused.failed" })).toEqual({});
   });
 });

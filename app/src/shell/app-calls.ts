@@ -14,6 +14,7 @@ import type {
   SetupSetting,
   UpdateHistoryStore,
   UpdateSettingsStore,
+  LimitDefaultsStore,
 } from "../ports/settings-store";
 import type { TelemetrySetting } from "../ports/telemetry";
 import { wireBoard } from "./board";
@@ -36,11 +37,13 @@ export interface AppCallsDeps {
   readonly editor: EditorWindow & EditorPresence & EditorNodes;
   readonly dialog: Pick<Dialog, "showSaveDialog" | "showOpenDialog">;
   /**
-   * shell-settings.json: Setup's place, Run history's retention, the telemetry answer, and
+   * shell-settings.json: Setup's place, Run history's retention, the person's resource limits,
+   * the telemetry answer, and
    * Reload's own install record and "Check automatically" switch.
    */
   readonly settings: SetupSetting &
     RunRetentionSetting &
+    LimitDefaultsStore &
     Pick<TelemetrySetting, "readTelemetry"> &
     UpdateHistoryStore &
     UpdateSettingsStore;
@@ -103,6 +106,7 @@ export function wireAppCalls(deps: AppCallsDeps): UpdateCalls {
     showInFolder: deps.showInFolder,
     platform: deps.platform,
     retention: settings,
+    limits: settings,
     toPage,
     log: deps.log,
     logger,

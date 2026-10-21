@@ -84,11 +84,6 @@ export class AnytypeApp {
     }
   }
 
-  /** The process of the Anytype Reload started; null when it adopted one, or started none. */
-  get startedPid(): number | null {
-    return this.#started?.pid ?? null;
-  }
-
   /**
    * The resource watchdog found the Anytype Reload started over a limit (plan 0031,
    * detection.py D5): quit it, politely and then forced. It is not started again. An adopted

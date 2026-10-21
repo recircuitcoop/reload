@@ -7,9 +7,9 @@
 import type { RowAction } from "../domain/packages/states";
 import type { AppApiV2 } from "./app-api-v2";
 import type { AnytypeStatus, McpEndpointStatus } from "./contract";
-import type { Answer } from "./answer";
+import type { Answer, Refusal } from "./answer";
 import type { FlowSummary, NodeOptions } from "./flow-contract";
-import { RETENTION_CHOICES, type PackagesView } from "./general-contract";
+import { RETENTION_CHOICES, type LimitValues, type PackagesView } from "./general-contract";
 import { plural, t, type PlainKey } from "./strings";
 
 /** The Anytype section's state line, and whether its button is Pair or Pair again. */
@@ -345,3 +345,52 @@ export const PACKAGE_ACTIONS: Readonly<
   "check-for-changes": (api, name) => ({ kind: "call", call: () => api.checkFolder(name) }),
   "go-back": () => ({ kind: "confirm-go-back" }),
 };
+
+// ── Stability defaults (plan 0031): the person's own resource limits ─────────────────────────
+
+/** Each limit General › Advanced asks for, in the settings file's order and units. */
+export const LIMIT_FIELDS: readonly {
+  readonly key: keyof LimitValues;
+  readonly label: PlainKey;
+  /** A count: open files and child processes are whole numbers. */
+  readonly whole: boolean;
+}[] = [
+  { key: "memory_mb", label: "general.limits.memory", whole: false },
+  { key: "cpu_percent", label: "general.limits.cpu", whole: false },
+  { key: "cpu_window_s", label: "general.limits.cpuWindow", whole: false },
+  { key: "open_files", label: "general.limits.openFiles", whole: true },
+  { key: "children", label: "general.limits.children", whole: true },
+  { key: "grace_s", label: "general.limits.grace", whole: false },
+];
+
+/** The form's fields as typed, from the values in force. */
+export function limitsTyped(values: LimitValues): Record<keyof LimitValues, string> {
+  return Object.fromEntries(LIMIT_FIELDS.map(({ key }) => [key, String(values[key])])) as Record<
+    keyof LimitValues,
+    string
+  >;
+}
+
+/**
+ * What the form sends: every field as a number. An empty field is sent as zero, so the shell
+ * refuses it in words rather than the page guessing a default.
+ */
+export function limitsToSave(typed: Readonly<Record<keyof LimitValues, string>>): LimitValues {
+  return Object.fromEntries(
+    LIMIT_FIELDS.map(({ key }) => [key, typed[key].trim() === "" ? 0 : Number(typed[key])]),
+  ) as unknown as LimitValues;
+}
+
+/** Each refused field's line, by the rule it broke: what is wrong and what to enter. */
+export function limitErrors(refusal: Refusal): Partial<Record<keyof LimitValues, string>> {
+  const errors: Partial<Record<keyof LimitValues, string>> = {};
+  for (const { path, message } of refusal.problems ?? []) {
+    const field = LIMIT_FIELDS.find((one) => one.key === path);
+    if (field !== undefined) {
+      errors[field.key] = t(
+        message === "not-whole" ? "general.limits.notWhole" : "general.limits.notPositive",
+      );
+    }
+  }
+  return errors;
+}

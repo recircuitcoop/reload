@@ -108,6 +108,18 @@ describe("compose", () => {
       title: "Reload stopped the Anytype app",
       body: "It used 2 GB. Open Anytype again to keep working.",
     });
+    expect(
+      compose({
+        kind: "limits-unreadable",
+        subject: "limits",
+        detail: "In shell-settings.json, children is 0",
+      }),
+    ).toEqual({
+      title: "Reload could not read your limits",
+      body:
+        "In shell-settings.json, children is 0. Until it is fixed, Reload uses its own. " +
+        "Change them in Configuration › General › Advanced.",
+    });
     expect(compose({ kind: "anytype-key-refused", subject: "Anytype" })).toEqual({
       title: "Anytype refused the Reload key",
       body:

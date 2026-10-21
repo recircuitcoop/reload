@@ -140,6 +140,7 @@ never by number.
    (the sha256 of the sorted `sha256sum` lines of the files) against the one recorded for the
    same package and version, refusing a different one (plan 0013). A path install has no
    signature and is compared by content hash in the same way.
+
 ### 2.4 Type fields
 
 | Field | Applies to | Required | Meaning |
@@ -204,13 +205,15 @@ of any type.
 
 #### 2.4.2 Resource limits (plan 0031)
 
-The runtime watches every node process, and the runtime and services processes and an Anytype
-app it started itself, against limits on memory, CPU over a window, open files and child
-processes. Over a limit for LONGER than the grace window, a process is stopped: SIGTERM (to its
-process group, for a node process), then SIGKILL after 10 s. A node process then comes back as
-after an unexpected exit (6.5), and the stop counts against the crash-loop limit; an Anytype app
-is not started again. The person is told each time. A platform that cannot measure a number
-leaves it unjudged (Windows is not measured yet).
+The runtime watches every node process, and the shell watches the runtime, the services process
+and an Anytype app it started itself, against limits on memory, CPU over a window, open files and
+child processes. Over a limit for LONGER than the grace window, a process is stopped: SIGTERM (to
+its process group, for a node process), then SIGKILL after 10 s, each sent only once the process
+is read again and is still the one first seen (its pid, start time and executable). A node
+process, the runtime or the services process then comes back as after an unexpected exit (6.5),
+and the stop counts against the crash-loop limit; five stops in ten minutes and it is not started
+again. An Anytype app is not started again. The person is told once an episode. A platform that
+cannot measure a number leaves it unjudged (Windows is not measured yet).
 
 A type MAY set its own limits in `reload.limits`:
 
@@ -223,7 +226,8 @@ A type MAY set its own limits in `reload.limits`:
    There is no upper bound. A key not listed here is refused.
 2. A type without `reload` is watched under the person's defaults: the documented ones (1024 MB,
    90 % of one core over 120 s, 1024 open files, 32 children, 60 s of grace), each of which the
-   person MAY change under `limits` in Reload's settings file, with the same keys.
+   person MAY change in Configuration › General › Advanced, kept under `limits` in Reload's
+   settings file with the same keys.
 3. A type with `reload` gets what it declares and the documented default for every other limit,
    except `children`, which, left out, is the person's.
 

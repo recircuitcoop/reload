@@ -78,14 +78,18 @@ test's id; nothing is marked without a test.
    `application/resource-watch.ts` samples and stops; `adapters/process/resource-guard.ts` (node
    processes) and `application/managed-watch.ts` (the children and Anytype) hand processes to
    it. A type's limits are `types[i].reload.limits` (spec 2.4.2); the person's are `limits` in
-   `shell-settings.json`. Defaults are the old app's: 1024 MB, 90 % over 120 s, 1024 files, 32
+   `shell-settings.json`, edited in General › Advanced's Stability defaults (the old helper form's
+   six numbers), and a broken one is told to the person naming the file. Defaults are the old app's: 1024 MB, 90 % over 120 s, 1024 files, 32
    children, 60 s of grace, a sample every 10 s, 10 s from SIGTERM to SIGKILL. One `ps` and one
    `lsof` per tick for every watched process, and an identity check (pid, start time, executable)
    before every signal. Three rows that need this branch and WI-0031-03's together go to
    WI-0031-03 after the merge:
    `test_helper_tick.py` `test_the_mcp_child_is_watched_against_its_own_limits_and_not_the_helper_wide_ones`,
    `test_one_pass_reads_the_heartbeats_and_samples_every_managed_process`, and
-   `test_helper_detection.py::test_the_anytype_desktop_app_is_never_judged_stale`.
+   `test_helper_detection.py::test_the_anytype_desktop_app_is_never_judged_stale`. Left too:
+   `test_addon_manifest.py`'s five stability rows about heartbeats and `restartable` (WI-0031-03's
+   fields), and `test_application_tab.py::test_helper_form_publishes_all_supervision_numbers`
+   (twelve numbers; the other six are fixed constants).
 3. **WI-0031-03 — B,** a heartbeat a package may declare, judged like the MCP child's.
 4. **WI-0031-04 — C,** `restartable: false` in the declaration, honoured by the supervisor.
 5. **WI-0031-05 — E,** `reload --status`, `--quit`, `--log` on the single running instance.

@@ -109,6 +109,19 @@ export interface LogFile {
   readonly path: string | null;
 }
 
+/**
+ * The person's own resource limits (plan 0031), in the units the settings file writes them:
+ * General › Advanced's "Stability defaults".
+ */
+export interface LimitValues {
+  readonly memory_mb: number;
+  readonly cpu_percent: number;
+  readonly cpu_window_s: number;
+  readonly open_files: number;
+  readonly children: number;
+  readonly grace_s: number;
+}
+
 /** The days General offers (D8); null is Forever. */
 export const RETENTION_CHOICES: readonly (number | null)[] = [7, 30, 90, 365, null];
 

@@ -18,6 +18,7 @@
 // for another reason than the connection, three or more uses in one refusal, a shipped package's
 // refusal, and the "not available yet" answer of a call whose work item has not landed.
 
+import { LIMIT_STRINGS } from "./strings-limits";
 import { TIME_STRINGS } from "./strings-time";
 
 export const STRINGS = {
@@ -401,6 +402,7 @@ export const STRINGS = {
   "general.advanced.legacy.delete": "Delete them", // decided
   "general.advanced.log": "Log file", // decided (plan 0031): where the log is, for support
   "general.advanced.log.show": "Show log", // decided (plan 0031): shows the file in its folder
+  ...LIMIT_STRINGS,
   "general.aiApps.host": "Address", // decided: the endpoint's host field (owner, 2026-10-15)
   "general.aiApps.port": "Port", // decided: the endpoint's port field
   "general.aiApps.change": "Change", // decided: the one button that moves both

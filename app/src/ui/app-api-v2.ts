@@ -28,6 +28,7 @@ import type {
   LogFile,
   PackagesChanged,
   PackagesView,
+  LimitValues,
   Retention,
   SetupMove,
   SetupState,
@@ -181,6 +182,10 @@ export interface AppApiV2 {
   onOpenLive(listener: (flowId: string) => void): void;
   /** Run history's retention (D8): 90 days unless changed. */
   retention(): Promise<Answer<Retention>>;
+  /** The person's own resource limits (plan 0031), or the documented ones where they set none. */
+  limits(): Promise<Answer<LimitValues>>;
+  /** Store them; each refused field is a problem, its message the rule it broke. */
+  setLimits(limits: LimitValues): Promise<Answer<LimitValues>>;
   /** 7, 30, 90 or 365 days, or null for Forever. */
   setRetention(days: number | null): Promise<Answer<Retention>>;
   /** The banner's Show in Finder: the refused flows file, in its folder. */

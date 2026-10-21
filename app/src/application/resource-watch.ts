@@ -22,6 +22,7 @@ import {
   type ResourceLimits,
 } from "../domain/supervision/resources";
 import type { Logger } from "../ports/logger";
+import type { Notifier } from "../ports/notifier";
 import type { LimitDefaultsSetting } from "../ports/settings-store";
 import type { Cancel, Clock } from "../ports/clock";
 import type {
@@ -48,14 +49,23 @@ export interface WatchDeps {
 
 /**
  * The person's own limits, from the settings file's `limits` (the old `[helper.defaults]`). A
- * setting that cannot be read is said, and the documented defaults are kept: a typo there must
- * not stop Reload from starting.
+ * setting that cannot be read is said, in the log and to the person with the file's name (the old
+ * HelperConfigError), and the documented defaults are kept: a typo there must not stop Reload
+ * from starting.
  */
-export function readPersonalLimits(setting: LimitDefaultsSetting, logger: Logger): ResourceLimits {
+export function readPersonalLimits(
+  setting: LimitDefaultsSetting,
+  logger: Logger,
+  notifier?: Notifier,
+): ResourceLimits {
   try {
-    return personalLimits(setting.readLimitDefaults());
+    const limits = personalLimits(setting.readLimitDefaults());
+    notifier?.clear("limits-unreadable", "limits");
+    return limits;
   } catch (error) {
-    logger.error(`${String(error)}; the documented resource limits are used instead`);
+    const why = error instanceof Error ? error.message : String(error);
+    logger.error(`${why}; the documented resource limits are used instead`);
+    notifier?.raise({ kind: "limits-unreadable", subject: "limits", detail: why });
     return personalLimits(undefined);
   }
 }
@@ -169,8 +179,18 @@ export function resourceWatchdog(deps: WatchDeps): ResourceWatchdog {
       }
       entry.identity = reading.identity;
       const breaches = entry.judge.observe(reading.sample, now);
-      if (breaches.length > 0) {
-        void stop(entry, breaches);
+      for (const breach of breaches) {
+        if (breach.durationMs === 0) {
+          // Reported once as it starts: a spike inside the grace window is not acted on.
+          log(
+            "warn",
+            `process ${String(entry.target.pid)} went over a limit: ${describeBreach(breach)}`,
+          );
+        }
+      }
+      const sustained = breaches.filter((breach) => breach.sustained);
+      if (sustained.length > 0) {
+        void stop(entry, sustained);
       }
     }
     schedule();

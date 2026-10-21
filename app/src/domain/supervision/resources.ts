@@ -61,25 +61,61 @@ export interface DeclaredLimits {
 const NUMBERS = ["memory_mb", "cpu_percent", "cpu_window_s", "grace_s"] as const;
 const COUNTS = ["open_files", "children"] as const;
 
+/** What is wrong with one limit as written: not one we know, not above zero, not whole. */
+export interface LimitProblem {
+  readonly key: string;
+  readonly problem: "not-a-limit" | "not-positive" | "not-whole";
+}
+
 /**
- * Why `value` is not a set of limits, in plain words; null when it is one. The old manifest's
- * rules (manifest.py _optional_number, _optional_count, _check_fields): every number greater than
- * zero, the two counts whole numbers, no upper bound, and no key it does not know.
+ * Every problem of `value` as a set of limits, field by field; null when it is not an object at
+ * all. The old manifest's rules (manifest.py _optional_number, _optional_count, _check_fields):
+ * every number greater than zero, the two counts whole numbers, no upper bound, and no key it
+ * does not know.
  */
-export function limitsProblem(value: unknown): string | null {
+export function limitProblems(value: unknown): readonly LimitProblem[] | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return "must be an object of limits";
+    return null;
   }
+  const problems: LimitProblem[] = [];
   for (const [key, number] of Object.entries(value)) {
     const count = (COUNTS as readonly string[]).includes(key);
     if (!count && !(NUMBERS as readonly string[]).includes(key)) {
-      return `${key} is not a limit (the limits are ${[...NUMBERS, ...COUNTS].join(", ")})`;
-    }
-    if (typeof number !== "number" || !(number > 0) || (count && !Number.isInteger(number))) {
-      return `${key} must be ${count ? "a whole number" : "a number"} greater than zero`;
+      problems.push({ key, problem: "not-a-limit" });
+    } else if (typeof number !== "number" || !(number > 0)) {
+      problems.push({ key, problem: count ? "not-whole" : "not-positive" });
+    } else if (count && !Number.isInteger(number)) {
+      problems.push({ key, problem: "not-whole" });
     }
   }
-  return null;
+  return problems;
+}
+
+/** Why `value` is not a set of limits, in plain words, for a file; null when it is one. */
+export function limitsProblem(value: unknown): string | null {
+  const problems = limitProblems(value);
+  if (problems === null) {
+    return "must be an object of limits";
+  }
+  const [first] = problems;
+  if (first === undefined) {
+    return null;
+  }
+  return first.problem === "not-a-limit"
+    ? `${first.key} is not a limit (the limits are ${[...NUMBERS, ...COUNTS].join(", ")})`
+    : `${first.key} must be ${first.problem === "not-whole" ? "a whole number" : "a number"} greater than zero`;
+}
+
+/** The limits in force, written as a declaration or the settings file writes them. */
+export function declaredOf(limits: ResourceLimits): Required<DeclaredLimits> {
+  return {
+    memory_mb: limits.memoryMb,
+    cpu_percent: limits.cpuPercent,
+    cpu_window_s: limits.cpuWindowMs / 1000,
+    open_files: limits.openFiles,
+    children: limits.children,
+    grace_s: limits.graceMs / 1000,
+  };
 }
 
 const fromDeclared = (declared: DeclaredLimits): Partial<ResourceLimits> => {
@@ -128,13 +164,15 @@ export interface ResourceSample {
 
 export type Limit = "memory" | "cpu" | "open-files" | "children";
 
-/** One limit a process has been over for longer than its grace window, with the numbers. */
+/** One limit a process is over, with the numbers, and whether it has outlasted its grace. */
 export interface Breach {
   readonly limit: Limit;
   readonly value: number;
   readonly allowed: number;
   /** Since the value went over its line; it starts again at zero once it comes back under. */
   readonly durationMs: number;
+  /** Over for longer than the grace window: acted on. Inside it, only reported. */
+  readonly sustained: boolean;
 }
 
 /** The judge of one process's samples, stateful between them (grace and CPU windows). */
@@ -149,7 +187,7 @@ export class ResourceWatch {
     this.#limits = limits;
   }
 
-  /** Judge one sample taken at `now`: the breaches that outlasted their grace window. */
+  /** Judge one sample taken at `now`: every limit over its line, sustained or not. */
   observe(sample: ResourceSample, now: number): readonly Breach[] {
     const limits = this.#limits;
     const cpuPercent = this.#cpuOverWindow(sample.cpuSeconds, now);
@@ -173,9 +211,7 @@ export class ResourceWatch {
       this.#overSince.set(limit, since);
       const durationMs = now - since;
       // Strictly longer than the grace window: exactly as long is still a spike.
-      if (durationMs > limits.graceMs) {
-        breaches.push({ limit, value, allowed, durationMs });
-      }
+      breaches.push({ limit, value, allowed, durationMs, sustained: durationMs > limits.graceMs });
     }
     return breaches;
   }

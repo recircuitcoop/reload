@@ -164,6 +164,29 @@ describe("parseDeclaration", () => {
     ).toEqual(["types/0/reload/limits/open_files: must be integer"]);
   });
 
+  /** The refusals of one type's `reload`, as the old manifest refused its `stability`. */
+  const reloadRefused = (reload: unknown): readonly string[] =>
+    refused(declaration({ types: [nodeType({ reload })] }));
+
+  it.each([0, -1])("refuses a memory limit of %d, naming it", (value) => {
+    expect(reloadRefused({ limits: { memory_mb: value } })).toEqual([
+      "types/0/reload/limits/memory_mb: must be > 0",
+    ]);
+  });
+
+  it.each(["10", null, true])("refuses a limit that is not a number (%s), naming it", (value) => {
+    expect(reloadRefused({ limits: { memory_mb: value } })).toEqual([
+      "types/0/reload/limits/memory_mb: must be number",
+    ]);
+  });
+
+  it("refuses a reload or a limits that is not an object, naming it", () => {
+    expect(reloadRefused(["limits", 10])).toEqual(["types/0/reload: must be object"]);
+    expect(reloadRefused({ limits: ["memory_mb", 10] })).toEqual([
+      "types/0/reload/limits: must be object",
+    ]);
+  });
+
   it("refuses a protocol that is not the integer 2", () => {
     expect(refused(declaration({ protocol: "2" }))).toEqual([
       'protocol: "2" is not implemented by this runtime, which implements protocol 2',

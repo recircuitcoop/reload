@@ -16,7 +16,7 @@ import {
 import { DEFAULT_LIMITS, type ResourceSample } from "../../src/domain/supervision/resources";
 import type { ProcessReading, ResourceProbe, WatchedProcess } from "../../src/ports/resource-watch";
 import { FakeClock } from "../fakes/clock";
-import { RecordingLogger } from "../fixtures/raw-node/fixture";
+import { RecordingLogger, RecordingNotifier } from "../fixtures/raw-node/fixture";
 
 const QUIET: ResourceSample = { memoryMb: 100, cpuSeconds: 0, openFiles: 10, children: 0 };
 const HUNGRY: ResourceSample = { ...QUIET, memoryMb: 2048 };
@@ -220,6 +220,17 @@ describe("the resource watchdog", () => {
     expect(h.signals()).toEqual([]);
   });
 
+  it("judges the others in the same pass when one process vanished from it", async () => {
+    // 20 went between the check and the read: the table no longer has it.
+    const h = harness((pid) => (pid === 20 ? null : HUNGRY));
+    h.watchdog(h.target(10));
+    h.watchdog(h.target(20));
+    h.watchdog(h.target(30));
+    await h.tick(8);
+    expect(h.passes[7]).toEqual([10, 20, 30]);
+    expect(h.signals()).toEqual(["SIGTERM 10", "SIGTERM 30"]);
+  });
+
   it("judges nothing from no reading, and keeps watching", async () => {
     const h = harness(() => null);
     h.watchdog(h.target(10));
@@ -272,7 +283,18 @@ describe("the person's own limits", () => {
         throw new Error("the limits setting in shell-settings.json: grace_s must be a number");
       },
     };
-    expect(readPersonalLimits(broken, logger)).toEqual(DEFAULT_LIMITS);
+    const notifier = new RecordingNotifier();
+    expect(readPersonalLimits(broken, logger, notifier)).toEqual(DEFAULT_LIMITS);
+    // Told to the person too, naming the file, as the old HelperConfigError was.
+    expect(notifier.notices).toEqual([
+      {
+        kind: "limits-unreadable",
+        subject: "limits",
+        detail: "the limits setting in shell-settings.json: grace_s must be a number",
+      },
+    ]);
+    readPersonalLimits({ readLimitDefaults: () => undefined }, logger, notifier);
+    expect(notifier.cleared).toEqual(["limits-unreadable limits"]);
     expect(logger.has(/grace_s must be a number.*the documented resource limits are used/)).toBe(
       true,
     );

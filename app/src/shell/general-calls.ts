@@ -1,7 +1,9 @@
 // General's calls that are no single flow's (plan 0022 §I, D8): the status pill, the runtime
 // banner and the Live badge, pushed whenever a child's status or the questions waiting change;
-// Run history's retention, 90 days unless changed, 7, 30, 90 or 365 days or Forever; and where
-// the log is, with Show log (plan 0031 group I: the person can find the log support needs).
+// Run history's retention, 90 days unless changed, 7, 30, 90 or 365 days or Forever; where the
+// log is, with Show log (plan 0031 group I: the person can find the log support needs); and the
+// person's own resource limits (plan 0031, the old "Stability defaults" form), judged by the
+// same rules as a type's own before anything is written.
 //
 // The badge counts the questions the runtime has waiting (the Inbox's count) until WI-0022-13
 // counts them from run records, hidden places included.
@@ -14,11 +16,14 @@ import { compose } from "../domain/notices/notices";
 import { runtimeBanner, statusPill } from "../domain/status/status";
 import type { ChildStatus } from "../domain/supervision/child-state";
 import type { Logger } from "../ports/logger";
-import type { RunRetentionSetting } from "../ports/settings-store";
+import { readPersonalLimits } from "../application/resource-watch";
+import { declaredOf, limitProblems, type DeclaredLimits } from "../domain/supervision/resources";
+import type { LimitDefaultsStore, RunRetentionSetting } from "../ports/settings-store";
 import type { Answer } from "../ui/answer";
 import {
   RETENTION_CHOICES,
   type LogFile,
+  type LimitValues,
   type Retention,
   type StatusView,
 } from "../ui/general-contract";
@@ -41,6 +46,7 @@ export interface GeneralCallsDeps {
   /** Finder on macOS, a folder elsewhere: the button's word. */
   readonly platform: NodeJS.Platform;
   readonly retention: RunRetentionSetting;
+  readonly limits: LimitDefaultsStore;
   readonly toPage: (channel: string, ...args: unknown[]) => void;
   /** The log this run writes (null: none could be opened), and the file manager that shows it. */
   readonly log: { readonly file: string | null; readonly shell: Pick<Shell, "showItemInFolder"> };
@@ -93,6 +99,8 @@ export function wireGeneralCalls(deps: GeneralCallsDeps): void {
   pending.onChange(push);
   notices.onChange(push);
 
+  // What the form shows: the person's limits, or the documented ones where they set none.
+  const limits = (): LimitValues => declaredOf(readPersonalLimits(deps.limits, logger));
   const days = (): Retention => {
     const stored = retention.readRunRetentionDays();
     return { days: stored === undefined ? DEFAULT_RETENTION_DAYS : stored };
@@ -102,7 +110,7 @@ export function wireGeneralCalls(deps: GeneralCallsDeps): void {
     return guarded(
       op,
       logger,
-      async (): Promise<Answer<StatusView | Retention | LogFile | null>> => {
+      async (): Promise<Answer<StatusView | Retention | LogFile | LimitValues | null>> => {
         switch (op) {
           case "status.get":
             await readAnytype();
@@ -133,6 +141,23 @@ export function wireGeneralCalls(deps: GeneralCallsDeps): void {
             }
             deps.log.shell.showItemInFolder(deps.log.file);
             return { ok: true, value: { path: deps.log.file } };
+          case "limits.get":
+            return { ok: true, value: limits() };
+          case "limits.set": {
+            const chosen = args["limits"];
+            const problems = limitProblems(chosen);
+            if (problems === null || problems.length > 0) {
+              logger.warn(`limits.set: refused ${JSON.stringify(chosen)}`);
+              return refused("invalid", "general.limits.refused", {
+                problems: (problems ?? []).map(({ key, problem }) => ({
+                  path: key,
+                  message: problem,
+                })),
+              });
+            }
+            deps.limits.writeLimitDefaults(chosen as DeclaredLimits);
+            return { ok: true, value: limits() };
+          }
           default:
             return unknownOp(op, "general", logger);
         }

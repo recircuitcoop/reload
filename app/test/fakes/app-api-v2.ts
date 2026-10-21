@@ -65,4 +65,6 @@ export const V2_UNUSED: AppApiV2 = {
   showFlowsFile: never,
   logFile: never,
   showLog: never,
+  limits: never,
+  setLimits: never,
 };

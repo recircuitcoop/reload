@@ -624,6 +624,30 @@ test("General shows the queued reports in full, Advanced's status details, Recor
     const revealed = () => first.app.evaluate(() => (globalThis as { revealed?: string }).revealed);
     await expect.poll(revealed).toMatch(/reload\.log$/);
     expect((await revealed())?.startsWith(scratch)).toBe(true);
+    // Stability defaults (plan 0031): the documented limits, saved as the person's own into
+    // shell-settings.json, and a bad one refused in words with nothing written.
+    const limits = advanced.getByTestId("general-limits");
+    const memory = limits.getByTestId("general-limits-memory_mb-input");
+    await expect(memory).toHaveValue("1024");
+    await memory.fill("4096");
+    await limits.getByTestId("general-limits-save").click();
+    await expect(limits.getByTestId("general-limits-message")).toHaveText(
+      STRINGS["general.limits.saved"],
+    );
+    const storedLimits = () =>
+      (
+        JSON.parse(fs.readFileSync(path.join(userData, "shell-settings.json"), "utf8")) as {
+          limits?: Record<string, number>;
+        }
+      ).limits;
+    expect(storedLimits()).toMatchObject({ memory_mb: 4096, children: 32 });
+    await limits.getByTestId("general-limits-children-input").fill("0");
+    await limits.getByTestId("general-limits-save").click();
+    await expect(limits.getByTestId("general-limits-message")).toHaveText(
+      STRINGS["general.limits.refused"],
+    );
+    await expect(limits).toContainText(STRINGS["general.limits.notWhole"]);
+    expect(storedLimits()).toMatchObject({ children: 32 });
     // A restart is followed: the runtime's next generation shows without a reload.
     process.kill(runtime.pid, "SIGKILL");
     const next = await waitForRunning(window, "runtime", runtime.generation + 1);

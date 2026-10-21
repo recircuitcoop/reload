@@ -11,12 +11,17 @@ import {
   limitsProblem,
   personalLimits,
   ResourceWatch,
+  type Breach,
   type ResourceLimits,
   type ResourceSample,
 } from "../../src/domain/supervision/resources";
 
 const QUIET: ResourceSample = { memoryMb: 100, cpuSeconds: 0, openFiles: 10, children: 0 };
 const GRACE = DEFAULT_LIMITS.graceMs;
+
+/** The breaches acted on: those that outlasted their grace window. */
+const acted = (breaches: readonly Breach[]): readonly Breach[] =>
+  breaches.filter((breach) => breach.sustained);
 
 function sample(overrides: Partial<ResourceSample>): ResourceSample {
   return { ...QUIET, ...overrides };
@@ -50,7 +55,7 @@ describe("the limits in force", () => {
   it("raised by the person keep a process under its old line from being judged", () => {
     const watch = new ResourceWatch(limitsFor(undefined, personalLimits({ memory_mb: 4096 })));
     watch.observe(sample({ memoryMb: 2048 }), 0);
-    expect(watch.observe(sample({ memoryMb: 2048 }), GRACE * 2)).toEqual([]);
+    expect(acted(watch.observe(sample({ memoryMb: 2048 }), GRACE * 2))).toEqual([]);
   });
 
   it("are what a type declared, so one that asked for 2 GB is watched against 2 GB", () => {
@@ -58,7 +63,7 @@ describe("the limits in force", () => {
     expect(limits.memoryMb).toBe(2048);
     const watch = new ResourceWatch(limits);
     watch.observe(sample({ memoryMb: 1500 }), 0);
-    expect(watch.observe(sample({ memoryMb: 1500 }), GRACE + 1)).toEqual([]);
+    expect(acted(watch.observe(sample({ memoryMb: 1500 }), GRACE + 1))).toEqual([]);
   });
 
   it("fill a partial declaration from the documented defaults, and the child limit from the person's", () => {
@@ -100,17 +105,23 @@ describe("limits as written", () => {
 });
 
 describe("a breach", () => {
-  it("inside the grace window is not acted on", () => {
+  it("inside the grace window is reported, with how long it has lasted, and not acted on", () => {
     const watch = new ResourceWatch(DEFAULT_LIMITS);
-    watch.observe(sample({ memoryMb: 2000 }), 0);
-    expect(watch.observe(sample({ memoryMb: 2000 }), GRACE)).toEqual([]);
+    expect(watch.observe(sample({ memoryMb: 2000 }), 0)).toEqual([
+      { limit: "memory", value: 2000, allowed: 1024, durationMs: 0, sustained: false },
+    ]);
+    const inside = watch.observe(sample({ memoryMb: 2000 }), GRACE);
+    expect(inside).toEqual([
+      { limit: "memory", value: 2000, allowed: 1024, durationMs: GRACE, sustained: false },
+    ]);
+    expect(acted(inside)).toEqual([]);
   });
 
   it("sustained one instant past the grace window is acted on, with its numbers", () => {
     const watch = new ResourceWatch(DEFAULT_LIMITS);
     watch.observe(sample({ memoryMb: 2000 }), 0);
-    expect(watch.observe(sample({ memoryMb: 2000 }), GRACE + 1)).toEqual([
-      { limit: "memory", value: 2000, allowed: 1024, durationMs: GRACE + 1 },
+    expect(acted(watch.observe(sample({ memoryMb: 2000 }), GRACE + 1))).toEqual([
+      { limit: "memory", value: 2000, allowed: 1024, durationMs: GRACE + 1, sustained: true },
     ]);
   });
 
@@ -119,29 +130,43 @@ describe("a breach", () => {
     watch.observe(sample({ memoryMb: 2000 }), 0);
     watch.observe(sample({ memoryMb: 500 }), GRACE / 2);
     watch.observe(sample({ memoryMb: 2000 }), GRACE);
-    expect(watch.observe(sample({ memoryMb: 2000 }), GRACE * 2)).toEqual([]);
-    expect(watch.observe(sample({ memoryMb: 2000 }), GRACE * 2 + 1)).toHaveLength(1);
+    expect(acted(watch.observe(sample({ memoryMb: 2000 }), GRACE * 2))).toEqual([]);
+    expect(acted(watch.observe(sample({ memoryMb: 2000 }), GRACE * 2 + 1))).toHaveLength(1);
   });
 
   it("is judged against the type's own grace window", () => {
     const watch = new ResourceWatch(limitsFor({ grace_s: 300 }));
     watch.observe(sample({ memoryMb: 2000 }), 0);
-    expect(watch.observe(sample({ memoryMb: 2000 }), 299_000)).toEqual([]);
-    expect(watch.observe(sample({ memoryMb: 2000 }), 300_001)).toHaveLength(1);
+    expect(acted(watch.observe(sample({ memoryMb: 2000 }), 299_000))).toEqual([]);
+    expect(acted(watch.observe(sample({ memoryMb: 2000 }), 300_001))).toHaveLength(1);
   });
 
   it("of open files over the limit is acted on", () => {
     const watch = new ResourceWatch(DEFAULT_LIMITS);
     watch.observe(sample({ openFiles: 5000 }), 0);
-    expect(watch.observe(sample({ openFiles: 5000 }), GRACE + 1)).toMatchObject([
+    expect(acted(watch.observe(sample({ openFiles: 5000 }), GRACE + 1))).toMatchObject([
       { limit: "open-files", value: 5000, allowed: 1024 },
     ]);
+  });
+
+  it("of children over the person's 32, for a type that declared limits but no child limit", () => {
+    const watch = new ResourceWatch(limitsFor({ memory_mb: 2048 }, personalLimits(undefined)));
+    watch.observe(sample({ children: 33 }), 0);
+    expect(acted(watch.observe(sample({ children: 33 }), GRACE + 1))).toMatchObject([
+      { limit: "children", value: 33, allowed: 32 },
+    ]);
+  });
+
+  it("is not found in a type that raised its child limit to 64 and runs 48", () => {
+    const watch = new ResourceWatch(limitsFor({ children: 64 }, personalLimits(undefined)));
+    watch.observe(sample({ children: 48 }), 0);
+    expect(watch.observe(sample({ children: 48 }), GRACE * 2)).toEqual([]);
   });
 
   it("of children over the person's default is acted on", () => {
     const watch = new ResourceWatch(limitsFor(undefined, PERSONAL));
     watch.observe(sample({ children: 5 }), 0);
-    expect(watch.observe(sample({ children: 5 }), GRACE + 1)).toMatchObject([
+    expect(acted(watch.observe(sample({ children: 5 }), GRACE + 1))).toMatchObject([
       { limit: "children", value: 5, allowed: 4 },
     ]);
   });
@@ -149,8 +174,8 @@ describe("a breach", () => {
   it("is not judged from a reading the platform did not give, and keeps its clock", () => {
     const watch = new ResourceWatch(DEFAULT_LIMITS);
     watch.observe(sample({ openFiles: 5000 }), 0);
-    expect(watch.observe(sample({ openFiles: null }), GRACE / 2)).toEqual([]);
-    expect(watch.observe(sample({ openFiles: 5000 }), GRACE + 1)).toHaveLength(1);
+    expect(acted(watch.observe(sample({ openFiles: null }), GRACE / 2))).toEqual([]);
+    expect(acted(watch.observe(sample({ openFiles: 5000 }), GRACE + 1))).toHaveLength(1);
   });
 });
 
@@ -165,14 +190,14 @@ describe("CPU", () => {
   it("is unknown from one sample, and measured over the window from two totals", () => {
     const watch = new ResourceWatch(limits);
     // One sample: unknown, so never a breach, however high the total.
-    expect(watch.observe(sample({ cpuSeconds: 1000 }), 0)).toEqual([]);
+    expect(acted(watch.observe(sample({ cpuSeconds: 1000 }), 0))).toEqual([]);
     // 50 CPU seconds in 100 s: half a core, over the 40 % line from here on...
-    expect(watch.observe(sample({ cpuSeconds: 1050 }), 100_000)).toEqual([]);
+    expect(acted(watch.observe(sample({ cpuSeconds: 1050 }), 100_000))).toEqual([]);
     // ...and acted on one instant later, past a grace window of zero.
     const [breach] = watch.observe(sample({ cpuSeconds: 1050 }), 100_001);
     expect(breach).toMatchObject({ limit: "cpu" });
     expect(breach?.value).toBeCloseTo(50, 2);
-    expect(watch.observe(sample({ cpuSeconds: null }), 110_000)).toEqual([]);
+    expect(acted(watch.observe(sample({ cpuSeconds: null }), 110_000))).toEqual([]);
   });
 
   it("inside the window cannot be hidden by a later idle sample", () => {
@@ -189,7 +214,7 @@ describe("CPU", () => {
     const watch = new ResourceWatch(DEFAULT_LIMITS);
     watch.observe(sample({ cpuSeconds: 0 }), 0);
     watch.observe(sample({ cpuSeconds: 15 }), 10_000);
-    expect(watch.observe(sample({ cpuSeconds: 105 }), 70_001)).toMatchObject([
+    expect(acted(watch.observe(sample({ cpuSeconds: 105 }), 70_001))).toMatchObject([
       { limit: "cpu", allowed: 90 },
     ]);
   });
@@ -198,13 +223,25 @@ describe("CPU", () => {
 describe("the words for a breach", () => {
   it("carry the numbers that triggered it", () => {
     expect(
-      describeBreach({ limit: "memory", value: 1300.4, allowed: 1024, durationMs: 61_000 }),
+      describeBreach({
+        limit: "memory",
+        value: 1300.4,
+        allowed: 1024,
+        durationMs: 61_000,
+        sustained: true,
+      }),
     ).toBe("memory 1300 MB, over its limit of 1024 MB, for 61 s");
-    expect(describeBreach({ limit: "cpu", value: 150, allowed: 90, durationMs: 0 })).toBe(
-      "CPU 150 %, over its limit of 90 %, for 0 s",
-    );
     expect(
-      describeBreach({ limit: "open-files", value: 2000, allowed: 1024, durationMs: 1000 }),
+      describeBreach({ limit: "cpu", value: 150, allowed: 90, durationMs: 0, sustained: false }),
+    ).toBe("CPU 150 %, over its limit of 90 %, for 0 s");
+    expect(
+      describeBreach({
+        limit: "open-files",
+        value: 2000,
+        allowed: 1024,
+        durationMs: 1000,
+        sustained: true,
+      }),
     ).toBe("open files 2000, over its limit of 1024, for 1 s");
   });
 });
