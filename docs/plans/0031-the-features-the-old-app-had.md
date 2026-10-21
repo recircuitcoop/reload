@@ -1,14 +1,15 @@
 ---
 type: plan
 title: The features the old app had that Reload is missing
-status: PROPOSED
+status: APPROVED
 created: 2026-10-21
 updated: 2026-10-21
 ---
 
 # 0031 — The features the old app had that Reload is missing
 
-Status: PROPOSED 2026-10-21. Blocks plan 0026 (the cutover).
+Status: APPROVED 2026-10-21. Blocks plan 0026 (the cutover). Owner: "finish ALL plans
+completely." No group was retired, so every group A to I is **Port**.
 
 ## Why this plan exists
 
