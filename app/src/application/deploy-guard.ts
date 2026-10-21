@@ -5,6 +5,9 @@
 // write to the flows is checked before Node-RED sees it, and refused when it names a type that
 // is not registered, or whose package is not in the verified package store.
 //
+// While Node-RED's flows file cannot be parsed (application/flow-files.ts), every write is
+// refused: a deploy then would write over the file and rotate it over the last good backup.
+//
 // The same guard refuses any request whose Host header is not the loopback address and the
 // runtime's port. That is not the admin token the owner declined: it only stops a web page
 // from reaching the admin API by DNS rebinding.
@@ -12,6 +15,7 @@
 // This file decides; adapters/nodered/guard-middleware.ts puts it in front of Node-RED.
 
 import { USER_EVENTS_PACKAGE } from "../domain/events/event-types";
+import { refusedFlowFileSentence, type RefusedFlowFile } from "../domain/flows/flow-file";
 import type { Logger } from "../ports/logger";
 import type { NodeRedEngine, NodeSet } from "../ports/node-red-engine";
 import type { PackageStore } from "../ports/package-store";
@@ -27,6 +31,9 @@ export const CORE_MODULE = "node-red";
 const RELOAD_TYPE = /^reload-([a-z][a-z0-9_]{1,39})-[a-z][a-z0-9_-]{0,63}$/;
 
 const PASS: GuardAnswer = { ok: true };
+
+/** The refusal's code while a flows file is refused; flow administration words it itself. */
+export const FLOWS_FILE_REFUSED = "flows_file_refused";
 
 type Fields = Readonly<Record<string, unknown>>;
 
@@ -139,6 +146,8 @@ export interface DeployGuardDeps {
   readonly logger: Logger;
   /** The runtime's stable port (plan 0018 §2.2). */
   readonly port: number;
+  /** Node-RED's flows files that may not be written over (application/flow-files.ts). */
+  readonly flowFiles: { refused(): readonly RefusedFlowFile[] };
 }
 
 export class DeployGuard implements RequestGuard {
@@ -166,9 +175,21 @@ export class DeployGuard implements RequestGuard {
     };
   }
 
-  /** A write to the flows: refused when it names a type that may not be deployed. */
+  /**
+   * A write to the flows: refused while a flows file is refused, and when it names a type that
+   * may not be deployed.
+   */
   async checkDeploy(route: FlowsRoute, body: unknown): Promise<GuardAnswer> {
-    const { engine, store, logger } = this.#deps;
+    const { engine, store, logger, flowFiles } = this.#deps;
+    const [file] = flowFiles.refused();
+    if (file !== undefined) {
+      logger.warn(`refused a deploy: ${file.file} ${file.problem}`);
+      return {
+        ok: false,
+        status: 409,
+        body: { code: FLOWS_FILE_REFUSED, message: refusedFlowFileSentence(file) },
+      };
+    }
     const types = typesNamedIn(route, body);
     if (types.length === 0) {
       return PASS;

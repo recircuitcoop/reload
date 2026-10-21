@@ -8,6 +8,7 @@ import {
   refusedTypes,
   typesNamedIn,
 } from "../../src/application/deploy-guard";
+import type { RefusedFlowFile } from "../../src/domain/flows/flow-file";
 import type { NodeSet } from "../../src/ports/node-red-engine";
 import { RecordingLogger } from "../fakes/children";
 
@@ -153,7 +154,7 @@ describe("hostAllowed", () => {
 });
 
 describe("DeployGuard", () => {
-  function guard(sets: readonly NodeSet[] = SETS) {
+  function guard(sets: readonly NodeSet[] = SETS, refused: readonly RefusedFlowFile[] = []) {
     const logger = new RecordingLogger();
     let asked = 0;
     const deployGuard = new DeployGuard({
@@ -166,6 +167,7 @@ describe("DeployGuard", () => {
       store: { packages: () => [...VERIFIED] },
       logger,
       port: 18_800,
+      flowFiles: { refused: () => refused },
     });
     return { deployGuard, logger, asked: () => asked };
   }
@@ -200,6 +202,30 @@ describe("DeployGuard", () => {
     ).toEqual({ ok: true });
     expect(asked()).toBe(1);
     expect(logger.lines).toEqual([]);
+  });
+
+  it("refuses every write while a flows file is refused, even one naming no types", async () => {
+    const refused: RefusedFlowFile = {
+      file: "/u/flows.json",
+      problem: "is not valid JSON",
+      safeCopy: "/u/flows.json.broken-x",
+      backup: null,
+    };
+    const { deployGuard, logger, asked } = guard(SETS, [refused]);
+    for (const [route, body] of [
+      ["flows", []],
+      ["flow", { nodes: [{ type: "inject" }] }],
+    ] as const) {
+      const answer = await deployGuard.checkDeploy(route, body);
+      expect(answer).toMatchObject({
+        ok: false,
+        status: 409,
+        body: { code: "flows_file_refused" },
+      });
+      expect(JSON.stringify(answer)).toContain("A copy is kept at /u/flows.json.broken-x.");
+    }
+    expect(asked()).toBe(0);
+    expect(logger.lines).toContain("WARN refused a deploy: /u/flows.json is not valid JSON");
   });
 
   it("answers a foreign Host with 403, and quotes the header in the log", () => {

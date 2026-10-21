@@ -18,6 +18,10 @@ before you open Reload, and remove InnyTypes once Reload has opened. See
   protected them under the old name, so it makes a new one and says so once in a notification.
 - **Function code in your flows that reads `msg.inny`** must be changed to `msg.reload` by hand:
   the field a step's message carries is renamed, and Reload does not rewrite code you wrote.
+- **A flows file that is not valid JSON is no longer lost.** Node-RED used to start with no flows
+  and let the next deploy write over the file and its backup. Reload now keeps the file as it is,
+  saves a copy beside it, deploys nothing over it, and says in a notification and in the window
+  which file it is, where the copy and the backup are, and what to do.
 - **For package authors:** the declaration file is now `reload-package.json`, the schema keyword
   is `reload`, the view schemes are `reload-app:` and `reload-view:`, the design tokens are
   `--reload-*`, the SDKs are `@recircuit/reload-node` (npm) and `reload-node` (PyPI, import

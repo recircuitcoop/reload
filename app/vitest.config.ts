@@ -54,7 +54,8 @@ export default defineConfig({
       // critical glob sets perFile itself, since globs do not inherit it.
       // - secrets and redaction: a miss writes a secret into a log, a report or the telemetry.
       // - package and update trust: a miss installs code whose signature or digest was not checked.
-      // - data integrity: a miss loses or corrupts the journal, the runs or the migrated data.
+      // - data integrity: a miss loses or corrupts the journal, the runs, the migrated data or
+      //   the person's flows file.
       // - trust boundaries: a miss lets an MCP call, a channel message or a form reach code
       //   it should not, or deploys over the person's flow.
       // - supervision: a miss leaves a crashed child dead or restarts it in a loop.
@@ -88,6 +89,9 @@ export default defineConfig({
             "src/adapters/fs/legacy-move.ts",
             "src/application/journal-replay.ts",
             "src/application/runs.ts",
+            "src/domain/flows/flow-file.ts",
+            "src/adapters/fs/flow-files.ts",
+            "src/application/flow-files.ts",
             // trust boundaries
             "src/application/mcp-dispatch.ts",
             "src/application/mcp-endpoint.ts",

@@ -36,6 +36,7 @@ export interface NoticeBoardDeps {
 export class NoticeBoard implements Notifier {
   readonly #deps: NoticeBoardDeps;
   readonly #current = new Map<string, Notice>();
+  readonly #listeners: (() => void)[] = [];
 
   constructor(deps: NoticeBoardDeps) {
     this.#deps = deps;
@@ -44,6 +45,11 @@ export class NoticeBoard implements Notifier {
   /** Every condition true now, in the order each was first raised. */
   current(): readonly Notice[] {
     return [...this.#current.values()];
+  }
+
+  /** Called after each change to what is current: the window shows some of it (general-calls). */
+  onChange(listener: () => void): void {
+    this.#listeners.push(listener);
   }
 
   raise(notice: Notice): void {
@@ -72,6 +78,9 @@ export class NoticeBoard implements Notifier {
   }
 
   #write(): void {
+    for (const listener of this.#listeners) {
+      listener();
+    }
     try {
       this.#deps.store?.write(this.current());
     } catch (error) {

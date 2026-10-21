@@ -7,6 +7,7 @@ import type { BoardStore } from "../ports/board-store";
 import type { Clock } from "../ports/clock";
 import type { EditorNodes, EditorPresence, EditorWindow } from "../ports/editor";
 import type { Logger } from "../ports/logger";
+import type { NoticeBoard } from "../application/notices";
 import type { Notifier } from "../ports/notifier";
 import type {
   RunRetentionSetting,
@@ -43,8 +44,8 @@ export interface AppCallsDeps {
     Pick<TelemetrySetting, "readTelemetry"> &
     UpdateHistoryStore &
     UpdateSettingsStore;
-  /** The once-only notice board: the crash-loop offer's one notice. */
-  readonly notifier: Notifier;
+  /** The once-only notice board: the crash-loop offer's one notice; General shows what is current. */
+  readonly notifier: Notifier & Pick<NoticeBoard, "current" | "onChange">;
   /** Open a release's notes, by its tag, in the browser. */
   readonly openReleaseNotes: (tag: string) => void;
   readonly pending: PendingQuestions;
@@ -93,6 +94,7 @@ export function wireAppCalls(deps: AppCallsDeps): UpdateCalls {
     runtime,
     services,
     pending: deps.pending,
+    notices: deps.notifier,
     retention: settings,
     toPage,
     logger,

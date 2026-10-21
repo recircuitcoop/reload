@@ -79,6 +79,7 @@ describe("flow administration in the embedded Node-RED", () => {
       store: { packages: () => ["keyed"] },
       logger,
       port,
+      flowFiles: { refused: () => [] },
     });
     const built: EmbeddedNodeRed = new EmbeddedNodeRed({
       port,
@@ -88,6 +89,7 @@ describe("flow administration in the embedded Node-RED", () => {
         credentialSecret: "a-test-credential-secret",
         coreNodesDir: CORE_NODES_DIR,
         logging: nodeRedLogging(new Quiet()),
+        readOnly: false,
       }),
       guard,
     });

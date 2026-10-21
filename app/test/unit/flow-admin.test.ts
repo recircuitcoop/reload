@@ -5,6 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { AjvSchemaValidator } from "../../src/adapters/schema/ajv-validator";
 import { DeployGuard } from "../../src/application/deploy-guard";
+import type { RefusedFlowFile } from "../../src/domain/flows/flow-file";
 import {
   DIRTY_SENTENCE,
   FlowAdmin,
@@ -249,7 +250,12 @@ const RECORDINGS: FlowTab = {
 };
 
 function harness(
-  options: { tabs?: FlowTab[]; runs?: Run[]; meta?: Record<string, FlowMeta> } = {},
+  options: {
+    tabs?: FlowTab[];
+    runs?: Run[];
+    meta?: Record<string, FlowMeta>;
+    refused?: RefusedFlowFile[];
+  } = {},
 ) {
   const engine = new MemoryEngine(options.tabs ?? [structuredClone(RECORDINGS)]);
   const logger = new RecordingLogger();
@@ -285,6 +291,7 @@ function harness(
     store: { packages: () => ["pkg"] },
     logger,
     port: 1880,
+    flowFiles: { refused: () => options.refused ?? [] },
   });
   const admin = new FlowAdmin({
     engine,
@@ -535,6 +542,20 @@ describe("every write", () => {
     });
     expect(h.engine.calls).toEqual([]);
     expect(h.logger.lines).toContainEqual(expect.stringContaining("refused a deploy naming types"));
+  });
+
+  it("is refused in its own words while a flows file is refused, and writes nothing", async () => {
+    const refused = {
+      file: "/u/flows.json",
+      problem: "is not valid JSON",
+      safeCopy: null,
+      backup: null,
+    };
+    const h = harness({ refused: [refused] });
+    const answer = await h.write("flow.rename", { id: "rec", name: "New name" });
+    expect(answer).toMatchObject({ ok: true, value: { refused: { reason: "flows-file" } } });
+    expect(JSON.stringify(answer)).toContain("/u/flows.json is not valid JSON");
+    expect(h.engine.calls).toEqual([]);
   });
 
   it("refuses a flow that no longer exists", async () => {

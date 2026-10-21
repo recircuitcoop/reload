@@ -178,6 +178,47 @@ test("a 0.2.1 installation with saved flows opens on Live, launch after launch, 
   }
 });
 
+test("a flows file that is not JSON is kept, told by notice and in the window, and never written", async () => {
+  const { scratch, userData, env } = scratchDirectories();
+  // A flows file cut short by a crash, beside Node-RED's last good backup.
+  const folder = path.join(userData, "node-red");
+  const flowsFile = path.join(folder, "flows.json");
+  const broken = '[{"id":"a1b2c3d4e5f60718","type":"tab","label":"Recordings to Anyt';
+  const backup = JSON.stringify([{ id: "a1b2c3d4e5f60718", type: "tab", label: "Recordings" }]);
+  fs.mkdirSync(folder, { recursive: true });
+  fs.writeFileSync(flowsFile, broken);
+  fs.writeFileSync(path.join(folder, ".flows.json.backup"), backup);
+  const apps: ElectronApplication[] = [];
+  try {
+    // The hooks record what the desktop was handed.
+    const { app, window } = await launchApp({ ...env, RELOAD_E2E_HOOKS: "1" });
+    apps.push(app);
+    await waitForRunning(window, "runtime");
+    const banner = window.getByTestId("flows-file-banner");
+    await expect(banner).toBeVisible({ timeout: 15_000 });
+    await expect(banner).toContainText("Reload did not load your flows");
+    await expect(banner).toContainText(`${flowsFile} is not valid JSON`);
+    await expect(banner).toContainText(path.join(folder, ".flows.json.backup"));
+    const copies = fs.readdirSync(folder).filter((name) => name.startsWith("flows.json.broken-"));
+    expect(copies).toHaveLength(1);
+    await expect(banner).toContainText(path.join(folder, copies[0] ?? ""));
+    const titles = await app.evaluate(() =>
+      (
+        globalThis as unknown as { reloadE2E: { notices: { list(): { title: string }[] } } }
+      ).reloadE2E.notices
+        .list()
+        .map((notice) => notice.title),
+    );
+    expect(titles).toContain("Reload did not load your flows");
+    await quit(app);
+    // Nothing Reload did wrote over the file or its backup.
+    expect(fs.readFileSync(flowsFile, "utf8")).toBe(broken);
+    expect(fs.readFileSync(path.join(folder, ".flows.json.backup"), "utf8")).toBe(backup);
+  } finally {
+    await cleanUp(apps, scratch);
+  }
+});
+
 test("the quit question shows and is answered even when Setup's state cannot be read", async () => {
   const { scratch, userData, env } = scratchDirectories();
   // shell-settings.json is not JSON: setup.get is refused, and the frame cannot place Setup.

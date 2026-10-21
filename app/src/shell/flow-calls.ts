@@ -34,6 +34,7 @@ const REFUSAL_KEYS: Readonly<Record<string, StringKey>> = {
   dirty: "flows.refused.dirty",
   loading: "flows.refused.loading",
   "not-installed": "flows.refused.notInstalled",
+  "flows-file": "flows.refused.flowsFile",
   gone: "flows.refused.gone",
   name: "flows.refused.name",
   "no-template": "flows.refused.noTemplate",

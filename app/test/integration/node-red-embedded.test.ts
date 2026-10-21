@@ -100,12 +100,14 @@ describe("the embedded Node-RED", () => {
         credentialSecret: "a-test-credential-secret",
         coreNodesDir: CORE_NODES_DIR,
         logging: nodeRedLogging(nodeRedLines),
+        readOnly: false,
       }),
       guard: new DeployGuard({
         engine: { nodeSets: () => built.nodeSets() },
         store: new DeclaredPackageStore([FIXTURES], logger),
         logger,
         port,
+        flowFiles: { refused: () => [] },
       }),
       nodeOptions: (query) => {
         asked.push(query);

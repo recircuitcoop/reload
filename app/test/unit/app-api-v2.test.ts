@@ -9,6 +9,7 @@ import type { IpcMain } from "electron";
 import { describe, expect, it } from "vitest";
 import { JsonBoardStore } from "../../src/adapters/fs/board-store";
 import { GONE_SENTENCE, NO_STEP_SENTENCE } from "../../src/application/flows";
+import { NoticeBoard } from "../../src/application/notices";
 import { FLOW_OFF_SENTENCE, NOT_REACHED_SENTENCE } from "../../src/application/run-actions";
 import { NOTHING_TO_UNDO_SENTENCE, RUN_GONE_SENTENCE } from "../../src/application/runs";
 import type { Supervisor } from "../../src/application/supervisor";
@@ -213,6 +214,7 @@ function harness() {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-v2-"));
   const flowsFile = path.join(scratch, "flows.json");
   const boardsFile = path.join(scratch, "boards.json");
+  const notices = new NoticeBoard({ deliver: () => undefined, store: null, logger });
   const updateCalls = wireAppCalls({
     ipc: ipcMain,
     flowsFile,
@@ -235,7 +237,7 @@ function harness() {
     },
     settings,
     packages: board,
-    notifier: new RecordingNotifier(),
+    notifier: notices,
     openReleaseNotes: () => undefined,
     pending,
     sampleFile: flowsFile,
@@ -266,6 +268,7 @@ function harness() {
     board,
     canvas,
     boardsFile,
+    notices,
   };
 }
 
@@ -773,8 +776,25 @@ describe("AppApi v2 calls, through the shell to its processes", () => {
     expect(await h.api.status()).toEqual({
       ok: true,
       // The runtime supervisor's own crash-loop limit, not a default restated.
-      value: { pill: "running", banner: null, badge: 0, crashLoop: { crashes: 3, minutes: 1 } },
+      value: {
+        pill: "running",
+        banner: null,
+        badge: 0,
+        crashLoop: { crashes: 3, minutes: 1 },
+        flowsFile: null,
+      },
     });
+    // A refused flows file is shown in the window in its notice's words, pushed when raised.
+    h.notices.raise({ kind: "flows-file-refused", subject: "/u/flows.json", detail: "Fix it" });
+    h.flush();
+    const refused = { title: "Reload did not load your flows", body: "Fix it." };
+    expect(h.sent).toContainEqual([
+      IPC.statusChanged,
+      expect.objectContaining({ flowsFile: refused }),
+    ]);
+    expect(await h.api.status()).toMatchObject({ value: { flowsFile: refused } });
+    h.notices.clear("flows-file-refused", "/u/flows.json");
+    expect(await h.api.status()).toMatchObject({ value: { flowsFile: null } });
     h.services.answers.set("anytype.status", () => ({ ok: false, code: "down", error: "d" }));
     expect(await h.api.status()).toMatchObject({ value: { pill: "running" } });
     expect(await h.api.retention()).toEqual({ ok: true, value: { days: 90 } });

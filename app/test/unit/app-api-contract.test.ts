@@ -282,7 +282,13 @@ const SUBSCRIPTIONS: Record<string, { channel: string; sent: unknown }> = {
   onPackages: { channel: IPC.packagesChanged, sent: undefined },
   onStatus: {
     channel: IPC.statusChanged,
-    sent: { pill: "running", banner: null, badge: 0, crashLoop: { crashes: 5, minutes: 2 } },
+    sent: {
+      pill: "running",
+      banner: null,
+      badge: 0,
+      crashLoop: { crashes: 5, minutes: 2 },
+      flowsFile: null,
+    },
   },
   onOpenLive: { channel: IPC.openLive, sent: "tab1" },
   onQuitQuestion: { channel: IPC.quitQuestion, sent: { problem: null } },

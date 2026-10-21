@@ -10,6 +10,7 @@ import * as path from "node:path";
 import { BundledRuntimeLocator } from "../adapters/process/bundled-runtime-locator";
 import { processHostOver, shellLinkOver } from "../adapters/electron/parent-port";
 import { DeclaredPackageStore } from "../adapters/fs/declared-package-store";
+import { keepRefusedFlowFiles } from "../adapters/fs/flow-files";
 import { FsTemplateSource } from "../adapters/fs/flow-templates";
 import { JsonFlowMetaStore } from "../adapters/fs/flows-meta-store";
 import { JsonSettingsStore } from "../adapters/fs/settings-store";
@@ -36,6 +37,7 @@ import { noticeAnytypeRefusals } from "../application/anytype-refusals";
 import { DeployGuard } from "../application/deploy-guard";
 import { answerEditorCall } from "../application/editor-events";
 import { EventTypeService, isEventOp } from "../application/event-types";
+import { FlowFiles } from "../application/flow-files";
 import { FlowAdmin, flowNodeTypeOf, isFlowOp } from "../application/flows";
 import { JournalReplay } from "../application/journal-replay";
 import { isRunActionOp, RunActions } from "../application/run-actions";
@@ -50,6 +52,7 @@ import { printCanary, sourceLog } from "../application/source-log";
 import { ViewService } from "../application/views";
 import { enabledNodes, InstanceReadiness } from "../application/instance-readiness";
 import { anytypeKeyVariables } from "../domain/anytype/pins";
+import { FLOW_FILES } from "../domain/flows/flow-file";
 import type { InitConfig, StopReason } from "../domain/channel/messages";
 import type { RuntimeLocator } from "../ports/runtime-locator";
 import {
@@ -335,6 +338,14 @@ async function startNodeRed(config: InitConfig): Promise<void> {
   const userDir = path.join(config.userDir, "node-red");
   const generatedDir = path.join(userDir, "generated");
   fs.mkdirSync(generatedDir, { recursive: true });
+  // Before Node-RED reads them: a flows file it cannot parse is kept, and never written over.
+  const flowFiles = new FlowFiles({
+    files: FLOW_FILES.map((name) => path.join(userDir, name)),
+    check: () => keepRefusedFlowFiles(userDir, FLOW_FILES, new Date()),
+    notifier: shellNotifier(link),
+    logger,
+  });
+  const readOnly = flowFiles.refused().length > 0;
 
   const packages = new InstalledPackageStore(
     new DeclaredPackageStore(PACKAGE_ROOTS, logger),
@@ -382,6 +393,7 @@ async function startNodeRed(config: InitConfig): Promise<void> {
     store: { packages: () => [...packages.packages(), USER_EVENTS_PACKAGE] },
     logger,
     port: config.port,
+    flowFiles,
   });
   const engine: EmbeddedNodeRed = new EmbeddedNodeRed({
     port: config.port,
@@ -391,6 +403,7 @@ async function startNodeRed(config: InitConfig): Promise<void> {
       credentialSecret,
       coreNodesDir: CORE_NODES_DIR,
       logging: nodeRedLogging(nodeRedLogger),
+      readOnly,
     }),
     guard,
     nodeOptions: (query) => nodeOptions.resolve(query),

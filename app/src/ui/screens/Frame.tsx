@@ -95,7 +95,13 @@ export function Frame({ api }: { readonly api: AppApi }) {
   }
   const view = status.status === "ready" ? status.value : null;
   const pill = view === null ? null : <StatusPillOf pill={view.pill} />;
-  const banner = view === null ? null : <Banner view={view} api={api} />;
+  const banner =
+    view === null ? null : (
+      <>
+        <FlowsFileBanner refused={view.flowsFile} />
+        <Banner view={view} api={api} />
+      </>
+    );
   return (
     <div data-testid="frame" data-route={route.screen} className="h-full">
       <Screen route={route} api={api} pill={pill} banner={banner} badge={view?.badge ?? 0} />
@@ -109,6 +115,19 @@ function StatusPillOf({ pill }: { readonly pill: Pill }) {
     <span data-testid="status-pill" data-pill={pill}>
       <StatusPill state={PILL_LOOK[pill]}>{wordStatus(pill)}</StatusPill>
     </span>
+  );
+}
+
+/** A refused flows file (application/flow-files.ts), in the notice's own words, until fixed. */
+function FlowsFileBanner({ refused }: { readonly refused: StatusView["flowsFile"] }) {
+  if (refused === null) {
+    return null;
+  }
+  return (
+    <InlineMessage kind="failed" testId="flows-file-banner">
+      <strong className="block">{refused.title}</strong>
+      {refused.body}
+    </InlineMessage>
   );
 }
 

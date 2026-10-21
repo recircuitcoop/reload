@@ -88,6 +88,8 @@ export interface StatusView {
   readonly badge: number;
   /** The crash-loop limit the banner's Down sentence names ("5 times in 2 minutes"). */
   readonly crashLoop: { readonly crashes: number; readonly minutes: number };
+  /** A refused flows file's notice, as the desktop showed it; null while none is refused. */
+  readonly flowsFile: { readonly title: string; readonly body: string } | null;
 }
 
 /** Run history's retention (D8): days, or null for Forever. */

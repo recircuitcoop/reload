@@ -30,6 +30,7 @@ import type { Logger } from "../ports/logger";
 import type { RequestGuard } from "../ports/request-guard";
 import type { RunStore } from "../ports/run-store";
 import type { SchemaValidator } from "../ports/schema-validator";
+import { FLOWS_FILE_REFUSED } from "./deploy-guard";
 import { flowSummary, requiredSecrets, stepName, type FlowSummary } from "./flow-summary";
 
 export { flowNodeTypeOf, type FlowSummary } from "./flow-summary";
@@ -69,6 +70,7 @@ export type RefusalReason =
   | "dirty"
   | "loading"
   | "not-installed"
+  | "flows-file"
   | "gone"
   | "name"
   | "no-template"
@@ -302,7 +304,9 @@ export class FlowAdmin {
     const { body, run } = await prepare();
     const answer = await this.#deps.guard.checkDeploy("flow", body);
     if (!answer.ok) {
-      return refuse("not-installed", `${answer.body.message}.`);
+      return answer.body.code === FLOWS_FILE_REFUSED
+        ? refuse("flows-file", answer.body.message)
+        : refuse("not-installed", `${answer.body.message}.`);
     }
     const result = await run();
     this.changed();

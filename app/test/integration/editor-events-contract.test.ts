@@ -173,12 +173,14 @@ describe("the runtime raises them to a connected editor", () => {
         credentialSecret: "a-test-credential-secret",
         coreNodesDir: CORE_NODES_DIR,
         logging: nodeRedLogging(new LeveledRecorder()),
+        readOnly: false,
       }),
       guard: new DeployGuard({
         engine: { nodeSets: () => built.nodeSets() },
         store: new DeclaredPackageStore([], logger),
         logger,
         port,
+        flowFiles: { refused: () => [] },
       }),
     });
     engine = built;

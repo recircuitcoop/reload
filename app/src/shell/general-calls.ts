@@ -6,8 +6,10 @@
 // counts them from run records, hidden places included.
 import type { IpcMain } from "electron";
 import { DEFAULT_RETENTION_DAYS } from "../application/runs";
+import type { NoticeBoard } from "../application/notices";
 import type { Supervisor } from "../application/supervisor";
 import type { AnytypeStatus } from "../domain/anytype/status";
+import { compose } from "../domain/notices/notices";
 import { runtimeBanner, statusPill } from "../domain/status/status";
 import type { ChildStatus } from "../domain/supervision/child-state";
 import type { Logger } from "../ports/logger";
@@ -26,17 +28,20 @@ export interface GeneralCallsDeps {
   readonly runtime: Pick<Supervisor, "crashLoop">;
   readonly services: Pick<Supervisor, "call">;
   readonly pending: PendingQuestions;
+  /** The notices current now: a refused flows file is shown in the window too. */
+  readonly notices: Pick<NoticeBoard, "current" | "onChange">;
   readonly retention: RunRetentionSetting;
   readonly toPage: (channel: string, ...args: unknown[]) => void;
   readonly logger: Logger;
 }
 
 export function wireGeneralCalls(deps: GeneralCallsDeps): void {
-  const { ipc, children, services, pending, retention, toPage, logger } = deps;
+  const { ipc, children, services, pending, notices, retention, toPage, logger } = deps;
   /** Anytype's state, as last read; the pill needs it only while the runtime runs. */
   let anytype: AnytypeStatus | null = null;
   const view = (): StatusView => {
     const statuses: ChildStatus[] = children.map((child) => child.status());
+    const refused = notices.current().find((notice) => notice.kind === "flows-file-refused");
     return {
       pill: statusPill({ children: statuses, anytype }),
       banner: runtimeBanner(statuses),
@@ -45,6 +50,7 @@ export function wireGeneralCalls(deps: GeneralCallsDeps): void {
         crashes: deps.runtime.crashLoop.maxCrashes,
         minutes: deps.runtime.crashLoop.windowMs / 60_000,
       },
+      flowsFile: refused === undefined ? null : compose(refused),
     };
   };
   const readAnytype = async (): Promise<void> => {
@@ -60,6 +66,7 @@ export function wireGeneralCalls(deps: GeneralCallsDeps): void {
     });
   }
   pending.onChange(push);
+  notices.onChange(push);
 
   const days = (): Retention => {
     const stored = retention.readRunRetentionDays();

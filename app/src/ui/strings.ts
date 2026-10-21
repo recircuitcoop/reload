@@ -259,6 +259,7 @@ export const STRINGS = {
   "flows.refused.noForm": "This step has no form to fill in.",
   "flows.refused.notInstalled":
     "A step of this flow comes from a package that isn't installed. Add it in Configuration › General.",
+  "flows.refused.flowsFile": "Reload did not load your flows file: see the message above.",
   "runState.copying": "copying",
   "runState.running": "running",
   "runState.waiting": "waiting for you",

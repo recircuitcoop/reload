@@ -20,6 +20,7 @@ export type RefusalReason =
   | "dirty"
   | "loading"
   | "not-installed"
+  | "flows-file"
   | "gone"
   | "name"
   | "no-template"
