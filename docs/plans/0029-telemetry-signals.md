@@ -1,14 +1,15 @@
 ---
 type: plan
 title: Telemetry signals, counted on the circu.it site
-status: APPROVED
+status: DONE
 created: 2026-10-20
-updated: 2026-10-20
+updated: 2026-10-21
 ---
 
 # 0029 — Telemetry signals, counted on the circu.it site
 
-Status: APPROVED 2026-10-20. Requested by the owner: "for the application telemetry, make the
+Status: APPROVED 2026-10-20, built 2026-10-21 (every WI DONE; see "As built" below). Requested
+by the owner: "for the application telemetry, make the
 signals go to the circu.it umami account but make them like they are from the reload campaign
 attribution. when a plugin is used get the metadata of the plugin in the message."
 
@@ -149,31 +150,71 @@ has no DSN, so crash reports still go nowhere (D23); the counts stay as they are
 
 ## Work items
 
-1. **WI-0029-01 — the endpoint (Step 0) and the credential gate.** Commit what is in the
+1. **WI-0029-01 — the endpoint (Step 0) and the credential gate.** Status: DONE. Commit what is in the
    working tree; build the field-name rule, the URL-to-host rule, the scrub-then-withhold rule
    and the fake-credential test of "No credentials, ever" first, so every later WI lands
    behind it.
-2. **WI-0029-02 — start, stop, unclean stop, setup steps.** `reports.ts` builders, the marker
+2. **WI-0029-02 — start, stop, unclean stop, setup steps.** Status: DONE. `reports.ts` builders, the marker
    file, `quit.ts`, the notice lines; unit tests for each body and for the marker across a
    killed launch.
-3. **WI-0029-03 — the queue and the sender for volume.** New bounds, back-to-back draining,
+3. **WI-0029-03 — the queue and the sender for volume.** Status: DONE. New bounds, back-to-back draining,
    batch when available; tests that 20 001 reports drop exactly the oldest, and that `off` still
    empties all of them.
-4. **WI-0029-04 — `package_used` and `package_error`.** The runtime-to-shell message, the
+4. **WI-0029-04 — `package_used` and `package_error`.** Status: DONE. The runtime-to-shell message, the
    type-to-package map, both SDKs' `file`/`line`, the unsigned rule; an e2e run of a shipped
    package node that fails, checking the event's fields against the source line that threw.
-5. **WI-0029-05 — `mcp_call` and `flow_deployed`.** Tests that an unknown tool name never
+5. **WI-0029-05 — `mcp_call` and `flow_deployed`.** Status: DONE. Tests that an unknown tool name never
    appears, and that the node counts equal the deployed flows' exactly.
-6. **WI-0029-06 — provider, install, update and remove events, and the updater's.** Tests that
+6. **WI-0029-06 — provider, install, update and remove events, and the updater's.** Status: DONE. Tests that
    a provider URL with `user:pass@` and `?token=` sends only the host, and that a file install
    sends no path.
-7. **WI-0029-07 — the privacy notice.** Every new field in `privacy.*`, the old "never the
+7. **WI-0029-07 — the privacy notice.** Status: DONE. Every new field in `privacy.*`, the old "never the
    error's message" line replaced by what is sent now; the notice test checks each line against
    the builders. The person is asked again on the first launch of the version that ships this,
    because what a yes covers changed.
 
 Each WI gets the quick gate; the full gate runs before the merge, and the owner tests the
 build locally before it ships.
+
+## As built (2026-10-21)
+
+Where the build differs from the text above, and why:
+
+- **`key_fingerprint` is `signer_fingerprint`.** Rule 2 refuses any field whose name contains
+  `key`, so the table's own name would refuse `provider_registered`. It is the first 12 hex
+  digits of the sha256 of the public signing key.
+- **`nodes_per_package` is a list of `{package, nodes}` pairs**, not a map: a key made of a
+  package name would be a field name nobody chose (rule 2), and the one redaction blanks the value
+  of a key such as `reload_notes`. Node-RED's own nodes count as `node-red`; unsigned and unknown
+  packages are merged under `unsigned`.
+- **`file`, `environment` and `provider_host` are vouched fields** (`reports.ts VOUCHED_FIELDS`):
+  their names contain `file`, `env` and `host`, which the one redaction blanks. Their values are
+  made by the builders from a closed form (a package-relative path, one of three kinds, a
+  hostname) and still pass the credential removal, the path reduction and the scrub.
+- **Every string is scrubbed, `tool` included.** `mcp_call`'s `tool` is lowercased so a long
+  capitalised tool name is not read as a key; there is no exemption from rule 4.
+- **`file`, `line`, `error_type` ride on the `error` frame** as optional fields both SDKs add when
+  a handler throws (spec §4.2 says so). They are not in the §4.5 schema, so a node that sends
+  them malformed still fails its input; the runtime reads them only when well formed. Only a
+  failure the node's own `error` frame states carries facts; a failure the runtime words (a
+  cancellation, a crash) is told with `error_type`, `error`, `file` and `line` all null, since its
+  words can name the step.
+- **Steps are heard in the process adapter** (`adapters/process/node-process.ts`), where each
+  input's `done` or `error` and the node's type are known, and told over the runtime's channel
+  as the `signal` message, as `node-crash` is.
+- **Providers are found by difference.** The app has no "add a source" screen (the owner kept
+  registering sources out, plan 0022), so a provider counts as registered the first time a
+  listing sees it (the official one included) and removed when a listing no longer does; the
+  telemetry memory (`userData/telemetry-memory.json`) keeps what was seen. A listing whose
+  settings could not be read changes nothing.
+- **The marker is `userData/telemetry-running`**, holding the version; `first_launch` and the
+  setup steps told are kept in the same memory file. A step reached before the yes is told at it.
+- **Asked again:** a yes is stored with `telemetryNotice: 2`; a yes without it reads as
+  unanswered, so nothing is sent and General › Reports shows the question and the notice again.
+  A no stays a no. Setup is not reopened for an installation that finished it.
+- **Batches:** Umami documents `/api/batch` (an array of `/api/send` bodies). One event goes to
+  `/api/send`, two to fifty to `/api/batch`; whether Umami Cloud's account accepts it is checked
+  on the first real send, not by a test.
 
 ## Risks
 
