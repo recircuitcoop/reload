@@ -11,7 +11,8 @@ acceptance:
 canonical_id: 0018
 canonical_source: plans
 size: M
-status: DONE
+status: TODO
+note: Reopened by plan 0031 on 2026-10-21. It was archived as DONE, but the parity ledger still had 68 undecided rows and no proof in docs/parity/proofs.csv had run.
 depends_on:
 - WI-0018-23-packaging
 - WI-0018-27-ledger-complete

@@ -71,7 +71,7 @@ fresh verifier on the final head. Each port moves its ledger rows to `ported` wi
 test's id; nothing is marked without a test.
 
 1. **WI-0031-01 — reopen.** WI-0018-27/28/29 set back from DONE with a note; the ledger rows
-   for D marked ported with their tests named.
+   for D marked ported with their tests named. **DONE** 2026-10-21.
 2. **WI-0031-02 — A, the resource watchdog** (the largest): limits per node process on memory,
    open files and children, grace window, polite stop then kill, restart through the existing
    breaker, a notice; limits a package may raise in its declaration; CPU warns, never kills
