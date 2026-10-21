@@ -45,13 +45,12 @@ export interface GeneralCallsDeps {
   readonly toPage: (channel: string, ...args: unknown[]) => void;
   /**
    * The log this run writes (null: none could be opened), the file manager that shows it, and
-   * this Reload's executable, which a terminal command names in full (a development run's is
-   * Electron's own, which needs the app folder after it).
+   * this Reload as a terminal starts it: its executable, then (a development run) the app folder.
    */
   readonly log: {
     readonly file: string | null;
     readonly shell: Pick<Shell, "showItemInFolder">;
-    readonly executable: string;
+    readonly command: readonly string[];
   };
   readonly logger: Logger;
 }
@@ -108,7 +107,7 @@ export function wireGeneralCalls(deps: GeneralCallsDeps): void {
   };
   const logFile = (): LogFile => ({
     path: deps.log.file,
-    command: `${shellWord(deps.log.executable)} --status`,
+    command: [...deps.log.command, "--status"].map(shellWord).join(" "),
   });
   ipc.handle(IPC.generalCall, (_event, call: unknown) => {
     const { op, args } = opOf(call);

@@ -127,7 +127,9 @@ class FakeBoard {
 const LOG_FILE = "/Users/me/Library/Logs/reload/reload.log";
 const MAC_EXECUTABLE = "/Applications/Reload.app/Contents/MacOS/Reload";
 
-function harness(options: { readonly logFile?: string | null; readonly executable?: string } = {}) {
+function harness(
+  options: { readonly logFile?: string | null; readonly command?: readonly string[] } = {},
+) {
   const handlers = new Map<string, Handler>();
   const pageListeners = new Map<string, Listener[]>();
   const ipcMain: Pick<IpcMain, "handle"> = {
@@ -255,7 +257,7 @@ function harness(options: { readonly logFile?: string | null; readonly executabl
     log: {
       file: options.logFile === undefined ? LOG_FILE : options.logFile,
       shell: { showItemInFolder: (file) => revealed.push(file) },
-      executable: options.executable ?? MAC_EXECUTABLE,
+      command: options.command ?? [MAC_EXECUTABLE],
     },
     clock: { now: () => new Date(2026, 9, 2, 9, 30).getTime() },
     logger,
@@ -847,13 +849,17 @@ describe("AppApi v2 calls, through the shell to its processes", () => {
   });
 
   it("the terminal command: the executable named in full, quoted where a shell needs it", async () => {
-    const command = async (executable: string) => {
-      const answer = await harness({ executable }).api.logFile();
+    const command = async (...argv: string[]) => {
+      const answer = await harness({ command: argv }).api.logFile();
       return answer.ok ? answer.value.command : null;
     };
     expect(await command("/opt/Reload/reload")).toBe("/opt/Reload/reload --status");
     expect(await command("/Users/me/Apps/Reload 2.app/Contents/MacOS/Reload")).toBe(
       "'/Users/me/Apps/Reload 2.app/Contents/MacOS/Reload' --status",
+    );
+    // A development run: Electron's own executable, then the app folder.
+    expect(await command("/src/node_modules/electron/dist/electron", "/src/my app")).toBe(
+      "/src/node_modules/electron/dist/electron '/src/my app' --status",
     );
     expect(await command("/home/me/it's/Reload.AppImage")).toBe(
       `'/home/me/it'\\''s/Reload.AppImage' --status`,
