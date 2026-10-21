@@ -43,6 +43,7 @@ class Node:
         self.running = None
         self.running_cancelled = threading.Event()
         self.waiting = {}  # action views: input id -> True
+        self.deaf = False  # set by {"do": "deaf"}: pings go unanswered, as in a stuck process
         threading.Thread(target=self.worker, daemon=True).start()
 
     # -- the serial worker (spec 4.3.3: a serial node queues its inputs) -------------------
@@ -64,6 +65,9 @@ class Node:
         action = data.get("do", "echo") if isinstance(data, dict) else "echo"
         if action == "echo":
             send({"t": "emit", "port": "out", "data": data.get("value"), "in": input_id})
+            send({"t": "done", "in": input_id})
+        elif action == "deaf":
+            self.deaf = True
             send({"t": "done", "in": input_id})
         elif action == "burst":
             self.burst(input_id, data["frames"], data["threads"])
@@ -205,6 +209,11 @@ class Node:
             else:
                 send({"t": "emit", "port": "out", "data": frame["values"], "in": input_id})
                 send({"t": "done", "in": input_id})
+        elif kind == "ping":
+            # Said on stderr too, so a test can wait for the answer before moving its clock.
+            print(f"pinged {frame['id']}", file=sys.stderr, flush=True)
+            if not self.deaf:
+                send({"t": "pong", "id": frame["id"]})
         elif kind == "close":
             if self.config.get("ignore_close"):
                 return

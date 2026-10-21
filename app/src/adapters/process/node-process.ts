@@ -12,7 +12,6 @@ import type { QueueReport } from "../../domain/journal/queue";
 import { CrashLoopBreaker } from "../../domain/supervision/breaker";
 import { TIMEOUT_PORT } from "../../domain/views/views";
 import type { Cancel } from "../../ports/clock";
-import { forEachLine } from "../../domain/logging/lines";
 import type { NodeLineLevel } from "../../ports/logger";
 import type {
   InputDelivery,
@@ -30,7 +29,6 @@ import {
   encodeFrame,
   envelopeOf,
   FrameTooLargeError,
-  LineReader,
   outcomeOf,
   statusOf,
   stepStatusOf,
@@ -40,7 +38,8 @@ import {
 } from "./codec";
 import { inputJournalFor, type Admitted, type Input, type InputJournal } from "./input-journal";
 import { prepareInstance, type NodeProcessDeps } from "./node-process-settings";
-import { watchExit } from "./exit-watch";
+import { readPipes, watchExit } from "./exit-watch";
+import { nodeHeartbeat, type NodeHeartbeat } from "./node-heartbeat";
 import { RefusedPorts } from "./refused-ports";
 import { NodeResourceGuard } from "./resource-guard";
 import { ViewDeadlines } from "./view-deadlines";
@@ -64,6 +63,7 @@ class ChildNodeProcess implements NodeProcess {
   readonly #closeWaiters: (() => void)[] = [];
   readonly #refused: RefusedPorts;
   readonly #guard: NodeResourceGuard;
+  readonly #heartbeat: NodeHeartbeat | null;
 
   #child: ChildProcess | null = null;
   ready = false;
@@ -87,6 +87,11 @@ class ChildNodeProcess implements NodeProcess {
       this.#timedOut(inputId);
     });
     prepareInstance(spec, deps, this.#who);
+    this.#heartbeat = nodeHeartbeat(spec, deps, {
+      who: this.#who,
+      write: (frame) => this.#write(frame),
+      pid: () => this.pid,
+    });
     // Created again (a redeploy): a crash loop from here on is news again.
     deps.notifier.clear("node-stopped", spec.identity.name || spec.identity.typeId);
     this.#refused = new RefusedPorts(spec, deps.notifier, (message) => {
@@ -227,20 +232,7 @@ class ChildNodeProcess implements NodeProcess {
     this.#closedAck = false;
     this.#log("info", `spawned pid ${String(child.pid)}: ${argv.join(" ")}`);
 
-    const stdout = new LineReader();
-    child.stdout.on("data", (chunk: Buffer) => {
-      this.#onStdout(child, stdout.push(chunk));
-    });
-    child.stdout.on("end", () => {
-      this.#onStdout(child, stdout.end());
-    });
-    child.stderr.setEncoding("utf8");
-    forEachLine(child.stderr, (line) => {
-      this.#line("STDERR", line.cut ? `${line.text} [line cut]` : line.text);
-    });
-    child.stdin.on("error", () => {
-      // A dead process's stdin; its exit is what reports it.
-    });
+    readPipes(child, this.#onStdout.bind(this, child), this.#line.bind(this, "STDERR"));
     watchExit(child, {
       graceMs: this.#deps.settings.exitGraceMs,
       after: this.#after.bind(this),
@@ -393,6 +385,7 @@ class ChildNodeProcess implements NodeProcess {
       case "ready":
         this.ready = true;
         this.#log("info", "ready");
+        this.#heartbeat?.started();
         if (!this.#statusSeen) {
           const text = this.#spec.identity.kind === "source" ? "watching" : "ready";
           this.#host.status({ fill: "green", shape: "ring", text });
@@ -429,6 +422,9 @@ class ChildNodeProcess implements NodeProcess {
       case "closed":
         this.#closedAck = true;
         this.#log("info", "close acknowledged");
+        return;
+      case "pong":
+        this.#heartbeat?.pong(frame.id);
         return;
     }
   }
@@ -557,12 +553,13 @@ class ChildNodeProcess implements NodeProcess {
     }
   }
 
-  #write(frame: RuntimeFrame): void {
+  #write(frame: RuntimeFrame): boolean {
     if (this.#child === null) {
       this.#log("warn", `no process is running; a ${frame.t} frame was not sent`);
-      return;
+      return false;
     }
     this.#child.stdin.write(encodeFrame(frame));
+    return true;
   }
 
   // ── time and logging ───────────────────────────────────────────────────────────────────
@@ -572,6 +569,7 @@ class ChildNodeProcess implements NodeProcess {
   }
 
   #cancelTimers(): void {
+    this.#heartbeat?.stopped();
     for (const cancel of this.#timers.splice(0)) {
       cancel();
     }

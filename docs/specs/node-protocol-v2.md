@@ -212,6 +212,7 @@ key it does not know.
 
 | Key | Value | Meaning |
 |---|---|---|
+| `heartbeat` | `{"interval_s": number, "stale_after_s"?: number}`, both above 0 | The type promises to answer `ping` (4.1). The runtime pings each of its processes every `interval_s` after `ready`, and records a beat only for a `pong` that comes back before the next ping is due. A process that answers none for `stale_after_s` (default: three intervals) while it is running is stuck: the runtime logs it, tells the person once, and kills it, and the kill is an unexpected exit (6.5), restarted like any other. A pass that runs long after it was due (the machine slept) starts the window again rather than reading the gap as silence. Without `heartbeat`, a process is never judged stuck. |
 | `restartable` | boolean, default `true` | `false`: a process that exits unexpectedly is never started again, for example because starting it twice would repeat a side effect. The instance is stopped as at the crash-loop limit (6.5): its open inputs fail, and the person is told once. A redeploy creates it again. |
 | `limits` | object | Its own resource limits, as below. |
 
@@ -368,6 +369,14 @@ A type MAY set its own limits in `reload.limits`:
     "typeReload": {
       "type": "object",
       "properties": {
+        "heartbeat": {
+          "type": "object",
+          "required": ["interval_s"],
+          "properties": {
+            "interval_s": { "type": "number", "exclusiveMinimum": 0 },
+            "stale_after_s": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        },
         "restartable": { "type": "boolean" },
         "limits": {
           "type": "object",
@@ -495,6 +504,7 @@ Every frame is a JSON object with a string field `t`.
 | `trigger` | `action` (port id), `snapshot: {id, state}`, `values` | Snapshot views only: an action was pressed. | Emit on the port named `action` WITHOUT `in` (a new run), carrying the snapshot state and `values`. |
 | `fire` | `data` (object, already validated) | Created event sources: the person fired the event from the app. | Emit on its one port without `in`. |
 | `close` | — | On redeploy, removal, quit or runtime restart. | Stop its work, send `closed`, and exit with code 0. Deadline: 5 s (6.3). |
+| `ping` | `id` | Only to a type that declares `reload.heartbeat` (2.4.2), once per interval after `ready`. | Answer `pong` with the same `id`, from the loop that reads its frames, while it is working too. A node whose type declares no heartbeat MAY ignore it. |
 
 ### 4.2 Node → runtime
 
@@ -509,6 +519,7 @@ Every frame is a JSON object with a string field `t`.
 | `present` | `in`, `content` | Action views: show this to the person. | Set the journal entry to `awaiting` with `content`, and apply section 8. |
 | `snapshot` | `content`, `state`, optional `in` | Snapshot views: record this. | Store the snapshot with the type's actions, the instance id and the time. |
 | `closed` | — | In answer to `close`. | Stop waiting for the acknowledgement. |
+| `pong` | `id` | In answer to `ping`. | Record a heartbeat for the process (2.4.2). A `pong` for an `id` it did not send is ignored. |
 
 #### 4.2.1 Notes and results on `done` (revision 2.1)
 
@@ -626,6 +637,11 @@ The schemas state the shape a frame has once the runtime has applied the revisio
     },
     "fire": { "type": "object", "required": ["t", "data"], "properties": { "t": { "const": "fire" }, "data": { "type": "object" } } },
     "close": { "type": "object", "required": ["t"], "properties": { "t": { "const": "close" } } },
+    "ping": {
+      "type": "object",
+      "required": ["t", "id"],
+      "properties": { "t": { "const": "ping" }, "id": { "$ref": "#/$defs/id" } }
+    },
     "ready": { "type": "object", "required": ["t"], "properties": { "t": { "const": "ready" } } },
     "status": {
       "type": "object",
@@ -702,6 +718,11 @@ The schemas state the shape a frame has once the runtime has applied the revisio
       "properties": { "t": { "const": "snapshot" }, "content": { "$ref": "#/$defs/viewContent" }, "state": {}, "in": { "$ref": "#/$defs/id" } }
     },
     "closed": { "type": "object", "required": ["t"], "properties": { "t": { "const": "closed" } } },
+    "pong": {
+      "type": "object",
+      "required": ["t", "id"],
+      "properties": { "t": { "const": "pong" }, "id": { "$ref": "#/$defs/id" } }
+    },
     "viewContent": {
       "type": "object",
       "properties": {
@@ -1233,6 +1254,8 @@ A node SDK (any language) conforms when it:
       `present`, `snapshot`;
 - [ ] (2.1) lets `done` carry `notes` and `results` (4.2.1), and provides
       `progress(in, done, total, eta_s?)`, a `status` with `in` (4.2.2);
+- [ ] answers every `ping` with a `pong` of its `id` itself, from the loop that reads frames,
+      while handlers are running too (2.4.2);
 - [ ] answers `close` with `closed`, then exits 0 within 5 s;
 - [ ] treats EOF on stdin as `close`, and exits without error;
 - [ ] never logs credentials;
@@ -1287,6 +1310,12 @@ Plan 0020 adds:
 | # | Test | Passes when |
 |---|---|---|
 | C24 | audio media | `present` with `media` holding an image, a labelled `data:audio/…` sample, an unlabelled package-file sample and a 600 KiB sample reaches the runtime intact: the frame decodes, its items are as sent, and the bound (8.1.4) refuses none of them |
+
+Plan 0031 adds:
+
+| # | Test | Passes when |
+|---|---|---|
+| C25 | heartbeat | each `ping` gets one `pong` with its `id`, also while an input is running; on the runtime side, a type that declares `reload.heartbeat` and stops answering is killed, restarted under the usual rules and the person told once, and a type that declares none is never pinged |
 
 C15 binds the runtime, not SDKs. Of these, C1, C4 to C8, C10 to C12, C14 and C15 were exercised
 by the spike, by hand and by script. **[UNPROVEN]** C2, C3, C9 and C13 as automated tests, and

@@ -46,7 +46,9 @@ export type RuntimeFrame =
   | { t: "action"; in: string; values: Readonly<Record<string, unknown>> }
   | { t: "trigger"; action: string; snapshot: { id: string; state: unknown }; values: object }
   | { t: "fire"; data: Readonly<Record<string, unknown>> }
-  | { t: "close" };
+  | { t: "close" }
+  /** Only to a type that declares `reload.heartbeat` (spec 2.4.2). */
+  | { t: "ping"; id: string };
 
 /** Node → runtime (spec 4.2). */
 export type NodeFrame =
@@ -71,9 +73,10 @@ export type NodeFrame =
   | { t: "error"; message: string; in?: string }
   | { t: "present"; in: string; content: ViewContent }
   | { t: "snapshot"; content: ViewContent; state: unknown; in?: string }
-  | { t: "closed" };
+  | { t: "closed" }
+  | { t: "pong"; id: string };
 
-const RUNTIME_FRAMES = ["start", "input", "cancel", "action", "trigger", "fire", "close"];
+const RUNTIME_FRAMES = ["start", "input", "cancel", "action", "trigger", "fire", "close", "ping"];
 const NODE_FRAMES = [
   "ready",
   "status",
@@ -84,6 +87,7 @@ const NODE_FRAMES = [
   "present",
   "snapshot",
   "closed",
+  "pong",
 ];
 
 // ── validation ───────────────────────────────────────────────────────────────────────────

@@ -1,7 +1,7 @@
 // The MCP heartbeat (plan 0018 §3, the heartbeat.py row; the owner's plan 0010 ruling): pinged
 // every interval, a beat only for an answered ping, stale past the window, slow passes defer.
 import { describe, expect, it } from "vitest";
-import { McpHeartbeat } from "../../src/application/mcp-heartbeat";
+import { Heartbeat } from "../../src/application/heartbeat";
 import { FakeClock } from "../fakes/clock";
 import { RecordingLogger } from "../fakes/children";
 import { FakeSession, flush } from "../fakes/anytype";
@@ -12,7 +12,8 @@ function beating(mode: FakeSession["pingMode"] = "answer") {
   const clock = new FakeClock();
   const logger = new RecordingLogger();
   const stale: number[] = [];
-  const heartbeat = new McpHeartbeat({
+  const heartbeat = new Heartbeat({
+    who: "the Anytype MCP child",
     clock,
     logger,
     profile: PROFILE,
@@ -96,7 +97,8 @@ describe("McpHeartbeat", () => {
     const clock = { now: () => fake.now() + slept, after: fake.after.bind(fake) };
     const logger = new RecordingLogger();
     const stale: number[] = [];
-    const heartbeat = new McpHeartbeat({
+    const heartbeat = new Heartbeat({
+      who: "the Anytype MCP child",
       clock,
       logger,
       profile: PROFILE,
@@ -150,7 +152,8 @@ describe("McpHeartbeat", () => {
   it("refuses a profile that promised no heartbeat", () => {
     expect(
       () =>
-        new McpHeartbeat({
+        new Heartbeat({
+          who: "the Anytype MCP child",
           clock: new FakeClock(),
           logger: new RecordingLogger(),
           profile: { heartbeatIntervalMs: null, staleAfterMs: null },

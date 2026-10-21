@@ -28,7 +28,7 @@ import { configOf, credentialsOf } from "../../domain/forms/coerce";
 import { secretKeys } from "../../domain/forms/form-model";
 import { payloadRefusal, USER_EVENTS_PACKAGE } from "../../domain/events/event-types";
 import type { CloseReason } from "../../domain/journal/entry";
-import { portsOf, type LoadedType } from "../../domain/packages/declaration";
+import { portsOf, stabilityOf, type LoadedType } from "../../domain/packages/declaration";
 import {
   DEFAULT_LIMITS,
   typeLimits,
@@ -262,6 +262,7 @@ export class TypeRegistration {
       },
     };
     const isView = loaded.type.kind === "view";
+    const stability = stabilityOf(loaded.type);
     const child = this.#deps.launcher.start(
       {
         identity: {
@@ -283,6 +284,7 @@ export class TypeRegistration {
         viewTimeoutMs: loaded.type.view === "action" ? timeoutOf(config, portNames) : null,
         limits: typeLimits(loaded.type.reload, this.#deps.personalLimits ?? DEFAULT_LIMITS),
         restartable: loaded.type.reload?.restartable !== false,
+        ...(stability === null ? {} : { stability }),
         // An action view's props are judged at present by the views service (spec 8.1.5).
         ...(loaded.type.view === "action"
           ? { judgeProps: (content: ViewContent) => views.propsRefusal(node.id, content) }

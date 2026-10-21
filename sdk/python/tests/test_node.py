@@ -451,6 +451,26 @@ def test_run_ignores_an_unknown_frame_type_and_keeps_going(monkeypatch: pytest.M
     wait_until(lambda: {"t": "done", "in": "after"} in frames_of(out))
 
 
+def test_run_answers_every_ping_with_a_pong_of_its_id_without_any_handler(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    out, _ = patch_io(monkeypatch)
+    node = start_node(
+        monkeypatch,
+        {"t": "ping", "id": "p1"},
+        {"t": "ping"},  # no id: nothing to answer, and ignored like any malformed frame
+        {"t": "ping", "id": "p2"},
+        {"t": "close"},
+    )
+    node.run()
+    assert frames_of(out) == [
+        {"t": "ready"},
+        {"t": "pong", "id": "p1"},
+        {"t": "pong", "id": "p2"},
+        {"t": "closed"},
+    ]
+
+
 def test_run_calls_on_close_and_sends_closed_on_an_explicit_close(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -8,7 +8,7 @@ import { DEFAULT_CRASH_LOOP, type CrashLoopSettings } from "../../domain/supervi
 import type { Clock } from "../../ports/clock";
 import type { JournalStore } from "../../ports/journal-store";
 import type { Logger, SecretSink } from "../../ports/logger";
-import type { HeldInputs, NodeProcessSpec } from "../../ports/node-process";
+import type { HeartbeatFactory, HeldInputs, NodeProcessSpec } from "../../ports/node-process";
 import type { Notifier } from "../../ports/notifier";
 import type { ResourceWatchdog } from "../../ports/resource-watch";
 import type { NodeCrashSink } from "../../ports/telemetry";
@@ -60,6 +60,8 @@ export interface NodeProcessDeps {
   readonly watchdog?: ResourceWatchdog;
   /** Told which runs have inputs held at the queue bound (plan 0022 §C); absent in most tests. */
   readonly held?: HeldInputs;
+  /** Builds the heartbeat of a type that declares one (spec 2.4.2); without it, none is kept. */
+  readonly heartbeat?: HeartbeatFactory;
 }
 
 /**

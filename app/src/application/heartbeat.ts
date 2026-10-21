@@ -1,7 +1,9 @@
-// The MCP child's heartbeat (plan 0018 §3, the heartbeat.py row; host.py:250-354 ported).
+// A heartbeat kept for a child that promised one (plan 0018 §3, the heartbeat.py row;
+// host.py:250-354 ported): the Anytype MCP child, pinged over MCP, and a package type that
+// declares `reload.heartbeat` (spec 2.4.2), pinged with protocol frames (plan 0031 B).
 //
 // The owner's plan 0010 ruling: "mcp can promise a heartbeat -> make it so". The child is
-// pinged over MCP at its declared interval, and a beat is recorded ONLY for a ping it answered
+// pinged at its declared interval, and a beat is recorded ONLY for a ping it answered
 // (host.py:331). A refusal, a timeout, a closed session: every way a ping can fail means the
 // same thing, no evidence the child is working, so nothing is recorded.
 //
@@ -21,34 +23,36 @@ import {
   StalenessJudge,
   type StabilityProfile,
 } from "../domain/supervision/staleness";
-import type { McpSession } from "../ports/anytype";
 import type { Cancel, Clock } from "../ports/clock";
 import type { Logger } from "../ports/logger";
+import type { HeartbeatWatch, Pingable } from "../ports/node-process";
 
-export interface McpHeartbeatDeps {
+export interface HeartbeatDeps {
   readonly clock: Clock;
   readonly logger: Logger;
+  /** The child, as the log names it: "the Anytype MCP child", "the node process". */
+  readonly who: string;
   /** The child's declared profile; its interval is the ping cadence. */
   readonly profile: StabilityProfile;
   /** Told once when the child is judged stale, with how long it has been silent. */
   readonly onStale: (silentForMs: number) => void;
 }
 
-export class McpHeartbeat {
-  readonly #deps: McpHeartbeatDeps;
+export class Heartbeat implements HeartbeatWatch {
+  readonly #deps: HeartbeatDeps;
   readonly #interval: number;
   #judge: StalenessJudge;
-  #session: McpSession | null = null;
+  #session: Pingable | null = null;
   #cancel: Cancel | null = null;
   #waiting = false;
   #beats = 0;
   #lastBeatAt: number | null = null;
   #silentSince = 0;
 
-  constructor(deps: McpHeartbeatDeps) {
+  constructor(deps: HeartbeatDeps) {
     this.#deps = deps;
     if (deps.profile.heartbeatIntervalMs === null) {
-      throw new RangeError("the MCP child's profile must declare a heartbeat interval");
+      throw new RangeError(`the profile of ${deps.who} must declare a heartbeat interval`);
     }
     this.#interval = deps.profile.heartbeatIntervalMs;
     this.#judge = new StalenessJudge(deps.profile);
@@ -65,7 +69,7 @@ export class McpHeartbeat {
   }
 
   /** Watch a newly validated child: its window starts now, and the first ping goes at once. */
-  start(session: McpSession): void {
+  start(session: Pingable): void {
     this.stop();
     this.#session = session;
     this.#judge = new StalenessJudge(this.#deps.profile);
@@ -98,9 +102,7 @@ export class McpHeartbeat {
       return;
     }
     if (this.#waiting) {
-      this.#deps.logger.warn(
-        "the previous ping to the Anytype MCP child is still waiting; deferred",
-      );
+      this.#deps.logger.warn(`the previous ping to ${this.#deps.who} is still waiting; deferred`);
       this.#schedule(this.#interval);
       return;
     }
@@ -121,7 +123,7 @@ export class McpHeartbeat {
         (error: unknown) => {
           if (session === this.#session) {
             this.#deps.logger.warn(
-              `the Anytype MCP child did not answer a ping, so no beat: ${String(error)}`,
+              `${this.#deps.who} did not answer a ping, so no beat: ${String(error)}`,
             );
           }
         },
@@ -143,7 +145,7 @@ export class McpHeartbeat {
     const verdict = this.#judge.observe(this.#lastBeatAt, now, onTime);
     if (verdict === "deferred" && !onTime) {
       this.#deps.logger.warn(
-        "the heartbeat pass ran late (the machine may have slept); the Anytype MCP child's " +
+        `the heartbeat pass ran late (the machine may have slept); ${this.#deps.who}'s ` +
           "window starts again rather than reading the gap as silence",
       );
       return;
@@ -154,7 +156,7 @@ export class McpHeartbeat {
     const silentFor = now - this.#silentSince;
     this.stop();
     this.#deps.logger.warn(
-      `the Anytype MCP child answered no ping for ${String(Math.round(silentFor))} ms ` +
+      `${this.#deps.who} answered no ping for ${String(Math.round(silentFor))} ms ` +
         `(its window is ${String(staleWindow(this.#deps.profile))} ms): judged stale`,
     );
     this.#deps.onStale(silentFor);

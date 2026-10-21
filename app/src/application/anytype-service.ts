@@ -38,7 +38,7 @@ import type { Cancel, Clock } from "../ports/clock";
 import type { Logger } from "../ports/logger";
 import type { Notifier } from "../ports/notifier";
 import type { SecretStore } from "../ports/secret-store";
-import { McpHeartbeat } from "./mcp-heartbeat";
+import { Heartbeat } from "./heartbeat";
 import { Pairing } from "./pair-anytype";
 
 /** What the service's notices are about. */
@@ -140,7 +140,7 @@ export async function serveAnytypeOptions(
 export class AnytypeService {
   readonly #deps: AnytypeServiceDeps;
   readonly #breaker: CrashLoopBreaker;
-  readonly #heartbeat: McpHeartbeat;
+  readonly #heartbeat: Heartbeat;
   readonly #pairing: Pairing;
   #state: AnytypeState = "starting";
   #detail: string | null = null;
@@ -161,7 +161,8 @@ export class AnytypeService {
   constructor(deps: AnytypeServiceDeps) {
     this.#deps = deps;
     this.#breaker = new CrashLoopBreaker(deps.settings.crashLoop, () => deps.clock.now());
-    this.#heartbeat = new McpHeartbeat({
+    this.#heartbeat = new Heartbeat({
+      who: `the ${MCP_CHILD}`,
       clock: deps.clock,
       logger: deps.logger,
       profile: deps.settings.profile,

@@ -6,7 +6,8 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { INHERITED_VARIABLES } from "../../src/adapters/process/command";
 import { MAX_FRAME_BYTES } from "../../src/adapters/process/codec";
-import type { NodeProcess } from "../../src/ports/node-process";
+import { Heartbeat } from "../../src/application/heartbeat";
+import type { HeartbeatFactory, NodeProcess } from "../../src/ports/node-process";
 import { compose } from "../../src/domain/notices/notices";
 import { AUDIO_BOUND_BYTES, TOO_LARGE } from "../../src/domain/views/views";
 import { contentHtml } from "../../src/ui/view/render";
@@ -513,6 +514,131 @@ describe("an unexpected exit of a node process", () => {
     expect(node.logger.lines.filter((line) => /spawned pid/.test(line.text))).toHaveLength(2);
   });
 });
+
+describe("a node process whose type declares a heartbeat (spec 2.4.2)", () => {
+  const STABILITY = { heartbeatIntervalMs: 30_000, staleAfterMs: null };
+
+  /** A raw node whose heartbeat is the application's own, on a fake clock. */
+  function beating(options: StartOptions = {}): { node: RawNode; clock: FakeClock } {
+    const clock = new FakeClock();
+    const node = raw({
+      clock,
+      stability: STABILITY,
+      heartbeat: (watch) => new Heartbeat({ ...watch, clock }),
+      ...options,
+    });
+    return { node, clock };
+  }
+
+  /** How many pings the current and earlier processes of `node` were sent. */
+  function pings(node: RawNode): number {
+    return node.logger.nodeLines.filter((line) => line.line.startsWith("pinged ")).length;
+  }
+
+  it("pings each process once per interval after ready, and one that answers is never judged stuck", async () => {
+    const { node, clock } = beating();
+    await ready(node);
+    const pid = node.node.pid;
+    clock.advance(0);
+    await waitFor("the first ping", () => pings(node) === 1);
+    for (let pass = 2; pass <= 6; pass += 1) {
+      clock.advance(30_000);
+      await waitFor(`ping ${String(pass)}`, () => pings(node) === pass);
+      await flushPongs();
+    }
+    expect(node.node.pid).toBe(pid);
+    expect(node.notifier.notices).toEqual([]);
+    expect(node.logger.has(/did not answer a ping/)).toBe(false);
+  });
+
+  it("a process that stops answering is killed after its window, the person told once, and it comes back", async () => {
+    const { node, clock } = beating();
+    await ready(node);
+    const first = node.node.pid as number;
+    clock.advance(0);
+    await waitFor("the first ping", () => pings(node) === 1);
+    await flushPongs();
+    const [, deaf] = send(node.node, { do: "deaf" });
+    await waitFor("deaf", () => deaf.finished);
+    // No pong settles a ping now: only the clock does. Past the window (three intervals) the
+    // first judgement after a missed ping finds it stuck.
+    const silentFrom = clock.now();
+    await untilStuck(node, clock);
+    expect(clock.now() - silentFrom).toBeGreaterThan(90_000);
+    await waitFor("the kill", () => node.node.pid === null);
+    expect(node.logger.has(/stuck: answered no ping for \d+ s; killing it/)).toBe(true);
+    expect(node.notifier.notices).toHaveLength(1);
+    expect(node.notifier.notices[0]).toMatchObject({ kind: "node-stuck", subject: "raw" });
+    expect(node.notifier.notices[0]?.detail).toMatch(
+      /^Its process answered nothing for \d+ s, so Reload stopped it$/,
+    );
+    expect(compose(node.notifier.notices[0] ?? { kind: "node-stuck", subject: "" }).title).toBe(
+      "The node raw stopped answering",
+    );
+    // Its exit is an unexpected exit like any other: restarted after 1 s, not before, and
+    // pinged again.
+    clock.advance(999);
+    expect(node.node.pid).toBeNull();
+    clock.advance(1);
+    await waitFor(
+      "the next ready",
+      () => node.logger.lines.filter((l) => / ready$/.test(l.text)).length === 2,
+    );
+    expect(node.node.pid).not.toBe(first);
+    expect(alive(first)).toBe(false);
+    const before = pings(node);
+    clock.advance(0);
+    await waitFor("a ping to the new process", () => pings(node) === before + 1);
+    expect(node.crashes).toEqual([false]);
+  });
+
+  it("a stuck process of a type that says never to restart it stays stopped", async () => {
+    const { node, clock } = beating({ restartable: false });
+    await ready(node);
+    clock.advance(0);
+    await waitFor("the first ping", () => pings(node) === 1);
+    await flushPongs();
+    const [, deaf] = send(node.node, { do: "deaf" });
+    await waitFor("deaf", () => deaf.finished);
+    await untilStuck(node, clock);
+    await waitFor("the stop", () => node.notifier.notices.length === 2);
+    expect(node.notifier.notices.map((notice) => notice.kind)).toEqual([
+      "node-stuck",
+      "node-stopped",
+    ]);
+    clock.advance(60_000);
+    expect(node.node.pid).toBeNull();
+  });
+
+  it("a type that declares no heartbeat is never pinged, nor is a runtime that keeps none", async () => {
+    let built = 0;
+    const counting: HeartbeatFactory = (watch) => {
+      built += 1;
+      return new Heartbeat({ ...watch, clock: new FakeClock() });
+    };
+    const undeclared = raw({ heartbeat: counting });
+    const unkept = raw({ stability: STABILITY });
+    await ready(undeclared);
+    await ready(unkept);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(built).toBe(0);
+    expect(pings(undeclared)).toBe(0);
+    expect(pings(unkept)).toBe(0);
+  });
+});
+
+/** Move the clock a second at a time, settling each missed ping, until the node is judged stuck. */
+async function untilStuck(node: RawNode, clock: FakeClock): Promise<void> {
+  for (let step = 0; step < 300 && !node.logger.has(/stuck:/); step += 1) {
+    clock.advance(1_000);
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+}
+
+/** Let a pong written by the process be read and settled before the clock moves again. */
+async function flushPongs(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 50));
+}
 
 describe("closing a node process", () => {
   it("sends close, reads closed, and waits for the exit", async () => {

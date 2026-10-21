@@ -95,6 +95,14 @@
     "typeReload": {
       "type": "object",
       "properties": {
+        "heartbeat": {
+          "type": "object",
+          "required": ["interval_s"],
+          "properties": {
+            "interval_s": { "type": "number", "exclusiveMinimum": 0 },
+            "stale_after_s": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        },
         "restartable": { "type": "boolean" },
         "limits": {
           "type": "object",

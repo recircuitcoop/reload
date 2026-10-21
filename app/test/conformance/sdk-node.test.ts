@@ -245,6 +245,24 @@ describe.each(SDK_LANGUAGES)("conformance: the %s SDK's kitchen reference node",
     expect(node.stderr).not.toMatch(/Traceback/);
   });
 
+  it("C25 heartbeat: each ping gets one pong with its id, also while an input is running", async () => {
+    const node = session(language);
+    node.start();
+    await node.ready();
+    node.send({ t: "ping", id: "idle" });
+    await waitFor("the idle pong", () => node.frames.some((f) => f.t === "pong"));
+    node.send({ t: "input", id: "running", event: { type: "t.v1", data: { do: "slow" } } });
+    await waitFor("working", () => node.frames.some((f) => f.t === "status"));
+    node.send({ t: "ping", id: "busy" });
+    await waitFor("the busy pong", () => node.frames.filter((f) => f.t === "pong").length === 2);
+    expect(node.frames.filter((f) => f.t === "pong")).toEqual([
+      { t: "pong", id: "idle" },
+      { t: "pong", id: "busy" },
+    ]);
+    expect(node.terminal("running")).toEqual([]);
+    expect(node.rejected).toEqual([]);
+  });
+
   it("C12 fire: a fire frame gives an emit with no in (a new run)", async () => {
     const node = session(language);
     node.start();

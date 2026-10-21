@@ -9,6 +9,8 @@ import type { CloseReason, JournaledMessage } from "../domain/journal/entry";
 import type { QueueReport } from "../domain/journal/queue";
 import type { StepOutcome, StepStatus } from "../domain/runs/step-report";
 import type { ResourceLimits } from "../domain/supervision/resources";
+import type { StabilityProfile } from "../domain/supervision/staleness";
+import type { Logger } from "./logger";
 
 export type { StepOutcome, StepStatus } from "../domain/runs/step-report";
 
@@ -168,6 +170,8 @@ export interface NodeProcessSpec {
   readonly limits?: ResourceLimits;
   /** False when the type declares `reload.restartable: false` (spec 2.4.2): never respawned. */
   readonly restartable?: boolean;
+  /** The type's `reload.heartbeat` (spec 2.4.2), in ms; absent for a type that promised none. */
+  readonly stability?: StabilityProfile;
 }
 
 /** One instance's process, respawned after an unexpected exit until the breaker trips. */
@@ -217,6 +221,25 @@ export interface NodeProcess {
   /** Its queue now: outstanding, held and refused inputs against the bound (spec 7.6). */
   queue(): QueueReport;
 }
+
+/** What a heartbeat pings (spec 4.1 `ping`; the MCP session's ping): settles on the answer. */
+export interface Pingable {
+  ping(timeoutMs: number): Promise<void>;
+}
+
+/** One process's heartbeat (spec 2.4.2): pings from `start`, and says once when it is stale. */
+export interface HeartbeatWatch {
+  start(target: Pingable): void;
+  stop(): void;
+}
+
+/** Builds the heartbeat of one node process; the application's Heartbeat in the runtime. */
+export type HeartbeatFactory = (options: {
+  readonly who: string;
+  readonly logger: Logger;
+  readonly profile: StabilityProfile;
+  readonly onStale: (silentForMs: number) => void;
+}) => HeartbeatWatch;
 
 export interface NodeProcessLauncher {
   start(spec: NodeProcessSpec, host: NodeProcessHost): NodeProcess;

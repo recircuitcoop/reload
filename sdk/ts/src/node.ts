@@ -403,6 +403,9 @@ export async function run(handlers: Handlers): Promise<void> {
         .catch((caught: unknown) => {
           log(caught instanceof Error ? caught.message : String(caught), "error");
         });
+    } else if (frame["t"] === "ping" && typeof frame["id"] === "string") {
+      // Answered on the loop that reads frames (spec 2.4.2, 4.1): handlers run apart from it.
+      send({ t: "pong", id: frame["id"] });
     } else if (frame["t"] === "close") {
       await handlers.close?.();
       closeAndExit();

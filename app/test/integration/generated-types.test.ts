@@ -240,17 +240,19 @@ describe("a generated type's instance", () => {
     expect(limits.get("t1")).toEqual(PERSONAL);
   });
 
-  it("tells its process whether its type may ever be restarted (spec 2.4.2)", async () => {
+  it("tells its process how its type is supervised: restarted or not, and its heartbeat (spec 2.4.2)", async () => {
     setUp();
     create(PROBE, probeConfig("p1"), { token: "s3cret" });
     await waitFor("the start", () => specs.length === 1);
     expect(specs[0]?.restartable).toBe(true);
+    expect(specs[0]?.stability).toBeUndefined();
 
     red = new FakeRed();
-    setUp(undefined, { restartable: false });
+    setUp(undefined, { restartable: false, heartbeat: { interval_s: 30 } });
     create(PROBE, probeConfig("p2"), { token: "s3cret" });
     await waitFor("the second start", () => specs.length === 2);
     expect(specs[1]?.restartable).toBe(false);
+    expect(specs[1]?.stability).toEqual({ heartbeatIntervalMs: 30_000, staleAfterMs: null });
   });
 
   it("registers every secret as a password credential with Node-RED", () => {

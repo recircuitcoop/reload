@@ -46,6 +46,7 @@ import { answerEditorCall } from "../application/editor-events";
 import { EventTypeService, isEventOp } from "../application/event-types";
 import { FlowFiles } from "../application/flow-files";
 import { FlowAdmin, flowNodeTypeOf, isFlowOp } from "../application/flows";
+import { Heartbeat } from "../application/heartbeat";
 import { JournalReplay } from "../application/journal-replay";
 import { isRunActionOp, RunActions } from "../application/run-actions";
 import { isRunOp, RunService } from "../application/runs";
@@ -287,6 +288,8 @@ function generateNodeTypes(
         crashes: shellNodeCrashes(link),
         // Inputs held at a queue bound keep their run from settling as done (WI-0022-06).
         held: runService,
+        // A type that declares a heartbeat is judged as the Anytype MCP child is (plan 0031 B).
+        heartbeat: (options) => new Heartbeat({ ...options, clock: systemClock }),
       }),
     ),
     notifier,

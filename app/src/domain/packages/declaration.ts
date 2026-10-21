@@ -9,6 +9,7 @@
 // Pure: no I/O, no library.
 
 import type { DeclaredLimits } from "../supervision/resources";
+import type { StabilityProfile } from "../supervision/staleness";
 import { oldKeywordAt, oldKeywordProblem } from "./old-names";
 
 /** The one protocol version this runtime implements (spec 1.2). */
@@ -70,6 +71,8 @@ export interface DeclaredType {
 
 /** A type's `reload` object (spec 2.4.2). */
 export interface TypeSupervision {
+  /** The type promises to answer `ping`; without it, a process is never judged stuck. */
+  readonly heartbeat?: { readonly interval_s: number; readonly stale_after_s?: number };
   /** False: a process that exits unexpectedly is never started again. Absent means true. */
   readonly restartable?: boolean;
   /** Its own resource limits, over the defaults. */
@@ -222,6 +225,18 @@ export function parseDeclaration(
     return { ok: false, problems };
   }
   return { ok: true, declaration: deepFreeze(declaration) };
+}
+
+/** A type's declared heartbeat as the runtime judges it (spec 2.4.2); null when it has none. */
+export function stabilityOf(type: DeclaredType): StabilityProfile | null {
+  const heartbeat = type.reload?.heartbeat;
+  if (heartbeat === undefined) {
+    return null;
+  }
+  return {
+    heartbeatIntervalMs: heartbeat.interval_s * 1000,
+    staleAfterMs: heartbeat.stale_after_s === undefined ? null : heartbeat.stale_after_s * 1000,
+  };
 }
 
 /** The Node-RED type name, derived and never declared (spec 2.1.4). */

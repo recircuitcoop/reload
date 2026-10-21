@@ -21,7 +21,9 @@ import type { Clock } from "../../../src/ports/clock";
 import type { ResourceWatchdog } from "../../../src/ports/resource-watch";
 import type { JournalStore } from "../../../src/ports/journal-store";
 import type { Logger, NodeLineLevel, NodeSource, SecretSink } from "../../../src/ports/logger";
+import type { StabilityProfile } from "../../../src/domain/supervision/staleness";
 import type {
+  HeartbeatFactory,
   InputDelivery,
   NodeOutput,
   NodeProcess,
@@ -240,6 +242,9 @@ export interface StartOptions {
   readonly limits?: ResourceLimits;
   /** False for a type that declares `reload.restartable: false` (spec 2.4.2). */
   readonly restartable?: boolean;
+  /** The type's declared heartbeat (spec 2.4.2), and the factory the runtime keeps it with. */
+  readonly stability?: StabilityProfile;
+  readonly heartbeat?: HeartbeatFactory;
 }
 
 /** Start the raw node through the real adapter, as the runtime would. */
@@ -254,6 +259,7 @@ export function startRaw(options: StartOptions = {}): RawNode {
     ...(options.ports === undefined ? {} : { ports: options.ports }),
     ...(options.limits === undefined ? {} : { limits: options.limits }),
     ...(options.restartable === undefined ? {} : { restartable: options.restartable }),
+    ...(options.stability === undefined ? {} : { stability: options.stability }),
   };
   const journal = options.journal ?? new MemoryJournal();
   const host = new RecordingHost();
@@ -272,6 +278,7 @@ export function startRaw(options: StartOptions = {}): RawNode {
     journal,
     settings: { ...DEFAULT_NODE_PROCESS, ...options.settings },
     ...(options.watchdog === undefined ? {} : { watchdog: options.watchdog }),
+    ...(options.heartbeat === undefined ? {} : { heartbeat: options.heartbeat }),
   });
   const node = launcher.start(spec, host);
   return { node, host, logger, notifier, secrets, spec, journal, crashes };

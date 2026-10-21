@@ -26,6 +26,8 @@ export type NoticeKind =
   | "anytype-over-limit"
   /** The person's own resource limits in the settings file could not be read (plan 0031). */
   | "limits-unreadable"
+  /** A node's process stopped answering its heartbeat and was stopped (spec 2.4.2). */
+  | "node-stuck"
   /** The Anytype MCP child stopped for good after the breaker's limit (§4.1 point 2). */
   | "mcp-child-stopped"
   /** The Anytype MCP child went silent and was restarted (§4.1 point 2). */
@@ -78,6 +80,7 @@ export const NOTICE_KINDS: readonly NoticeKind[] = [
   "child-over-limit",
   "anytype-over-limit",
   "limits-unreadable",
+  "node-stuck",
   "mcp-child-stopped",
   "mcp-child-restarted",
   "endpoint-degraded",
@@ -212,6 +215,8 @@ function composeWords(notice: Notice): Message {
           "Until it is fixed, Reload uses its own. Change them in Configuration › General › Advanced.",
         ),
       };
+    case "node-stuck":
+      return { title: `The node ${subject} stopped answering`, body: sentences(detail) };
     case "mcp-child-stopped":
       // The body is the service's sentence and nothing else: it already says why, and a remedy
       // invented here would be a second, worse account of it (notification.py HOST_DEGRADED).

@@ -15,6 +15,7 @@ import {
   nodeTypeName,
   parseDeclaration,
   portsOf,
+  stabilityOf,
   type DeclaredType,
   type ParsedDeclaration,
 } from "../../src/domain/packages/declaration";
@@ -192,6 +193,27 @@ describe("parseDeclaration", () => {
     expect(parsed.ok && parsed.declaration.types[0]?.reload).toEqual({ restartable: false });
     expect(refused(declaration({ types: [nodeType({ reload: { restartable: "no" } })] }))).toEqual([
       "types/0/reload/restartable: must be boolean",
+    ]);
+  });
+
+  it("accepts a type's heartbeat, judged in ms, and refuses one without a positive interval (spec 2.4.2)", () => {
+    const beat = (heartbeat: unknown) =>
+      declaration({ types: [nodeType({ reload: { heartbeat } })] });
+    const parsed = parse(beat({ interval_s: 30, stale_after_s: 120 }));
+    const type = parsed.ok ? parsed.declaration.types[0] : undefined;
+    expect(type && stabilityOf(type)).toEqual({
+      heartbeatIntervalMs: 30_000,
+      staleAfterMs: 120_000,
+    });
+    const plain = parse(beat({ interval_s: 0.5 }));
+    const half = plain.ok ? plain.declaration.types[0] : undefined;
+    expect(half && stabilityOf(half)).toEqual({ heartbeatIntervalMs: 500, staleAfterMs: null });
+    expect(stabilityOf(nodeType() as unknown as DeclaredType)).toBeNull();
+    expect(refused(beat({ interval_s: 0 }))).toEqual([
+      "types/0/reload/heartbeat/interval_s: must be > 0",
+    ]);
+    expect(refused(beat({ stale_after_s: 90 }))).toEqual([
+      "types/0/reload/heartbeat/interval_s: is required",
     ]);
   });
 

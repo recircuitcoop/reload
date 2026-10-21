@@ -371,6 +371,12 @@ class Node:
                 data = frame.get("data")
                 if isinstance(data, dict):
                     self._dispatch(on_fire, (data,), input_id=None)
+            elif t == "ping":
+                # Answered here, on the loop that reads frames, so a heartbeat says that this
+                # loop still reads (spec 2.4.2, 4.1); every handler runs on its own thread.
+                ping_id = frame.get("id")
+                if isinstance(ping_id, str):
+                    self.send({"t": "pong", "id": ping_id})
             elif t == "close":
                 if on_close is not None:
                     on_close()

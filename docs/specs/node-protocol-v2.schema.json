@@ -180,6 +180,21 @@
         }
       }
     },
+    "ping": {
+      "type": "object",
+      "required": [
+        "t",
+        "id"
+      ],
+      "properties": {
+        "t": {
+          "const": "ping"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        }
+      }
+    },
     "ready": {
       "type": "object",
       "required": [
@@ -458,6 +473,21 @@
       "properties": {
         "t": {
           "const": "closed"
+        }
+      }
+    },
+    "pong": {
+      "type": "object",
+      "required": [
+        "t",
+        "id"
+      ],
+      "properties": {
+        "t": {
+          "const": "pong"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
         }
       }
     },
