@@ -155,7 +155,11 @@ async function stop(page: Page, where: string, findings: Finding[], unnamed: str
   unnamed.push(...(await unnamedIconControls(page)).map((control) => `${where} › ${control}`));
 }
 
-/** Welcome, Reports, Connect Anytype (skipped) and the example (used), to Source folder. */
+/**
+ * Welcome, Reports, Connect Anytype (skipped) and the example, to Source folder. With Anytype not
+ * connected the example offers Connect Anytype, not Use the example: the move is made as the
+ * shell's own, so the screens after it are audited too.
+ */
 async function toSourceFolder(window: Page, visit?: (where: string) => Promise<void>) {
   const step = window.getByTestId("setup-step");
   await expect(step).toHaveAttribute("data-step", "welcome", { timeout: 20_000 });
@@ -168,8 +172,15 @@ async function toSourceFolder(window: Page, visit?: (where: string) => Promise<v
   await visit?.("setup connect anytype");
   await step.getByTestId("setup-anytype-skip").click();
   await expect(step).toHaveAttribute("data-step", "example", { timeout: 20_000 });
+  await expect(step.getByTestId("setup-example-connect")).toBeVisible({ timeout: 20_000 });
   await visit?.("setup example");
-  await step.getByTestId("setup-example-use").click();
+  await window.evaluate(() =>
+    (
+      globalThis as unknown as {
+        reload: { app: { setSetupStep(move: { kind: "useExample" }): Promise<unknown> } };
+      }
+    ).reload.app.setSetupStep({ kind: "useExample" }),
+  );
   await expect(step).toHaveAttribute("data-step", "source-folder", { timeout: 20_000 });
 }
 
@@ -188,7 +199,7 @@ async function toStepForms(app: ElectronApplication, window: Page, scratch: stri
   await expect(window.getByTestId("setup-step")).toHaveAttribute("data-step", "node-forms", {
     timeout: 20_000,
   });
-  await expect(window.getByTestId("setup-field-space_id-select-trigger")).toBeVisible({
+  await expect(window.getByTestId("setup-form-connect")).toBeVisible({
     timeout: 15_000,
   });
 }

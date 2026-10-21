@@ -23,8 +23,6 @@ import { anytypeKeyFile, APP, cleanUp, launchApp, quit, scratchDirectories } fro
 /** The key the fake Anytype hands out for the code 1234: a test value, not a credential. */
 const KEY = "e2e-setup-anytype-key-5b21";
 const FAKE = path.join(APP, "test", "fixtures", "fake-mcp");
-/** An address nothing answers on: a starter that never meets a file never calls it anyway. */
-const NOWHERE = "http://127.0.0.1:9";
 
 /** The titles the walkthrough shows, in order (ux-writing "The first run (Setup)"). */
 const WALK = [
@@ -55,6 +53,28 @@ function fakeSurface(scratch: string): string {
     }),
   );
   return file;
+}
+
+/**
+ * A fake Anytype that already knows the run's canary key, so Reload is connected as it starts:
+ * the space Work, with the types Page and Note. Its env points the services process at it.
+ */
+async function connectedAnytype(scratch: string, canaryKey: string) {
+  const anytype = new FakeAnytypeServer(canaryKey);
+  anytype.spaces = [{ id: "sp-work", name: "Work" }];
+  anytype.types.set("sp-work", [
+    { key: "page", name: "Page" },
+    { key: "note", name: "Note" },
+  ]);
+  const url = await anytype.start();
+  const env = {
+    ANYTYPE_API_BASE_URL: url,
+    RELOAD_TEST_ANYTYPE: JSON.stringify({
+      entry: path.join(FAKE, "server.mjs"),
+      surface: fakeSurface(scratch),
+    }),
+  };
+  return { anytype, url, env };
 }
 
 type Answer = { ok: boolean; value?: unknown; refused?: { reason: string } };
@@ -129,9 +149,12 @@ async function welcomeAndReports(window: Page, seen: string[]): Promise<void> {
   await at(window, "connect-anytype", seen);
 }
 
-/** Connect Anytype skipped, then Use the example: Source folder. */
+/** Connect Anytype, already connected (connectedAnytype), then Use the example: Source folder. */
 async function useTheExample(window: Page, seen: string[]): Promise<void> {
-  await button(window, "setup.anytype.skip").click();
+  await expect(window.getByTestId("setup-anytype")).toHaveText("Connected. Found 1 space.", {
+    timeout: 30_000,
+  });
+  await button(window, "setup.continue").click();
   await at(window, "example", seen);
   await button(window, "setup.example.use").click();
   await at(window, "source-folder", seen);
@@ -145,9 +168,8 @@ async function fileStepOf(window: Page): Promise<{ flowId: string; nodeId: strin
 }
 
 /**
- * The File in Anytype step given a space and where Anytype answers, as the canvas would set them:
- * with Anytype not paired, Setup's form cannot list a space to choose, and the address is never
- * shown in Setup.
+ * The File in Anytype step given a space and where Anytype answers, as the canvas's Advanced
+ * would set them: the address is never shown in Setup, and the fake is not on Anytype's port.
  */
 async function configureFileStep(window: Page, space: string, api: string) {
   const { flowId, nodeId } = await fileStepOf(window);
@@ -173,17 +195,32 @@ const drawnFields = (window: Page) =>
       .map((id) => id.replace("setup-field-", "")),
   );
 
-/** From a fresh launch to Ready with the example, Anytype skipped (nothing answers it). */
+/** A step form's Anytype select, by its field's key. */
+const select = (window: Page, key: string) =>
+  window.getByTestId(`setup-field-${key}-select-trigger`);
+
+/** The space Work chosen in the step form, and its types listed: Page, the default, shown. */
+async function chooseWork(window: Page) {
+  await expect(select(window, "space_id")).toBeEnabled({ timeout: 30_000 });
+  await select(window, "space_id").click();
+  await window.getByTestId("setup-field-space_id-select-option-sp-work").click();
+  await expect(select(window, "space_id")).toHaveText("Work");
+  await expect(select(window, "type_key")).toHaveText("Page", { timeout: 30_000 });
+}
+
+/** The words the window shows, as a person reads them. */
+const shownText = (window: Page) => window.evaluate(() => document.body.innerText);
+
+/** From a fresh launch to Ready with the example, Anytype connected (connectedAnytype). */
 async function walkToReady(app: ElectronApplication, window: Page, folder: string) {
   const seen: string[] = [];
   await welcomeAndReports(window, seen);
   await useTheExample(window, seen);
   await chooseFolder(app, window, folder);
-  await configureFileStep(window, "sp-any", NOWHERE);
   await button(window, "setup.continue").click();
-  // The form keeps the space it holds, though Anytype cannot list it, and saves it.
   await at(window, "node-forms", seen);
-  await expect(drawnFields(window)).resolves.toEqual(["space_id", "type_key"]);
+  expect(await drawnFields(window)).toEqual(["space_id", "type_key"]);
+  await chooseWork(window);
   await button(window, "setup.continue").click();
   await at(window, "ready", seen);
   return seen;
@@ -191,7 +228,9 @@ async function walkToReady(app: ElectronApplication, window: Page, folder: strin
 
 test("quit mid-setup resumes", async () => {
   test.setTimeout(180_000);
-  const { scratch, env } = scratchDirectories();
+  const { scratch, env: base, canaryKey } = scratchDirectories();
+  const connected = await connectedAnytype(scratch, canaryKey);
+  const env = { ...base, ...connected.env };
   const watched = path.join(scratch, "Recordings");
   fs.mkdirSync(watched);
   const apps: ElectronApplication[] = [];
@@ -237,6 +276,7 @@ test("quit mid-setup resumes", async () => {
     await quit(third.app);
   } finally {
     await cleanUp(apps, scratch);
+    await connected.anytype.close();
   }
 });
 
@@ -310,21 +350,19 @@ test("the starter's forms, then Ready, then Open Live lands in Live", async () =
     await expect(setupStep(window)).toContainText(
       "Adds an object to Anytype for each item that reaches this step",
     );
-    const select = (key: string) => window.getByTestId(`setup-field-${key}-select-trigger`);
-    await expect(select("space_id")).toBeEnabled({ timeout: 30_000 });
+    await expect(select(window, "space_id")).toBeEnabled({ timeout: 30_000 });
     expect(await drawnFields(window)).toEqual(["space_id", "type_key"]);
     await expect(window.getByTestId("setup-field-space_id")).toContainText("Space");
     await expect(window.getByTestId("setup-field-type_key")).toContainText("Save as");
     await expect(setupStep(window)).not.toContainText(/Anytype address|Name from|Text from/);
-    // Continue with no space chosen is refused, and the form says so.
+    // Continue with nothing chosen is refused, in words: never a schema key, anywhere.
     await button(window, "setup.continue").click();
-    await expect(window.getByTestId("setup-message")).toContainText("File in Anytype");
+    await expect(window.getByTestId("setup-message")).toHaveText(
+      "File in Anytype isn't set up yet: choose a space.",
+    );
     await expect(setupStep(window)).toHaveAttribute("data-step", "node-forms");
-    await select("space_id").click();
-    await window.getByTestId("setup-field-space_id-select-option-sp-work").click();
-    await expect(select("space_id")).toHaveText("Work");
-    // The space's types, by name; the default, a page, already chosen.
-    await expect(select("type_key")).toHaveText("Page", { timeout: 30_000 });
+    expect(await shownText(window)).not.toMatch(/space_id|type_key|_field|api_base_url/);
+    await chooseWork(window);
     await button(window, "setup.continue").click();
     await at(window, "ready", seen);
 
@@ -465,12 +503,82 @@ test("Skip the example on its choice: no flow is installed, and Ready without it
   }
 });
 
-test("Skip the example on Source folder removes the starter it installed", async () => {
+test("Anytype skipped: the example offers Connect Anytype, which goes back to it", async () => {
   test.setTimeout(180_000);
   const { scratch, env } = scratchDirectories();
   const apps: ElectronApplication[] = [];
   try {
     const { app, window } = await launchApp(env);
+    apps.push(app);
+    const seen: string[] = [];
+    await welcomeAndReports(window, seen);
+    await button(window, "setup.anytype.skip").click();
+    await at(window, "example", seen);
+    // Not a form it could never finish: no Use the example, but Connect Anytype and the way out.
+    await expect(window.getByTestId("setup-example-needs-anytype")).toHaveText(
+      STRINGS["setup.example.needsAnytype"],
+      { timeout: 20_000 },
+    );
+    expect(
+      await setupStep(window).evaluate((step) =>
+        [...step.querySelectorAll("button")].map((choice) => choice.getAttribute("data-testid")),
+      ),
+    ).toEqual(["setup-back", "setup-example-skip", "setup-example-connect"]);
+    await expect(window.getByTestId("setup-example-connect")).toHaveText(
+      STRINGS["setup.anytype.title"],
+    );
+    await window.getByTestId("setup-example-connect").click();
+    await at(window, "connect-anytype", seen);
+    // Nothing was installed on the way.
+    await expect.poll(async () => (await call(window, "flows")).ok, { timeout: 20_000 }).toBe(true);
+    expect(await flowsOf(window)).toEqual([]);
+    await quit(app);
+  } finally {
+    await cleanUp(apps, scratch);
+  }
+});
+
+test("the step form, Anytype not connected: Connect Anytype goes back to Setup's Anytype step", async () => {
+  test.setTimeout(180_000);
+  const { scratch, env } = scratchDirectories();
+  const watched = path.join(scratch, "Gone");
+  fs.mkdirSync(watched);
+  const apps: ElectronApplication[] = [];
+  try {
+    const { app, window } = await launchApp(env);
+    apps.push(app);
+    const seen: string[] = [];
+    await welcomeAndReports(window, seen);
+    await button(window, "setup.anytype.skip").click();
+    await at(window, "example", seen);
+    // The example chosen as the shell's own move, as when Anytype goes away after the choice.
+    expect(await call(window, "setSetupStep", { kind: "useExample" })).toMatchObject({ ok: true });
+    await at(window, "source-folder", seen);
+    await chooseFolder(app, window, watched);
+    await button(window, "setup.continue").click();
+    await at(window, "node-forms", seen);
+    await expect(window.getByTestId("setup-form-no-spaces")).toContainText(
+      STRINGS["setup.form.noSpaces"],
+      { timeout: 30_000 },
+    );
+    // Save as shows the type by its name, never its key; nothing points to Configuration.
+    await expect(select(window, "type_key")).toHaveText("Page");
+    expect(await shownText(window)).not.toMatch(/Configuration|space_id|type_key/);
+    await window.getByTestId("setup-form-connect").click();
+    await at(window, "connect-anytype", seen);
+    await quit(app);
+  } finally {
+    await cleanUp(apps, scratch);
+  }
+});
+
+test("Skip the example on Source folder removes the starter it installed", async () => {
+  test.setTimeout(180_000);
+  const { scratch, env, canaryKey } = scratchDirectories();
+  const connected = await connectedAnytype(scratch, canaryKey);
+  const apps: ElectronApplication[] = [];
+  try {
+    const { app, window } = await launchApp({ ...env, ...connected.env });
     apps.push(app);
     const seen: string[] = [];
     await welcomeAndReports(window, seen);
@@ -483,17 +591,19 @@ test("Skip the example on Source folder removes the starter it installed", async
     await quit(app);
   } finally {
     await cleanUp(apps, scratch);
+    await connected.anytype.close();
   }
 });
 
 test("I'll build my own lands in Flows", async () => {
   test.setTimeout(180_000);
-  const { scratch, env } = scratchDirectories();
+  const { scratch, env, canaryKey } = scratchDirectories();
+  const connected = await connectedAnytype(scratch, canaryKey);
   const watched = path.join(scratch, "Notes");
   fs.mkdirSync(watched);
   const apps: ElectronApplication[] = [];
   try {
-    const { app, window } = await launchApp(env);
+    const { app, window } = await launchApp({ ...env, ...connected.env });
     apps.push(app);
     expect(await walkToReady(app, window, watched)).toEqual(WALK);
     await button(window, "setup.ready.own").click();
@@ -509,21 +619,25 @@ test("I'll build my own lands in Flows", async () => {
     await quit(app);
   } finally {
     await cleanUp(apps, scratch);
+    await connected.anytype.close();
   }
 });
 
 test("never shown again", async () => {
   test.setTimeout(180_000);
   const { scratch, userData, env } = scratchDirectories();
-  const watched = path.join(scratch, "Drop");
-  fs.mkdirSync(watched);
   const apps: ElectronApplication[] = [];
   try {
     const first = await launchApp(env);
     apps.push(first.app);
-    await walkToReady(first.app, first.window, watched);
-    await button(first.window, "setup.ready.openLive").click();
-    await expect(first.window.getByTestId("frame")).toHaveAttribute("data-route", "live");
+    const seen: string[] = [];
+    await welcomeAndReports(first.window, seen);
+    await button(first.window, "setup.anytype.skip").click();
+    await at(first.window, "example", seen);
+    await button(first.window, "setup.example.skip").click();
+    await at(first.window, "ready", seen);
+    await button(first.window, "live.empty.goToFlows").click();
+    await expect(first.window.getByTestId("frame")).toHaveAttribute("data-route", "flows");
     // A move after completion changes nothing.
     expect(await call(first.window, "setSetupStep", { kind: "back" })).toMatchObject({
       ok: true,
