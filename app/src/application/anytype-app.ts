@@ -34,6 +34,11 @@ export class AnytypeApp {
     return this.#state;
   }
 
+  /** The process of the Anytype Reload started; null when it adopted one, or started none. */
+  get startedPid(): number | null {
+    return this.#started?.pid ?? null;
+  }
+
   /** Start Anytype, or adopt the one already running. Never throws. */
   async start(): Promise<AnytypeAppState> {
     const { apps, executable, logger } = this.#deps;

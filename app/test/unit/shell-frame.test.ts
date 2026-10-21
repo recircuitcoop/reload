@@ -2,8 +2,11 @@
 // window, the shell's life and its quit, the children's status calls, and the push events'
 // pass-through of every other message.
 import { EventEmitter } from "node:events";
+import fs from "node:fs";
+import os from "node:os";
+import * as path from "node:path";
 import type { BrowserWindow } from "electron";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import type { Supervisor } from "../../src/application/supervisor";
 import type { ChildName, ChildStatus } from "../../src/domain/supervision/child-state";
 import { wireChildCalls } from "../../src/shell/child-calls";
@@ -151,12 +154,19 @@ describe("the push events", () => {
   });
 });
 
+const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-shell-frame-"));
+afterAll(() => {
+  fs.rmSync(scratch, { recursive: true, force: true });
+});
+
 function lifecycle(lock = true) {
   const app = Object.assign(new EventEmitter(), {
     exits: [] as number[],
     quits: 0,
     ready: true,
     requestSingleInstanceLock: () => lock,
+    // The run-state file is written here once the start resolved.
+    getPath: () => scratch,
     exit: (code: number) => {
       app.exits.push(code);
     },
@@ -174,7 +184,13 @@ function lifecycle(lock = true) {
       return Promise.resolve("quit" as never);
     },
   };
-  const state = { forward: 0, open: false, started: true, startFails: false };
+  const state = { forward: 0, open: false, startFails: false };
+  const supervisors = new Map<ChildName, Pick<Supervisor, "status" | "onStatus">>([
+    [
+      "runtime",
+      { status: () => ({ child: "runtime", pid: null }) as ChildStatus, onStatus: () => undefined },
+    ],
+  ]);
   const logger = new RecordingLogger();
   runShell({
     app: app as never,
@@ -184,11 +200,16 @@ function lifecycle(lock = true) {
       state.forward += 1;
     },
     windowOpen: () => state.open,
-    started: () => state.started,
+    running: {
+      supervisors,
+      anytype: { state: null, startedPid: null },
+      log: null,
+      notices: "notices.json",
+    },
     start: () => (state.startFails ? Promise.reject(new Error("no")) : Promise.resolve()),
     logger,
   });
-  return { app, signals, quitFlow, requests, state, logger };
+  return { app, signals, quitFlow, requests, state, supervisors, logger };
 }
 
 describe("the shell's life", () => {
@@ -200,13 +221,13 @@ describe("the shell's life", () => {
   });
 
   it("brings the window forward on a second launch, and on a dock click with none open", () => {
-    const { app, state } = lifecycle();
+    const { app, state, supervisors } = lifecycle();
     app.emit("second-instance");
     app.emit("activate");
     state.open = true;
     app.emit("activate");
     state.open = false;
-    state.started = false;
+    supervisors.clear();
     app.emit("activate");
     app.emit("window-all-closed");
     expect(state.forward).toBe(2);
@@ -249,7 +270,12 @@ describe("the shell's life", () => {
       quitFlow: { done: false, request: () => Promise.resolve("quit" as never) },
       bringForward: () => undefined,
       windowOpen: () => false,
-      started: () => false,
+      running: {
+        supervisors: new Map(),
+        anytype: { state: null, startedPid: null },
+        log: null,
+        notices: "",
+      },
       start: () => Promise.reject(new Error("no port")),
       logger,
     });

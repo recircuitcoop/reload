@@ -110,6 +110,7 @@ import { wireAppCalls } from "./app-calls";
 import { PushEvents } from "./push";
 import { AppWindow } from "./window";
 import { runShell } from "./lifecycle";
+import { runCommandLine } from "./command-line";
 import { wireChildCalls } from "./child-calls";
 
 // The e2e gate runs the real app against a temporary userData directory, so no test ever touches
@@ -118,6 +119,7 @@ const userData = process.env["RELOAD_USER_DATA"];
 if (userData !== undefined && userData !== "") {
   app.setPath("userData", userData);
 }
+runCommandLine(app, process.argv); // --status, --quit, --log: ask the running Reload, then exit
 // The e2e gate's hooks (never set in an ordinary run, and never on in an installed build).
 const e2eHooks = e2eHooksOn({ packaged: app.isPackaged, env: process.env });
 // The first start over a 0.3.0 installation (plan 0028 step 1), before the single-instance lock;
@@ -592,7 +594,7 @@ if (firstStart.problem === null) {
     quitFlow,
     bringForward,
     windowOpen: () => appWindow.current !== null,
-    started: () => supervisors.size > 0,
+    running: { supervisors, anytype: anytypeApp, log: logFile, notices: NOTICES_FILENAME },
     start,
     logger,
   });

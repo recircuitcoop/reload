@@ -59,7 +59,9 @@ describe("the Anytype desktop app", () => {
     const { anytype, logger } = subject(fake);
     expect(anytype.state).toBeNull();
     expect(await anytype.start()).toBe("started");
+    expect(anytype.startedPid).toBe(4242);
     await anytype.quitIfOurs();
+    expect(anytype.startedPid).toBeNull();
     await anytype.quitIfOurs();
     expect(journal).toEqual([`find ${ANYTYPE}`, `launch ${ANYTYPE}`, "quit 4242"]);
     expect(logger.lines.join("\n")).toContain("quitting the Anytype desktop app Reload started");
@@ -69,6 +71,7 @@ describe("the Anytype desktop app", () => {
     const { fake, journal } = apps({ pid: 777 });
     const { anytype, logger } = subject(fake);
     expect(await anytype.start()).toBe("adopted");
+    expect(anytype.startedPid).toBeNull();
     await anytype.quitIfOurs();
     expect(journal).toEqual([`find ${ANYTYPE}`]);
     expect(logger.lines.join("\n")).toContain(
