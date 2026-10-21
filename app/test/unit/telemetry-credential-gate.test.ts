@@ -31,7 +31,6 @@ import { parseChildSignal } from "../../src/domain/channel/messages";
 import {
   crashPayload,
   SIGNALS,
-  usagePayload,
   type ChildSignal,
   type QueuedReport,
   type Versions,
@@ -40,7 +39,7 @@ import { fingerprintOf } from "../../src/shell/telemetry";
 import { unpairedFiles } from "../fakes/anytype";
 import { RecordingLogger } from "../fakes/children";
 import { FakeClock } from "../fakes/clock";
-import { everySignal } from "../fakes/signals";
+import { everySignal, startPayload } from "../fakes/signals";
 import { telemetryWorld } from "../fakes/telemetry";
 
 // ── the fakes ────────────────────────────────────────────────────────────────────────────
@@ -64,7 +63,42 @@ const PAIR_PASSWORD = "fakePw-77Hh";
 const JWT = "eyJmYWtlIjoxfQ.eyJmYWtlIjoyfQ.ZmFrZS1zaWduYXR1cmU";
 const HEX_RUN = "0123456789abcdef0123456789abcdef";
 
-const UNREGISTERED = [URL_USER, URL_PASSWORD, QUERY_TOKEN, BARE_TOKEN, PAIR_PASSWORD, JWT, HEX_RUN];
+// What a verifier got past the scrub (plan 0029, as built), each now planted below.
+const PASS_VALUE = "fakePassVal";
+const PW_VALUE = "fakePwVal";
+const PAIR_SECRET = "hunter2";
+// A password with a slash, a hash and a space in it: the userinfo rule stopped at each.
+const ODD_PASSWORD_PARTS = ["fake/pw", "hash#part", "with space"];
+const BASIC = "ZmFrZXVzZXI6ZmFrZXBhc3M"; // base64 of fakeuser:fakepass
+// Lowercase, no digit: the scrub took it for a name. A token's length, past any word's.
+const LOWERCASE_RANDOM = "fakeqwzxkjvbnmtyrplkdhgfsamcuewo";
+const DOTTED_KEY = "fake.Qw9xZr7L.mK2pT5vB"; // Anytype's KEY_SHAPE allows dots
+const DIGIT_RUN = "4111111111111111111111";
+const CYRILLIC_VALUE = "fakecyrvalue";
+const HALF_KEY = ANYTYPE_KEY.slice(0, ANYTYPE_KEY.length / 2 + 1);
+const MCP_CLIENT = "cursor ×4 sk-Ab12Cd34Ef56Gh78Ij90Kl";
+const MCP_CLIENT_PARTS = ["×4", "sk-Ab12Cd34Ef56Gh78Ij90Kl", "Ab12Cd34"];
+
+const UNREGISTERED = [
+  URL_USER,
+  URL_PASSWORD,
+  QUERY_TOKEN,
+  BARE_TOKEN,
+  PAIR_PASSWORD,
+  JWT,
+  HEX_RUN,
+  PASS_VALUE,
+  PW_VALUE,
+  PAIR_SECRET,
+  ...ODD_PASSWORD_PARTS,
+  BASIC,
+  LOWERCASE_RANDOM,
+  DOTTED_KEY,
+  DIGIT_RUN,
+  CYRILLIC_VALUE,
+  HALF_KEY,
+  ...MCP_CLIENT_PARTS,
+];
 const EVERY_FAKE = [...REGISTERED, ...UNREGISTERED];
 
 /** Every way a credential reaches a string a signal's hook can see. */
@@ -79,6 +113,21 @@ const HOSTILE: readonly string[] = [
   `upstream said ${JWT}`,
   `digest ${HEX_RUN}`,
   new Error(`node threw while holding ${NODE_RED_SECRET} and ${BARE_TOKEN}`).message,
+  // Each of these got past the scrub of free text; none may leave now.
+  `login failed: pass=${PASS_VALUE}`,
+  `pw=${PW_VALUE}`,
+  `bob:${PAIR_SECRET}`,
+  `https://fakeuser:${ODD_PASSWORD_PARTS.join("")}@provider.example/c.json`,
+  `Basic ${BASIC}`,
+  LOWERCASE_RANDOM,
+  DOTTED_KEY,
+  `card ${DIGIT_RUN}`,
+  // Cyrillic р, а, о: "password" to the eye, not to a pattern.
+  `\u0440\u0430ssw\u043erd=${CYRILLIC_VALUE}`,
+  // A registered key that an SDK's cut at 2000 characters would halve.
+  `${"x".repeat(2000 - HALF_KEY.length)}${ANYTYPE_KEY}`,
+  `src/${DOTTED_KEY}/node.py`,
+  MCP_CLIENT,
 ];
 
 /**
@@ -148,24 +197,13 @@ const BUILDERS: readonly BuilderFixture[] = [
     record: (pipeline, planted) =>
       pipeline.recordUsage(
         "app_start",
-        usagePayload(versionsOf(planted), [{ id: planted, version: planted }]),
+        startPayload(versionsOf(planted), [{ id: planted, version: planted }]),
       ),
   },
   {
     name: "crashPayload",
     record: (pipeline, planted) =>
       pipeline.recordCrash(crashPayload("node", true, COUNTS, versionsOf(planted))),
-  },
-  {
-    // No builder: what a careless caller might hand the pipeline, nested, in an error message
-    // and in a URL. The gate is the pipeline's, so it holds here too.
-    name: "a hand-made payload",
-    record: (pipeline, planted) =>
-      pipeline.recordCrash({
-        error: new Error(planted).message,
-        provider: planted,
-        detail: [planted, { deeper: [planted, { deepest: planted }] }],
-      }),
   },
 ];
 
@@ -341,6 +379,12 @@ describe.each(HOOKS)("the credential gate, through the hook: $name", ({ facts })
     for (const queued of world.queue.reports) {
       expect(stringsIn(queued.payload).flatMap(leaksIn)).toEqual([]);
     }
+    // On the wire: what the transports render from the queue.
+    await pipeline.flush();
+    expect(world.poster.sent.length).toBeGreaterThan(0);
+    const sentBytes = JSON.stringify(world.poster.sent);
+    expect(EVERY_FAKE.filter((fake) => sentBytes.includes(fake))).toEqual([]);
+    expect(sentBytes).not.toContain("fake-person");
   });
 });
 
@@ -403,7 +447,7 @@ function only<T>(items: readonly T[]): T {
 // ── rule 6: nothing is sent by a package ──────────────────────────────────────────────────
 
 describe("the credential gate: a package chooses no field (rule 6)", () => {
-  it("an error frame's facts are the four named ones, whatever else the frame carries", () => {
+  it("an error frame's facts are the three named ones, never its message", () => {
     const failure = failureOf({
       t: "error",
       message: "m",
@@ -412,7 +456,7 @@ describe("the credential gate: a package chooses no field (rule 6)", () => {
       line: 2,
       ...({ api_key: "x", event: "app_start", machine_id: "x" } as object),
     });
-    expect(Object.keys(failure).sort()).toEqual(["errorType", "file", "line", "message"]);
+    expect(Object.keys(failure).sort()).toEqual(["errorType", "file", "line"]);
   });
 
   it("no package or SDK file names the telemetry endpoints or posts an event itself", () => {
@@ -467,7 +511,7 @@ describe("the credential gate: field names (rule 2)", () => {
     const versions = { appVersion: "0.4.0", os: "darwin", osVersion: "25.3.0", arch: "arm64" };
     expect(
       pipeline.recordUsage("app_start", {
-        ...usagePayload(versions, [{ id: "reload_anytype", version: "1.0.0" }]),
+        ...startPayload(versions, [{ id: "reload_anytype", version: "1.0.0" }]),
         unsigned_packages: 0,
       }),
     ).not.toBeNull();

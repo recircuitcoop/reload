@@ -452,13 +452,13 @@ describe("the launch's own signals (plan 0029)", () => {
       kind: "step",
       package: "probekit",
       step: { ...step, ok: false },
-      failure: { errorType: "ValueError", message: "bad input", file: "src/probe.py", line: 7 },
+      failure: { errorType: "ValueError", file: "src/probe.py", line: 7 },
     });
     world.runtime.tell({
       kind: "step",
       package: "my-private-thing",
       step: { ...step, nodeId: "secret-type", ok: false },
-      failure: { errorType: "Error", message: "boom", file: "lib/mine.js", line: 3 },
+      failure: { errorType: "Error", file: "lib/mine.js", line: 3 },
     });
     world.runtime.tell({
       kind: "step",
@@ -504,7 +504,6 @@ describe("the launch's own signals (plan 0029)", () => {
       expect.objectContaining({
         package: "probekit",
         error_type: "ValueError",
-        error: "bad input",
         file: "src/probe.py",
         line: 7,
       }),
@@ -512,11 +511,13 @@ describe("the launch's own signals (plan 0029)", () => {
       expect.objectContaining({
         package: "anytype",
         error_type: null,
-        error: null,
         file: null,
         line: null,
       }),
     ]);
+    for (const payload of payloads(world, "package_error")) {
+      expect(Object.keys(payload)).not.toContain("error");
+    }
     expect(payloads(world, "mcp_call")).toEqual([
       expect.objectContaining({
         package: "reload_anytype",
@@ -573,7 +574,7 @@ describe("a child's facts reach the shell over the channel (plan 0029)", () => {
       kind: "step",
       package: "probekit",
       step: { nodeKind: "view", nodeId: "probe", durationMs: 3, ok: false },
-      failure: { errorType: "Error", message: "boom", file: "a.js", line: 2 },
+      failure: { errorType: "Error", file: "a.js", line: 2 },
     };
     shellSignals(link as unknown as Parameters<typeof shellSignals>[0])(signal);
     expect(posted).toEqual([{ v: 1, t: "signal", signal }]);
@@ -608,9 +609,9 @@ describe("a child's facts reach the shell over the channel (plan 0029)", () => {
     expect(
       parseChildSignal({
         ...valid[0],
-        failure: { errorType: 7, message: "x".repeat(2001), file: "f".repeat(201), line: -1 },
+        failure: { errorType: 7, message: "m", file: "f".repeat(2001), line: -1 },
       }),
-    ).toMatchObject({ failure: { errorType: null, message: null, file: null, line: null } });
+    ).toEqual({ ...valid[0], failure: { errorType: null, file: null, line: null } });
     for (const bad of [
       null,
       "step",

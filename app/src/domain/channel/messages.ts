@@ -368,15 +368,17 @@ const isCount = (value: unknown): value is number =>
 const nullOr = <T>(value: unknown, is: (value: unknown) => value is T): T | null =>
   is(value) ? value : null;
 
-/** A failed step's facts: each field its SDK may leave out is null, never a refusal. */
+/**
+ * A failed step's facts: each field its SDK may leave out is null, never a refusal. The bounds
+ * only keep a channel message small: the shell's shape check is what decides what is sent.
+ */
 function stepFailureOf(value: unknown): StepFailure | null {
   if (!isRecord(value)) {
     return null;
   }
   return {
-    errorType: nullOr(value["errorType"], (item) => isTextUpTo(item, 100)),
-    message: nullOr(value["message"], (item) => isTextUpTo(item, 2000)),
-    file: nullOr(value["file"], (item) => isTextUpTo(item, 200)),
+    errorType: nullOr(value["errorType"], (item) => isTextUpTo(item, 2000)),
+    file: nullOr(value["file"], (item) => isTextUpTo(item, 2000)),
     line: nullOr(value["line"], isCount),
   };
 }

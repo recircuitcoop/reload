@@ -17,8 +17,8 @@ import {
   crashPayload,
   isReportKind,
   TelemetryError,
-  usagePayload,
 } from "../../src/domain/telemetry/reports";
+import { startPayload } from "../fakes/signals";
 
 const none = (text: string): string => text;
 
@@ -108,7 +108,7 @@ describe("telemetry redaction: forbidden keys", () => {
       { runtime: 1, services: 2, node: 3, nodeStopped: 1 },
       versions,
     );
-    const usage = usagePayload(versions, [{ id: "anytype", version: "1.0.0" }]);
+    const usage = startPayload(versions, [{ id: "anytype", version: "1.0.0" }]);
     const stamps = {
       kind: "error",
       machine_id: "ab".repeat(32),

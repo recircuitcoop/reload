@@ -162,13 +162,14 @@ def _thrown_at(caught: BaseException, root: str | None = None) -> dict[str, Any]
     relative to that folder, and ``line``. A frame in a library (``site-packages``) or outside
     the folder gives way to the package's own last one; with none, only ``error_type``."""
     folder = os.path.realpath(root if root is not None else os.getcwd())
-    where: dict[str, Any] = {"error_type": type(caught).__name__[:100]}
+    # Never cut: the app checks each field's shape and withholds one that does not fit.
+    where: dict[str, Any] = {"error_type": type(caught).__name__}
     for frame in reversed(traceback.extract_tb(caught.__traceback__)):
         file = os.path.realpath(frame.filename)
         inside = os.path.commonpath([folder, file]) == folder if os.path.isabs(file) else False
         if not inside or "site-packages" in file.split(os.sep) or frame.lineno is None:
             continue
-        where["file"] = os.path.relpath(file, folder).replace(os.sep, "/")[:200]
+        where["file"] = os.path.relpath(file, folder).replace(os.sep, "/")
         where["line"] = frame.lineno
         break
     return where

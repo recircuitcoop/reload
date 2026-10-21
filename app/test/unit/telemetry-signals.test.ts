@@ -12,16 +12,21 @@ import { TelemetryPipeline } from "../../src/application/telemetry";
 import { factsOf } from "../../src/application/usage-signals";
 import { REDACTED } from "../../src/domain/redaction/registry";
 import { redactPayload } from "../../src/domain/telemetry/redact";
+import { WITHHELD } from "../../src/domain/telemetry/redact";
 import {
-  clientOf,
-  errorTypeOf,
+  appUncleanStop,
+  CLIENT,
+  ERROR_TYPE,
   lineOf,
   mcpCall,
   packageInstallFailed,
   packageUpdated,
   providerRegistered,
   providerRemoved,
+  shaped,
   stepFile,
+  updateSignal,
+  versionFields,
   VOUCHED_FIELDS,
   type QueuedReport,
 } from "../../src/domain/telemetry/reports";
@@ -30,35 +35,76 @@ import { RecordingLogger } from "../fakes/children";
 import { ENDPOINTS, settle, telemetryWorld } from "../fakes/telemetry";
 
 describe("what a field may hold (plan 0029)", () => {
-  it("a step's file is a plain path inside its package, or null", () => {
+  it("a step's file is a plain source path inside its package, withheld otherwise", () => {
     expect(stepFile("src/node.py")).toBe("src/node.py");
     expect(stepFile("dist/anytype.cjs")).toBe("dist/anytype.cjs");
+    expect(stepFile("src/reload_node/__init__.py")).toBe("src/reload_node/__init__.py");
+    expect(stepFile(null)).toBeNull();
     for (const bad of [
       "/Users/fake-person/node.py",
       "../outside.py",
-      "src/../../x",
+      "src/../../x.py",
       "./node.py",
       "C:\\\\node.py",
       "a b.py",
-      "x".repeat(201),
+      "src/notes.md",
+      // A dotted, key-like segment: Anytype's keys may hold dots (KEY_SHAPE).
+      "src/fake.Qw9x.Zr7L.mK2p/node.py",
+      "src/fake.Qw9x.Zr7L.py",
+      "src/kéy/node.py",
+      `${"x".repeat(197)}.py`,
       7,
-      null,
     ]) {
-      expect(stepFile(bad), String(bad)).toBeNull();
+      expect(stepFile(bad), String(bad)).toBe(WITHHELD);
     }
   });
 
-  it("an error type is a class name, a line a whole number, a client cut to 40", () => {
-    expect(errorTypeOf("anytype.ApiError")).toBe("anytype.ApiError");
-    expect(errorTypeOf("not a class")).toBeNull();
-    expect(errorTypeOf(3)).toBeNull();
+  it("an error type is a class name, a line a whole number, a client a plain name", () => {
+    expect(shaped("ZeroDivisionError", ERROR_TYPE)).toBe("ZeroDivisionError");
+    expect(shaped("ECONNREFUSED", ERROR_TYPE)).toBe("ECONNREFUSED");
+    for (const bad of ["anytype.ApiError", "not a class", "x".repeat(65), 3]) {
+      expect(shaped(bad, ERROR_TYPE), String(bad)).toBe(WITHHELD);
+    }
+    expect(shaped(undefined, ERROR_TYPE)).toBeNull();
     expect(lineOf(12)).toBe(12);
     for (const bad of [0, -1, 1.5, "3", 10_000_001]) {
       expect(lineOf(bad)).toBeNull();
     }
-    expect(clientOf(` ${"c".repeat(50)} `)).toBe("c".repeat(40));
-    expect(clientOf("  ")).toBeNull();
-    expect(clientOf(undefined)).toBeNull();
+    expect(shaped("Claude Desktop", CLIENT)).toBe("Claude Desktop");
+    // Never cut to fit: a cut can halve a credential.
+    for (const bad of ["c".repeat(65), "bob:hunter2", "cursor ×4 sk-Ab12Cd34Ef56Gh78Ij90Kl", " "]) {
+      expect(shaped(bad, CLIENT), bad).toBe(WITHHELD);
+    }
+  });
+
+  it("every name and version a package or the app gives is held to its shape", () => {
+    expect(
+      versionFields({
+        appVersion: "0.4.0",
+        os: "linux",
+        osVersion: "6.8.0-45-generic",
+        arch: "x64",
+      }),
+    ).toEqual({
+      app_version: "0.4.0",
+      os: "linux",
+      os_version: "6.8.0-45-generic",
+      arch: "x64",
+    });
+    expect(
+      versionFields({ appVersion: "pass=x", os: "a b", osVersion: "bob:hunter2", arch: "" }),
+    ).toEqual({
+      app_version: WITHHELD,
+      os: WITHHELD,
+      os_version: WITHHELD,
+      arch: WITHHELD,
+    });
+    expect(appUncleanStop("1.0.0\nsecret").fields["last_version"]).toBe(WITHHELD);
+    expect(updateSignal("update_offered", "1.0.0", "2.0.0-beta.1", "beta").fields).toEqual({
+      from_version: "1.0.0",
+      to_version: "2.0.0-beta.1",
+      channel: "beta",
+    });
   });
 
   it("a provider is its host, a file source is `file`, a fingerprint is short hex or null", () => {
@@ -70,6 +116,9 @@ describe("what a field may hold (plan 0029)", () => {
     expect(providerRegistered(facts("not a url"), "NOT-HEX", 1).fields).toMatchObject({
       provider_host: null,
       signer_fingerprint: null,
+    });
+    expect(providerRegistered(facts("https://[::1]/c.json"), null, 0).fields).toMatchObject({
+      provider_host: WITHHELD,
     });
     expect(providerRemoved(facts("https://a.example/x")).fields).toEqual({
       provider_host: "a.example",

@@ -17,9 +17,21 @@ import {
   providerRemoved,
   setupStep,
   updateSignal,
+  versionFields,
   type PackageFacts,
+  type ReportedPackage,
   type Signal,
+  type Versions,
 } from "../../src/domain/telemetry/reports";
+
+/** An app_start's payload as the shell records it: the version fields beside its own. */
+export function startPayload(
+  versions: Versions,
+  packages: readonly ReportedPackage[],
+): Record<string, unknown> {
+  const start = appStart({ startupMs: 900, packages, unsignedPackages: 0, firstLaunch: false });
+  return { ...versionFields(versions), ...start.fields };
+}
 
 /** Every signal, built with `text` in every string input; `signed` decides the package rule. */
 export function everySignal(text: string, signed = true): Signal[] {
@@ -31,7 +43,7 @@ export function everySignal(text: string, signed = true): Signal[] {
     environment: "uv-python",
   };
   const step = { nodeKind: "node" as const, nodeId: text, durationMs: 5, ok: true };
-  const failure = { errorType: text, message: text, file: text, line: 3 };
+  const failure = { errorType: text, file: text, line: 3 };
   const call = { tool: text, client: text, durationMs: 9, ok: false, errorCode: -32000 };
   const provider = { url: text, official: false };
   return [

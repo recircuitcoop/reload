@@ -118,7 +118,8 @@ function clientOf(request: unknown): string | null {
   const params = isObject(request) ? request["params"] : undefined;
   const info = isObject(params) ? params["clientInfo"] : undefined;
   const name = isObject(info) ? info["name"] : undefined;
-  return typeof name === "string" ? name.slice(0, 200) : null;
+  // Whole: the shell checks its shape and withholds it, never a cut that could halve a secret.
+  return typeof name === "string" ? name : null;
 }
 
 /** A tools/call's facts: its tool when the validated set holds it, and how it was answered. */

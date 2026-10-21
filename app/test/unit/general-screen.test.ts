@@ -55,12 +55,14 @@ import type { AppApiV2 } from "../../src/ui/app-api-v2";
 import { STRINGS, type PlainKey } from "../../src/ui/strings";
 import packageJson from "../../package.json";
 import {
+  appStart,
   NOTICE_VERSION,
   SIGNALS,
-  usagePayload,
   USAGE_RETENTION_MONTHS,
+  versionFields,
   type SignalName,
 } from "../../src/domain/telemetry/reports";
+import type { Json } from "../../src/domain/telemetry/redact";
 import { everySignal } from "../fakes/signals";
 import {
   flatten,
@@ -361,7 +363,6 @@ const LINE_FIELDS: Readonly<Record<string, readonly string[]>> = {
     "duration_ms",
     "ok",
     "error_type",
-    "error",
     "file",
     "line",
   ],
@@ -414,10 +415,9 @@ const LINE_WORDS: Readonly<Record<string, readonly string[]>> = {
   ],
   "privacy.sent.errors": [
     "the kind of error",
-    "its message",
+    "the same",
     "the file and line",
-    "is not sent",
-    "quote your own words",
+    "Never the error's message",
   ],
   "privacy.sent.aiApps": [
     "which tool",
@@ -479,13 +479,14 @@ describe("the privacy notice lists every field of every signal (plan 0029)", () 
     }
   });
 
-  it("no longer claims an error's message is never sent, and says what it can quote", () => {
-    const notice = Object.values(STRINGS).join("\n");
-    expect(notice).not.toMatch(/never[^.]*error'?s? message/i);
-    expect(STRINGS["privacy.never.line"]).toContain("unless a failing step's message quotes them");
+  it("says an error's message is never sent, and lists no message field", () => {
+    expect(STRINGS["privacy.never.line"]).toContain("Any error's message.");
+    expect(STRINGS["privacy.never.line"]).not.toContain("quotes them");
     expect(STRINGS["privacy.never.line"]).toContain(
       "Your Anytype key or any other key, token or password.",
     );
+    expect(Object.values(LINE_FIELDS).flat()).not.toContain("error");
+    expect(Object.values(LINE_FIELDS).flat()).not.toContain("message");
     expect(NOTICE_VERSION).toBe(2);
   });
 });
@@ -538,7 +539,13 @@ describe("the privacy notice beside the reports question (D25)", () => {
     expect(unsigned).toBe(1);
     expect(STRINGS["privacy.sent.packages"]).toContain("how many unsigned packages");
     expect(STRINGS["privacy.sent.packages"]).toContain("never their names");
-    const payload = usagePayload(versions, named);
+    const start = appStart({
+      startupMs: 900,
+      packages: named,
+      unsignedPackages: 0,
+      firstLaunch: false,
+    });
+    const payload = { ...versionFields(versions), packages: start.fields["packages"] as Json };
     expect(Object.keys(payload).sort()).toEqual([
       "app_version",
       "arch",

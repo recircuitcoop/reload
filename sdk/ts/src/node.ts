@@ -381,7 +381,8 @@ export function thrownAt(caught: unknown, root: string = process.cwd()): ThrownA
   if (!(caught instanceof Error)) {
     return {};
   }
-  const where: ThrownAt = { error_type: (caught.constructor.name || caught.name).slice(0, 100) };
+  // Never cut: the app checks each field's shape and withholds one that does not fit.
+  const where: ThrownAt = { error_type: caught.constructor.name || caught.name };
   for (const frame of (caught.stack ?? "").split("\n").slice(1)) {
     const found = STACK_FRAME.exec(frame.trim());
     if (found === null) {
@@ -398,7 +399,7 @@ export function thrownAt(caught: unknown, root: string = process.cwd()): ThrownA
     ) {
       continue;
     }
-    where.file = relative.split(path.sep).join("/").slice(0, 200);
+    where.file = relative.split(path.sep).join("/");
     where.line = Number(found[2]);
     break;
   }

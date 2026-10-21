@@ -112,12 +112,7 @@ export class UsageSignals {
         const facts = this.facts(signal.package) ?? unknownPackage(signal.package);
         this.record(packageUsed(facts, signal.step));
         if (!signal.step.ok) {
-          const failure = signal.failure ?? {
-            errorType: null,
-            message: null,
-            file: null,
-            line: null,
-          };
+          const failure = signal.failure ?? { errorType: null, file: null, line: null };
           this.record(packageError(facts, signal.step, failure));
         }
         return;

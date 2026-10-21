@@ -5,7 +5,8 @@
 import { describe, expect, it } from "vitest";
 import { TelemetryPipeline, DEFAULT_BACKOFF_MS } from "../../src/application/telemetry";
 import { REDACTED } from "../../src/domain/redaction/registry";
-import { crashPayload, usagePayload, type Versions } from "../../src/domain/telemetry/reports";
+import { crashPayload, type Versions } from "../../src/domain/telemetry/reports";
+import { startPayload } from "../fakes/signals";
 import { NO_ENDPOINTS, outgoingFor } from "../../src/domain/telemetry/transports";
 import { ENDPOINTS, queued, RAW_IDENTIFIER, settle, telemetryWorld } from "../fakes/telemetry";
 
@@ -17,7 +18,7 @@ const VERSIONS: Versions = {
 };
 const COUNTS = { runtime: 1, services: 0, node: 0, nodeStopped: 0 };
 const crash = () => crashPayload("runtime", false, COUNTS, VERSIONS);
-const usage = () => usagePayload(VERSIONS, [{ id: "anytype", version: "1.0.0" }]);
+const usage = () => startPayload(VERSIONS, [{ id: "anytype", version: "1.0.0" }]);
 
 // The canaries of plan 0018 §5.4: none may appear in a queued or a sent payload.
 const ANYTYPE_KEY = "canary-anytype-key-2f6c1e9a8b7d";

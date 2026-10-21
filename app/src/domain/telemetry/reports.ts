@@ -7,7 +7,7 @@
 // which process crashed and how often each has. Adding a field here is the moment somebody has to
 // ask whether it may be sent.
 
-import { hostOnly, type JsonObject } from "./redact";
+import { hostOnly, WITHHELD, type JsonObject } from "./redact";
 
 /** The two kinds of report, which go to two different servers (D21, D22). */
 export type ReportKind = "usage" | "error";
@@ -79,24 +79,16 @@ export interface ReportedPackage {
   readonly version: string;
 }
 
-/** The version fields every report carries; each signal's own fields go beside them. */
-export function versionFields(versions: Versions): Record<string, string> {
+/**
+ * The version fields every report carries; each signal's own fields go beside them. The app
+ * reads them from itself and the OS, and they are still held to their shapes.
+ */
+export function versionFields(versions: Versions): Record<string, string | null> {
   return {
-    app_version: versions.appVersion,
-    os: versions.os,
-    os_version: versions.osVersion,
-    arch: versions.arch,
-  };
-}
-
-/** One usage report's body, before redaction: the version set and the packages installed. */
-export function usagePayload(
-  versions: Versions,
-  packages: readonly ReportedPackage[],
-): Record<string, unknown> {
-  return {
-    ...versionFields(versions),
-    packages: packages.map((entry) => ({ id: entry.id, version: entry.version })),
+    app_version: shaped(versions.appVersion, VERSION),
+    os: shaped(versions.os, IDENTIFIER),
+    os_version: shaped(versions.osVersion, VERSION),
+    arch: shaped(versions.arch, IDENTIFIER),
   };
 }
 
@@ -149,8 +141,14 @@ export function crashPayload(
 // One Umami event per signal, named as the signal. Each builder below makes its fields from named
 // inputs and nothing else (plan 0029 rule 1): no node config, no message payload, no MCP tool's
 // arguments or result, no header, environment variable or settings value. A URL becomes its host
-// (rule 3), a package nobody signed is counted, never named, and the only free text is a failed
-// step's message and an MCP client's name, which the pipeline scrubs or withholds (rule 4).
+// (rule 3), and a package nobody signed is counted, never named.
+//
+// No free text, ever: free text cannot be proved credential-free, so no event carries an error's
+// message or any other text a package or a person wrote. Every string a package or a person could
+// choose is an identifier checked against a strict shape (`shaped`, below): a package name, a
+// version, a type id, a tool name, a host, a relative source file, an error's class name, an MCP
+// client's name. A value outside its shape is sent as "[withheld]", never cut to fit; what passes
+// still goes through the pipeline's redaction and scrub.
 
 export const SIGNALS = [
   "app_start",
@@ -217,8 +215,8 @@ export interface PackageFacts {
 /** The package fields of an event: an unsigned package is `unsigned`, with no version. */
 function packageFields(facts: PackageFacts): Record<string, unknown> {
   return {
-    package: facts.signed ? facts.package : UNSIGNED,
-    version: facts.signed ? facts.version : null,
+    package: facts.signed ? shaped(facts.package, IDENTIFIER) : UNSIGNED,
+    version: facts.signed ? shaped(facts.version, VERSION) : null,
     source: facts.source,
     signed: facts.signed,
     environment: facts.environment,
@@ -230,35 +228,53 @@ function whole(value: number): number {
   return Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
 }
 
-/** A path relative to its package's folder, in the SDKs' form: `src/node.py`, never `..`. */
-const RELATIVE_FILE = /^[\w.+@-]+(?:\/[\w.+@-]+)*$/;
+/** No 25 letters and digits in a row, no 9 digits in a row: a key's or a card's, never a name's. */
+const NO_KEY_RUN = String.raw`(?![\s\S]*[A-Za-z0-9]{25})(?![\s\S]*\d{9})`;
+
+/** A package's name, a type id, a tool name, an update channel: a plain identifier, no dots. */
+export const IDENTIFIER = new RegExp(String.raw`^${NO_KEY_RUN}[A-Za-z0-9][\w-]{0,99}$`);
+/** A version (`1.2.3`, `0.4.0-beta.1`), or `unknown` when a package declares none. */
+export const VERSION = new RegExp(
+  String.raw`^${NO_KEY_RUN}(?:unknown|\d{1,9}(?:\.\d{1,9}){0,3}(?:[-+][0-9A-Za-z.-]{1,40})?)$`,
+);
+/** A hostname as `hostOnly` gives it, or `file` for a local source. */
+export const HOST = new RegExp(String.raw`^${NO_KEY_RUN}[a-z0-9][a-z0-9.-]{0,252}$`);
+/**
+ * A source file relative to its package's folder, in the SDKs' form (`src/node.py`): folders of
+ * word characters, one file name of word characters and a known source extension. No dot but the
+ * extension's, so no dotted, key-like segment passes; no `..`, no absolute path, no space.
+ */
+export const SOURCE_FILE = new RegExp(
+  String.raw`^${NO_KEY_RUN}(?:\w{1,100}\/){0,15}\w{1,100}\.(?:py|pyw|ts|tsx|mts|cts|js|jsx|mjs|cjs)$`,
+);
 export const MAX_FILE_LENGTH = 200;
 
-/** A step's `file`, when it is a plain path inside its package; null for anything else. */
-export function stepFile(file: unknown): string | null {
-  if (typeof file !== "string" || file.length > MAX_FILE_LENGTH || !RELATIVE_FILE.test(file)) {
+/** An exception's class name (`ZeroDivisionError`) or an error code (`ECONNREFUSED`). */
+export const ERROR_TYPE = new RegExp(String.raw`^${NO_KEY_RUN}[A-Za-z_$][\w$]{0,63}$`);
+/** The name an MCP client gives itself (`Claude Desktop`, `cursor-vscode`): words, no dots. */
+export const CLIENT = new RegExp(String.raw`^${NO_KEY_RUN}[A-Za-z0-9][A-Za-z0-9 _-]{0,63}$`);
+/**
+ * `value` when it is a string of `shape`, null when there is none, and WITHHELD for anything else:
+ * a value outside its shape is never cut down to one, because a cut can halve a credential.
+ */
+export function shaped(value: unknown, shape: RegExp): string | null {
+  if (value === null || value === undefined) {
     return null;
   }
-  return file.split("/").some((segment) => segment === "." || segment === "..") ? null : file;
+  return typeof value === "string" && shape.test(value) ? value : WITHHELD;
 }
 
-/** An exception's class name (`ZeroDivisionError`, `anytype.ApiError`); null for anything else. */
-export function errorTypeOf(type: unknown): string | null {
-  return typeof type === "string" && /^[A-Za-z_$][\w$.]{0,99}$/.test(type) ? type : null;
+/** A step's `file`: a plain source path inside its package, WITHHELD for anything else. */
+export function stepFile(file: unknown): string | null {
+  return typeof file === "string" && file.length > MAX_FILE_LENGTH
+    ? WITHHELD
+    : shaped(file, SOURCE_FILE);
 }
 
 /** A source line: a whole number from 1; null for anything else. */
 export function lineOf(line: unknown): number | null {
   return typeof line === "number" && Number.isInteger(line) && line >= 1 && line <= 10_000_000
     ? line
-    : null;
-}
-
-/** An MCP client's `clientInfo.name`, cut to 40 characters; null when it gave none. */
-export const MAX_CLIENT_LENGTH = 40;
-export function clientOf(name: unknown): string | null {
-  return typeof name === "string" && name.trim() !== ""
-    ? name.trim().slice(0, MAX_CLIENT_LENGTH)
     : null;
 }
 
@@ -271,10 +287,12 @@ export interface StepFacts {
   readonly ok: boolean;
 }
 
-/** Why a step failed, as its SDK said it; every field may be missing. */
+/**
+ * Where a step failed, as its SDK said it; every field may be missing. Never its message: the
+ * message stays in the app's own log and on the canvas.
+ */
 export interface StepFailure {
   readonly errorType: string | null;
-  readonly message: string | null;
   readonly file: string | null;
   readonly line: number | null;
 }
@@ -290,7 +308,10 @@ export function appStart(facts: {
     name: "app_start",
     fields: {
       startup_ms: whole(facts.startupMs),
-      packages: facts.packages.map((entry) => ({ id: entry.id, version: entry.version })),
+      packages: facts.packages.map((entry) => ({
+        id: shaped(entry.id, IDENTIFIER),
+        version: shaped(entry.version, VERSION),
+      })),
       unsigned_packages: facts.unsignedPackages,
       first_launch: facts.firstLaunch,
     },
@@ -306,7 +327,7 @@ export function appStop(uptimeS: number, reason: StopReason): Signal {
 
 /** `app_unclean_stop`: at start, when the last launch left no `app_stop`. */
 export function appUncleanStop(lastVersion: string): Signal {
-  return { name: "app_unclean_stop", fields: { last_version: lastVersion } };
+  return { name: "app_unclean_stop", fields: { last_version: shaped(lastVersion, VERSION) } };
 }
 
 function stepFields(facts: PackageFacts, step: StepFacts): Record<string, unknown> {
@@ -314,7 +335,7 @@ function stepFields(facts: PackageFacts, step: StepFacts): Record<string, unknow
     ...packageFields(facts),
     node_kind: step.nodeKind,
     // A type id is its author's words too: an unsigned package's is not named either.
-    node_id: facts.signed ? step.nodeId : null,
+    node_id: facts.signed ? shaped(step.nodeId, IDENTIFIER) : null,
     duration_ms: whole(step.durationMs),
     ok: step.ok,
   };
@@ -326,17 +347,16 @@ export function packageUsed(facts: PackageFacts, step: StepFacts): Signal {
 }
 
 /**
- * `package_error`: every time such a step fails: the type of the error, its message (redacted
- * and scrubbed by the pipeline), and where it was thrown. An unsigned package's file is its
- * author's path: only the line is sent.
+ * `package_error`: every time such a step fails: the type of the error and where it
+ * was thrown, never its message. An unsigned package's file is its author's path: only the line
+ * is sent.
  */
 export function packageError(facts: PackageFacts, step: StepFacts, failure: StepFailure): Signal {
   return {
     name: "package_error",
     fields: {
       ...stepFields(facts, { ...step, ok: false }),
-      error_type: errorTypeOf(failure.errorType),
-      error: failure.message,
+      error_type: shaped(failure.errorType, ERROR_TYPE),
       file: facts.signed ? stepFile(failure.file) : null,
       line: lineOf(failure.line),
     },
@@ -363,11 +383,11 @@ export function mcpCall(version: string | null, call: McpCallFacts): Signal {
     name: "mcp_call",
     fields: {
       package: MCP_PACKAGE,
-      version,
+      version: shaped(version, VERSION),
       // Lowercased: a long capitalised name (`API-get-collection-views`) would read as a key to
       // the scrub, which every string passes, this one too.
-      tool: call.tool?.toLowerCase() ?? null,
-      client: clientOf(call.client),
+      tool: shaped(call.tool?.toLowerCase(), IDENTIFIER),
+      client: shaped(call.client?.trim(), CLIENT),
       duration_ms: whole(call.durationMs),
       ok: call.ok,
       error_code: call.errorCode,
@@ -397,7 +417,7 @@ export function flowDeployed(
       nodes: nodesPerFlow.reduce((sum, count) => sum + count, 0),
       nodes_per_flow: [...nodesPerFlow],
       nodes_per_package: perPackage.map((entry) => ({
-        package: entry.package,
+        package: shaped(entry.package, IDENTIFIER),
         nodes: entry.nodes,
       })),
     },
@@ -420,12 +440,15 @@ export interface ProviderFacts {
   readonly official: boolean;
 }
 
-/** A URL's host, or `file` for a local source (rule 3); null when there is none. */
-function providerHost(url: string | null): string | null {
+/**
+ * A URL's host, or `file` for a local source (rule 3); null when there is none, WITHHELD when
+ * the host is not a plain hostname.
+ */
+export function providerHost(url: string | null): string | null {
   if (url === null) {
     return null;
   }
-  return url.toLowerCase().startsWith("file:") ? "file" : hostOnly(url);
+  return url.toLowerCase().startsWith("file:") ? "file" : shaped(hostOnly(url), HOST);
 }
 
 /** `provider_registered`: a package provider (catalogue) is added. */
@@ -493,7 +516,7 @@ export function packageUpdated(
     name: "package_updated",
     fields: {
       ...installFields(facts, origin, nodeTypes),
-      from_version: facts.signed ? fromVersion : null,
+      from_version: facts.signed ? shaped(fromVersion, VERSION) : null,
     },
   };
 }
@@ -511,7 +534,9 @@ export function packageInstallFailed(origin: InstallOrigin, reason: string): Sig
     fields: {
       source: origin.kind,
       provider_host: origin.kind === "file" ? "file" : providerHost(origin.url),
-      reason: /^[a-z][a-z0-9-]{0,39}$/.test(reason) ? reason : "other",
+      reason: new RegExp(String.raw`^${NO_KEY_RUN}[a-z][a-z0-9-]{0,39}$`).test(reason)
+        ? reason
+        : "other",
     },
   };
 }
@@ -525,7 +550,11 @@ export function updateSignal(
 ): Signal {
   return {
     name,
-    fields: { from_version: fromVersion, to_version: toVersion, channel },
+    fields: {
+      from_version: shaped(fromVersion, VERSION),
+      to_version: shaped(toVersion, VERSION),
+      channel: shaped(channel, IDENTIFIER),
+    },
   };
 }
 

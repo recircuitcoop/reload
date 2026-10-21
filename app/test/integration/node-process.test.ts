@@ -209,13 +209,13 @@ describe("a node process", () => {
       step,
       failure: null,
     });
+    // Where it was thrown, never its message.
     expect(byOk[1]?.failure).toEqual({
       errorType: "FileNotFoundError",
-      message: "no such folder",
       file: "src/watch.py",
       line: 41,
     });
-    expect(byOk[2]?.failure).toEqual({ errorType: null, message: "odd", file: null, line: null });
+    expect(byOk[2]?.failure).toEqual({ errorType: null, file: null, line: null });
     expect(byOk.every((signal) => (signal?.step.durationMs ?? -1) >= 0)).toBe(true);
   });
 

@@ -24,7 +24,7 @@ export const PRIVACY_STRINGS = {
   "privacy.sent.steps":
     "every time a step of a package runs: the package, its version, where it came from, whether it is signed, what it runs on, the kind and type of the step but never its name, how long it took and whether it worked. A package nobody signed is only called unsigned", // plan 0029
   "privacy.sent.errors":
-    "every time such a step fails: the kind of error, its message, and the file and line in the package where it happened. Every key, token and password Reload knows of, and anything shaped like one, is removed from the message first, and if anything still looks like one, the message is not sent. The message can still quote your own words, such as a note's title", // plan 0029
+    "every time such a step fails: the same, the kind of error (its class's name or code), and the file and line in the package where it happened. Never the error's message", // plan 0029
   "privacy.sent.aiApps":
     "every time an AI app uses Reload's Anytype tools: which tool, the name the AI app gives itself, how long it took and whether it worked, never what it asked or what it was answered", // plan 0029
   "privacy.sent.flows":
@@ -44,7 +44,7 @@ export const PRIVACY_STRINGS = {
   "privacy.sent.crashes": "Crash reports aren't sent: this version has nowhere to send them.", // decided
   "privacy.never": "What is never sent", // decided
   "privacy.never.line":
-    "Your Anytype key or any other key, token or password. Anything from your Anytype content, or the names of your objects, spaces, flows or steps, unless a failing step's message quotes them. Anything you set a step up with, what passes through a flow, what an AI app asks or is answered, the contents of any file, audio or transcript, the values of environment variables, full paths inside your home folder, a catalogue's full address, your user name, your computer's name, or its raw identifier.", // plan 0029
+    "Your Anytype key or any other key, token or password. Any error's message. Anything from your Anytype content, or the names of your objects, spaces, flows or steps. Anything you set a step up with, what passes through a flow, what an AI app asks or is answered, the contents of any file, audio or transcript, the values of environment variables, full paths inside your home folder, a catalogue's full address, your user name, your computer's name, or its raw identifier.", // plan 0029
   "privacy.kept": "How long it is kept", // decided
   "privacy.kept.line": "Umami Cloud keeps usage counts for 6 months, then deletes them.", // decided
   "privacy.rights": "Your rights under the GDPR", // decided

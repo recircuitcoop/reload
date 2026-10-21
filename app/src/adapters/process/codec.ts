@@ -248,13 +248,16 @@ export function outcomeOf(frame: Extract<NodeFrame, { t: "done" }>): StepOutcome
   return { notes: frame.notes ?? [], results: frame.results ?? [] };
 }
 
-/** A failed step's facts from its `error` frame; a field of the wrong shape is null. */
+/**
+ * A failed step's facts from its `error` frame: where it was thrown, never its message (which
+ * stays in the app's own log). A field of the wrong type is null; nothing is cut here, so the
+ * shell's shape check sees what the node sent and withholds what does not fit.
+ */
 export function failureOf(frame: Extract<NodeFrame, { t: "error" }>): StepFailure {
-  const { message, error_type: type, file, line } = frame;
+  const { error_type: type, file, line } = frame;
   return {
-    errorType: typeof type === "string" ? type.slice(0, 100) : null,
-    message,
-    file: typeof file === "string" ? file.slice(0, 200) : null,
+    errorType: typeof type === "string" ? type : null,
+    file: typeof file === "string" ? file : null,
     line: typeof line === "number" && Number.isInteger(line) && line >= 1 ? line : null,
   };
 }

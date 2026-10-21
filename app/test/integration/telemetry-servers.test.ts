@@ -15,7 +15,8 @@ import { HttpsPoster } from "../../src/adapters/telemetry/https-poster";
 import { machineIdHash } from "../../src/adapters/telemetry/machine-id";
 import { TelemetryPipeline } from "../../src/application/telemetry";
 import { SecretRegistry } from "../../src/domain/redaction/registry";
-import { crashPayload, usagePayload, type Versions } from "../../src/domain/telemetry/reports";
+import { crashPayload, type Versions } from "../../src/domain/telemetry/reports";
+import { startPayload } from "../fakes/signals";
 import { outgoingFor, type Endpoints } from "../../src/domain/telemetry/transports";
 import { RecordingLogger } from "../fakes/children";
 import { FakeClock } from "../fakes/clock";
@@ -173,7 +174,7 @@ describe("telemetry against local fake GlitchTip and Umami servers", () => {
   it("before an answer: no request, no queued file, no machine identifier read", async () => {
     const { pipeline, queueDir, identified } = world("unset");
     pipeline.recordCrash(hostile());
-    pipeline.recordUsage("app_start", usagePayload(VERSIONS, []));
+    pipeline.recordUsage("app_start", startPayload(VERSIONS, []));
     await pipeline.flush();
     expect(received).toEqual([]);
     expect(fs.existsSync(queueDir)).toBe(false);
@@ -206,7 +207,7 @@ describe("telemetry against local fake GlitchTip and Umami servers", () => {
     const { pipeline } = world("on");
     pipeline.recordUsage(
       "app_start",
-      usagePayload(VERSIONS, [{ id: "anytype", version: "1.0.0" }]),
+      startPayload(VERSIONS, [{ id: "anytype", version: "1.0.0" }]),
     );
     await pipeline.flush();
     expect(received.map((request) => request.url)).toEqual(["/umami/api/send"]);
@@ -220,7 +221,7 @@ describe("telemetry against local fake GlitchTip and Umami servers", () => {
   it("no canary secret, home path or raw identifier is in a queued file or a sent request", async () => {
     const { pipeline, queued } = world("on");
     pipeline.recordCrash(hostile());
-    pipeline.recordUsage("app_start", { ...usagePayload(VERSIONS, []), where: HOME, id: RAW });
+    pipeline.recordUsage("app_start", { ...startPayload(VERSIONS, []), where: HOME, id: RAW });
     const onDisk = queued();
     expect(onDisk).not.toBe("");
     await pipeline.flush();
