@@ -16,6 +16,7 @@
 //   credential value is protected the moment start() reads it, before any handler can run.
 
 import * as fs from "node:fs";
+import * as path from "node:path";
 import * as readline from "node:readline";
 
 export interface StartInfo {
@@ -360,6 +361,56 @@ export function error(inputId: string | undefined, message: string): void {
   );
 }
 
+/** Where an exception was thrown, as an `error` frame's optional fields (plan 0029). */
+export interface ThrownAt {
+  error_type?: string;
+  file?: string;
+  line?: number;
+}
+
+/** A stack line's location: `at fn (/a/b.js:12:3)`, `at /a/b.js:12:3`, or a `file://` URL. */
+const STACK_FRAME = /\(?((?:file:\/\/)?[^\s()]+):(\d+):\d+\)?$/;
+
+/**
+ * Where `caught` was thrown: its class's name, and the innermost stack frame inside the
+ * package's folder (`root`, the working directory the runtime starts it in), relative to that
+ * folder, with its line. A frame in a library (`node_modules`) or outside the folder gives way to
+ * the package's own last one; with none, only the type.
+ */
+export function thrownAt(caught: unknown, root: string = process.cwd()): ThrownAt {
+  if (!(caught instanceof Error)) {
+    return {};
+  }
+  const where: ThrownAt = { error_type: (caught.constructor.name || caught.name).slice(0, 100) };
+  for (const frame of (caught.stack ?? "").split("\n").slice(1)) {
+    const found = STACK_FRAME.exec(frame.trim());
+    if (found === null) {
+      continue;
+    }
+    const file = (found[1] ?? "").replace(/^file:\/\//, "");
+    const relative = path.relative(root, file);
+    if (
+      !path.isAbsolute(file) ||
+      relative === "" ||
+      relative.startsWith("..") ||
+      path.isAbsolute(relative) ||
+      relative.split(path.sep).includes("node_modules")
+    ) {
+      continue;
+    }
+    where.file = relative.split(path.sep).join("/").slice(0, 200);
+    where.line = Number(found[2]);
+    break;
+  }
+  return where;
+}
+
+/** Fail `inputId` with what a handler threw: its message, and where it was thrown. */
+function fail(inputId: string, caught: unknown): void {
+  const message = (caught instanceof Error ? caught.message : String(caught)).slice(0, 2000);
+  send({ t: "error", in: inputId, message, ...thrownAt(caught) });
+}
+
 export function status(
   text: string,
   fill: "red" | "green" | "yellow" | "blue" | "grey" = "blue",
@@ -468,7 +519,7 @@ export async function run(handlers: Handlers): Promise<void> {
       Promise.resolve()
         .then(() => handlers.input?.(id, event))
         .catch((caught: unknown) => {
-          error(id, caught instanceof Error ? caught.message : String(caught));
+          fail(id, caught);
         });
     } else if (frame["t"] === "cancel" && typeof frame["in"] === "string") {
       handlers.cancel?.(frame["in"]);
@@ -481,7 +532,7 @@ export async function run(handlers: Handlers): Promise<void> {
       Promise.resolve()
         .then(() => handlers.action?.(id, values))
         .catch((caught: unknown) => {
-          error(id, caught instanceof Error ? caught.message : String(caught));
+          fail(id, caught);
         });
     } else if (
       frame["t"] === "trigger" &&

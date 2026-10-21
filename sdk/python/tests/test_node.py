@@ -9,8 +9,11 @@ from __future__ import annotations
 
 import io
 import json
+import pathlib
+import sys
 import threading
 import time
+import traceback
 from collections.abc import Callable
 from typing import cast
 
@@ -24,6 +27,7 @@ from reload_node import (
     ImageItem,
     MediaItem,
     Node,
+    _thrown_at,  # noqa: PLC2701 - the frame fields' own unit test
     protect,
     redact,
 )
@@ -386,7 +390,62 @@ def test_an_exception_in_on_input_fails_that_input_with_error(
     node.run(on_input=on_input)
     wait_until(lambda: any(f.get("t") == "error" for f in frames_of(out)))
     error = next(f for f in frames_of(out) if f.get("t") == "error")
-    assert error == {"t": "error", "in": "i1", "message": "went wrong"}
+    # Plan 0029: where it was thrown, relative to the working directory (the package's folder).
+    assert error == {
+        "t": "error",
+        "in": "i1",
+        "message": "went wrong",
+        "error_type": "ValueError",
+        "file": "tests/test_node.py",
+        "line": RAISED_AT,
+    }
+
+
+RAISED_AT = test_an_exception_in_on_input_fails_that_input_with_error.__code__.co_firstlineno + 6
+
+
+def test_thrown_at_names_the_package_s_own_last_frame_and_never_a_library_s(
+    tmp_path: pathlib.Path,
+) -> None:
+    def library() -> None:
+        raise KeyError("x")
+
+    try:
+        library()
+    except KeyError as caught:
+        here = _thrown_at(caught)
+        # Outside the package's folder entirely: the type only.
+        elsewhere = _thrown_at(caught, root=str(tmp_path))
+        # A traceback whose innermost frame is in site-packages gives way to the package's own.
+        frames = traceback.extract_tb(caught.__traceback__)
+    assert here["error_type"] == "KeyError"
+    assert here["file"] == "tests/test_node.py"
+    assert here["line"] == frames[-1].lineno
+    assert elsewhere == {"error_type": "KeyError"}
+
+    site = tmp_path / "site-packages" / "lib.py"
+    site.parent.mkdir()
+    site.write_text("def boom():\n    raise OSError('deep')\n")
+    own = tmp_path / "pkg.py"
+    own.write_text("import lib\ndef run():\n    lib.boom()\n")
+    sys.path.insert(0, str(site.parent))
+    sys.path.insert(0, str(tmp_path))
+    try:
+        import pkg  # type: ignore[import-not-found]
+
+        try:
+            pkg.run()
+        except OSError as caught:
+            assert _thrown_at(caught, root=str(tmp_path)) == {
+                "error_type": "OSError",
+                "file": "pkg.py",
+                "line": 3,
+            }
+    finally:
+        sys.path.remove(str(site.parent))
+        sys.path.remove(str(tmp_path))
+        sys.modules.pop("pkg", None)
+        sys.modules.pop("lib", None)
 
 
 def test_run_dispatches_cancel_action_trigger_and_fire(monkeypatch: pytest.MonkeyPatch) -> None:

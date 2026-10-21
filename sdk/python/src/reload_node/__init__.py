@@ -30,9 +30,11 @@ Revision 2.1 (spec 1.3, still wire protocol 2) adds ``done(..., notes=, results=
 from __future__ import annotations
 
 import json
+import os
 import sys
 import threading
 import time
+import traceback
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from typing import Any, Literal, NotRequired, TextIO, TypedDict
 
@@ -151,6 +153,25 @@ def _as_dict(value: object) -> dict[str, Any]:
     """``value`` if it is a JSON object, else an empty one: the start frame's fields are
     trusted to be well-formed (the runtime built them), but never trusted blindly."""
     return value if isinstance(value, dict) else {}
+
+
+def _thrown_at(caught: BaseException, root: str | None = None) -> dict[str, Any]:
+    """Where ``caught`` was thrown, as an ``error`` frame's optional fields (plan 0029): its
+    class's name as ``error_type``, and the innermost frame of its traceback inside the
+    package's folder (``root``, the working directory the runtime starts it in) as ``file``,
+    relative to that folder, and ``line``. A frame in a library (``site-packages``) or outside
+    the folder gives way to the package's own last one; with none, only ``error_type``."""
+    folder = os.path.realpath(root if root is not None else os.getcwd())
+    where: dict[str, Any] = {"error_type": type(caught).__name__[:100]}
+    for frame in reversed(traceback.extract_tb(caught.__traceback__)):
+        file = os.path.realpath(frame.filename)
+        inside = os.path.commonpath([folder, file]) == folder if os.path.isabs(file) else False
+        if not inside or "site-packages" in file.split(os.sep) or frame.lineno is None:
+            continue
+        where["file"] = os.path.relpath(file, folder).replace(os.sep, "/")[:200]
+        where["line"] = frame.lineno
+        break
+    return where
 
 
 class Node:
@@ -300,6 +321,13 @@ class Node:
             frame["in"] = input_id
         self.send(frame)
 
+    def _fail(self, input_id: str, caught: BaseException) -> None:
+        """Fail ``input_id`` with ``caught``: an ``error`` frame with its message, and where it
+        was thrown (``_thrown_at``), which the app's usage signals read (plan 0029)."""
+        frame: dict[str, Any] = {"t": "error", "in": input_id, "message": str(caught)[:2000]}
+        frame.update(_thrown_at(caught))
+        self.send(frame)
+
     def status(self, text: str, fill: str = "blue", shape: str = "dot") -> None:
         self.send({"t": "status", "text": text[:200], "fill": fill, "shape": shape})
 
@@ -345,7 +373,7 @@ class Node:
                 handler(*args)
             except Exception as caught:  # noqa: BLE001 - reported, never swallowed silently
                 if input_id is not None:
-                    self.error(input_id, str(caught))
+                    self._fail(input_id, caught)
                 else:
                     self.log(str(caught), "error")
 
