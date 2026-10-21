@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest";
 import {
   AnytypeService,
+  HEALTH_BACKOFF_MS,
   OPTIONS_CACHE_MS,
   serveAnytypeOptions,
 } from "../../src/application/anytype-service";
@@ -60,7 +61,7 @@ function services(key: string | null = KEY) {
       crashLoop: { maxCrashes: 5, windowMs: 120_000 },
       profile: MCP_STABILITY,
       keyLocation: "the key file",
-      healthRetryMs: 10_000,
+      healthBackoffMs: HEALTH_BACKOFF_MS,
     },
     secrets,
     api,

@@ -26,6 +26,7 @@ import { syncWriter } from "../adapters/system/sync-writer";
 import { FileDownloads } from "../application/anytype-file-download";
 import {
   AnytypeService,
+  HEALTH_BACKOFF_MS,
   serveAnytypeCall,
   serveAnytypeOptions,
 } from "../application/anytype-service";
@@ -236,7 +237,7 @@ function startService(config: InitConfig): void {
           ? MCP_STABILITY
           : { ...MCP_STABILITY, heartbeatIntervalMs: substitutes.heartbeatMs },
       keyLocation: keyLocation(config.secretFiles),
-      healthRetryMs: 10_000,
+      healthBackoffMs: HEALTH_BACKOFF_MS,
     },
     secrets,
     api: anytypeApi,

@@ -1,7 +1,11 @@
 // The Anytype core service (plan 0018 §4.1; WI-0018-18): key, health gate, the MCP child's
 // lifecycle, its heartbeat and staleness restart, backoff and breaker, and pairing.
 import { describe, expect, it } from "vitest";
-import { AnytypeService, serveAnytypeCall } from "../../src/application/anytype-service";
+import {
+  AnytypeService,
+  HEALTH_BACKOFF_MS,
+  serveAnytypeCall,
+} from "../../src/application/anytype-service";
 import { SessionError, ToolSurfaceMismatchError } from "../../src/domain/anytype/errors";
 import { DEFAULT_BACKOFF } from "../../src/domain/supervision/backoff";
 import { MCP_STABILITY } from "../../src/domain/supervision/staleness";
@@ -34,7 +38,7 @@ function service(options: { key?: string | null; onReady?: () => void } = {}) {
       crashLoop: { maxCrashes: 5, windowMs: 120_000 },
       profile: MCP_STABILITY,
       keyLocation: "/home/x/.config/reload/anytype_api_key or /legacy/anytype_api_key",
-      healthRetryMs: 10_000,
+      healthBackoffMs: HEALTH_BACKOFF_MS,
     },
     secrets,
     api,
@@ -118,9 +122,61 @@ describe("bringing the MCP child up", () => {
     expect(ctx.launcher.children).toEqual([]);
     expect(ctx.subject.session()).toBeNull();
     ctx.api.up = true;
-    await ctx.advance(10_000);
+    await ctx.advance(1_000);
     expect(ctx.subject.status().state).toBe("ready");
     expect(ctx.launcher.children).toHaveLength(1);
+  });
+
+  it("asks an Anytype that does not answer again with backoff: 1, 2, 4, 8, then every 16 s", async () => {
+    expect(HEALTH_BACKOFF_MS).toEqual([1_000, 2_000, 4_000, 8_000, 16_000]);
+    const ctx = service();
+    ctx.api.up = false;
+    ctx.subject.start();
+    await ctx.advance(0);
+    expect(ctx.api.probes).toHaveLength(1);
+    // Each wait is the next delay: one ms short of it asks nothing, the delay itself asks once.
+    for (const [index, delay] of [1_000, 2_000, 4_000, 8_000, 16_000, 16_000, 16_000].entries()) {
+      await ctx.advance(delay - 1, delay);
+      expect(ctx.api.probes).toHaveLength(index + 1);
+      await ctx.advance(1);
+      expect(ctx.api.probes).toHaveLength(index + 2);
+    }
+    expect(ctx.launcher.children).toEqual([]);
+    // Once Anytype answers, the next miss starts the backoff from its first delay again.
+    ctx.api.up = true;
+    await ctx.advance(16_000, 16_000);
+    expect(ctx.subject.status().state).toBe("ready");
+    const probes = ctx.api.probes.length;
+    // The child exits with Anytype gone: its restart finds Anytype silent, a first miss again.
+    ctx.api.up = false;
+    ctx.launcher.current.exit(1);
+    await ctx.advance(250, 250);
+    expect(ctx.subject.status().state).toBe("unreachable");
+    expect(ctx.api.probes).toHaveLength(probes + 1);
+    await ctx.advance(1_000);
+    expect(ctx.api.probes).toHaveLength(probes + 2);
+  });
+
+  it("tells a start Anytype refused from a crash: misses cost no restart, and a later crash is still restarted", async () => {
+    const ctx = service();
+    ctx.api.up = false;
+    ctx.subject.start();
+    // Far more misses than the crash-loop limit (5 in 120 s), all inside its window.
+    await ctx.advance(100_000, 1_000);
+    expect(ctx.api.probes.length).toBeGreaterThan(5);
+    expect(ctx.subject.status().state).toBe("unreachable");
+    expect(ctx.launcher.children).toEqual([]);
+    expect(ctx.notifier.notices).toEqual([]);
+    ctx.api.up = true;
+    await ctx.advance(16_000, 1_000);
+    expect(ctx.subject.status().state).toBe("ready");
+    // A crash is answered as a crash: down, then back after the crash backoff, not the health one.
+    ctx.launcher.current.exit(1);
+    await ctx.advance(0);
+    expect(ctx.subject.status().state).toBe("down");
+    await ctx.advance(250, 250);
+    expect(ctx.subject.status().state).toBe("ready");
+    expect(ctx.launcher.children).toHaveLength(2);
   });
 
   it("names a tool surface that does not match, stops the child, and does not restart it", async () => {

@@ -5,7 +5,8 @@
 // * The key is read through the SecretStore (the owner-only file adapter: canonical file, then
 //   the read-only legacy one) and handed to the runtime's redactor over the direct channel.
 // * The MCP child starts only after the health gate passes. Anytype not running is a state,
-//   checked again on a timer; it is not a crash.
+//   asked again under the old helper's restart backoff (1, 2, 4, 8, then every 16 s); it is not
+//   a crash.
 // * The handshake runs and tools/list must match the committed surface exactly, or the state
 //   is `tool-surface-mismatch`, named, and the child is not restarted.
 // * A child that exits, or that the heartbeat judges stale, is restarted under the domain
@@ -43,6 +44,13 @@ import { Pairing } from "./pair-anytype";
 /** What the service's notices are about. */
 const MCP_CHILD = "Anytype MCP child";
 
+/**
+ * When an Anytype that did not answer is asked again (helper/config.py:474, the old helper's
+ * restart backoff): the n-th miss in a row waits the n-th delay, and the last one repeats, so the
+ * list is a rate to settle at, never an end (helper/restart.py:310).
+ */
+export const HEALTH_BACKOFF_MS: readonly number[] = [1_000, 2_000, 4_000, 8_000, 16_000];
+
 /** How long a listed set of spaces, or of one space's types, is answered from memory. */
 export const OPTIONS_CACHE_MS = 30_000;
 
@@ -57,8 +65,8 @@ export interface AnytypeServiceSettings {
   readonly profile: StabilityProfile;
   /** Where the key is looked for, in words: the no-key state names it. */
   readonly keyLocation: string;
-  /** How long after "Anytype did not answer" the health gate is asked again. */
-  readonly healthRetryMs: number;
+  /** The waits before the health gate is asked again after misses in a row; the last repeats. */
+  readonly healthBackoffMs: readonly number[];
 }
 
 export interface AnytypeServiceDeps {
@@ -139,6 +147,8 @@ export class AnytypeService {
   #child: McpChild | null = null;
   #tools: readonly McpTool[] = [];
   #crashesInARow = 0;
+  /** Health gates in a row that Anytype did not answer: the health backoff's n. */
+  #missesInARow = 0;
   #retry: Cancel | null = null;
   #stopping = false;
   #attempt = 0;
@@ -299,7 +309,7 @@ export class AnytypeService {
     }
     this.#deps.publishKey(key);
 
-    const { apiBaseUrl, healthRetryMs } = this.#deps.settings;
+    const { apiBaseUrl, healthBackoffMs } = this.#deps.settings;
     const reachable = await this.#deps.api.reachable(key);
     if (this.#superseded(attempt)) {
       return;
@@ -309,9 +319,13 @@ export class AnytypeService {
         "unreachable",
         `Anytype's local API did not answer at ${apiBaseUrl}; start the Anytype desktop app`,
       );
-      this.#retry = this.#deps.clock.after(healthRetryMs, () => void this.#bringUp());
+      this.#missesInARow += 1;
+      const delay = healthBackoffMs[Math.min(this.#missesInARow, healthBackoffMs.length) - 1] ?? 0;
+      this.#deps.logger.info(`asking Anytype again in ${String(delay)} ms`);
+      this.#retry = this.#deps.clock.after(delay, () => void this.#bringUp());
       return;
     }
+    this.#missesInARow = 0;
     this.#launch(key);
   }
 
