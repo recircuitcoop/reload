@@ -15,20 +15,23 @@
 //   function of node:fs and node:fs/promises is wrapped: a write to a path inside the real
 //   home is refused before it reaches the disk, and recorded, so the test fails even when
 //   the code under test swallows the refusal. This catches what redirection cannot: a path
-//   spelled out, or captured before the redirection happened. A Node child a test starts
-//   with the inherited environment is closed the same way: NODE_OPTIONS loads
-//   test/home-guard-child.cjs into it first, and its refusals are written to a file this
-//   process reads after each test, so they fail the test that started it.
+//   spelled out, or captured before the redirection happened.
+// * Every child a test starts is closed the same way, whatever environment it is given: the
+//   inherited one, `{}`, or the node adapter's minimal one. The child_process functions add
+//   the guard's variables to any environment passed, so a Node child loads
+//   test/home-guard-child.cjs first (NODE_OPTIONS) and a Python child test/home-guard-python's
+//   audit hook (PYTHONPATH). A child's refusals go to a file this process reads after each
+//   test, so they fail the test that started it.
 //
 // Two places inside the real home stay writable: the temp directory (when it lives there)
 // and this repository's checkout, which on a developer machine usually sits under the home.
 //
-// What it cannot see, said plainly: a child that is not Node (Python, a shell) writing a real
-// home path it spelled out, and any child started with an environment of its own that names
-// neither the scratch home nor NODE_OPTIONS. Those are caught only by what they leave in the
-// scratch home.
+// What it cannot see, said plainly: a child that is neither Node nor Python (a shell, a
+// compiled binary) writing a real home path, and a Python child run with -I or -S, which skip
+// sitecustomize. Those are caught only by what they leave in the scratch home.
 // The default export: the module object itself, whose functions can be replaced. A
 // namespace import (`* as fs`) is frozen.
+import childProcess from "node:child_process";
 import fs from "node:fs";
 import { createRequire, syncBuiltinESMExports } from "node:module";
 import * as os from "node:os";
@@ -47,6 +50,65 @@ interface FsGuard {
 }
 const fsGuard = createRequire(import.meta.url)("./home-guard-fs.cjs") as FsGuard;
 const CHILD_GUARD = fileURLToPath(new URL("./home-guard-child.cjs", import.meta.url));
+const PYTHON_GUARD = fileURLToPath(new URL("./home-guard-python", import.meta.url));
+
+/** The variables the guard adds to every child's environment, for a test that lists them. */
+export const GUARD_VARIABLES: readonly string[] = [
+  "RELOAD_TEST_REAL_HOMES",
+  "RELOAD_TEST_ALLOWED",
+  "RELOAD_TEST_REFUSALS",
+  "NODE_OPTIONS",
+  "PYTHONPATH",
+];
+
+/** An environment with the guard in it: the guard's variables added to whatever it holds. */
+function guarded(env: NodeJS.ProcessEnv, from: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const require = `--require ${JSON.stringify(CHILD_GUARD)}`;
+  const options = env["NODE_OPTIONS"] ?? "";
+  const pythonPath = env["PYTHONPATH"];
+  return {
+    ...env,
+    RELOAD_TEST_REAL_HOMES: from["RELOAD_TEST_REAL_HOMES"],
+    RELOAD_TEST_ALLOWED: from["RELOAD_TEST_ALLOWED"],
+    RELOAD_TEST_REFUSALS: from["RELOAD_TEST_REFUSALS"],
+    NODE_OPTIONS: options.includes(CHILD_GUARD) ? options : `${options} ${require}`.trim(),
+    PYTHONPATH:
+      pythonPath === undefined || pythonPath === ""
+        ? PYTHON_GUARD
+        : pythonPath.split(path.delimiter).includes(PYTHON_GUARD)
+          ? pythonPath
+          : `${PYTHON_GUARD}${path.delimiter}${pythonPath}`,
+  };
+}
+
+/**
+ * Wrap the child_process functions so that an environment a test or the code under test passes
+ * explicitly gets the guard too. Without one, the child inherits process.env, which has it.
+ */
+function guardChildren(): void {
+  const functions = childProcess as unknown as Record<string, unknown>;
+  for (const name of [
+    "spawn",
+    "spawnSync",
+    "execFile",
+    "execFileSync",
+    "exec",
+    "execSync",
+    "fork",
+  ]) {
+    const original = functions[name] as (...args: unknown[]) => unknown;
+    functions[name] = function (this: unknown, ...args: unknown[]): unknown {
+      const withGuard = args.map((argument) => {
+        if (typeof argument !== "object" || argument === null || Array.isArray(argument)) {
+          return argument;
+        }
+        const env = (argument as { env?: NodeJS.ProcessEnv }).env;
+        return env === undefined ? argument : { ...argument, env: guarded(env, process.env) };
+      });
+      return original.apply(this, withGuard);
+    };
+  }
+}
 
 /** A test tried to change something in this user's real home. Not an fs error on purpose. */
 export const WriteToRealDirectory = fsGuard.WriteToRealDirectory;
@@ -109,8 +171,8 @@ function install(): GuardState {
   process.env["RELOAD_TEST_REAL_HOMES"] = JSON.stringify(realHomes);
   process.env["RELOAD_TEST_ALLOWED"] = JSON.stringify(allowed);
   process.env["RELOAD_TEST_REFUSALS"] = refusals;
-  process.env["NODE_OPTIONS"] =
-    `${process.env["NODE_OPTIONS"] ?? ""} --require ${JSON.stringify(CHILD_GUARD)}`.trim();
+  Object.assign(process.env, guarded(process.env, process.env));
+  guardChildren();
 
   const state: GuardState = { realHomes, allowed, sandboxHome, blocked: [], refusals };
   fsGuard.guardFs(fs, state, (entry) => state.blocked.push(entry));

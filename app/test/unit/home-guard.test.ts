@@ -6,9 +6,14 @@ import * as fsp from "node:fs/promises";
 import fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { buildSync } from "esbuild";
 import { describe, expect, it } from "vitest";
 
+import { logPath } from "../../src/adapters/fs/log-writer";
+import { rawNodeEnv } from "../fixtures/raw-node/fixture";
+
 import {
+  GUARD_VARIABLES,
   REAL_HOMES,
   SANDBOX_HOME,
   SANDBOX_VARIABLE,
@@ -23,6 +28,51 @@ function probeInRealHome(): string {
     throw new Error("the guard knows no real home");
   }
   return path.join(home, `.reload-home-guard-probe-${String(process.pid)}`);
+}
+
+/** Where the production log writer puts the log, for a home. */
+function location(home: string) {
+  return { platform: process.platform, home, env: {} };
+}
+
+let bundled: string | null = null;
+
+/**
+ * A script that writes one line through the production log writer at its default path, worked
+ * out from os.homedir() as the shell does (shell/main.ts): the way the old leaks happened.
+ */
+function productionLogWriter(): string {
+  if (bundled !== null) {
+    return bundled;
+  }
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "reload-guard-writer-"));
+  const entry = path.join(dir, "entry.ts");
+  const source = path.resolve(
+    import.meta.dirname,
+    "..",
+    "..",
+    "src",
+    "adapters",
+    "fs",
+    "log-writer.ts",
+  );
+  fs.writeFileSync(
+    entry,
+    `import * as os from "node:os";\n` +
+      `import { logPath, RotatingLogFile } from ${JSON.stringify(source)};\n` +
+      `const file = logPath({ platform: process.platform, home: os.homedir(), env: {} });\n` +
+      `RotatingLogFile.open(file)?.append("a line");\n`,
+  );
+  bundled = path.join(dir, "writer.cjs");
+  buildSync({
+    entryPoints: [entry],
+    bundle: true,
+    platform: "node",
+    format: "cjs",
+    outfile: bundled,
+    logLevel: "silent",
+  });
+  return bundled;
 }
 
 describe("the scratch home", () => {
@@ -147,17 +197,12 @@ describe("a child process started with the inherited environment", () => {
     ]);
   });
 
-  it("writing where production code looks lands in the scratch home, and is reported", () => {
-    const run = child(
-      `const p = require("node:path").join(require("node:os").homedir(), ".config", "reload");` +
-        `require("node:fs").mkdirSync(p, { recursive: true });` +
-        `require("node:fs").writeFileSync(require("node:path").join(p, "settings.json"), "{}");`,
-    );
+  it("writing through the production log writer, at its default path, lands in the scratch home and is reported", () => {
+    const run = spawnSync(process.execPath, [productionLogWriter()], { encoding: "utf8" });
 
     expect(run.status).toBe(0);
-    expect(collectLeaks()).toContain(
-      `written: ~/${path.join(".config", "reload", "settings.json")}`,
-    );
+    const log = path.relative(SANDBOX_HOME, logPath(location(SANDBOX_HOME)));
+    expect(collectLeaks()).toContain(`written: ~/${log}`);
   });
 
   it("may still write in the temp directory", () => {
@@ -171,5 +216,90 @@ describe("a child process started with the inherited environment", () => {
     expect(fs.readFileSync(path.join(scratch, "file"), "utf8")).toBe("x");
     fs.rmSync(scratch, { recursive: true });
     expect(collectLeaks()).toEqual([]);
+  });
+});
+
+describe("a child process started with an environment of its own", () => {
+  it("a Node child given {} writes through the production log writer into the real home: refused", () => {
+    // With no HOME at all, os.homedir() falls back to the account's real home.
+    const real = logPath(location(os.userInfo().homedir));
+    const before = fs.existsSync(real) ? fs.statSync(real).size : null;
+    const run = spawnSync(process.execPath, [productionLogWriter()], { env: {}, encoding: "utf8" });
+
+    // The production writer swallows the failure, as it should: the record still fails the test.
+    expect(run.status).toBe(0);
+    // The real log, where this machine's own Reload writes, is untouched.
+    expect(fs.existsSync(real) ? fs.statSync(real).size : null).toBe(before);
+    const leaks = collectLeaks();
+    expect(leaks.length).toBeGreaterThan(0);
+    expect(
+      leaks.every(
+        (leak) =>
+          leak.startsWith("refused: fs.") && leak.includes(`(child process ${String(run.pid)})`),
+      ),
+    ).toBe(true);
+  });
+
+  it("a Python child given the node adapter's minimal environment is refused a real-home write", () => {
+    const probe = probeInRealHome();
+    const run = spawnSync(
+      "python3",
+      [
+        "-c",
+        `import os\ntry:\n    open(${JSON.stringify(probe)}, "w").write("x")\nexcept PermissionError as e:\n    print(e)\n`,
+      ],
+      { env: rawNodeEnv(), encoding: "utf8" },
+    );
+
+    expect(run.status).toBe(0);
+    expect(run.stdout).toContain("WriteToRealDirectory");
+    expect(fs.existsSync(probe)).toBe(false);
+    expect(collectLeaks()).toEqual([
+      `refused: python open ${probe} (child process ${String(run.pid)})`,
+    ]);
+  });
+
+  it("a Python child that removes, renames or makes a directory in the real home is refused each", () => {
+    const probe = probeInRealHome();
+    const run = spawnSync(
+      "python3",
+      [
+        "-c",
+        [
+          "import os, shutil",
+          `for act in (lambda: os.mkdir(${JSON.stringify(probe)}), lambda: os.remove(${JSON.stringify(probe)}), lambda: os.rename(${JSON.stringify(probe)}, ${JSON.stringify(`${probe}-2`)}), lambda: shutil.rmtree(${JSON.stringify(probe)})):`,
+          "    try:",
+          "        act()",
+          "    except (PermissionError, FileNotFoundError):",
+          "        pass",
+        ].join("\n"),
+      ],
+      { env: rawNodeEnv(), encoding: "utf8" },
+    );
+
+    expect(run.status).toBe(0);
+    const leaks = collectLeaks();
+    for (const event of ["os.mkdir", "os.remove", "os.rename", "shutil.rmtree"]) {
+      expect(leaks).toContain(
+        `refused: python ${event} ${probe} (child process ${String(run.pid)})`,
+      );
+    }
+  });
+
+  it("an environment that already holds the guard, or a PYTHONPATH of its own, keeps both", () => {
+    const run = spawnSync(
+      process.execPath,
+      [
+        "-e",
+        "process.stdout.write(JSON.stringify([process.env.PYTHONPATH, process.env.NODE_OPTIONS]))",
+      ],
+      { env: { ...process.env, PYTHONPATH: "/somewhere" }, encoding: "utf8" },
+    );
+
+    const [pythonPath, nodeOptions] = JSON.parse(run.stdout) as [string, string];
+    expect(pythonPath.split(path.delimiter)).toHaveLength(2);
+    expect(pythonPath.endsWith(`${path.delimiter}/somewhere`)).toBe(true);
+    expect(nodeOptions.match(/home-guard-child\.cjs/g)).toHaveLength(1);
+    expect(GUARD_VARIABLES).toContain("PYTHONPATH");
   });
 });

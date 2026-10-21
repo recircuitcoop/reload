@@ -111,7 +111,7 @@ test's id; nothing is marked without a test.
    is said not to answer and is never killed by the asking.
 6. **WI-0031-06 — F,** the spread checks: the update setting's `check_jitter` (default an hour, 0 at once), drawn afresh for every check, the first and each daily one (`due = now + interval + jitter`), as the old helper did. **DONE** 2026-10-21.
 7. **WI-0031-07 — G,** an unreachable Anytype at start is not retried on a timer and costs no attempt; it is asked again on the person's action and when Reload sees the Anytype app start, and the person is told once. (Corrected: the first version added a backoff, which the old test rules out, since waiting does not change a failed start.) **DONE** 2026-10-21.
-8. **WI-0031-08 — H,** the home guard for child processes. **DONE** 2026-10-21.
+8. **WI-0031-08 — H,** the home guard for child processes: every Node and Python child, whatever environment it is given (inherited, `{}`, or the node adapter's minimal one), refuses real-home writes, proved through the production log writer at its default path. **DONE** 2026-10-21.
 9. **WI-0031-09 — I,** log path and "Show log" in General › Advanced; the refused-kind
    once-only rule proved by a test.
    **DONE 2026-10-23:** the log's path and Show log (`shell.showItemInFolder`) in Advanced. An

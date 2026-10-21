@@ -8,6 +8,7 @@ import { INHERITED_VARIABLES } from "../../src/adapters/process/command";
 import { MAX_FRAME_BYTES } from "../../src/adapters/process/codec";
 import { systemClock } from "../../src/adapters/system/clock";
 import { Heartbeat } from "../../src/application/heartbeat";
+import { GUARD_VARIABLES } from "../home-guard";
 import type { HeartbeatFactory, NodeProcess } from "../../src/ports/node-process";
 import { compose } from "../../src/domain/notices/notices";
 import { AUDIO_BOUND_BYTES, TOO_LARGE } from "../../src/domain/views/views";
@@ -62,7 +63,13 @@ describe("a node process", () => {
       pgid: number;
       data_dir: string;
     };
-    const allowed = new Set([...INHERITED_VARIABLES, "PYTHONUNBUFFERED", "PYTHONIOENCODING"]);
+    // The test home guard adds its own to every child (test/home-guard.ts); nothing else.
+    const allowed = new Set([
+      ...INHERITED_VARIABLES,
+      "PYTHONUNBUFFERED",
+      "PYTHONIOENCODING",
+      ...GUARD_VARIABLES,
+    ]);
     // Darwin adds these to every process itself; they were not passed.
     const added = new Set(["__CF_USER_TEXT_ENCODING", "LC_CTYPE"]);
     expect(about.env.filter((name) => !allowed.has(name) && !added.has(name))).toEqual([]);
