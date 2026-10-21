@@ -66,6 +66,8 @@ export default defineConfig({
             "src/application/secrets.ts",
             "src/domain/telemetry/**",
             "src/application/telemetry.ts",
+            "src/adapters/fs/owner-only-files.ts",
+            "src/adapters/electron/safe-storage-store.ts",
             // package and update trust
             "src/domain/signature/**",
             "src/adapters/signature/**",
@@ -76,6 +78,7 @@ export default defineConfig({
             "src/domain/update/**",
             "src/domain/updates/**",
             "src/adapters/update/**",
+            "src/adapters/fs/content-hashes.ts",
             // data integrity
             "src/domain/journal/**",
             "src/adapters/sqlite/**",
@@ -89,6 +92,7 @@ export default defineConfig({
             "src/domain/channel/**",
             "src/domain/forms/**",
             "src/application/deploy-guard.ts",
+            "src/adapters/nodered/guard-middleware.ts",
             // supervision
             "src/domain/supervision/**",
             "src/application/supervisor.ts",

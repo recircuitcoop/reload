@@ -499,17 +499,20 @@ trivial code and let one well-tested file hide a weak critical one.
 - **Critical set, per file:** 95% lines, 90% branches, each file on its own (`perFile: true`):
   - *secrets and redaction* (a miss leaks a secret into a log, report or telemetry):
     `domain/redaction/**`, `application/secrets.ts`, `domain/telemetry/**`,
-    `application/telemetry.ts`;
+    `application/telemetry.ts`, `adapters/fs/owner-only-files.ts`,
+    `adapters/electron/safe-storage-store.ts`;
   - *package and update trust* (a miss installs code whose signature or digest was not checked):
     `domain/signature/**`, `adapters/signature/**`, `domain/packages/**`,
     `application/install-package.ts`, `application/package-environment.ts`,
-    `application/remove-package.ts`, `domain/update/**`, `domain/updates/**`, `adapters/update/**`;
+    `application/remove-package.ts`, `domain/update/**`, `domain/updates/**`, `adapters/update/**`,
+    `adapters/fs/content-hashes.ts`;
   - *data integrity* (a miss loses or corrupts the journal, runs or migrated data):
     `domain/journal/**`, `adapters/sqlite/**`, `domain/migration/**`, `adapters/fs/legacy-move.ts`,
     `application/journal-replay.ts`, `application/runs.ts`;
   - *trust boundaries* (a miss lets an MCP call, channel message or form reach code it should not,
     or deploys over the person's flow): `application/mcp-dispatch.ts`, `application/mcp-endpoint.ts`,
-    `domain/channel/**`, `domain/forms/**`, `application/deploy-guard.ts`;
+    `domain/channel/**`, `domain/forms/**`, `application/deploy-guard.ts`,
+    `adapters/nodered/guard-middleware.ts`;
   - *supervision* (a miss leaves a crashed child dead or restarts it in a loop):
     `domain/supervision/**`, `application/supervisor.ts`.
 
