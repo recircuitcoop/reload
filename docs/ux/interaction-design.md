@@ -43,7 +43,7 @@ again; everything it asks can be changed later in Configuration › General.
 
 **Rules, as a sequence of screens.** Each screen has one job and a Back button. Nothing is
 skippable that the pipeline needs; everything else is. The order is the owner's (2026-10-02):
-consent → pair Anytype → choose the source folder → the starter's node forms → Ready. Reload's
+consent → pair Anytype → the example, or not → choose the source folder → the starter's node forms → Ready. Reload's
 own setup asks only for what Reload itself owns; anything a node package owns (the recorder is
 monty's source) is asked in that package's node form, during the starter flow's forms or later on
 the canvas (owner, 2026-10-02).
@@ -54,7 +54,7 @@ inside the app (anytype and folder in 0.3.0) are set up on their own while the w
 The example (the starter flow) is elective (owner, 2026-10-20: *"installing a simple example flow
 is ELECTIVE and you are missing a skip button"*): after Connect Anytype, **Start with an
 example?** offers **Use the example** and **Skip the example**, and every screen of the
-example's own (steps 4 and 5) offers Skip the example too. Skip goes to Ready with no flow; a
+example's own (steps 5 and 6) offers Skip the example too. Skip goes to Ready with no flow; a
 starter already installed is removed.
 
 1. **Welcome:** one sentence on what Reload does, in the owner's terms: *records → transcript →
@@ -64,14 +64,17 @@ starter already installed is removed.
    and a wait. On success, the person's spaces and their object types are read, so every node form
    that follows can offer real choices. Which space is "mine" and which are customers' is decided in
    the nodes, not here.
-4. **Source folder.** The folder the starter watches, chosen with the system's folder picker
+4. **Start with an example?** The example files each new file in a folder into Anytype.
+   **Use the example** goes on; with Anytype not connected, **Connect Anytype** takes its place
+   and returns to step 3. **Skip the example** goes to Ready with no flow.
+5. **Source folder.** The folder the starter watches, chosen with the system's folder picker
    (*"ship a setup step that configures the source folder"*). It configures the first-party folder
    source, which starts one run for every new file in that folder.
-5. **The starter's node forms**, one per step, in the order the event passes through them, each
+6. **The starter's node forms**, one per step, in the order the event passes through them, each
    headed "Step n of N". Each form is the node's own configuration form; the app only sequences
    them and feeds them Anytype's spaces and types (for the folder-to-Anytype starter: the space
    and the type each new file is filed as).
-6. **Ready.** The flow is on: "Your flow is on. Drop a file in *folder* to start. Or try it now
+7. **Ready.** The flow is on: "Your flow is on. Drop a file in *folder* to start. Or try it now
    with a 10-second sample." **Try with a sample** runs the whole flow on a bundled sample, so the
    person sees the first result inside the first ten minutes. **Open Live** lands the person in
    Live, *"where the application lives"*, on the flow's board. **I'll build my own** (secondary)

@@ -162,7 +162,7 @@ describe("a step's form", () => {
       ["space_id", "Space", { source: "spaces" }],
       ["type_key", "Save as", { source: "types", of: "space_id" }],
     ]);
-    expect(shown[1]?.help).toBe("What each new file becomes in Anytype.");
+    expect(shown[1]?.help).toBe("What the new object is in Anytype, such as a page or a note.");
     // The wiring is never shown, and is saved as the step holds it.
     const draft = { ...draftOf(fields, { api_base_url: "http://127.0.0.1:9" }), space_id: "sp-1" };
     expect(valuesOf(fields, draft)).toEqual({

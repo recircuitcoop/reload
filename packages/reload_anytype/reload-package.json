@@ -29,7 +29,7 @@
           "type_key": {
             "type": "string",
             "title": "Save as",
-            "description": "What each new file becomes in Anytype.",
+            "description": "What the new object is in Anytype, such as a page or a note.",
             "default": "page",
             "reload": {
               "types": {
