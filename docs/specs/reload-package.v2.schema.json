@@ -101,7 +101,8 @@
           "properties": {
             "interval_s": { "type": "number", "minimum": 1, "maximum": 86400 },
             "stale_after_s": { "type": "number", "minimum": 1, "maximum": 86400 }
-          }
+          },
+          "additionalProperties": false
         },
         "restartable": { "type": "boolean" },
         "limits": {

@@ -207,8 +207,10 @@ of any type.
 #### 2.4.2 Supervision: `reload` on a type
 
 A type's own `reload` object says how Reload supervises each process of the type. Like the
-annotation of 2.4.1, Reload-specific settings live in this one field, and a receiver ignores a
-key it does not know.
+annotation of 2.4.1, Reload-specific settings live in this one field. Unlike that annotation,
+it is closed, as the old manifest's `stability` section was: a key it does not define, in
+`reload` or in `heartbeat`, refuses the declaration and names the key, so a misspelt setting is
+never silently ignored.
 
 | Key | Value | Meaning |
 |---|---|---|
@@ -375,7 +377,8 @@ A type MAY set its own limits in `reload.limits`:
           "properties": {
             "interval_s": { "type": "number", "minimum": 1, "maximum": 86400 },
             "stale_after_s": { "type": "number", "minimum": 1, "maximum": 86400 }
-          }
+          },
+          "additionalProperties": false
         },
         "restartable": { "type": "boolean" },
         "limits": {

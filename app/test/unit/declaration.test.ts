@@ -229,6 +229,19 @@ describe("parseDeclaration", () => {
     ]);
   });
 
+  it("refuses a key a type's reload object or its heartbeat does not define, naming it (spec 2.4.2)", () => {
+    const typed = (reload: unknown) => declaration({ types: [nodeType({ reload })] });
+    expect(refused(typed({ restartible: false }))).toEqual([
+      "types/0/reload/restartible: is not a declared property",
+    ]);
+    expect(refused(typed({ heartbeat: { interval_s: 30, stale_s: 90 } }))).toEqual([
+      "types/0/reload/heartbeat/stale_s: is not a declared property",
+    ]);
+    // `limits` is the resource limits' place: an object is allowed.
+    expect(parse(typed({ restartable: true, limits: {} })).ok).toBe(true);
+    expect(refused(typed({ limits: 5 }))).toEqual(["types/0/reload/limits: must be object"]);
+  });
+
   it("refuses a protocol that is not the integer 2", () => {
     expect(refused(declaration({ protocol: "2" }))).toEqual([
       'protocol: "2" is not implemented by this runtime, which implements protocol 2',
