@@ -297,7 +297,7 @@ export function appStart(facts: {
   };
 }
 
-export type StopReason = "quit" | "update" | "restart";
+export type StopReason = "quit" | "update";
 
 /** `app_stop`: every quit, queued before the children stop. */
 export function appStop(uptimeS: number, reason: StopReason): Signal {
