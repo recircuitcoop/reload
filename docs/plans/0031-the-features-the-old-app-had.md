@@ -101,7 +101,7 @@ test's id; nothing is marked without a test.
    `test_addon_manifest.py`'s five stability rows about heartbeats and `restartable` (WI-0031-03's
    fields).
 3. **WI-0031-03 — B,** a heartbeat a package may declare, judged like the MCP child's.
-4. **WI-0031-04 — C,** `restartable: false` in the declaration, honoured by the supervisor.
+4. **WI-0031-04 — C,** `restartable: false` in the declaration, honoured by the supervisor. **DONE** 2026-10-21: honoured where plugins are restarted, the node process adapter (`adapters/process/node-process.ts`); `application/supervisor.ts` restarts only the runtime and services processes, which no package declares.
 5. **WI-0031-05 — E,** `reload --status`, `--quit`, `--log` on the single running instance.
    **DONE 2026-10-21:** `shell/command-line.ts`; the answer returns as a 0600 file in userData.
    `reload --quit --force` (`shell/run-state.ts`) stops each recorded process itself. As the old

@@ -64,8 +64,16 @@ export interface DeclaredType {
   readonly answer?: JsonSchema;
   /** An action view's props schema (spec 2.4); without one, its props get the bounds only. */
   readonly props?: JsonSchema;
-  /** How Reload watches its process (spec 2.4.2): its own resource limits. */
-  readonly reload?: { readonly limits?: DeclaredLimits };
+  /** How Reload supervises the type's processes (spec 2.4.2). */
+  readonly reload?: TypeSupervision;
+}
+
+/** A type's `reload` object (spec 2.4.2). */
+export interface TypeSupervision {
+  /** False: a process that exits unexpectedly is never started again. Absent means true. */
+  readonly restartable?: boolean;
+  /** Its own resource limits, over the defaults. */
+  readonly limits?: DeclaredLimits;
 }
 
 /** An executable package's binary for one platform: its path in the package, and its sha256. */

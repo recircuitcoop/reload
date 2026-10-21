@@ -95,6 +95,7 @@
     "typeReload": {
       "type": "object",
       "properties": {
+        "restartable": { "type": "boolean" },
         "limits": {
           "type": "object",
           "properties": {

@@ -47,16 +47,22 @@ let events: EventEmitter;
 let logger: RecordingLogger;
 let started: string[];
 let limits: Map<string, NodeProcessSpec["limits"]>;
+let specs: NodeProcessSpec[];
 let closes: string[];
 let closeReason: Exclude<CloseReason, "removed">;
 let red: FakeRed;
 let live: FakeNode[];
 
-function setUp(commandFor?: () => never): TypeRegistration {
+/** `probeReload`: the probe type's `reload` object (spec 2.4.2), added to the fixture's own. */
+function setUp(commandFor?: () => never, probeReload?: object): TypeRegistration {
   const validator = new AjvSchemaValidator();
-  const document: unknown = JSON.parse(
+  const document = JSON.parse(
     fs.readFileSync(path.join(FIXTURE, "reload-package.json"), "utf8"),
-  );
+  ) as { types: { id: string; reload?: object }[] };
+  const probe = document.types.find((type) => type.id === "probe");
+  if (probe !== undefined && probeReload !== undefined) {
+    probe.reload = probeReload;
+  }
   const loaded = loadNodeTypes(
     [{ name: "everycontrol", folder: FIXTURE, document }],
     validator,
@@ -77,6 +83,7 @@ function setUp(commandFor?: () => never): TypeRegistration {
     start: (spec, host) => {
       started.push(spec.identity.id);
       limits.set(spec.identity.id, spec.limits);
+      specs.push(spec);
       const child = real.start(spec, host);
       return {
         get pid() {
@@ -179,6 +186,7 @@ beforeEach(() => {
   logger = new RecordingLogger();
   started = [];
   limits = new Map();
+  specs = [];
   closes = [];
   closeReason = "redeploy";
   red = new FakeRed();
@@ -230,6 +238,19 @@ describe("a generated type's instance", () => {
     expect(limits.get("p1")).toEqual({ ...DEFAULT_LIMITS, memoryMb: 2048, children: 4 });
     // The ticker declared no reload: it is watched under the person's own defaults.
     expect(limits.get("t1")).toEqual(PERSONAL);
+  });
+
+  it("tells its process whether its type may ever be restarted (spec 2.4.2)", async () => {
+    setUp();
+    create(PROBE, probeConfig("p1"), { token: "s3cret" });
+    await waitFor("the start", () => specs.length === 1);
+    expect(specs[0]?.restartable).toBe(true);
+
+    red = new FakeRed();
+    setUp(undefined, { restartable: false });
+    create(PROBE, probeConfig("p2"), { token: "s3cret" });
+    await waitFor("the second start", () => specs.length === 2);
+    expect(specs[1]?.restartable).toBe(false);
   });
 
   it("registers every secret as a password credential with Node-RED", () => {

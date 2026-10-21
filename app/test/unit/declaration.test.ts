@@ -187,6 +187,14 @@ describe("parseDeclaration", () => {
     ]);
   });
 
+  it("accepts a type that says never to restart it, and refuses one that is not a yes or no (spec 2.4.2)", () => {
+    const parsed = parse(declaration({ types: [nodeType({ reload: { restartable: false } })] }));
+    expect(parsed.ok && parsed.declaration.types[0]?.reload).toEqual({ restartable: false });
+    expect(refused(declaration({ types: [nodeType({ reload: { restartable: "no" } })] }))).toEqual([
+      "types/0/reload/restartable: must be boolean",
+    ]);
+  });
+
   it("refuses a protocol that is not the integer 2", () => {
     expect(refused(declaration({ protocol: "2" }))).toEqual([
       'protocol: "2" is not implemented by this runtime, which implements protocol 2',

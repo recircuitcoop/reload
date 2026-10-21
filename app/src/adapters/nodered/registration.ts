@@ -282,6 +282,7 @@ export class TypeRegistration {
         ports: ports.map(({ port, event }) => ({ port, event })),
         viewTimeoutMs: loaded.type.view === "action" ? timeoutOf(config, portNames) : null,
         limits: typeLimits(loaded.type.reload, this.#deps.personalLimits ?? DEFAULT_LIMITS),
+        restartable: loaded.type.reload?.restartable !== false,
         // An action view's props are judged at present by the views service (spec 8.1.5).
         ...(loaded.type.view === "action"
           ? { judgeProps: (content: ViewContent) => views.propsRefusal(node.id, content) }

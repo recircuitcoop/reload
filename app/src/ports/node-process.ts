@@ -166,6 +166,8 @@ export interface NodeProcessSpec {
   readonly judgeProps?: (content: ViewContent) => string | null;
   /** The resource limits it is watched against (its package's `reload.limits`); else defaults. */
   readonly limits?: ResourceLimits;
+  /** False when the type declares `reload.restartable: false` (spec 2.4.2): never respawned. */
+  readonly restartable?: boolean;
 }
 
 /** One instance's process, respawned after an unexpected exit until the breaker trips. */

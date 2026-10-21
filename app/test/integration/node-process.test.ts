@@ -437,7 +437,53 @@ describe("an unexpected exit of a node process", () => {
     clock.advance(60_000);
     expect(node.node.pid).toBeNull();
     const [, refused] = send(node.node, { do: "echo" });
-    expect(refused.ends[0]?.message).toBe("the node process is stopped after repeated exits");
+    expect(refused.ends[0]?.message).toBe("the node process is stopped");
+  });
+
+  it("a type that says never to restart it is stopped at its first exit: red status, one notice, inputs refused", async () => {
+    const clock = new FakeClock();
+    const node = raw({ clock, restartable: false });
+    await ready(node);
+    const [, running] = send(node.node, { do: "slow" });
+    await waitFor("working", () => node.host.statuses.some((s) => s.text === "working"));
+    process.kill(node.node.pid as number, "SIGKILL");
+    await waitFor("the stop", () => node.notifier.notices.length === 1);
+
+    expect(running.ends[0]?.message).toBe(
+      "raw: node process exited (signal SIGKILL) while handling this event",
+    );
+    const text = "exited (signal SIGKILL), and its type says never to restart it";
+    expect(node.host.statuses.at(-1)).toEqual({ fill: "red", shape: "dot", text });
+    expect(node.notifier.notices[0]).toMatchObject({
+      kind: "node-stopped",
+      subject: "raw",
+      detail: `Its process ${text}`,
+    });
+    expect(node.crashes).toEqual([true]);
+    // Nothing is started again, however long the wait.
+    clock.advance(60_000);
+    expect(node.node.pid).toBeNull();
+    expect(node.logger.lines.filter((line) => /spawned pid/.test(line.text))).toHaveLength(1);
+    const [, refused] = send(node.node, { do: "echo" });
+    expect(refused.ends[0]?.message).toBe("the node process is stopped");
+  });
+
+  it("an instance stopped for good leaves every other alone: another still comes back after an exit", async () => {
+    const clock = new FakeClock();
+    const stopped = raw({ clock, restartable: false });
+    const other = raw({ clock });
+    await ready(stopped);
+    await ready(other);
+    process.kill(stopped.node.pid as number, "SIGKILL");
+    await waitFor("the stop", () => stopped.notifier.notices.length === 1);
+    const first = other.node.pid as number;
+    process.kill(first, "SIGKILL");
+    await waitFor("the other's exit", () => other.node.pid === null);
+    clock.advance(1_000);
+    expect(other.node.pid).not.toBeNull();
+    expect(other.node.pid).not.toBe(first);
+    expect(other.notifier.notices).toEqual([]);
+    expect(stopped.node.pid).toBeNull();
   });
 
   it("kills a process that sends no ready within 30 s, and counts it as an exit", async () => {

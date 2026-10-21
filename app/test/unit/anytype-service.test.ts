@@ -244,6 +244,17 @@ describe("a dead child", () => {
     await ctx.advance(600_000, 10_000);
     expect(ctx.launcher.children).toHaveLength(launched);
   });
+
+  it("a child stopped for good leaves the rest of the service alone: its spaces are still read", async () => {
+    const ctx = await running();
+    for (let exit = 1; exit <= 5; exit++) {
+      ctx.launcher.current.exit(1);
+      await ctx.advance(5_000);
+    }
+    expect(ctx.subject.status().state).toBe("down-for-good");
+    ctx.api.spaces = [{ id: "s1", name: "TEST" }];
+    await expect(ctx.subject.spaces(true)).resolves.toEqual([{ id: "s1", name: "TEST" }]);
+  });
 });
 
 describe("a session that closes while the child lives (plan 0019)", () => {

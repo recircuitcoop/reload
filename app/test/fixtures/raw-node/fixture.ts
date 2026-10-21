@@ -238,6 +238,8 @@ export interface StartOptions {
   readonly watchdog?: ResourceWatchdog;
   /** The resource limits it is watched against, as its package would declare them. */
   readonly limits?: ResourceLimits;
+  /** False for a type that declares `reload.restartable: false` (spec 2.4.2). */
+  readonly restartable?: boolean;
 }
 
 /** Start the raw node through the real adapter, as the runtime would. */
@@ -246,10 +248,13 @@ export function startRaw(options: StartOptions = {}): RawNode {
   const withId =
     options.id === undefined ? base : { ...base, identity: { ...base.identity, id: options.id } };
   const argv = options.argv === undefined ? withId : { ...withId, argv: options.argv };
-  const judged =
-    options.judgeProps === undefined ? argv : { ...argv, judgeProps: options.judgeProps };
-  const ported = options.ports === undefined ? judged : { ...judged, ports: options.ports };
-  const spec = options.limits === undefined ? ported : { ...ported, limits: options.limits };
+  const spec = {
+    ...argv,
+    ...(options.judgeProps === undefined ? {} : { judgeProps: options.judgeProps }),
+    ...(options.ports === undefined ? {} : { ports: options.ports }),
+    ...(options.limits === undefined ? {} : { limits: options.limits }),
+    ...(options.restartable === undefined ? {} : { restartable: options.restartable }),
+  };
   const journal = options.journal ?? new MemoryJournal();
   const host = new RecordingHost();
   const logger = new RecordingLogger();

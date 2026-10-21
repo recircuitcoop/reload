@@ -159,6 +159,7 @@ never by number.
 | `event`, `payload` | sources with one output | MAY | The single event type and its payload JSON Schema. REQUIRED for created event types. |
 | `answer` | views | MAY | A JSON Schema 2020-12 for what the view sends back: an action view's submission, and the values of a snapshot view's action press. The runtime judges every answer by it, after the bounds of 8.5.7. Without it, an answer must have the default shape of 8.5.7. A dismissal (8.2.2) is never judged by it. |
 | `props` | action views | MAY | A JSON Schema 2020-12 for the input an action view hands its own web component, `content.component.props` (8.1.3). The runtime judges props at present, by the bounds of 8.5.7 and then by this schema (8.1.5). Without it, props are judged by the bounds only. A development build's **Preview a view…** draws the type without a flow: the element `<package>-<id>` (underscores as hyphens), handed the first of this schema's `examples` as its props (`{}` without one); the answer is logged, never sent. |
+| `reload` | all | MAY | How Reload supervises the type's processes (2.4.2). |
 | `window` | views | via `config` | Views SHOULD declare a config property `window` with enum `["inline", "popout"]`, so that each instance chooses (8.5). |
 | `reload` | all | MAY | How Reload watches the type's process: `limits` (2.4.2). Every key is optional, and an unknown key is refused. |
 
@@ -203,9 +204,18 @@ of any type.
 4. Reload-specific schema keys are never spelled as separate `x-` prefixed keywords; only
    `x-secret` (2.5), which predates this rule, remains.
 
-#### 2.4.2 Resource limits (plan 0031)
+#### 2.4.2 Supervision: `reload` on a type
 
-The runtime watches every node process, and the shell watches the runtime, the services process
+A type's own `reload` object says how Reload supervises each process of the type. Like the
+annotation of 2.4.1, Reload-specific settings live in this one field, and a receiver ignores a
+key it does not know.
+
+| Key | Value | Meaning |
+|---|---|---|
+| `restartable` | boolean, default `true` | `false`: a process that exits unexpectedly is never started again, for example because starting it twice would repeat a side effect. The instance is stopped as at the crash-loop limit (6.5): its open inputs fail, and the person is told once. A redeploy creates it again. |
+| `limits` | object | Its own resource limits, as below. |
+
+**Resource limits (plan 0031).** The runtime watches every node process, and the shell watches the runtime, the services process
 and an Anytype app it started itself, against limits on memory, CPU over a window, open files and
 child processes. Over a limit for LONGER than the grace window, a process is stopped: SIGTERM (to
 its process group, for a node process), then SIGKILL after 10 s, each sent by pid only once the
@@ -358,6 +368,7 @@ A type MAY set its own limits in `reload.limits`:
     "typeReload": {
       "type": "object",
       "properties": {
+        "restartable": { "type": "boolean" },
         "limits": {
           "type": "object",
           "properties": {
@@ -793,6 +804,8 @@ When the runtime sends an event to the next node on a wire, the Node-RED `msg` M
    - The runtime MUST respawn the process after 1 s. It MUST stop respawning after 5 unexpected
      exits (proven as code).
    - **[UNPROVEN]** A time-windowed crash-loop limit and its UI.
+   - A type that declares `reload.restartable: false` (2.4.2) is never respawned: its first
+     unexpected exit stops the instance as the limit would.
 6. **Parent death.**
    - The runtime process MUST end when the shell dies (proven with Electron `utilityProcess`
      semantics on macOS). It MUST also run a watchdog: if `process.ppid` changes, it exits.

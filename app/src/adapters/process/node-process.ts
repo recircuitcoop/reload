@@ -104,7 +104,7 @@ class ChildNodeProcess implements NodeProcess {
   input(message: InputMessage, delivery: InputDelivery): string | null {
     const replayed = this.#journal.claim(message);
     if (this.#closing || this.#stopped) {
-      const why = `the node process is ${this.#closing ? "closing" : "stopped after repeated exits"}`;
+      const why = `the node process is ${this.#closing ? "closing" : "stopped"}`;
       this.#log(
         "warn",
         `refused ${replayed === undefined ? "an input" : `input ${replayed}`}: ${why}`,
@@ -298,10 +298,16 @@ class ChildNodeProcess implements NodeProcess {
         );
       }
     }
-    const again = this.#guard.restartable && this.#breaker.recordCrash();
+    // A type that must never run twice (spec 2.4.2) is stopped at its first unexpected exit.
+    const restartable = this.#spec.restartable !== false;
+    const again = restartable && this.#guard.restartable && this.#breaker.recordCrash();
     this.#deps.crashes?.nodeCrashed(!again);
     if (!again) {
-      this.#stop();
+      this.#stop(
+        restartable
+          ? this.#guard.stopText(this.#deps.settings.crashLoop)
+          : `exited (${how}), and its type says never to restart it`,
+      );
       return;
     }
     this.#after(this.#deps.settings.respawnDelayMs, () => {
@@ -309,10 +315,9 @@ class ChildNodeProcess implements NodeProcess {
     });
   }
 
-  /** The crash-loop limit: no more processes until the instance is re-created. */
-  #stop(): void {
+  /** The crash-loop limit, or a type never restarted: no more processes until re-created. */
+  #stop(text: string): void {
     this.#stopped = true;
-    const text = this.#guard.stopText(this.#deps.settings.crashLoop);
     this.#log("error", `${text}; no more restarts until it is redeployed`);
     this.#host.status({ fill: "red", shape: "dot", text });
     for (const [id, input] of this.#inputs) {
