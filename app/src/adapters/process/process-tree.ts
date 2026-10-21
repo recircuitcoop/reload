@@ -17,6 +17,8 @@ export interface ProcessTree {
   readonly detached: boolean;
   /** End the whole tree now. Safe when it is already gone. */
   kill(pid: number): void;
+  /** Ask the whole tree to stop (SIGTERM), politely. Safe when it is already gone. */
+  stop(pid: number): void;
   /** Why this platform cannot end the whole tree, or null when it can. */
   readonly blocked: string | null;
 }
@@ -49,6 +51,11 @@ export function processTreeFor(
           signal(pid, "SIGKILL");
         });
       },
+      stop: (pid) => {
+        quietly(() => {
+          signal(pid, "SIGTERM");
+        });
+      },
     };
   }
   return {
@@ -57,6 +64,11 @@ export function processTreeFor(
     kill: (pid) => {
       quietly(() => {
         signal(-pid, "SIGKILL");
+      });
+    },
+    stop: (pid) => {
+      quietly(() => {
+        signal(-pid, "SIGTERM");
       });
     },
   };

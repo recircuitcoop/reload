@@ -22,7 +22,8 @@ import { loadNodeTypes } from "../../src/application/load-node-types";
 import { ViewService } from "../../src/application/views";
 import { newEntry, type CloseReason } from "../../src/domain/journal/entry";
 import { nodeTypeName, type LoadedType } from "../../src/domain/packages/declaration";
-import type { NodeProcessLauncher } from "../../src/ports/node-process";
+import { DEFAULT_LIMITS } from "../../src/domain/supervision/resources";
+import type { NodeProcessLauncher, NodeProcessSpec } from "../../src/ports/node-process";
 import { MemoryJournal } from "../fakes/journal";
 import { FakeNode, FakeRed, type Message } from "../fakes/node-red";
 import { MemorySnapshots } from "../fakes/snapshots";
@@ -43,6 +44,7 @@ let journal: MemoryJournal;
 let events: EventEmitter;
 let logger: RecordingLogger;
 let started: string[];
+let limits: Map<string, NodeProcessSpec["limits"]>;
 let closes: string[];
 let closeReason: Exclude<CloseReason, "removed">;
 let red: FakeRed;
@@ -72,6 +74,7 @@ function setUp(commandFor?: () => never): TypeRegistration {
   const launcher: NodeProcessLauncher = {
     start: (spec, host) => {
       started.push(spec.identity.id);
+      limits.set(spec.identity.id, spec.limits);
       const child = real.start(spec, host);
       return {
         get pid() {
@@ -172,6 +175,7 @@ beforeEach(() => {
   events = new EventEmitter();
   logger = new RecordingLogger();
   started = [];
+  limits = new Map();
   closes = [];
   closeReason = "redeploy";
   red = new FakeRed();
@@ -211,6 +215,13 @@ describe("a generated type's instance", () => {
       credentials: { token: "s3cret" },
       data_dir: path.join(scratch, "instances", "p1"),
     });
+  });
+
+  it("is watched against the resource limits its package declared, and defaults for the rest", async () => {
+    setUp();
+    create(PROBE, probeConfig("p1"), { token: "s3cret" });
+    await waitFor("its process", () => started.includes("p1"));
+    expect(limits.get("p1")).toEqual({ ...DEFAULT_LIMITS, memoryMb: 2048 });
   });
 
   it("registers every secret as a password credential with Node-RED", () => {

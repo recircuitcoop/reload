@@ -48,6 +48,7 @@ import { inputJournalFor, type Admitted, type Input, type InputJournal } from ".
 import type { NodeProcessDeps } from "./node-process-settings";
 import { watchExit } from "./exit-watch";
 import { RefusedPorts } from "./refused-ports";
+import { guardResources } from "./resource-guard";
 import { ViewDeadlines } from "./view-deadlines";
 
 export * from "./node-process-settings";
@@ -259,6 +260,11 @@ class ChildNodeProcess implements NodeProcess {
       tree: this.#deps.tree,
       log: this.#log.bind(this, "error"),
       exited: this.#onExit.bind(this, child),
+    });
+    guardResources(child.pid, this.#spec, this.#deps, {
+      after: this.#after.bind(this),
+      current: () => child === this.#child && !this.#closing,
+      log: this.#log.bind(this),
     });
 
     this.#host.status({ fill: "grey", shape: "ring", text: "starting" });

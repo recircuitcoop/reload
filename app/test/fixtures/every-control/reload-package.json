@@ -3,6 +3,7 @@
   "package": "everycontrol",
   "version": "0.0.0",
   "environment": { "kind": "executable" },
+  "reload": { "limits": { "memory_mb": 2048 } },
   "types": [
     {
       "id": "ticker",

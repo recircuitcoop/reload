@@ -33,6 +33,7 @@ import { guardMissingExamplesFailure } from "../adapters/nodered/examples";
 import { minimalEnvironment, resolveCommand } from "../adapters/process/command";
 import { DEFAULT_NODE_PROCESS, nodeProcessLauncher } from "../adapters/process/node-process";
 import { processTreeFor } from "../adapters/process/process-tree";
+import { resourceProbeFor } from "../adapters/process/resource-probe";
 import { SystemRuntimeLocator } from "../adapters/process/runtime-locator";
 import { AjvSchemaValidator } from "../adapters/schema/ajv-validator";
 import { openSqliteJournal, type SqliteJournal } from "../adapters/sqlite/journal";
@@ -256,6 +257,8 @@ function generateNodeTypes(
         logger,
         notifier,
         tree: processTreeFor(process.platform),
+        // The resource watchdog of every node process (plan 0031 group A).
+        probe: resourceProbeFor(process.platform),
         newId: randomUUID,
         secrets: logger,
         journal: store,

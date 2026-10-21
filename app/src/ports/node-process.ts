@@ -8,6 +8,7 @@
 import type { CloseReason, JournaledMessage } from "../domain/journal/entry";
 import type { QueueReport } from "../domain/journal/queue";
 import type { StepOutcome, StepStatus } from "../domain/runs/step-report";
+import type { ResourceLimits } from "../domain/supervision/resources";
 
 export type { StepOutcome, StepStatus } from "../domain/runs/step-report";
 
@@ -163,6 +164,8 @@ export interface NodeProcessSpec {
    * presented content's props pass, else the error its step fails with.
    */
   readonly judgeProps?: (content: ViewContent) => string | null;
+  /** The resource limits it is watched against (its package's `reload.limits`); else defaults. */
+  readonly limits?: ResourceLimits;
 }
 
 /** One instance's process, respawned after an unexpected exit until the breaker trips. */

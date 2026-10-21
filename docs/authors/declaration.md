@@ -57,6 +57,19 @@ One of three kinds (`docs/authors/packaging.md` covers building each):
 
 `python` must be `"3.13"` — Reload bundles exactly one Python and refuses anything else.
 
+## Resource limits
+
+Reload watches every process of your types: 1024 MB of memory, 1024 open files and 32 child
+processes, each allowed over for 60 s before Reload stops the process and starts it again; and
+90 % of one core over 2 minutes, which only tells the person (a long job is fine). If your node
+really needs more, say so at the top level of the declaration (spec §2.3.6); any key may be left
+out:
+
+```json
+"reload": { "limits": { "memory_mb": 4096, "open_files": 4096, "children": 64,
+                        "cpu_percent": 200, "cpu_window_s": 300, "grace_s": 120 } }
+```
+
 ## Event type names
 
 `<your-package>.<name>.v<N>`, lower case (`monty.new.v1`, `monty.folder.updated.v1`). A

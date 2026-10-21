@@ -29,6 +29,7 @@ import { secretKeys } from "../../domain/forms/form-model";
 import { payloadRefusal, USER_EVENTS_PACKAGE } from "../../domain/events/event-types";
 import type { CloseReason } from "../../domain/journal/entry";
 import { portsOf, type LoadedType } from "../../domain/packages/declaration";
+import { limitsFor } from "../../domain/supervision/resources";
 import type { Logger } from "../../ports/logger";
 import type {
   InputMessage,
@@ -274,6 +275,7 @@ export class TypeRegistration {
         dataDir: this.#deps.dataDirFor(node.id),
         ports: ports.map(({ port, event }) => ({ port, event })),
         viewTimeoutMs: loaded.type.view === "action" ? timeoutOf(config, portNames) : null,
+        limits: limitsFor(loaded.declaration.reload?.limits),
         // An action view's props are judged at present by the views service (spec 8.1.5).
         ...(loaded.type.view === "action"
           ? { judgeProps: (content: ViewContent) => views.propsRefusal(node.id, content) }

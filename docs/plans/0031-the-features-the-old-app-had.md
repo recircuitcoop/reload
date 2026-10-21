@@ -69,6 +69,17 @@ test's id; nothing is marked without a test.
    open files and children, grace window, polite stop then kill, restart through the existing
    breaker, a notice; limits a package may raise in its declaration; CPU warns, never kills
    (long jobs are legal); the Anytype app is never stopped.
+   **DONE 2026-10-21.** `domain/supervision/resources.ts` judges, `adapters/process/resource-probe.ts`
+   measures (`ps`, `lsof`, `/proc`; Windows not measured), `adapters/process/resource-guard.ts`
+   acts on each node process; a package raises its limits in `reload.limits` (spec 2.3.6). The
+   old helper's defaults: 1024 MB, 90 % over 120 s, 1024 files, 32 children, 60 s grace, 10 s
+   to stop. Ledger: 20 rows ported, 4 replaced. Left for WI-0031-03 or the owner, since they are
+   about the MCP child's own limits or the heartbeat: `test_helper_tick.py` rows
+   `test_the_mcp_child_is_watched_against_its_own_limits_and_not_the_helper_wide_ones`,
+   `test_one_lookup_answers_for_every_managed_process_and_not_only_for_plugins`,
+   `test_one_pass_reads_the_heartbeats_and_samples_every_managed_process`,
+   `test_a_plugin_is_watched_against_the_profile_its_manifest_published`, and
+   `test_helper_detection.py::test_the_anytype_desktop_app_is_never_judged_stale`.
 3. **WI-0031-03 — B,** a heartbeat a package may declare, judged like the MCP child's.
 4. **WI-0031-04 — C,** `restartable: false` in the declaration, honoured by the supervisor.
 5. **WI-0031-05 — E,** `reload --status`, `--quit`, `--log` on the single running instance.

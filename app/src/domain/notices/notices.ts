@@ -18,6 +18,10 @@ export type NoticeKind =
   | "child-stopped"
   /** A node's process crashed too often and is no longer restarted (spec 6.5). */
   | "node-stopped"
+  /** A node's process stayed over a resource limit, so it was stopped and restarted (plan 0031). */
+  | "node-over-limit"
+  /** A node's process has used a lot of CPU for a while; it is left running (plan 0031). */
+  | "node-busy"
   /** The Anytype MCP child stopped for good after the breaker's limit (§4.1 point 2). */
   | "mcp-child-stopped"
   /** The Anytype MCP child went silent and was restarted (§4.1 point 2). */
@@ -64,6 +68,8 @@ export type NoticeKind =
 export const NOTICE_KINDS: readonly NoticeKind[] = [
   "child-stopped",
   "node-stopped",
+  "node-over-limit",
+  "node-busy",
   "mcp-child-stopped",
   "mcp-child-restarted",
   "endpoint-degraded",
@@ -174,6 +180,16 @@ function composeWords(notice: Notice): Message {
       return {
         title: `Reload stopped restarting the node ${subject}`,
         body: sentences(detail, "Redeploy the flow to let it try again."),
+      };
+    case "node-over-limit":
+      return {
+        title: `Reload restarted the node ${subject}`,
+        body: sentences(detail, "If it needs more, its package can raise its limits."),
+      };
+    case "node-busy":
+      return {
+        title: `The node ${subject} has been busy for a while`,
+        body: sentences(detail, "Reload leaves it running: long jobs are allowed."),
       };
     case "mcp-child-stopped":
       // The body is the service's sentence and nothing else: it already says why, and a remedy

@@ -9,6 +9,7 @@
 // Pure: no I/O, no library.
 
 /** The one protocol version this runtime implements (spec 1.2). */
+import type { DeclaredLimits } from "../supervision/resources";
 import { oldKeywordAt, oldKeywordProblem } from "./old-names";
 
 export const PROTOCOL = 2;
@@ -83,6 +84,8 @@ export interface Declaration {
     readonly binaries?: Readonly<Record<string, DeclaredBinary>>;
   };
   readonly types: readonly DeclaredType[];
+  /** Resource limits for every process of its types, raised from the defaults (spec 2.3.6). */
+  readonly reload?: { readonly limits?: DeclaredLimits };
 }
 
 /** A type of a loaded package, and the folder its package is in (spec 2.3.4). */

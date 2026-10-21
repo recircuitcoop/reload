@@ -136,6 +136,21 @@ describe("parseDeclaration", () => {
     ]);
   });
 
+  it("accepts resource limits a package raises, and refuses an unknown or a bad one (spec 2.3.6)", () => {
+    const limits = { memory_mb: 4096, open_files: 4096, children: 64, grace_s: 120 };
+    const parsed = parse(declaration({ reload: { limits } }));
+    expect(parsed.ok && parsed.declaration.reload?.limits).toEqual(limits);
+    expect(refused(declaration({ reload: { limits: { memory: 4096 } } }))).toEqual([
+      "reload/limits/memory: is not a declared property",
+    ]);
+    expect(refused(declaration({ reload: { limits: { memory_mb: 0 } } }))).toEqual([
+      "reload/limits/memory_mb: must be >= 1",
+    ]);
+    expect(refused(declaration({ reload: { limits: {} } }))).toEqual([
+      "reload/limits: must NOT have fewer than 1 properties",
+    ]);
+  });
+
   it("refuses a protocol that is not the integer 2", () => {
     expect(refused(declaration({ protocol: "2" }))).toEqual([
       'protocol: "2" is not implemented by this runtime, which implements protocol 2',

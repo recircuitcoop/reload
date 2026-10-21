@@ -129,7 +129,11 @@ describe("the process tree", () => {
     expect(tree.detached).toBe(true);
     expect(tree.blocked).toBeNull();
     tree.kill(42);
-    expect(signals).toEqual([[-42, "SIGKILL"]]);
+    tree.stop(42);
+    expect(signals).toEqual([
+      [-42, "SIGKILL"],
+      [-42, "SIGTERM"],
+    ]);
   });
 
   it("on Windows is BLOCKED for WI-0025-01 and ends only the process", () => {
@@ -138,7 +142,11 @@ describe("the process tree", () => {
     expect(tree.detached).toBe(false);
     expect(tree.blocked).toMatch(/^BLOCKED\(WI-0025-01\): Windows Job Objects/);
     tree.kill(42);
-    expect(signals).toEqual([[42, "SIGKILL"]]);
+    tree.stop(42);
+    expect(signals).toEqual([
+      [42, "SIGKILL"],
+      [42, "SIGTERM"],
+    ]);
   });
 
   it("treats a tree that is already gone as ended", () => {
@@ -150,6 +158,10 @@ describe("the process tree", () => {
     }).not.toThrow();
     expect(() => {
       processTreeFor("win32", gone).kill(42);
+    }).not.toThrow();
+    expect(() => {
+      processTreeFor("linux", gone).stop(42);
+      processTreeFor("win32", gone).stop(42);
     }).not.toThrow();
     expect(() => {
       processTreeFor("linux").kill(2 ** 30);

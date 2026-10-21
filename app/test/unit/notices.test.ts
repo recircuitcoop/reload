@@ -90,6 +90,14 @@ describe("compose", () => {
     expect(compose({ kind: "node-stopped", subject: "raw", detail: "It exited" }).body).toBe(
       "It exited. Redeploy the flow to let it try again.",
     );
+    expect(compose({ kind: "node-over-limit", subject: "raw", detail: "It used 2 GB" })).toEqual({
+      title: "Reload restarted the node raw",
+      body: "It used 2 GB. If it needs more, its package can raise its limits.",
+    });
+    expect(compose({ kind: "node-busy", subject: "raw", detail: "It used CPU" })).toEqual({
+      title: "The node raw has been busy for a while",
+      body: "It used CPU. Reload leaves it running: long jobs are allowed.",
+    });
     expect(compose({ kind: "anytype-key-refused", subject: "Anytype" })).toEqual({
       title: "Anytype refused the Reload key",
       body:

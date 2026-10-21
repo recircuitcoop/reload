@@ -140,6 +140,22 @@ never by number.
    (the sha256 of the sorted `sha256sum` lines of the files) against the one recorded for the
    same package and version, refusing a different one (plan 0013). A path install has no
    signature and is compared by content hash in the same way.
+6. **Resource limits** (plan 0031). The runtime watches every node process against limits on
+   memory, CPU, open files and child processes, defaulting to 1024 MB of resident memory, 90 %
+   of one core over 120 s, 1024 open files and 32 child processes, with 60 s of grace. A
+   package MAY set its own, for every process of its types, in a top-level `reload` object:
+
+   ```json
+   "reload": { "limits": { "memory_mb": 4096, "open_files": 4096, "children": 64,
+                           "cpu_percent": 200, "cpu_window_s": 300, "grace_s": 120 } }
+   ```
+
+   Every key is optional, and one left out keeps its default; an unknown key is refused. A
+   value over its limit for longer than `grace_s` is acted on: over memory, open files or
+   children, the runtime stops the process (SIGTERM to its process group, then SIGKILL after
+   10 s), restarts it as after an unexpected exit (6.5) and tells the person. Over CPU, it only
+   tells the person: a long job is legal. A platform that cannot measure a number leaves it
+   unjudged (Windows is not measured yet).
 
 ### 2.4 Type fields
 
@@ -254,7 +270,25 @@ of any type.
         }
       }
     },
-    "types": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/type" } }
+    "types": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/type" } },
+    "reload": {
+      "type": "object",
+      "properties": {
+        "limits": {
+          "type": "object",
+          "minProperties": 1,
+          "properties": {
+            "memory_mb": { "type": "integer", "minimum": 1 },
+            "cpu_percent": { "type": "number", "exclusiveMinimum": 0 },
+            "cpu_window_s": { "type": "number", "exclusiveMinimum": 0 },
+            "open_files": { "type": "integer", "minimum": 1 },
+            "children": { "type": "integer", "minimum": 0 },
+            "grace_s": { "type": "number", "minimum": 0 }
+          },
+          "additionalProperties": false
+        }
+      }
+    }
   },
   "$defs": {
     "argv": { "type": "array", "minItems": 1, "items": { "type": "string" } },
