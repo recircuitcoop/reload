@@ -386,3 +386,45 @@ describe("a stop over a resource limit (plan 0031)", () => {
     expect(notifier.notices.map((notice) => notice.kind)).toEqual(["child-stopped"]);
   });
 });
+
+describe("the watchdog's last stop over a resource limit (plan 0031)", () => {
+  it("ends the child for good with the watchdog's own sentence, told once", () => {
+    const { supervisor, launcher, clock, notifier } = supervised(obedient);
+    supervisor.start();
+    clock.advance(1);
+    supervisor.stopOverLimit("The Reload runtime went over its resource limits 5 times.");
+    launcher.current.exit(143);
+    expect(supervisor.status()).toMatchObject({
+      state: "down-for-good",
+      error: "The Reload runtime went over its resource limits 5 times.",
+    });
+    expect(notifier.notices).toEqual([
+      {
+        kind: "child-stopped",
+        subject: "runtime",
+        detail: "The Reload runtime went over its resource limits 5 times.",
+      },
+    ]);
+    // A person's Restart starts it again, and its next crash is an ordinary one.
+    expect(supervisor.recover()).toBe(true);
+    clock.advance(1);
+    launcher.current.exit(1);
+    expect(supervisor.status().state).toBe("down");
+  });
+
+  it("tells whoever watches it when a quit or a planned restart begins", async () => {
+    const { supervisor, clock } = supervised(obedient);
+    let told = 0;
+    supervisor.onStopping(() => {
+      told += 1;
+    });
+    supervisor.start();
+    clock.advance(1);
+    supervisor.restart("types");
+    clock.advance(10);
+    const stopped = supervisor.stop();
+    clock.advance(10);
+    await stopped;
+    expect(told).toBe(2);
+  });
+});

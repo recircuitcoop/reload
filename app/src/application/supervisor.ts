@@ -72,6 +72,7 @@ export class Supervisor {
   readonly #viewListeners: ((event: ViewMessage) => void)[] = [];
   readonly #nodeCrashListeners: ((stopped: boolean) => void)[] = [];
   readonly #quitWaiters: (() => void)[] = [];
+  readonly #stoppingListeners: (() => void)[] = [];
 
   #state: ChildState = "starting";
   #generation = 0;
@@ -86,6 +87,8 @@ export class Supervisor {
   #cancelKill: Cancel | null = null;
   #started = false;
   #quitting = false;
+  /** Set by a last stop over a resource limit: the crash it causes is the end. */
+  #overLimitForGood: string | null = null;
 
   constructor(deps: SupervisorDeps) {
     this.#deps = deps;
@@ -145,6 +148,7 @@ export class Supervisor {
       return false;
     }
     this.#deps.logger.info(`restarting the ${this.#deps.child} (${reason})`);
+    this.#tellStopping();
     this.#nextRestart = info ?? {
       reason,
       added: [],
@@ -185,6 +189,7 @@ export class Supervisor {
       return gone;
     }
     this.#quitting = true;
+    this.#tellStopping();
     this.#cancelBackoff?.();
     this.#cancelBackoff = null;
     if (this.#handle === null) {
@@ -198,16 +203,23 @@ export class Supervisor {
 
   /**
    * The resource watchdog found it over a limit (plan 0031): end it politely (SIGTERM). Its exit
-   * is then a crash like any other, so the breaker counts it and decides whether it comes back.
-   * False, and nothing done, when the child is not running.
+   * is then a crash like any other, counted by the breaker. `forGood` is the watchdog's own
+   * breaker at its limit: the child is then not started again, and `forGood` is the sentence the
+   * page and the one notice say. False, and nothing done, when the child is not running.
    */
-  stopOverLimit(): boolean {
+  stopOverLimit(forGood: string | null = null): boolean {
     if (this.#state !== "running" || this.#handle === null) {
       return false;
     }
     this.#deps.logger.warn(`stopping the ${this.#deps.child}: it is over its resource limits`);
+    this.#overLimitForGood = forGood;
     this.#handle.kill();
     return true;
+  }
+
+  /** Told when a quit or a planned restart begins: nothing may signal the child after that. */
+  onStopping(listener: () => void): void {
+    this.#stoppingListeners.push(listener);
   }
 
   /**
@@ -349,9 +361,11 @@ export class Supervisor {
 
   #onCrash(code: number): void {
     this.#crashesInARow += 1;
-    if (!this.#breaker.recordCrash()) {
+    const forGood = this.#overLimitForGood;
+    this.#overLimitForGood = null;
+    if (forGood !== null || !this.#breaker.recordCrash()) {
       // The crash-loop limit: stop restarting, say so on the page, and raise one notice.
-      const message = crashLoopMessage(this.#deps.child, this.#deps.settings.crashLoop);
+      const message = forGood ?? crashLoopMessage(this.#deps.child, this.#deps.settings.crashLoop);
       this.#error = message;
       this.#deps.logger.error(
         `the ${this.#deps.child} exited unexpectedly (code ${String(code)}); ` +
@@ -399,6 +413,12 @@ export class Supervisor {
         handle.kill();
       }
     });
+  }
+
+  #tellStopping(): void {
+    for (const listener of this.#stoppingListeners) {
+      listener();
+    }
   }
 
   #finishQuit(): void {

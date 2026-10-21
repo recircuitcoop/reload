@@ -5,8 +5,23 @@
 import type { ResourceLimits, ResourceSample } from "../domain/supervision/resources";
 import type { Cancel } from "./clock";
 
-/** One sample of `pid`; null when this platform is not measured or the process is gone. */
-export type ResourceProbe = (pid: number) => Promise<ResourceSample | null>;
+/** One process as the process table shows it now: what it uses, and who it is. */
+export interface ProcessReading {
+  readonly sample: ResourceSample;
+  /**
+   * Who the process is (its start time and executable, children.py's identity): a pid read
+   * again with another identity is another process, and is never signalled.
+   */
+  readonly identity: string;
+}
+
+/**
+ * One read of the process table for every pid asked about at once (one `ps`, one `lsof`). A pid
+ * missing from the answer is gone, or on a platform that is not measured.
+ */
+export type ResourceProbe = (
+  pids: readonly number[],
+) => Promise<ReadonlyMap<number, ProcessReading>>;
 
 /** One process to watch, and how it is stopped. */
 export interface WatchedProcess {
@@ -14,11 +29,11 @@ export interface WatchedProcess {
   readonly limits: ResourceLimits;
   /** Ask it to stop (SIGTERM, or the app's own polite quit). */
   stop(): void;
-  /** End it now (SIGKILL); only called while `current` still holds. */
+  /** End it now (SIGKILL); only called while `current` still holds and it is still itself. */
   kill(): void;
   /** False once this process exited or was replaced: the watch then ends. */
   current(): boolean;
-  /** It was stopped for these breaches, already in words. Called once. */
+  /** It is about to be stopped for these breaches, already in words. Called once, first. */
   stopped(why: string): void;
 }
 

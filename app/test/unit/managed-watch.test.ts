@@ -1,6 +1,6 @@
 // The shell's managed processes under the resource watchdog (application/managed-watch.ts): the
 // runtime and the services process each generation, and the Anytype app only when Reload
-// started it (tests/test_helper_detection.py D5, tests/test_helper_tick.py).
+// started it (tests/test_helper_detection.py D5, tests/test_helper_tick.py, helper/breaker.py).
 
 import { describe, expect, it } from "vitest";
 
@@ -13,23 +13,27 @@ import {
 import { DEFAULT_WATCH_PACE } from "../../src/application/resource-watch";
 import type { ChildName, ChildState, ChildStatus } from "../../src/domain/supervision/child-state";
 import { DEFAULT_LIMITS, type ResourceSample } from "../../src/domain/supervision/resources";
+import type { ProcessReading } from "../../src/ports/resource-watch";
 import { FakeClock } from "../fakes/clock";
 import { RecordingLogger, RecordingNotifier } from "../fixtures/raw-node/fixture";
 
 const QUIET: ResourceSample = { memoryMb: 100, cpuSeconds: 0, openFiles: 10, children: 0 };
 const HUNGRY: ResourceSample = { ...QUIET, memoryMb: 2048 };
 const EVERY = DEFAULT_WATCH_PACE.sampleEveryMs;
+const STOP = DEFAULT_WATCH_PACE.stopTimeoutMs;
 
 const settle = async (): Promise<void> => {
-  for (let i = 0; i < 3; i += 1) {
+  for (let i = 0; i < 4; i += 1) {
     await new Promise((resolve) => setImmediate(resolve));
   }
 };
 
 class FakeChild implements WatchedChild {
   readonly #listeners: ((status: ChildStatus) => void)[] = [];
+  readonly #stopping: (() => void)[] = [];
   #status: ChildStatus;
-  readonly stops: number[] = [];
+  /** Each stop over a limit: the pid, and the sentence of a last one. */
+  readonly stops: [number, string | null][] = [];
 
   constructor(readonly child: ChildName) {
     this.#status = { child, state: "starting", generation: 0, pid: null, port: null, error: null };
@@ -43,9 +47,19 @@ class FakeChild implements WatchedChild {
     this.#listeners.push(listener);
   }
 
-  stopOverLimit(): boolean {
-    this.stops.push(this.#status.pid ?? -1);
+  onStopping(listener: () => void): void {
+    this.#stopping.push(listener);
+  }
+
+  stopOverLimit(forGood: string | null = null): boolean {
+    this.stops.push([this.#status.pid ?? -1, forGood]);
     return true;
+  }
+
+  quit(): void {
+    for (const listener of this.#stopping) {
+      listener();
+    }
   }
 
   set(state: ChildState, pid: number | null): void {
@@ -58,22 +72,36 @@ class FakeChild implements WatchedChild {
 
 class FakeAnytype implements WatchedAnytype {
   stopped = 0;
+  readonly #ended: (() => void)[] = [];
   constructor(public startedPid: number | null) {}
   stopOverLimit(): void {
     this.stopped += 1;
+    this.exit();
+  }
+  onEnded(listener: () => void): void {
+    this.#ended.push(listener);
+  }
+  exit(): void {
     this.startedPid = null;
+    for (const listener of this.#ended.splice(0)) {
+      listener();
+    }
   }
 }
 
 function harness(samples: Record<number, ResourceSample>) {
   const clock = new FakeClock();
   const notifier = new RecordingNotifier();
-  const sampled: number[] = [];
+  const passes: number[][] = [];
   const signals: [number, string][] = [];
   const parts = {
-    probe: (pid: number) => {
-      sampled.push(pid);
-      return Promise.resolve(samples[pid] ?? QUIET);
+    probe: (pids: readonly number[]) => {
+      passes.push([...pids]);
+      const readings = new Map<number, ProcessReading>();
+      for (const pid of pids) {
+        readings.set(pid, { sample: samples[pid] ?? QUIET, identity: `started-${String(pid)}` });
+      }
+      return Promise.resolve(readings);
     },
     settings: { readLimitDefaults: () => undefined },
     clock,
@@ -86,9 +114,10 @@ function harness(samples: Record<number, ResourceSample>) {
   return {
     clock,
     notifier,
-    sampled,
+    passes,
     signals,
     parts,
+    sampled: () => passes.flat(),
     tick: async (times = 1) => {
       for (let i = 0; i < times; i += 1) {
         clock.advance(EVERY);
@@ -98,8 +127,10 @@ function harness(samples: Record<number, ResourceSample>) {
   };
 }
 
+const noAnytype = (): Promise<WatchedAnytype> => Promise.resolve(new FakeAnytype(null));
+
 describe("the shell's managed processes", () => {
-  it("are each sampled once per tick: the runtime, the services process and an Anytype Reload started", async () => {
+  it("are each sampled once per tick, in one read: the runtime, the services process and an Anytype Reload started", async () => {
     const h = harness({});
     const runtime = new FakeChild("runtime");
     const services = new FakeChild("services");
@@ -109,7 +140,10 @@ describe("the shell's managed processes", () => {
     services.set("running", 200);
     await settle();
     await h.tick(2);
-    expect([...h.sampled].sort()).toEqual([100, 100, 200, 200, 300, 300]);
+    expect(h.passes).toEqual([
+      [100, 200, 300],
+      [100, 200, 300],
+    ]);
   });
 
   it("never watch an adopted Anytype, nor stop it", async () => {
@@ -118,7 +152,7 @@ describe("the shell's managed processes", () => {
     watchManaged({ ...h.parts, children: [], anytype: Promise.resolve(adopted) });
     await settle();
     await h.tick(10);
-    expect(h.sampled).toEqual([]);
+    expect(h.passes).toEqual([]);
     expect(adopted.stopped).toBe(0);
   });
 
@@ -132,7 +166,8 @@ describe("the shell's managed processes", () => {
     await h.tick(1);
     // Its own quit asks politely and ends it after its grace; never a kill by pid here.
     expect(anytype.stopped).toBe(1);
-    h.clock.advance(DEFAULT_WATCH_PACE.stopTimeoutMs);
+    h.clock.advance(STOP);
+    await settle();
     expect(h.signals).toEqual([]);
     expect(h.notifier.notices).toEqual([
       {
@@ -143,18 +178,28 @@ describe("the shell's managed processes", () => {
     ]);
   });
 
+  it("stop watching an Anytype Reload started once it exits by itself", async () => {
+    const h = harness({ 300: HUNGRY });
+    const anytype = new FakeAnytype(300);
+    watchManaged({ ...h.parts, children: [], anytype: Promise.resolve(anytype) });
+    await settle();
+    await h.tick(3);
+    anytype.exit(); // the person quit it, or it relaunched to update
+    expect(h.clock.pending).toBe(0);
+    await h.tick(10);
+    expect(h.passes).toHaveLength(3);
+    expect(anytype.stopped).toBe(0);
+  });
+
   it("stop a child over its limit, kill it if it stays, and say it was restarted once it is", async () => {
     const h = harness({ 100: HUNGRY });
     const runtime = new FakeChild("runtime");
-    watchManaged({
-      ...h.parts,
-      children: [runtime],
-      anytype: Promise.resolve(new FakeAnytype(null)),
-    });
+    watchManaged({ ...h.parts, children: [runtime], anytype: noAnytype() });
     runtime.set("running", 100);
     await h.tick(8);
-    expect(runtime.stops).toEqual([100]);
-    h.clock.advance(DEFAULT_WATCH_PACE.stopTimeoutMs);
+    expect(runtime.stops).toEqual([[100, null]]);
+    h.clock.advance(STOP);
+    await settle();
     expect(h.signals).toEqual([[100, "SIGKILL"]]);
     expect(h.notifier.notices).toEqual([]);
     runtime.set("down", null);
@@ -170,17 +215,66 @@ describe("the shell's managed processes", () => {
     ]);
     // The next generation is watched afresh.
     await h.tick(1);
-    expect(h.sampled.at(-1)).toBe(101);
+    expect(h.sampled().at(-1)).toBe(101);
+  });
+
+  it("say it once an episode, and at the fifth stop in ten minutes end the child for good", async () => {
+    const h = harness({});
+    const hungry = new Set<number>();
+    h.parts.probe = (pids) => {
+      const readings = new Map<number, ProcessReading>();
+      for (const pid of pids) {
+        const sample = hungry.has(pid) ? HUNGRY : QUIET;
+        readings.set(pid, { sample, identity: `started-${String(pid)}` });
+      }
+      return Promise.resolve(readings);
+    };
+    const runtime = new FakeChild("runtime");
+    watchManaged({ ...h.parts, children: [runtime], anytype: noAnytype() });
+    for (let generation = 1; generation <= 5; generation += 1) {
+      const pid = 100 + generation;
+      hungry.add(pid);
+      runtime.set("running", pid);
+      await h.tick(8); // each stop takes the 60 s grace window and more: 80 s here
+      runtime.set("down", null);
+    }
+    expect(runtime.stops.map(([, forGood]) => forGood)).toEqual([
+      null,
+      null,
+      null,
+      null,
+      "The Reload runtime went over its resource limits 5 times in 10 minutes (the last: " +
+        "memory 2048 MB, over its limit of 1024 MB, for 70 s), so it is no longer restarted. " +
+        "Press Restart to try again.",
+    ]);
+    // Restarted four times in the episode, and told once.
+    expect(h.notifier.notices.map((notice) => notice.kind)).toEqual(["child-over-limit"]);
+    // The supervisor's down-for-good carries its one notice; a person's Restart counts afresh.
+    runtime.set("down-for-good", null);
+    hungry.add(200);
+    runtime.set("running", 200);
+    await h.tick(8);
+    expect(runtime.stops.at(-1)).toEqual([200, null]);
+  });
+
+  it("send nothing to a child once a quit has begun, even one 55 s over its limit", async () => {
+    const h = harness({ 100: HUNGRY });
+    const runtime = new FakeChild("runtime");
+    watchManaged({ ...h.parts, children: [runtime], anytype: noAnytype() });
+    runtime.set("running", 100);
+    await h.tick(6); // over from 10 s: 50 s over its line at 60 s...
+    h.clock.advance(5_000); // ...and 55 s when the quit begins
+    runtime.quit();
+    expect(h.clock.pending).toBe(0);
+    await h.tick(10);
+    expect(runtime.stops).toEqual([]);
+    expect(h.signals).toEqual([]);
   });
 
   it("leave the breaker's own words when a stopped child is not started again", async () => {
     const h = harness({ 100: HUNGRY });
     const runtime = new FakeChild("runtime");
-    watchManaged({
-      ...h.parts,
-      children: [runtime],
-      anytype: Promise.resolve(new FakeAnytype(null)),
-    });
+    watchManaged({ ...h.parts, children: [runtime], anytype: noAnytype() });
     runtime.set("running", 100);
     await h.tick(8);
     runtime.set("down-for-good", null);
@@ -191,15 +285,12 @@ describe("the shell's managed processes", () => {
   it("do not force a child that stopped when asked", async () => {
     const h = harness({ 100: HUNGRY });
     const runtime = new FakeChild("runtime");
-    watchManaged({
-      ...h.parts,
-      children: [runtime],
-      anytype: Promise.resolve(new FakeAnytype(null)),
-    });
+    watchManaged({ ...h.parts, children: [runtime], anytype: noAnytype() });
     runtime.set("running", 100);
     await h.tick(8);
     runtime.set("down", null);
-    h.clock.advance(DEFAULT_WATCH_PACE.stopTimeoutMs);
+    h.clock.advance(STOP);
+    await settle();
     expect(h.signals).toEqual([]);
   });
 
@@ -213,6 +304,7 @@ describe("the shell's managed processes", () => {
       },
     });
     expect(deps.limits).toEqual({ ...DEFAULT_LIMITS, memoryMb: 4096 });
+    expect(deps.now()).toBe(0);
     expect(() => {
       deps.kill(100);
     }).not.toThrow();

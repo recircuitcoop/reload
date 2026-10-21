@@ -86,11 +86,26 @@ describe.skipIf(process.platform === "win32")("the resource watchdog", () => {
     await waitFor("the breaker", () => raw.crashes.at(-1) === true, 20_000);
     expect(raw.crashes).toEqual([false, false, true]);
     expect(new Set(stopped).size).toBe(3);
-    // Restarted twice and told so each time; the third stop is the breaker's to tell.
+    // One episode: told once that it was started again, then the breaker's own notice.
     expect(raw.notifier.notices.map((notice) => notice.kind)).toEqual([
-      "node-over-limit",
       "node-over-limit",
       "node-stopped",
     ]);
   });
+
+  it("stops restarting it after five stops over its limits, however lenient the crash-loop limit", async () => {
+    const { tree, stopped } = recording();
+    const raw = overItsLimit(tree, { maxCrashes: 50, windowMs: 120_000 });
+    await waitFor("the last stop", () => raw.crashes.at(-1) === true, 30_000);
+    expect(raw.crashes).toEqual([false, false, false, false, true]);
+    expect(new Set(stopped).size).toBe(5);
+    expect(raw.notifier.notices.map((notice) => notice.kind)).toEqual([
+      "node-over-limit",
+      "node-stopped",
+    ]);
+    expect(raw.notifier.notices[1]?.detail).toMatch(
+      /^Its process stopped after going over its resource limits 5 times in 10 minutes \(the last: memory \d+ MB/,
+    );
+    expect(raw.node.pid).toBeNull();
+  }, 40_000);
 });

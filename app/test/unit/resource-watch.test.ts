@@ -14,7 +14,7 @@ import {
   resourceWatchdog,
 } from "../../src/application/resource-watch";
 import { DEFAULT_LIMITS, type ResourceSample } from "../../src/domain/supervision/resources";
-import type { ResourceProbe, WatchedProcess } from "../../src/ports/resource-watch";
+import type { ProcessReading, ResourceProbe, WatchedProcess } from "../../src/ports/resource-watch";
 import { FakeClock } from "../fakes/clock";
 import { RecordingLogger } from "../fixtures/raw-node/fixture";
 
@@ -30,15 +30,28 @@ const settle = async (): Promise<void> => {
   }
 };
 
-function harness(reading: (pid: number) => ResourceSample | null | Error) {
+function harness(reading: (pid: number) => ResourceSample | null) {
   const clock = new FakeClock();
   const logger = new RecordingLogger();
-  const sampled: number[] = [];
+  /** The pids of each read of the process table, in order. */
+  const passes: number[][] = [];
   const events: string[] = [];
-  const probe: ResourceProbe = (pid) => {
-    sampled.push(pid);
-    const answer = reading(pid);
-    return answer instanceof Error ? Promise.reject(answer) : Promise.resolve(answer);
+  const identities = new Map<number, string>();
+  let failing = false;
+  const probe: ResourceProbe = (pids) => {
+    passes.push([...pids]);
+    if (failing) {
+      failing = false;
+      return Promise.reject(new Error("ps: the process table could not be read"));
+    }
+    const readings = new Map<number, ProcessReading>();
+    for (const pid of pids) {
+      const sample = reading(pid);
+      if (sample !== null) {
+        readings.set(pid, { sample, identity: identities.get(pid) ?? `started-${String(pid)}` });
+      }
+    }
+    return Promise.resolve(readings);
   };
   const watchdog = resourceWatchdog({
     probe,
@@ -60,13 +73,19 @@ function harness(reading: (pid: number) => ResourceSample | null | Error) {
       stopped: (why) => events.push(`stopped ${String(pid)}: ${why}`),
     };
   };
+  const signals = (): string[] => events.filter((event) => event.startsWith("SIG"));
   return {
     clock,
     logger,
-    sampled,
+    passes,
     events,
+    signals,
     watchdog,
     target,
+    identities,
+    failNextPass: () => {
+      failing = true;
+    },
     exit: (pid: number) => alive.delete(pid),
     tick: async (times = 1) => {
       for (let i = 0; i < times; i += 1) {
@@ -78,17 +97,21 @@ function harness(reading: (pid: number) => ResourceSample | null | Error) {
 }
 
 describe("the resource watchdog", () => {
-  it("samples every process it watches once per period, each by its own pid", async () => {
+  it("samples every process it watches in one read of the process table per tick", async () => {
     const h = harness(() => QUIET);
     h.watchdog(h.target(10));
     h.watchdog(h.target(20));
     h.watchdog(h.target(30));
     await h.tick(3);
-    expect(h.sampled).toEqual([10, 20, 30, 10, 20, 30, 10, 20, 30]);
+    expect(h.passes).toEqual([
+      [10, 20, 30],
+      [10, 20, 30],
+      [10, 20, 30],
+    ]);
     expect(h.events).toEqual([]);
   });
 
-  it("stops a sustained breach politely, then forced after the stop timeout", async () => {
+  it("stops a sustained breach politely, then forced after the stop timeout, checking it is still itself before each", async () => {
     const h = harness(() => HUNGRY);
     h.watchdog(h.target(10));
     await h.tick(7); // over from 10 s; at 70 s only exactly the grace window
@@ -99,10 +122,48 @@ describe("the resource watchdog", () => {
       "SIGTERM 10",
     ]);
     h.clock.advance(STOP);
+    await settle();
     expect(h.events.at(-1)).toBe("SIGKILL 10");
+    // A read before the SIGTERM, and one before the SIGKILL.
+    expect(h.passes.slice(-2)).toEqual([[10], [10]]);
     // Acting ends the watch: the process that comes back is watched afresh.
     await h.tick(3);
-    expect(h.sampled).toHaveLength(8);
+    expect(h.passes).toHaveLength(10);
+  });
+
+  it("sends nothing to a pid that is another process now, the moment before a signal", async () => {
+    const h = harness(() => HUNGRY);
+    h.watchdog(h.target(10));
+    await h.tick(7);
+    // Between the sample that finds it sustained and the read before the SIGTERM, the pid is
+    // reused: same number, another start time.
+    h.clock.advance(EVERY);
+    h.identities.set(10, "started-later");
+    await settle();
+    expect(h.signals()).toEqual([]);
+    expect(h.logger.has(/process 10 is gone or is another process now; nothing is sent/)).toBe(
+      true,
+    );
+  });
+
+  it("sends no kill to a pid reused while it waited out the stop timeout", async () => {
+    const h = harness(() => HUNGRY);
+    h.watchdog(h.target(10));
+    await h.tick(8);
+    h.identities.set(10, "started-later");
+    h.clock.advance(STOP);
+    await settle();
+    expect(h.signals()).toEqual(["SIGTERM 10"]);
+  });
+
+  it("stops watching a pid that turns out to be another process at a sample", async () => {
+    const h = harness(() => HUNGRY);
+    h.watchdog(h.target(10));
+    await h.tick(3);
+    h.identities.set(10, "started-later");
+    await h.tick(10);
+    expect(h.signals()).toEqual([]);
+    expect(h.passes).toHaveLength(4);
   });
 
   it("does not force a process that stopped when asked", async () => {
@@ -111,7 +172,8 @@ describe("the resource watchdog", () => {
     await h.tick(8);
     h.exit(10);
     h.clock.advance(STOP);
-    expect(h.events.filter((event) => event.startsWith("SIG"))).toEqual(["SIGTERM 10"]);
+    await settle();
+    expect(h.signals()).toEqual(["SIGTERM 10"]);
   });
 
   it("gives a process that replaced a stopped one its whole grace window again", async () => {
@@ -121,9 +183,9 @@ describe("the resource watchdog", () => {
     h.exit(10);
     h.watchdog(h.target(11));
     await h.tick(7);
-    expect(h.events.filter((event) => event === "SIGTERM 11")).toEqual([]);
+    expect(h.signals().filter((event) => event === "SIGTERM 11")).toEqual([]);
     await h.tick(1);
-    expect(h.events.at(-1)).toBe("SIGTERM 11");
+    expect(h.signals().at(-1)).toBe("SIGTERM 11");
   });
 
   it("is watched against the limits it was given", async () => {
@@ -133,27 +195,36 @@ describe("the resource watchdog", () => {
     expect(h.events).toEqual([]);
   });
 
-  it("counts a sample that throws as one failed sample, and still takes the next", async () => {
-    let calls = 0;
-    const h = harness(() => {
-      calls += 1;
-      return calls === 2 ? new Error("ps: the process table could not be read") : QUIET;
-    });
+  it("counts a pass that throws as one failed pass, and still takes the next", async () => {
+    const h = harness(() => QUIET);
     h.watchdog(h.target(10));
-    await h.tick(4);
-    expect(h.sampled).toHaveLength(4);
+    await h.tick(1);
+    h.failNextPass();
+    await h.tick(3);
+    expect(h.passes).toHaveLength(4);
     expect(
       h.logger.lines.filter((line) =>
-        /one sample of process 10 failed: Error: ps:/.test(line.text),
+        /one pass of the resource watchdog failed: Error: ps:/.test(line.text),
       ),
     ).toHaveLength(1);
+  });
+
+  it("logs a check before a signal that throws, and sends nothing", async () => {
+    const h = harness(() => HUNGRY);
+    h.watchdog(h.target(10));
+    await h.tick(7);
+    h.failNextPass();
+    h.clock.advance(EVERY);
+    // The sample passes; the read just before the SIGTERM fails.
+    await settle();
+    expect(h.signals()).toEqual([]);
   });
 
   it("judges nothing from no reading, and keeps watching", async () => {
     const h = harness(() => null);
     h.watchdog(h.target(10));
     await h.tick(10);
-    expect(h.sampled).toHaveLength(10);
+    expect(h.passes).toHaveLength(10);
     expect(h.events).toEqual([]);
   });
 
@@ -165,16 +236,19 @@ describe("the resource watchdog", () => {
     h.exit(10); // ...and the process exits before its answer is judged
     await settle();
     await h.tick(3);
-    expect(h.sampled).toHaveLength(8);
+    expect(h.passes).toHaveLength(8);
     expect(h.events).toEqual([]);
   });
 
-  it("leaves nothing scheduled once cancelled", async () => {
+  it("leaves nothing scheduled once every watch is cancelled, a kill in waiting included", async () => {
     const h = harness(() => HUNGRY);
     const cancel = h.watchdog(h.target(10));
     await h.tick(8);
     cancel();
     expect(h.clock.pending).toBe(0);
+    h.clock.advance(STOP);
+    await settle();
+    expect(h.signals()).toEqual(["SIGTERM 10"]);
     const quiet = harness(() => QUIET);
     quiet.watchdog(quiet.target(10))();
     expect(quiet.clock.pending).toBe(0);

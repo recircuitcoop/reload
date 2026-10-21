@@ -114,6 +114,42 @@ describe("a node instance's resource guard", () => {
     expect(h.notifier.notices[0]?.detail).toMatch(/^The node raw used CPU 150 %/);
   });
 
+  it("tells one episode once, and ends the instance at the fifth stop in ten minutes", () => {
+    const h = harness();
+    const guard = new NodeResourceGuard(spec("n1", "Summarize"), h.deps);
+    const clock = h.deps.clock as FakeClock;
+    for (let stop = 1; stop <= 5; stop += 1) {
+      guard.spawned(1000 + stop, () => true);
+      expect(guard.restartable).toBe(true);
+      h.handed
+        .at(-1)
+        ?.stopped(`memory ${String(2000 + stop)} MB, over its limit of 1024 MB, for 61 s`);
+      clock.advance(80_000);
+    }
+    expect(guard.restartable).toBe(false);
+    expect(guard.stoppedForGood).toBe(
+      "stopped after going over its resource limits 5 times in 10 minutes " +
+        "(the last: memory 2005 MB, over its limit of 1024 MB, for 61 s)",
+    );
+    // The four restarts were one episode: told once, with the numbers of its first stop.
+    expect(h.notifier.notices).toHaveLength(1);
+    expect(h.notifier.notices[0]?.detail).toContain("memory 2001 MB");
+  });
+
+  it("starts a new episode once the ten minutes have passed", () => {
+    const h = harness();
+    const guard = new NodeResourceGuard(spec("n1"), h.deps);
+    const clock = h.deps.clock as FakeClock;
+    guard.spawned(1, () => true);
+    h.handed.at(-1)?.stopped("memory 2001 MB, over its limit of 1024 MB, for 61 s");
+    guard.spawned(2, () => true);
+    clock.advance(600_001);
+    h.handed.at(-1)?.stopped("memory 2002 MB, over its limit of 1024 MB, for 61 s");
+    guard.spawned(3, () => true);
+    expect(h.notifier.notices).toHaveLength(2);
+    expect(guard.restartable).toBe(true);
+  });
+
   it("watches nothing without a watchdog or a process", () => {
     const unwatched = harness(false);
     const guard = new NodeResourceGuard(spec("n1"), unwatched.deps);

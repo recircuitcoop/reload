@@ -313,7 +313,7 @@ class ChildNodeProcess implements NodeProcess {
         );
       }
     }
-    const again = this.#breaker.recordCrash();
+    const again = this.#guard.restartable && this.#breaker.recordCrash();
     this.#deps.crashes?.nodeCrashed(!again);
     if (!again) {
       this.#stop();
@@ -328,7 +328,9 @@ class ChildNodeProcess implements NodeProcess {
   #stop(): void {
     this.#stopped = true;
     const { maxCrashes, windowMs } = this.#deps.settings.crashLoop;
-    const text = `stopped after ${String(maxCrashes)} exits in ${String(windowMs / 1000)} s`;
+    const text =
+      this.#guard.stoppedForGood ??
+      `stopped after ${String(maxCrashes)} exits in ${String(windowMs / 1000)} s`;
     this.#log("error", `${text}; no more restarts until it is redeployed`);
     this.#host.status({ fill: "red", shape: "dot", text });
     for (const [id, input] of this.#inputs) {

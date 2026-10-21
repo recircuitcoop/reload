@@ -13,6 +13,8 @@ const ANYTYPE = "/Applications/Anytype.app/Contents/MacOS/Anytype";
 /** Desktop apps with Anytype running already (`running`) or not; every start and quit recorded. */
 function apps(running: FoundApp | null, options: { launchFails?: boolean } = {}) {
   const journal: string[] = [];
+  /** Ends the fake app as if it exited by itself. */
+  const exits: (() => void)[] = [];
   let findDone: (() => void) | null = null;
   const fake: DesktopApps & { holdFind: () => () => void } = {
     find: (executable) => {
@@ -38,6 +40,9 @@ function apps(running: FoundApp | null, options: { launchFails?: boolean } = {})
           journal.push("quit 4242");
           return Promise.resolve();
         },
+        exited: new Promise<void>((resolve) => {
+          exits.push(resolve);
+        }),
       };
     },
     holdFind: () => {
@@ -45,7 +50,7 @@ function apps(running: FoundApp | null, options: { launchFails?: boolean } = {})
       return () => findDone?.();
     },
   };
-  return { fake, journal };
+  return { fake, journal, exits };
 }
 
 function subject(fake: DesktopApps, executable: string | null = ANYTYPE) {
@@ -138,10 +143,31 @@ describe("the Anytype desktop app", () => {
     expect(journal).toEqual([`find ${ANYTYPE}`]);
   });
 
+  it("Reload started is no longer Reload's once it exits by itself, and whoever watched it is told", async () => {
+    const { fake, journal, exits } = apps(null);
+    const { anytype } = subject(fake);
+    let ended = 0;
+    anytype.onEnded(() => {
+      ended += 1;
+    });
+    await anytype.start();
+    expect(anytype.startedPid).toBe(4242);
+    exits[0]?.();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(anytype.startedPid).toBeNull();
+    expect(ended).toBe(1);
+    await anytype.quitIfOurs();
+    expect(journal).toEqual([`find ${ANYTYPE}`, `launch ${ANYTYPE}`]);
+  });
+
   it("a stop over its limits that fails is logged, never thrown", async () => {
     const fake: DesktopApps = {
       find: () => Promise.resolve(null),
-      launch: () => ({ pid: 1, quit: () => Promise.reject(new Error("EPERM")) }),
+      launch: () => ({
+        pid: 1,
+        quit: () => Promise.reject(new Error("EPERM")),
+        exited: new Promise<void>(() => undefined),
+      }),
     };
     const { anytype, logger } = subject(fake);
     await anytype.start();
@@ -153,7 +179,11 @@ describe("the Anytype desktop app", () => {
   it("a quit that fails is logged, never thrown into the quit flow", async () => {
     const fake: DesktopApps = {
       find: () => Promise.resolve(null),
-      launch: () => ({ pid: 1, quit: () => Promise.reject(new Error("EPERM")) }),
+      launch: () => ({
+        pid: 1,
+        quit: () => Promise.reject(new Error("EPERM")),
+        exited: new Promise<void>(() => undefined),
+      }),
     };
     const { anytype, logger } = subject(fake);
     await anytype.start();

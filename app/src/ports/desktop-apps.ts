@@ -13,6 +13,8 @@ export interface StartedApp {
   readonly pid: number;
   /** Ask it to quit, and end it if it has not after a grace period. Settles once it is gone. */
   quit(): Promise<void>;
+  /** Settles once it has exited, however it did. */
+  readonly exited: Promise<void>;
 }
 
 export interface DesktopApps {

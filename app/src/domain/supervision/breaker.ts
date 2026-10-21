@@ -22,6 +22,13 @@ export interface CrashLoopSettings {
 
 export const DEFAULT_CRASH_LOOP: CrashLoopSettings = { maxCrashes: 5, windowMs: 120_000 };
 
+/**
+ * The resource watchdog's own limit (helper/config.py BreakerSettings): five stops over a limit
+ * in ten minutes, and the process is not started again. A stop takes at least the grace window,
+ * so the crash-loop limit above could never see five of them in its two minutes.
+ */
+export const DEFAULT_INTERVENTIONS: CrashLoopSettings = { maxCrashes: 5, windowMs: 600_000 };
+
 export class CrashLoopBreaker {
   readonly #settings: CrashLoopSettings;
   readonly #now: () => number;

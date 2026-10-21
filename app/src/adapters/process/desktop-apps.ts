@@ -124,6 +124,7 @@ function startedApp(child: ChildProcess, pid: number): StartedApp {
   });
   return {
     pid,
+    exited: gone,
     quit: async () => {
       if (exited) {
         return;

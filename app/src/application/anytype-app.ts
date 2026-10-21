@@ -25,6 +25,7 @@ export class AnytypeApp {
   #started: StartedApp | null = null;
   #quitting = false;
   readonly #onStarted: (() => void)[] = [];
+  readonly #endedListeners: (() => void)[] = [];
 
   constructor(deps: AnytypeAppDeps) {
     this.#deps = deps;
@@ -67,8 +68,13 @@ export class AnytypeApp {
         );
         return (this.#state = "adopted");
       }
-      this.#started = apps.launch(executable);
-      logger.info(`started the Anytype desktop app (process ${String(this.#started.pid)})`);
+      const started = apps.launch(executable);
+      this.#started = started;
+      // However it ends (the person quits it, it relaunches to update), it is ours no more.
+      void started.exited.then(() => {
+        this.#forget(started);
+      });
+      logger.info(`started the Anytype desktop app (process ${String(started.pid)})`);
       this.#state = "started";
       for (const listener of this.#onStarted) listener();
       return this.#state;
@@ -93,7 +99,7 @@ export class AnytypeApp {
     if (started === null) {
       return;
     }
-    this.#started = null;
+    this.#forget(started);
     this.#deps.logger.warn(
       `stopping the Anytype desktop app Reload started (process ${String(started.pid)}): ` +
         `it is over its resource limits`,
@@ -101,6 +107,21 @@ export class AnytypeApp {
     void started.quit().catch((error: unknown) => {
       this.#deps.logger.error(`the Anytype desktop app did not stop: ${String(error)}`);
     });
+  }
+
+  /** Told once the Anytype Reload started is gone, or no longer Reload's to stop. */
+  onEnded(listener: () => void): void {
+    this.#endedListeners.push(listener);
+  }
+
+  #forget(started: StartedApp): void {
+    if (this.#started !== started) {
+      return;
+    }
+    this.#started = null;
+    for (const listener of this.#endedListeners.splice(0)) {
+      listener();
+    }
   }
 
   /** On Quit: quit Anytype when Reload started it, and leave it running otherwise. */
@@ -113,7 +134,7 @@ export class AnytypeApp {
       }
       return;
     }
-    this.#started = null;
+    this.#forget(started);
     this.#deps.logger.info(
       `quitting the Anytype desktop app Reload started (process ${String(started.pid)})`,
     );

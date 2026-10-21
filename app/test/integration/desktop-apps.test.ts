@@ -8,15 +8,16 @@ import * as path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { ProcessTableApps } from "../../src/adapters/process/desktop-apps";
 import { AnytypeApp } from "../../src/application/anytype-app";
-import { fakeAnytypeApp, fakeAnytypePid, isAlive } from "../fakes/anytype-app";
+import { fakeAnytypeApp, fakeAnytypePid, isAlive, ORPHAN_EXIT } from "../fakes/anytype-app";
 import { RecordingLogger } from "../fakes/children";
 
-/** Every pid a test started, killed afterwards whatever the test did. */
-const started: number[] = [];
+/** Every fake a test wrote: each one's pid is killed afterwards, whatever the test did. */
+const fakes: string[] = [];
 
 afterEach(() => {
-  for (const pid of started.splice(0)) {
-    if (isAlive(pid)) {
+  for (const executable of fakes.splice(0)) {
+    const pid = fakeAnytypePid(executable);
+    if (pid !== null && isAlive(pid)) {
       process.kill(pid, "SIGKILL");
     }
   }
@@ -37,9 +38,11 @@ async function until<T>(what: string, probe: () => T | null, timeoutMs = 10_000)
 }
 
 function scratchApp(): string {
-  return fakeAnytypeApp(
+  const executable = fakeAnytypeApp(
     fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-reload_anytype-"))),
   );
+  fakes.push(executable);
+  return executable;
 }
 
 describe("ProcessTableApps and AnytypeApp, with a fake Anytype", () => {
@@ -51,7 +54,6 @@ describe("ProcessTableApps and AnytypeApp, with a fake Anytype", () => {
     const anytype = new AnytypeApp({ apps, executable, logger: new RecordingLogger() });
     expect(await anytype.start()).toBe("started");
     const pid = await until("the fake Anytype to run", () => fakeAnytypePid(executable));
-    started.push(pid);
     expect(await apps.find(executable)).toEqual({ pid });
 
     await anytype.quitIfOurs();
@@ -64,7 +66,6 @@ describe("ProcessTableApps and AnytypeApp, with a fake Anytype", () => {
     const theirs = spawn(executable, [], { detached: true, stdio: "ignore" });
     theirs.unref();
     const pid = await until("the running Anytype", () => fakeAnytypePid(executable));
-    started.push(pid);
 
     const logger = new RecordingLogger();
     const apps = new ProcessTableApps(process.platform);
@@ -82,19 +83,29 @@ describe("ProcessTableApps and AnytypeApp, with a fake Anytype", () => {
     fs.writeFileSync(
       executable,
       `#!/bin/bash\nexec -a "$0" ${JSON.stringify(process.execPath)} -e ${JSON.stringify(
-        "process.on('SIGTERM', () => undefined); require('fs').writeFileSync(process.argv[1], String(process.pid)); setInterval(() => undefined, 1000);",
+        `process.on('SIGTERM', () => undefined); require('fs').writeFileSync(process.argv[1], String(process.pid)); ${ORPHAN_EXIT}`,
       )} "$0.pid"\n`,
       { mode: 0o755 },
     );
+    fakes.push(executable);
     const app = new ProcessTableApps(process.platform).launch(executable);
     const pid = await until("the stubborn Anytype", () => fakeAnytypePid(executable));
-    started.push(pid);
     const began = Date.now();
     await app.quit();
     expect(isAlive(pid)).toBe(false);
     expect(Date.now() - began).toBeGreaterThanOrEqual(4_000);
     // A second quit of one already gone answers at once.
     await app.quit();
+  }, 30_000);
+
+  it("the fake ends itself once whoever started it is gone, so a failed test leaves no process", async () => {
+    const executable = scratchApp();
+    // A shell that starts the fake and exits a second later, leaving it orphaned.
+    spawn("/bin/sh", ["-c", `${JSON.stringify(executable)} >/dev/null 2>&1 & sleep 1`], {
+      stdio: "ignore",
+    });
+    const pid = await until("the orphaned fake to run", () => fakeAnytypePid(executable));
+    await until("the orphan to end itself", () => (isAlive(pid) ? null : true), 5_000);
   }, 30_000);
 
   it("a launcher that cannot be started is an error, never a crash of the caller", () => {

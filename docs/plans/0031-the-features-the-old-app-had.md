@@ -69,7 +69,8 @@ test's id; nothing is marked without a test.
    memory, CPU over a window, open files and children for every node process, the runtime and
    the services process, and an Anytype Reload started; over a limit past the grace window,
    polite stop then kill; a node process or a child restarted through its crash-loop breaker,
-   which counts the stop; a notice. A type may set its own limits in its declaration, and the
+   which counts the stop, and the watchdog's own breaker (five stops in ten minutes) ends it for
+   good; a notice once an episode. A type may set its own limits in its declaration, and the
    person may change the defaults in the settings file, as `[helper.defaults]` allowed. CPU stops
    a process like any other limit, as the old app did. An adopted Anytype is never stopped.
    **Implemented 2026-10-21, waiting on its verifier.** `domain/supervision/resources.ts` judges;
@@ -78,10 +79,11 @@ test's id; nothing is marked without a test.
    processes) and `application/managed-watch.ts` (the children and Anytype) hand processes to
    it. A type's limits are `types[i].reload.limits` (spec 2.4.2); the person's are `limits` in
    `shell-settings.json`. Defaults are the old app's: 1024 MB, 90 % over 120 s, 1024 files, 32
-   children, 60 s of grace, a sample every 10 s, 10 s from SIGTERM to SIGKILL. Four rows that
-   need this branch and WI-0031-03's together go to WI-0031-03 after the merge:
+   children, 60 s of grace, a sample every 10 s, 10 s from SIGTERM to SIGKILL. One `ps` and one
+   `lsof` per tick for every watched process, and an identity check (pid, start time, executable)
+   before every signal. Three rows that need this branch and WI-0031-03's together go to
+   WI-0031-03 after the merge:
    `test_helper_tick.py` `test_the_mcp_child_is_watched_against_its_own_limits_and_not_the_helper_wide_ones`,
-   `test_one_lookup_answers_for_every_managed_process_and_not_only_for_plugins`,
    `test_one_pass_reads_the_heartbeats_and_samples_every_managed_process`, and
    `test_helper_detection.py::test_the_anytype_desktop_app_is_never_judged_stale`.
 3. **WI-0031-03 — B,** a heartbeat a package may declare, judged like the MCP child's.
@@ -106,6 +108,15 @@ test's id; nothing is marked without a test.
 
 Retired groups skip their WI; their rows get the owner's answer in `owner_ack`, in the owner's
 words.
+
+## As built
+
+- **A, children are counted within a process's own process group.** Every node process leads its
+  own group, so a node process and its tree never count against the runtime that started it:
+  in the old app a flow of 33 nodes would have tripped the runtime's limit of 32 children.
+- **A, the watchdog's own breaker.** Five stops over a limit in ten minutes and the process is
+  not started again (the old `BreakerSettings`): a stop takes at least the 60 s grace window, so
+  the crash-loop limit of five in two minutes could never end a loop of stops.
 
 ## Risks
 

@@ -4,12 +4,16 @@
 // host and Anytype included; node processes are watched inside the runtime, by their instance.
 //
 // * The runtime and the services process are watched under the person's limits, every
-//   generation afresh. A stop over a limit is a crash to their supervisor, so its breaker counts
-//   it: the person hears "started it again" once the next generation runs, and the supervisor's
-//   own crash-loop notice when there is none.
+//   generation afresh. A stop over a limit is a crash to their supervisor. The stops are also
+//   counted by their own breaker (five in ten minutes, helper/config.py BreakerSettings); at its
+//   limit the last stop ends the child for good, in the supervisor's down-for-good state, with
+//   one notice. Before that the person hears "started it again" once an episode.
+// * A quit or a planned restart ends the watch at once: nothing is signalled after either began.
 // * An Anytype Reload started is stopped (quit politely, then forced) and not started again; the
-//   person is told at once. An adopted Anytype is never watched or stopped.
+//   person is told at once. Its watch ends when it exits, however it does. An adopted Anytype is
+//   never watched or stopped.
 
+import { CrashLoopBreaker, DEFAULT_INTERVENTIONS } from "../domain/supervision/breaker";
 import type { ResourceLimits } from "../domain/supervision/resources";
 import type { ChildName, ChildStatus } from "../domain/supervision/child-state";
 import type { Cancel, Clock } from "../ports/clock";
@@ -24,19 +28,23 @@ export interface WatchedChild {
   readonly child: ChildName;
   status(): ChildStatus;
   onStatus(listener: (status: ChildStatus) => void): void;
-  stopOverLimit(): boolean;
+  onStopping(listener: () => void): void;
+  stopOverLimit(forGood?: string | null): boolean;
 }
 
 /** What of the Anytype app the watch needs. */
 export interface WatchedAnytype {
   readonly startedPid: number | null;
   stopOverLimit(): void;
+  /** Told once the Anytype Reload started is gone: quit, stopped, or exited by itself. */
+  onEnded(listener: () => void): void;
 }
 
 export interface ManagedWatchDeps {
   readonly watchdog: ResourceWatchdog;
   readonly limits: ResourceLimits;
   readonly notifier: Notifier;
+  readonly now: () => number;
   /** End a process now (SIGKILL), by pid; safe when it is already gone. */
   readonly kill: (pid: number) => void;
 }
@@ -65,6 +73,7 @@ export function managedWatch(parts: ManagedWatchParts): ManagedWatchDeps {
     }),
     limits: readPersonalLimits(parts.settings, logger),
     notifier: parts.notifier,
+    now: () => parts.clock.now(),
     kill: (pid) => {
       try {
         parts.signal(pid, "SIGKILL");
@@ -93,23 +102,32 @@ export function watchManaged(
 
 /** Watch each generation of one supervised child. */
 export function watchChild(supervisor: WatchedChild, deps: ManagedWatchDeps): void {
+  const interventions = new CrashLoopBreaker(DEFAULT_INTERVENTIONS, deps.now);
   let watched: number | null = null;
   let cancel: Cancel | null = null;
   let stoppedFor: string | null = null;
+  const end = (): void => {
+    cancel?.();
+    cancel = null;
+  };
   const running = (pid: number): boolean => {
     const status = supervisor.status();
     return status.state === "running" && status.pid === pid;
   };
+  supervisor.onStopping(end);
   supervisor.onStatus((status) => {
     if (status.state === "down-for-good") {
-      stoppedFor = null; // the breaker's own notice says what happened
+      // The supervisor's one notice says what happened; a Restart starts a new count.
+      end();
+      stoppedFor = null;
+      interventions.reset();
       return;
     }
     const { pid } = status;
     if (status.state !== "running" || pid === null || pid === watched) {
       return;
     }
-    cancel?.();
+    end();
     watched = pid;
     if (stoppedFor !== null) {
       deps.notifier.raise({
@@ -119,18 +137,29 @@ export function watchChild(supervisor: WatchedChild, deps: ManagedWatchDeps): vo
       });
       stoppedFor = null;
     }
+    let forGood: string | null = null;
     cancel = deps.watchdog({
       pid,
       limits: deps.limits,
       stop: () => {
-        supervisor.stopOverLimit();
+        supervisor.stopOverLimit(forGood);
       },
       kill: () => {
         deps.kill(pid);
       },
       current: () => running(pid),
       stopped: (why) => {
-        stoppedFor = why;
+        const first = interventions.crashesInWindow() === 0;
+        if (!interventions.recordCrash()) {
+          const { maxCrashes, windowMs } = DEFAULT_INTERVENTIONS;
+          forGood =
+            `The Reload ${supervisor.child} went over its resource limits ${String(maxCrashes)} ` +
+            `times in ${String(windowMs / 60_000)} minutes (the last: ${why}), so it is no ` +
+            `longer restarted. Press Restart to try again.`;
+          return;
+        }
+        // Told once an episode: stopped again within the window is the same news.
+        stoppedFor = first ? why : null;
       },
     });
   });
@@ -142,7 +171,7 @@ export function watchStartedAnytype(app: WatchedAnytype, deps: ManagedWatchDeps)
   if (pid === null) {
     return;
   }
-  deps.watchdog({
+  const cancel = deps.watchdog({
     pid,
     limits: deps.limits,
     stop: () => {
@@ -159,4 +188,5 @@ export function watchStartedAnytype(app: WatchedAnytype, deps: ManagedWatchDeps)
       });
     },
   });
+  app.onEnded(cancel);
 }
