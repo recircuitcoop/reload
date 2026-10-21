@@ -623,3 +623,54 @@ describe("a file download", () => {
     expect(redactedStrings.mock.calls.map(([text]) => text)).toContain(KEY);
   });
 });
+
+describe("every tools/call is told for the usage signals (plan 0029)", () => {
+  const call = (id: number, name: unknown, args: unknown = {}) => ({
+    jsonrpc: "2.0",
+    id,
+    method: "tools/call",
+    params: { name, arguments: args },
+  });
+
+  it("tells the tool only when the validated set holds it, the client initialize named, and how it ended", async () => {
+    const session = new RecordingSession();
+    const told: unknown[] = [];
+    const clock = new FakeClock();
+    let served: ServedMcp | null = { session, tools: [TOOL] };
+    const handle = mcpDispatch({
+      served: () => served,
+      redact: (text) => text,
+      clock,
+      logger: new RecordingLogger(),
+      files: unpairedFiles(new RecordingLogger()),
+      observe: (facts) => told.push(facts),
+    });
+    const send = (payload: unknown) => handle(new TextEncoder().encode(JSON.stringify(payload)));
+    // Before any initialize: no client.
+    await send(call(1, "get_object", { secret: "fake-argument-token-1234567890" }));
+    await send({
+      jsonrpc: "2.0",
+      id: 2,
+      method: "initialize",
+      params: { clientInfo: { name: "fake-client-A" } },
+    });
+    session.answer = () => ({ content: [], isError: true });
+    await send(call(3, "get_object"));
+    await send(call(4, "API-delete-everything-fake-unknown"));
+    await send(call(5, 42));
+    served = null;
+    await send(call(6, "get_object"));
+    // Not a tools/call: nothing told.
+    await send({ jsonrpc: "2.0", id: 7, method: "ping" });
+    await send({ jsonrpc: "2.0", id: 8, method: "initialize", params: {} });
+    expect(told).toEqual([
+      { tool: "get_object", client: null, durationMs: 0, ok: true, errorCode: null },
+      { tool: "get_object", client: "fake-client-A", durationMs: 0, ok: false, errorCode: null },
+      { tool: null, client: "fake-client-A", durationMs: 0, ok: false, errorCode: -32602 },
+      { tool: null, client: "fake-client-A", durationMs: 0, ok: false, errorCode: -32602 },
+      { tool: null, client: "fake-client-A", durationMs: 0, ok: false, errorCode: -32000 },
+    ]);
+    // Never the arguments, the result or an unknown name.
+    expect(JSON.stringify(told)).not.toMatch(/fake-argument-token|delete-everything/);
+  });
+});

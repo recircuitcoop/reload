@@ -8,6 +8,7 @@ import { Ajv2020, type ValidateFunction } from "ajv/dist/2020.js";
 import frameSchemas from "../../../../docs/specs/node-protocol-v2.schema.json" with { type: "json" };
 import type { DoneNote, DoneResult, StepProgress } from "../../domain/runs/run";
 import type { CopyPhase } from "../../domain/runs/step-report";
+import type { ChildSignal, StepFailure } from "../../domain/telemetry/reports";
 import type {
   EventEnvelope,
   InputEvent,
@@ -70,7 +71,15 @@ export type NodeFrame =
       notes?: DoneNote[];
       results?: DoneResult[];
     }
-  | { t: "error"; message: string; in?: string }
+  | {
+      t: "error";
+      message: string;
+      in?: string;
+      /** Plan 0029: where an exception was thrown, as the SDKs add it; read only when well formed. */
+      error_type?: unknown;
+      file?: unknown;
+      line?: unknown;
+    }
   | { t: "present"; in: string; content: ViewContent }
   | { t: "snapshot"; content: ViewContent; state: unknown; in?: string }
   | { t: "closed" }
@@ -237,6 +246,32 @@ export function outcomeOf(frame: Extract<NodeFrame, { t: "done" }>): StepOutcome
     return undefined;
   }
   return { notes: frame.notes ?? [], results: frame.results ?? [] };
+}
+
+/** A failed step's facts from its `error` frame; a field of the wrong shape is null. */
+export function failureOf(frame: Extract<NodeFrame, { t: "error" }>): StepFailure {
+  const { message, error_type: type, file, line } = frame;
+  return {
+    errorType: typeof type === "string" ? type.slice(0, 100) : null,
+    message,
+    file: typeof file === "string" ? file.slice(0, 200) : null,
+    line: typeof line === "number" && Number.isInteger(line) && line >= 1 ? line : null,
+  };
+}
+
+/** One ended step of `identity`'s node, as the shell is told it for the usage signals. */
+export function stepSignal(
+  identity: NodeIdentity,
+  durationMs: number,
+  ok: boolean,
+  failure: StepFailure | undefined,
+): ChildSignal {
+  return {
+    kind: "step",
+    package: identity.package,
+    step: { nodeKind: identity.kind, nodeId: identity.typeId, durationMs, ok },
+    failure: failure ?? null,
+  };
 }
 
 // ── encoding ─────────────────────────────────────────────────────────────────────────────

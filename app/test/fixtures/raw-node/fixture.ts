@@ -17,6 +17,7 @@ import {
 import { processTreeFor, type ProcessTree } from "../../../src/adapters/process/process-tree";
 import { systemClock } from "../../../src/adapters/system/clock";
 import type { ResourceLimits } from "../../../src/domain/supervision/resources";
+import type { ChildSignal } from "../../../src/domain/telemetry/reports";
 import type { Clock } from "../../../src/ports/clock";
 import type { ResourceWatchdog } from "../../../src/ports/resource-watch";
 import type { JournalStore } from "../../../src/ports/journal-store";
@@ -216,6 +217,8 @@ export interface RawNode {
   readonly journal: JournalStore;
   /** Every unexpected exit the process told of, for the crash reports: true once it stopped. */
   readonly crashes: readonly boolean[];
+  /** Every step that ended, as the usage signals hear it (plan 0029). */
+  readonly steps: readonly ChildSignal[];
 }
 
 export interface StartOptions {
@@ -267,12 +270,14 @@ export function startRaw(options: StartOptions = {}): RawNode {
   const notifier = options.notifier ?? new RecordingNotifier();
   const secrets = new RecordingSecrets();
   const crashes: boolean[] = [];
+  const steps: ChildSignal[] = [];
   const launcher = nodeProcessLauncher({
     clock: options.clock ?? systemClock,
     logger,
     secrets,
     notifier,
     crashes: { nodeCrashed: (stopped) => crashes.push(stopped) },
+    steps: (signal) => steps.push(signal),
     tree: options.tree ?? processTreeFor(process.platform),
     newId: randomUUID,
     journal,
@@ -281,7 +286,7 @@ export function startRaw(options: StartOptions = {}): RawNode {
     ...(options.heartbeat === undefined ? {} : { heartbeat: options.heartbeat }),
   });
   const node = launcher.start(spec, host);
-  return { node, host, logger, notifier, secrets, spec, journal, crashes };
+  return { node, host, logger, notifier, secrets, spec, journal, crashes, steps };
 }
 
 /** Wait until `condition` holds, polling; fail with `what` after `timeoutMs`. */

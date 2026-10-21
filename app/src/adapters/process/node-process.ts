@@ -8,6 +8,7 @@
 import { spawn, type ChildProcessWithoutNullStreams as ChildProcess } from "node:child_process";
 
 import type { CloseReason } from "../../domain/journal/entry";
+import type { StepFailure } from "../../domain/telemetry/reports";
 import type { QueueReport } from "../../domain/journal/queue";
 import { CrashLoopBreaker } from "../../domain/supervision/breaker";
 import { TIMEOUT_PORT } from "../../domain/views/views";
@@ -28,9 +29,11 @@ import {
   decodeFrame,
   encodeFrame,
   envelopeOf,
+  failureOf,
   FrameTooLargeError,
   outcomeOf,
   statusOf,
+  stepSignal,
   stepStatusOf,
   type NodeFrame,
   type ReadLine,
@@ -132,7 +135,8 @@ class ChildNodeProcess implements NodeProcess {
 
   #queue(admitted: Admitted, delivery: InputDelivery): string {
     const { id, event, awaiting } = admitted;
-    const input: Input = { event, delivery, state: awaiting ? "awaiting" : "queued" };
+    const at = this.#deps.clock.now();
+    const input: Input = { event, delivery, state: awaiting ? "awaiting" : "queued", at };
     this.#inputs.set(id, input);
     if (this.#child !== null) {
       this.#sendInput(id, input);
@@ -419,7 +423,7 @@ class ChildNodeProcess implements NodeProcess {
         return;
       case "error":
         if (frame.in !== undefined) {
-          this.#finish(frame.in, new Error(frame.message));
+          this.#finish(frame.in, new Error(frame.message), undefined, failureOf(frame));
           return;
         }
         this.#log("error", frame.message);
@@ -518,8 +522,9 @@ class ChildNodeProcess implements NodeProcess {
     input?.delivery.status?.(stepStatusOf(frame));
   }
 
-  /** The terminal frame of an input; a second one, or one for an unknown id, is ignored. */
-  #finish(inputId: string, error: Error | undefined, outcome?: StepOutcome): void {
+  /** The terminal frame of an input; a second one, or one for an unknown id, is ignored. The step
+   * is told (plan 0029); failure facts come only from the node's own `error` frame. */
+  #finish(inputId: string, error?: Error, outcome?: StepOutcome, failure?: StepFailure): void {
     const input = this.#inputs.get(inputId);
     if (input === undefined) {
       this.#log("warn", `ignored done/error for unknown or finished input ${inputId}`);
@@ -531,6 +536,8 @@ class ChildNodeProcess implements NodeProcess {
     // and never re-sends a step that was.
     this.#journal.finished(inputId, error, outcome);
     input.delivery.done(error, outcome);
+    const took = this.#deps.clock.now() - (input.at ?? this.#deps.clock.now());
+    this.#deps.steps?.(stepSignal(this.#spec.identity, took, error === undefined, failure));
     // A place under the bound: the oldest held input goes next (spec 7.6).
     const next = this.#closing || this.#stopped !== null ? undefined : this.#journal.nextHeld();
     if (next !== undefined) {

@@ -9,6 +9,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import type { Signal } from "../../src/domain/telemetry/reports";
 import { sha512Base64 } from "../../src/adapters/signature/digest";
 import { MinisignVerifier } from "../../src/adapters/signature/minisign";
 import { HttpsClient } from "../../src/adapters/net/https-client";
@@ -121,7 +122,12 @@ function checker(options: {
   const logger = new RecordingLogger();
   /** domain/updates' events, in order, as General's update line hears them (plan 0022 §G). */
   const events: string[] = [];
+  /** The updater's usage signals (plan 0029), as name and fields. */
+  const signals: Signal[] = [];
   const check = new UpdateCheck({
+    signal: (signal) => {
+      signals.push(signal);
+    },
     onEvent: (event) => {
       events.push(
         event.kind === "found"
@@ -150,7 +156,7 @@ function checker(options: {
     platform: "mac",
     arch: "arm64",
   });
-  return { check, notifier, selfUpdater, logger, events };
+  return { check, notifier, selfUpdater, logger, events, signals };
 }
 
 describe("the self-update check over real HTTPS", () => {
@@ -171,7 +177,9 @@ describe("the self-update check over real HTTPS", () => {
     published.set("/latest-mac.yml.minisig", encode(signer.sign(encode(yaml))));
     published.set(`/${fileName}`, artifact);
 
-    const { check, events, notifier, selfUpdater } = checker({ publicKey: signer.publicKeyText });
+    const { check, events, notifier, selfUpdater, signals } = checker({
+      publicKey: signer.publicKeyText,
+    });
     // A staged release is announced once staging completes: not while it is still downloading.
     const stage = selfUpdater.checkForUpdates.bind(selfUpdater);
     let announcedEarly = true;
@@ -182,6 +190,7 @@ describe("the self-update check over real HTTPS", () => {
     const outcome = await check.check();
     expect(events).toEqual(["check", "found 1.2.3", "progress", "downloaded"]);
     expect(announcedEarly).toBe(false);
+    expect(check.staged).toBe(true);
 
     expect(outcome).toMatchObject({
       ok: true,
@@ -196,6 +205,17 @@ describe("the self-update check over real HTTPS", () => {
 
     check.installAtQuit();
     expect(selfUpdater.installed).toBe(1);
+    // Offered once verified, applied as it installs: the versions and the channel only.
+    expect(signals).toEqual([
+      {
+        name: "update_offered",
+        fields: { from_version: "1.0.0", to_version: "1.2.3", channel: "latest" },
+      },
+      {
+        name: "update_applied",
+        fields: { from_version: "1.0.0", to_version: "1.2.3", channel: "latest" },
+      },
+    ]);
   });
 
   it("a notice that cannot be raised after staging is not told as a failure to reach the updater", async () => {
@@ -418,11 +438,12 @@ describe("Go back over real HTTPS: as verified as an update (plan 0022 §G, D4)"
     const signer = new Signer();
     publishOld(signer);
     // Off in the settings: going back is the person's own press, not a check.
-    const { check, events, selfUpdater } = checker({
+    const { check, events, selfUpdater, signals } = checker({
       publicKey: signer.publicKeyText,
       update: { auto_check: false },
     });
     const outcome = await check.goBack({ version: OLD, tag: TAG });
+    expect(signals).toEqual([]);
     expect(outcome).toMatchObject({ ok: true });
     expect(events).toEqual([]);
     expect(asked).toEqual([
@@ -434,6 +455,9 @@ describe("Go back over real HTTPS: as verified as an update (plan 0022 §G, D4)"
     expect(selfUpdater.checked).toBe(0);
     check.installAtQuit();
     expect(selfUpdater.installed).toBe(1);
+    expect(signals.map((signal) => [signal.name, signal.fields["to_version"]])).toEqual([
+      ["update_applied", OLD],
+    ]);
   });
 
   it("a tampered old release is refused: another key's signature, nothing pinned or installed", async () => {

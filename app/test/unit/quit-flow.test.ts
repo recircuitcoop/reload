@@ -40,6 +40,9 @@ function flow(options: {
     exit: () => {
       events.push("exit");
     },
+    stopping: () => {
+      events.push("stopping");
+    },
     logger,
   });
   return { quit, events, asked, logger };
@@ -54,7 +57,7 @@ describe("the quit", () => {
       const { quit, events } = flow({ palette });
       expect(quit.idle).toBe(true);
       await expect(quit.request({ ask: true })).resolves.toBe("quit");
-      expect(events).toEqual(["stop children", "exit"]);
+      expect(events).toEqual(["stopping", "stop children", "exit"]);
       expect(quit.done).toBe(true);
       expect(quit.idle).toBe(false);
     }
@@ -63,7 +66,7 @@ describe("the quit", () => {
   it("Deploy and quit: deploys, then stops every child", async () => {
     const { quit, events, logger } = flow({ palette: DIRTY, answers: ["deploy"] });
     await expect(quit.request({ ask: true })).resolves.toBe("quit");
-    expect(events).toEqual(["ask", "deploy", "stop children", "exit"]);
+    expect(events).toEqual(["ask", "deploy", "stopping", "stop children", "exit"]);
     expect(logger.lines).toContain("INFO Deploy and quit: the editor's edits are deployed");
   });
 
@@ -83,7 +86,7 @@ describe("the quit", () => {
   it("Quit and discard: stops every child without deploying, and the log says so", async () => {
     const { quit, events, logger } = flow({ palette: DIRTY, answers: ["discard"] });
     await expect(quit.request({ ask: true })).resolves.toBe("quit");
-    expect(events).toEqual(["ask", "stop children", "exit"]);
+    expect(events).toEqual(["ask", "stopping", "stop children", "exit"]);
     expect(logger.lines).toContain(
       "WARN Quit and discard: the editor's undeployed edits are discarded",
     );
@@ -94,13 +97,13 @@ describe("the quit", () => {
     await expect(quit.request({ ask: true })).resolves.toBe("cancelled");
     expect(events).toEqual(["ask"]);
     await expect(quit.request({ ask: true })).resolves.toBe("quit");
-    expect(events).toEqual(["ask", "ask", "stop children", "exit"]);
+    expect(events).toEqual(["ask", "ask", "stopping", "stop children", "exit"]);
   });
 
   it("a quit on a signal asks nobody: the edits are discarded, and the log says so", async () => {
     const { quit, events, logger } = flow({ palette: DIRTY });
     await expect(quit.request({ ask: false })).resolves.toBe("quit");
-    expect(events).toEqual(["stop children", "exit"]);
+    expect(events).toEqual(["stopping", "stop children", "exit"]);
     expect(logger.lines).toContain(
       "WARN quitting on a signal: the editor's undeployed edits are discarded",
     );

@@ -21,6 +21,7 @@ import {
   type StopReason,
 } from "../domain/channel/messages";
 import { crashRestartDelay } from "../domain/supervision/backoff";
+import type { ChildSignal } from "../domain/telemetry/reports";
 import { CrashLoopBreaker, type CrashLoopSettings } from "../domain/supervision/breaker";
 import {
   crashLoopMessage,
@@ -71,6 +72,7 @@ export class Supervisor {
   readonly #listeners: ((status: ChildStatus) => void)[] = [];
   readonly #viewListeners: ((event: ViewMessage) => void)[] = [];
   readonly #nodeCrashListeners: ((stopped: boolean) => void)[] = [];
+  readonly #signalListeners: ((signal: ChildSignal) => void)[] = [];
   readonly #quitWaiters: (() => void)[] = [];
   readonly #stoppingListeners: (() => void)[] = [];
 
@@ -129,6 +131,11 @@ export class Supervisor {
   /** A node process of the runtime's crashed (WI-0018-22); `stopped` at the crash-loop limit. */
   onNodeCrash(listener: (stopped: boolean) => void): void {
     this.#nodeCrashListeners.push(listener);
+  }
+
+  /** What the child observed for the usage signals (plan 0029): facts, never an event. */
+  onSignal(listener: (signal: ChildSignal) => void): void {
+    this.#signalListeners.push(listener);
   }
 
   /**
@@ -344,6 +351,11 @@ export class Supervisor {
       case "node-crash":
         for (const listener of this.#nodeCrashListeners) {
           listener(message.stopped);
+        }
+        return;
+      case "signal":
+        for (const listener of this.#signalListeners) {
+          listener(message.signal);
         }
         return;
     }

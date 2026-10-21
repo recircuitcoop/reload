@@ -56,6 +56,7 @@ import { JsonSettingsStore } from "../adapters/fs/settings-store";
 import { anytypeExecutable, ProcessTableApps } from "../adapters/process/desktop-apps";
 import { DiskReportQueue, QUEUE_DIRNAME } from "../adapters/telemetry/disk-queue";
 import { HttpsPoster } from "../adapters/telemetry/https-poster";
+import { FsTelemetryMarks } from "../adapters/telemetry/marks";
 import * as machineId from "../adapters/telemetry/machine-id";
 import { HttpsClient } from "../adapters/net/https-client";
 import { forgetGeneratedTypes } from "../adapters/nodered/generator";
@@ -104,7 +105,7 @@ import { quitQuestion, wireQuit } from "./quit-question";
 import { forkSpecFor, LOG_CANARY_VARIABLE } from "./child-environment";
 import { wireRuntimeCalls } from "./runtime-calls";
 import { wireServiceCalls } from "./service-calls";
-import { wireTelemetry } from "./telemetry";
+import { wireTelemetry, type ShellTelemetry } from "./telemetry";
 import { releaseUrls, updateSource, wireUpdate } from "./update";
 import { wireViews } from "./views";
 import { previewOn, wirePreview } from "./view-preview";
@@ -212,7 +213,7 @@ const { toPage } = push;
 /** The editor's address once the session's port is picked (WI-0018-12). */
 let editorUrl: string | null = null;
 let updates: UpdateCheck | null = null;
-
+let telemetry: ShellTelemetry | null = null;
 // ── quit (WI-0018-12): undeployed edits are put to the person, then both children stop ──
 const editor = new EditorFrame({
   frames: () => {
@@ -234,6 +235,7 @@ const question = quitQuestion({
 const quitFlow = new QuitFlow({
   editor,
   ask: (problem) => question.ask(problem),
+  stopping: () => telemetry?.stopping(updates?.staged === true ? "update" : "quit"),
   stopChildren: async () => {
     await Promise.all([
       ...[...supervisors.values()].map((supervisor) => supervisor.stop()),
@@ -384,7 +386,9 @@ async function start(): Promise<DesktopWired["notices"] | null> {
   }
   // And the loopback MCP endpoint (WI-0018-19): served against saved, and the live move.
   const proxyToken = () => new OwnerOnlyFileStore(anytypeSecrets).read("mcp-proxy-token");
-  wireServiceCalls(ipcMain, services, proxyToken, anytypeStarted);
+  wireServiceCalls(ipcMain, services, proxyToken, anytypeStarted, () =>
+    telemetry?.reached("anytype_paired"),
+  );
   // ── the pages and pop-outs (WI-0018-11): served by the shell, never by the runtime ───────
   serveAppPages(protocol, path.join(APP_DIR, "dist", "ui"));
   const viewSession = session.fromPartition(VIEW_PARTITION);
@@ -422,6 +426,8 @@ async function start(): Promise<DesktopWired["notices"] | null> {
     notifier: notices,
     settings: new JsonSettingsStore(path.join(userDir, "shell-settings.json")),
     blocked: new FsBlockedUpdates(path.join(packageBase, "blocked-updates.json")),
+    signal: (signal) => telemetry?.signal(signal),
+    providers: (seen) => telemetry?.providers(seen),
     forgetGenerated: (name) =>
       forgetGeneratedTypes(path.join(userDir, "node-red", "generated"), name),
     environment: {
@@ -524,11 +530,11 @@ async function start(): Promise<DesktopWired["notices"] | null> {
     selfUpdater: new ElectronUpdaterInstaller(autoUpdater, source.repo, updateChannel, logger),
     session: { clock: systemClock, currentVersion: () => app.getVersion(), random: Math.random },
     publicKey: source.publicKey,
+    signal: (signal) => telemetry?.signal(signal),
     feedBaseUrl: releases.feedBaseUrl,
     tagBaseUrl: releases.tagBaseUrl,
   });
   updateCalls.attach(updates);
-
   // The person's answer to the quit question.
   wireQuit(ipcMain, question);
   // The page's calls the runtime answers: Skip this step, and the canvas's dirty flag.
@@ -545,8 +551,9 @@ async function start(): Promise<DesktopWired["notices"] | null> {
   );
   // ── telemetry (WI-0018-22): nothing is queued, sent or even identified before the answer ──
   const testMachineId = e2eHooks ? process.env["RELOAD_TEST_MACHINE_ID"] : undefined;
-  wireTelemetry({
+  telemetry = wireTelemetry({
     ipc: ipcMain,
+    marks: new FsTelemetryMarks(userDir, logger),
     setting: new JsonSettingsStore(path.join(userDir, "shell-settings.json")),
     queue: new DiskReportQueue(path.join(userDir, QUEUE_DIRNAME), logger),
     poster: new HttpsPoster(e2eHooks && testCa !== undefined ? { ca: testCa } : {}),

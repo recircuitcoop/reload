@@ -28,6 +28,8 @@ export interface StoredPackage extends DeclaredDocument {
   readonly installed: boolean;
   /** For an installed package: whether a publisher's signature covered it. */
   readonly signed: boolean;
+  /** For an installed package whose record says: where it was installed from. */
+  readonly origin?: "catalogue" | "file";
 }
 
 export class InstalledPackageStore implements PackageStore {
@@ -82,6 +84,7 @@ export class InstalledPackageStore implements PackageStore {
         document,
         installed: true,
         signed: record.signed,
+        ...(record.origin === undefined ? {} : { origin: record.origin.kind }),
         ...(record.python === undefined
           ? {}
           : { python: path.join(folder.root, ...record.python.split("/")) }),

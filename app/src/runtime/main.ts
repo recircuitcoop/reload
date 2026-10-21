@@ -45,7 +45,7 @@ import { DeployGuard } from "../application/deploy-guard";
 import { answerEditorCall } from "../application/editor-events";
 import { EventTypeService, isEventOp } from "../application/event-types";
 import { FlowFiles } from "../application/flow-files";
-import { FlowAdmin, flowNodeTypeOf, isFlowOp } from "../application/flows";
+import { deployCounts, FlowAdmin, flowNodeTypeOf, isFlowOp } from "../application/flows";
 import { Heartbeat } from "../application/heartbeat";
 import { JournalReplay } from "../application/journal-replay";
 import { isRunActionOp, RunActions } from "../application/run-actions";
@@ -65,6 +65,7 @@ import {
   serveShell,
   shellNodeCrashes,
   shellNotifier,
+  shellSignals,
 } from "../application/serve-shell";
 import { printCanary, sourceLog } from "../application/source-log";
 import { ViewService } from "../application/views";
@@ -286,6 +287,8 @@ function generateNodeTypes(
         settings: DEFAULT_NODE_PROCESS,
         // Counted by the shell for crash reports, which the telemetry switch gates (WI-0018-22).
         crashes: shellNodeCrashes(link),
+        // Every step that ended, for the usage signals, which the same switch gates (plan 0029).
+        steps: shellSignals(link),
         // Inputs held at a queue bound keep their run from settling as done (WI-0022-06).
         held: runService,
         // A type that declares a heartbeat is judged as the Anytype MCP child is (plan 0031 B).
@@ -480,9 +483,22 @@ async function startNodeRed(config: InitConfig): Promise<void> {
       link.post({ v: 1, t: "flows" });
     },
   });
-  // Any deploy, the canvas's included, changes what Configuration › Flows lists.
+  // Any deploy, the canvas's included, changes what Configuration › Flows lists, and is counted
+  // for the usage signals (plan 0029). This generation's first start is the load, not a deploy.
+  let loaded = false;
   engine.events.on("flows:started", () => {
     admin.changed();
+    if (loaded) {
+      void engine.deployedFlows().then(
+        (flows) => {
+          shellSignals(link)(deployCounts(flows, packageOfType));
+        },
+        (error: unknown) => {
+          logger.warn(`a deploy could not be counted: ${String(error)}`);
+        },
+      );
+    }
+    loaded = true;
   });
   await engine.start();
   // The Inbox badge from the journal: views pending before a restart are pending still.

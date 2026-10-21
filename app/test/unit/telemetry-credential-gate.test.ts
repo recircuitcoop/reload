@@ -4,26 +4,43 @@
 // the redactor and some nobody knew, are planted in every string every builder takes, and no
 // queued or sent byte may contain any of them or any credential shape.
 //
-// BUILDERS is the table every later signal joins: one row per builder in reports.ts, building its
-// report with the planted text in every string input and recording it through the pipeline.
+// BUILDERS is the table every signal joins: one row per builder in reports.ts (test/fakes/
+// signals.ts builds each with the planted text in every string input), recorded through the
+// pipeline. HOOKS drives the code that hears each signal, from the hostile inputs it can see
+// (an error frame, a stack, an MCP tool's arguments, a provider's URL, a file path) to the queue.
+// Rule 6: a package chooses no field, whatever its frame carries.
 //
 // Every fake value says "fake" (or is too short to be read as a key), so the repository's own
 // secret scans (no-secrets.test.ts, test_no_secrets.py) excuse them by construction.
+import fs from "node:fs";
+import * as path from "node:path";
 import { describe, expect, it } from "vitest";
 import { TelemetryPipeline } from "../../src/application/telemetry";
 import {
+  credentialFieldName,
   CREDENTIAL_NAME_FRAGMENTS,
   hostOnly,
   scrubFreeText,
   WITHHELD,
   type Json,
 } from "../../src/domain/telemetry/redact";
+import { failureOf, stepSignal } from "../../src/adapters/process/codec";
+import { mcpDispatch } from "../../src/application/mcp-dispatch";
+import { UsageSignals } from "../../src/application/usage-signals";
+import { parseChildSignal } from "../../src/domain/channel/messages";
 import {
   crashPayload,
+  SIGNALS,
   usagePayload,
+  type ChildSignal,
   type QueuedReport,
   type Versions,
 } from "../../src/domain/telemetry/reports";
+import { fingerprintOf } from "../../src/shell/telemetry";
+import { unpairedFiles } from "../fakes/anytype";
+import { RecordingLogger } from "../fakes/children";
+import { FakeClock } from "../fakes/clock";
+import { everySignal } from "../fakes/signals";
 import { telemetryWorld } from "../fakes/telemetry";
 
 // ── the fakes ────────────────────────────────────────────────────────────────────────────
@@ -98,12 +115,41 @@ const versionsOf = (planted: string): Versions => ({
 
 const COUNTS = { runtime: 1, services: 2, node: 3, nodeStopped: 1 };
 
-/** Every builder in reports.ts. A new signal adds its row here. */
+/** Every builder in reports.ts, through the shell's UsageSignals (the version fields join them). */
+const SIGNAL_ROWS: readonly BuilderFixture[] = SIGNALS.flatMap((name) =>
+  [true, false].map((signed) => ({
+    name: `${name}${signed ? "" : " (unsigned)"}`,
+    record: (pipeline: TelemetryPipeline, planted: string) => {
+      const signal = everySignal(planted, signed).find((built) => built.name === name);
+      if (signal === undefined) {
+        throw new Error(`no builder makes ${name}`);
+      }
+      const recorded = usage(pipeline, planted).record(signal);
+      return recorded ? (pipeline.pending().at(-1) ?? null) : null;
+    },
+  })),
+);
+
+/** The shell's mapper over `pipeline`, its version fields planted too, its store knowing one package. */
+const usage = (pipeline: TelemetryPipeline, planted: string): UsageSignals =>
+  new UsageSignals({
+    record: (event, payload) => pipeline.recordUsage(event, payload),
+    versions: versionsOf(planted),
+    packages: () => [
+      { name: planted, document: { version: planted }, installed: true, signed: true },
+    ],
+  });
+
+/** Every builder in reports.ts. A new signal adds its row in test/fakes/signals.ts. */
 const BUILDERS: readonly BuilderFixture[] = [
+  ...SIGNAL_ROWS,
   {
     name: "usagePayload",
     record: (pipeline, planted) =>
-      pipeline.recordUsage("app_start", usagePayload(versionsOf(planted), [{ id: planted, version: planted }])),
+      pipeline.recordUsage(
+        "app_start",
+        usagePayload(versionsOf(planted), [{ id: planted, version: planted }]),
+      ),
   },
   {
     name: "crashPayload",
@@ -179,6 +225,214 @@ describe("the credential gate: its own check can fail", () => {
   });
 });
 
+// ── rule 5, through the hooks: from what each hook can see to the queue ───────────────────
+
+const IDENTITY = {
+  id: "n1",
+  flowId: "f1",
+  package: "probekit",
+  typeId: "probe",
+  type: "reload-probekit-probe",
+  name: "",
+  kind: "node" as const,
+};
+
+/** The hooks, each handed `planted` wherever its input can carry one, giving the child's facts. */
+const HOOKS: readonly {
+  readonly name: string;
+  readonly facts: (planted: string) => Promise<ChildSignal[]>;
+}[] = [
+  {
+    name: "a failed step's error frame: its message, its type, its file, a stack, extra fields",
+    facts: (planted) =>
+      Promise.resolve([
+        stepSignal(
+          IDENTITY,
+          12,
+          false,
+          failureOf({
+            t: "error",
+            in: "i1",
+            message: `${planted}\n    at run (/Users/fake-person/${planted}/node.js:3:1)`,
+            error_type: planted,
+            file: `src/${planted}.py`,
+            line: 3,
+          }),
+        ),
+      ]),
+  },
+  {
+    name: "a step whose facts crossed the channel with extra fields a package added",
+    facts: (planted) =>
+      Promise.resolve(
+        [
+          parseChildSignal({
+            kind: "step",
+            package: "probekit",
+            step: { nodeKind: "node", nodeId: "probe", durationMs: 1, ok: false, token: planted },
+            failure: { errorType: null, message: null, file: planted, line: 1, config: planted },
+            payload: planted,
+          }),
+        ].filter((signal): signal is ChildSignal => signal !== null),
+      ),
+  },
+  {
+    name: "an MCP tools/call: its arguments, its result, its client's name",
+    facts: async (planted) => {
+      const told: ChildSignal[] = [];
+      const session = {
+        closed: false,
+        initialize: () => Promise.resolve([]),
+        ping: () => Promise.resolve(),
+        request: () => Promise.resolve({ content: [{ type: "text", text: planted }] }),
+        close: () => undefined,
+        onBroken: () => undefined,
+      };
+      const handle = mcpDispatch({
+        served: () => ({ session, tools: [{ name: "API-get-object", inputSchema: {} }] }),
+        redact: (text) => text,
+        clock: new FakeClock(),
+        logger: new RecordingLogger(),
+        files: unpairedFiles(new RecordingLogger()),
+        observe: (call) => told.push({ kind: "mcp-call", call }),
+      });
+      const send = (body: unknown) => handle(new TextEncoder().encode(JSON.stringify(body)));
+      await send({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: { clientInfo: { name: planted } },
+      });
+      await send({
+        jsonrpc: "2.0",
+        id: 2,
+        method: "tools/call",
+        params: { name: "API-get-object", arguments: { key: planted, query: planted } },
+      });
+      await send({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: planted } });
+      return told;
+    },
+  },
+];
+
+describe.each(HOOKS)("the credential gate, through the hook: $name", ({ facts }) => {
+  it.each(HOSTILE)("no fake credential or credential shape leaves with %s", async (planted) => {
+    const world = telemetryWorld("on");
+    for (const secret of REGISTERED) {
+      world.registry.protect(secret);
+    }
+    const pipeline = new TelemetryPipeline(world.deps);
+    const signals = new UsageSignals({
+      record: (event, payload) => pipeline.recordUsage(event, payload),
+      versions: { appVersion: "1.0.0", os: "darwin", osVersion: "25.3.0", arch: "arm64" },
+      packages: () => [
+        { name: "probekit", document: { version: "0.3.0" }, installed: true, signed: true },
+      ],
+    });
+    const told = await facts(planted);
+    expect(told.length).toBeGreaterThan(0);
+    for (const signal of told) {
+      signals.child(signal);
+    }
+    expect(world.queue.reports.length).toBeGreaterThan(0);
+    const queuedBytes = JSON.stringify(world.queue.reports);
+    expect(EVERY_FAKE.filter((fake) => queuedBytes.includes(fake))).toEqual([]);
+    expect(queuedBytes).not.toContain("fake-person");
+    for (const queued of world.queue.reports) {
+      expect(stringsIn(queued.payload).flatMap(leaksIn)).toEqual([]);
+    }
+  });
+});
+
+describe("the credential gate: a provider's URL and an install's file (rules 3 and 5)", () => {
+  it("a provider URL with user:pass@ and ?token= sends only the host; a file sends no path", () => {
+    const world = telemetryWorld("on");
+    const pipeline = new TelemetryPipeline(world.deps);
+    const signals = usage(pipeline, "0.4.0");
+    const url = `https://${URL_USER}:${URL_PASSWORD}@provider.example:8443/c/index.json?token=${QUERY_TOKEN}#${PROXY_TOKEN}`;
+    const registered = only(
+      everySignal(url).filter((signal) => signal.name === "provider_registered"),
+    );
+    signals.record({
+      ...registered,
+      fields: { ...registered.fields, signer_fingerprint: fingerprintOf("RWfakeKey") },
+    });
+    for (const signal of everySignal(url)) {
+      if (signal.name.startsWith("package_install") || signal.name === "provider_removed") {
+        signals.record(signal);
+      }
+    }
+    const fileInstall = everySignal("/Users/fake-person/Downloads/my-package.tgz").find(
+      (signal) => signal.name === "package_updated",
+    );
+    signals.record(only(fileInstall === undefined ? [] : [fileInstall]));
+    const hosts = world.queue.reports.map((report) => report.payload["provider_host"]);
+    expect(hosts).toEqual([
+      "provider.example",
+      "provider.example",
+      "provider.example",
+      "provider.example",
+      "file",
+    ]);
+    const bytes = JSON.stringify(world.queue.reports);
+    for (const leak of [
+      URL_USER,
+      URL_PASSWORD,
+      QUERY_TOKEN,
+      PROXY_TOKEN,
+      "8443",
+      "index.json",
+      "fake-person",
+      "Downloads",
+      "my-package.tgz",
+    ]) {
+      expect(bytes).not.toContain(leak);
+    }
+  });
+});
+
+/** The one item of `items`; a test of a builder that makes none fails here. */
+function only<T>(items: readonly T[]): T {
+  const [item] = items;
+  if (item === undefined || items.length !== 1) {
+    throw new Error(`expected exactly one, got ${String(items.length)}`);
+  }
+  return item;
+}
+
+// ── rule 6: nothing is sent by a package ──────────────────────────────────────────────────
+
+describe("the credential gate: a package chooses no field (rule 6)", () => {
+  it("an error frame's facts are the four named ones, whatever else the frame carries", () => {
+    const failure = failureOf({
+      t: "error",
+      message: "m",
+      error_type: "E",
+      file: "f.py",
+      line: 2,
+      ...({ api_key: "x", event: "app_start", machine_id: "x" } as object),
+    });
+    expect(Object.keys(failure).sort()).toEqual(["errorType", "file", "line", "message"]);
+  });
+
+  it("no package or SDK file names the telemetry endpoints or posts an event itself", () => {
+    const repo = path.resolve(import.meta.dirname, "..", "..", "..");
+    const sources = [
+      "sdk/ts/src/node.ts",
+      "sdk/python/src/reload_node/__init__.py",
+      ...fs
+        .readdirSync(path.join(repo, "packages"), { recursive: true, withFileTypes: true })
+        .filter((entry) => entry.isFile() && /\.(ts|py)$/.test(entry.name))
+        .filter((entry) => !entry.parentPath.includes("node_modules"))
+        .map((entry) => path.relative(repo, path.join(entry.parentPath, entry.name))),
+    ];
+    for (const file of sources) {
+      const text = fs.readFileSync(path.join(repo, file), "utf8");
+      expect(text, file).not.toMatch(/umami|glitchtip|api\/send|api\/batch|telemetry/i);
+    }
+  });
+});
+
 // ── rule 2: no field is named like a credential ──────────────────────────────────────────
 
 describe("the credential gate: field names (rule 2)", () => {
@@ -200,6 +454,12 @@ describe("the credential gate: field names (rule 2)", () => {
       }
     },
   );
+
+  it("every builder's every field name passes, at any depth, signed or not", () => {
+    for (const signal of [...everySignal("x"), ...everySignal("x", false)]) {
+      expect(credentialFieldName(signal.fields), signal.name).toBeNull();
+    }
+  });
 
   it("the existing reports' field names pass", () => {
     const world = telemetryWorld("on");

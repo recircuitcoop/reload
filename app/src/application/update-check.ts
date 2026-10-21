@@ -23,6 +23,7 @@
 // every check: off makes no request at all, not even for the metadata (D14's rule, again).
 
 import { compareVersions } from "../domain/packages/versions";
+import { updateSignal, type Signal } from "../domain/telemetry/reports";
 import { MinisignError } from "../domain/signature/minisign";
 import {
   DEFAULT_CHECK_JITTER_SECONDS,
@@ -111,6 +112,8 @@ export interface UpdateCheckPorts {
    * that does not ask.
    */
   readonly onEvent?: (event: UpdateEvent) => void;
+  /** Where update_offered and update_applied go (plan 0029): the usage signals, behind consent. */
+  readonly signal?: (signal: Signal) => void;
 }
 
 const reasonOf = (error: unknown): string =>
@@ -123,7 +126,8 @@ function joinUrl(base: string, segment: string): string {
 
 export class UpdateCheck {
   readonly #ports: UpdateCheckPorts;
-  #staged = false;
+  /** The verified release the platform updater holds, installed at quit; null when none. */
+  #staged: { readonly version: string; readonly channel: string } | null = null;
   #cancelSchedule: (() => void) | null = null;
 
   constructor(ports: UpdateCheckPorts) {
@@ -138,7 +142,7 @@ export class UpdateCheck {
    */
   async check(options: { readonly manual?: boolean } = {}): Promise<UpdateOutcome> {
     const { notifier, logger } = this.#ports.report;
-    this.#staged = false;
+    this.#staged = null;
     const policy = this.#policy();
     if (!policy.ok) {
       return this.#failed(policy.why);
@@ -184,6 +188,10 @@ export class UpdateCheck {
       ok: true,
       message: `Checked: Reload ${parsed.version} is available.`,
     };
+    const { channel } = policy.value;
+    this.#ports.signal?.(
+      updateSignal("update_offered", this.#ports.session.currentVersion(), parsed.version, channel),
+    );
     try {
       await this.#ports.selfUpdater.checkForUpdates(parsed);
     } catch (error) {
@@ -199,7 +207,7 @@ export class UpdateCheck {
       return available;
     }
     // Staged: nothing after this point is a failure to reach the platform updater.
-    this.#staged = true;
+    this.#staged = { version: parsed.version, channel };
     this.#emit({ kind: "progress", percent: 100 });
     this.#emit({ kind: "downloaded" });
     // "Ready, installs when you quit" only once it is (test_helper_notification.py: a staged
@@ -230,7 +238,7 @@ export class UpdateCheck {
    */
   async goBack(to: { readonly version: string; readonly tag: string }): Promise<UpdateOutcome> {
     const { logger } = this.#ports.report;
-    this.#staged = false;
+    this.#staged = null;
     const policy = this.#policy();
     if (!policy.ok) {
       return this.#failed(policy.why);
@@ -272,7 +280,7 @@ export class UpdateCheck {
         "no-connection",
       );
     }
-    this.#staged = true;
+    this.#staged = { version: to.version, channel: policy.value.channel };
     return { ok: true, message: `Verified: Reload ${to.version} installs when you quit.` };
   }
 
@@ -379,9 +387,17 @@ export class UpdateCheck {
 
   /** Install the verified update now; a no-op unless the last check staged one. */
   installAtQuit(): void {
-    if (this.#staged) {
+    if (this.#staged !== null) {
+      const { version, channel } = this.#staged;
+      const from = this.#ports.session.currentVersion();
+      this.#ports.signal?.(updateSignal("update_applied", from, version, channel));
       this.#ports.selfUpdater.quitAndInstall();
     }
+  }
+
+  /** Whether a verified release waits to be installed at quit. */
+  get staged(): boolean {
+    return this.#staged !== null;
   }
 
   /**

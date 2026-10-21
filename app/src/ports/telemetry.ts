@@ -51,3 +51,32 @@ export type MachineIdHash = (raw: string) => string;
 export interface NodeCrashSink {
   nodeCrashed(stopped: boolean): void;
 }
+
+/** A provider as the memory keeps it: only what its removal event needs. */
+export interface RememberedProvider {
+  readonly url: string;
+  readonly official: boolean;
+}
+
+/** What the shell's telemetry remembers between launches (plan 0029): never a report. */
+export interface TelemetryMemory {
+  /** The setup steps reached, and which of those a queued event has told. */
+  readonly reached: readonly string[];
+  readonly told: readonly string[];
+  /** The providers the last listing saw, by name: their address and whether official. */
+  readonly providers: Readonly<Record<string, RememberedProvider>>;
+}
+
+/**
+ * The marker a launch leaves until its app_stop is queued, and the telemetry memory. A marker
+ * found at start is a launch that did not stop cleanly.
+ */
+export interface TelemetryMarks {
+  /** The version the last launch ran, when it left its marker; null when it stopped cleanly. */
+  readRunning(): string | null;
+  writeRunning(version: string): void;
+  clearRunning(): void;
+  /** Null when nothing was remembered yet: no launch of this app has ever told one. */
+  readMemory(): TelemetryMemory | null;
+  writeMemory(memory: TelemetryMemory): void;
+}

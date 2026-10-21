@@ -10,6 +10,8 @@ import type { Endpoints, Outgoing } from "../../src/domain/telemetry/transports"
 import type {
   PostResult,
   ReportQueue,
+  TelemetryMarks,
+  TelemetryMemory,
   TelemetryPoster,
   TelemetrySetting,
 } from "../../src/ports/telemetry";
@@ -160,5 +162,31 @@ export function queued(report: QueuedReport | null): QueuedReport {
 export async function settle(): Promise<void> {
   for (let n = 0; n < 20; n += 1) {
     await Promise.resolve();
+  }
+}
+
+/** The launch marker and the telemetry memory, in memory: one instance is one userData. */
+export class MemoryMarks implements TelemetryMarks {
+  running: string | null = null;
+  memory: TelemetryMemory | null = null;
+
+  readRunning(): string | null {
+    return this.running;
+  }
+
+  writeRunning(version: string): void {
+    this.running = version;
+  }
+
+  clearRunning(): void {
+    this.running = null;
+  }
+
+  readMemory(): TelemetryMemory | null {
+    return this.memory;
+  }
+
+  writeMemory(memory: TelemetryMemory): void {
+    this.memory = memory;
   }
 }

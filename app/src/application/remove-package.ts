@@ -12,7 +12,13 @@
 
 import type { Logger } from "../ports/logger";
 import type { InstalledRecord, PackageRoots } from "../ports/package-roots";
-import type { OneAtATime, PackageOutcome, RestartRuntime } from "./install-package";
+import { packageRemoved, type Signal } from "../domain/telemetry/reports";
+import {
+  recordFacts,
+  type OneAtATime,
+  type PackageOutcome,
+  type RestartRuntime,
+} from "./install-package";
 
 /** The types the flows name now; `undeployed` is null when no editor is open to ask. */
 export interface TypesInUse {
@@ -30,6 +36,8 @@ export interface PackageRemoverPorts {
   readonly shipped: () => readonly string[];
   readonly restartRuntime: RestartRuntime;
   readonly logger: Logger;
+  /** Where the removal event goes (plan 0029): the usage signals, behind consent. */
+  readonly signal?: (signal: Signal) => void;
 }
 
 /** The types of `types` that belong to package `name` (`reload-<name>-<id>`, spec 2.1). */
@@ -91,6 +99,7 @@ export class PackageRemover {
       }
 
       roots.remove(name);
+      this.#ports.signal?.(packageRemoved(recordFacts(record)));
       this.#ports.forgetGenerated(name);
       const took = await this.#ports.restartRuntime(`${name} was removed`);
       logger.info(

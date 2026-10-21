@@ -1,0 +1,414 @@
+// The pieces of plan 0029's signals that stand on their own: the builders' rules for what a field
+// may hold, a deploy's exact counts, the providers a listing sees, the redaction's vouched fields,
+// Umami's batch request, the pipeline's draining in batches, and the launch marker on disk.
+import fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { FsTelemetryMarks } from "../../src/adapters/telemetry/marks";
+import { CORE_NODES, deployCounts } from "../../src/application/flows";
+import { PackageCatalogues, type CatalogueReads } from "../../src/application/package-catalogues";
+import { TelemetryPipeline } from "../../src/application/telemetry";
+import { factsOf } from "../../src/application/usage-signals";
+import { REDACTED } from "../../src/domain/redaction/registry";
+import { redactPayload } from "../../src/domain/telemetry/redact";
+import {
+  clientOf,
+  errorTypeOf,
+  lineOf,
+  mcpCall,
+  packageInstallFailed,
+  packageUpdated,
+  providerRegistered,
+  providerRemoved,
+  stepFile,
+  VOUCHED_FIELDS,
+  type QueuedReport,
+} from "../../src/domain/telemetry/reports";
+import { MAX_BATCH, outgoingFor } from "../../src/domain/telemetry/transports";
+import { RecordingLogger } from "../fakes/children";
+import { ENDPOINTS, settle, telemetryWorld } from "../fakes/telemetry";
+
+describe("what a field may hold (plan 0029)", () => {
+  it("a step's file is a plain path inside its package, or null", () => {
+    expect(stepFile("src/node.py")).toBe("src/node.py");
+    expect(stepFile("dist/anytype.cjs")).toBe("dist/anytype.cjs");
+    for (const bad of [
+      "/Users/fake-person/node.py",
+      "../outside.py",
+      "src/../../x",
+      "./node.py",
+      "C:\\\\node.py",
+      "a b.py",
+      "x".repeat(201),
+      7,
+      null,
+    ]) {
+      expect(stepFile(bad), String(bad)).toBeNull();
+    }
+  });
+
+  it("an error type is a class name, a line a whole number, a client cut to 40", () => {
+    expect(errorTypeOf("anytype.ApiError")).toBe("anytype.ApiError");
+    expect(errorTypeOf("not a class")).toBeNull();
+    expect(errorTypeOf(3)).toBeNull();
+    expect(lineOf(12)).toBe(12);
+    for (const bad of [0, -1, 1.5, "3", 10_000_001]) {
+      expect(lineOf(bad)).toBeNull();
+    }
+    expect(clientOf(` ${"c".repeat(50)} `)).toBe("c".repeat(40));
+    expect(clientOf("  ")).toBeNull();
+    expect(clientOf(undefined)).toBeNull();
+  });
+
+  it("a provider is its host, a file source is `file`, a fingerprint is short hex or null", () => {
+    const facts = (url: string) => ({ url, official: false });
+    expect(providerRegistered(facts("file:///Users/x/c.json"), null, 0).fields).toMatchObject({
+      provider_host: "file",
+      signer_fingerprint: null,
+    });
+    expect(providerRegistered(facts("not a url"), "NOT-HEX", 1).fields).toMatchObject({
+      provider_host: null,
+      signer_fingerprint: null,
+    });
+    expect(providerRemoved(facts("https://a.example/x")).fields).toEqual({
+      provider_host: "a.example",
+      official: false,
+    });
+  });
+
+  it("a refusal is its code, never its words; a tool name is lowercased", () => {
+    const where = { kind: "catalogue" as const, url: null };
+    expect(packageInstallFailed(where, "download-failed").fields["reason"]).toBe("download-failed");
+    expect(packageInstallFailed(where, "the server said no").fields["reason"]).toBe("other");
+    expect(packageInstallFailed(where, "x").fields["provider_host"]).toBeNull();
+    const call = {
+      tool: "API-get-collection-views",
+      client: null,
+      durationMs: -3,
+      ok: true,
+      errorCode: null,
+    };
+    expect(mcpCall("1.0.0", call).fields).toMatchObject({
+      tool: "api-get-collection-views",
+      duration_ms: 0,
+    });
+    expect(mcpCall(null, { ...call, tool: null }).fields["tool"]).toBeNull();
+  });
+
+  it("an unsigned package's update names no version it came from", () => {
+    const facts = {
+      package: "mine",
+      version: "2.0.0",
+      source: "file" as const,
+      signed: false,
+      environment: null,
+    };
+    expect(packageUpdated(facts, { kind: "file" }, 1, "1.0.0").fields).toMatchObject({
+      package: "unsigned",
+      version: null,
+      from_version: null,
+      provider_host: "file",
+    });
+  });
+
+  it("a package's facts come from the store's own record, its environment only when declared", () => {
+    expect(
+      factsOf({
+        name: "p",
+        document: { version: "1.0.0", environment: { kind: "uv-python" } },
+        installed: true,
+        signed: true,
+        origin: "file",
+      }),
+    ).toEqual({
+      package: "p",
+      version: "1.0.0",
+      source: "file",
+      signed: true,
+      environment: "uv-python",
+    });
+    expect(factsOf({ name: "q", document: null, installed: false, signed: false })).toEqual({
+      package: "q",
+      version: "unknown",
+      source: "shipped",
+      signed: true,
+      environment: null,
+    });
+    expect(
+      factsOf({
+        name: "r",
+        document: { environment: { kind: "java" } },
+        installed: true,
+        signed: false,
+      }),
+    ).toMatchObject({ source: "catalogue", environment: null, signed: false });
+  });
+});
+
+describe("a deploy's exact counts", () => {
+  it("counts every node on each flow, in order, by package, Node-RED's own as node-red", () => {
+    const packageOf = (type: string) =>
+      type.startsWith("reload-probekit-") ? "probekit" : undefined;
+    const flows = [
+      { id: "t1", type: "tab" },
+      { id: "t2", type: "tab" },
+      { id: "a", type: "reload-probekit-probe", z: "t1" },
+      { id: "b", type: "inject", z: "t1" },
+      { id: "c", type: "reload-probekit-probe", z: "t2" },
+      { id: "cfg", type: "some-config" },
+      { id: "sub", type: "debug", z: "elsewhere" },
+      { id: "untyped", z: "t1" },
+      "not a node",
+    ];
+    expect(deployCounts(flows, packageOf)).toEqual({
+      kind: "deployed",
+      nodesPerFlow: [2, 1],
+      perPackage: [
+        { package: "probekit", nodes: 2 },
+        { package: CORE_NODES, nodes: 1 },
+      ],
+    });
+    expect(deployCounts([], packageOf)).toEqual({
+      kind: "deployed",
+      nodesPerFlow: [],
+      perPackage: [],
+    });
+  });
+});
+
+describe("the providers a listing sees", () => {
+  const reads = (overrides: Partial<CatalogueReads> = {}): CatalogueReads => ({
+    catalogue: () =>
+      Promise.resolve({ name: "official", url: "u", verified: true, fetchedAt: 0, entries: [] }),
+    catalogueKey: "RWofficial",
+    sources: () => [
+      { name: "mine", url: "https://mine.example/c.json", publicKey: null, autoUpdate: null },
+    ],
+    registered: () => Promise.reject(new Error("down")),
+    http: { get: () => Promise.reject(new Error("no")) },
+    saveDownload: () => "",
+    catalogueUrl: "https://catalogue.example/index.json",
+    ...overrides,
+  });
+
+  it("tells the official one and every registered source, and nothing when the settings cannot be read", async () => {
+    const seen: unknown[] = [];
+    const catalogues = new PackageCatalogues(reads({ providers: (list) => seen.push(list) }));
+    await catalogues.listings(new Set());
+    expect(seen).toEqual([
+      [
+        {
+          name: "official",
+          url: "https://catalogue.example/index.json",
+          official: true,
+          publicKey: "RWofficial",
+          offered: 0,
+        },
+        {
+          name: "mine",
+          url: "https://mine.example/c.json",
+          official: false,
+          publicKey: null,
+          offered: 0,
+        },
+      ],
+    ]);
+    const unreadable = new PackageCatalogues(
+      reads({
+        providers: (list) => seen.push(list),
+        sources: () => {
+          throw new Error("settings are not JSON");
+        },
+      }),
+    );
+    await unreadable.listings(new Set());
+    expect(seen).toHaveLength(1);
+    const none = new PackageCatalogues(
+      reads({ catalogueUrl: "", providers: (list) => seen.push(list) }),
+    );
+    await none.listings(new Set());
+    expect(seen.at(-1)).toEqual([expect.objectContaining({ name: "mine" })]);
+  });
+
+  it("knows each catalogue's address, and where an installed package came from", () => {
+    const catalogues = new PackageCatalogues(reads());
+    expect(catalogues.urlOf("official")).toBe("https://catalogue.example/index.json");
+    expect(catalogues.urlOf("mine")).toBe("https://mine.example/c.json");
+    expect(catalogues.urlOf("gone")).toBeNull();
+    expect(new PackageCatalogues(reads({ catalogueUrl: "" })).urlOf("official")).toBeNull();
+    const broken = new PackageCatalogues(
+      reads({
+        sources: () => {
+          throw new Error("unreadable");
+        },
+      }),
+    );
+    expect(broken.urlOf("mine")).toBeNull();
+    expect(catalogues.installOrigin({ kind: "file", path: "/Users/x/p.tgz" })).toEqual({
+      kind: "file",
+    });
+    expect(catalogues.installOrigin({ kind: "catalogue", source: "mine", id: "p" })).toEqual({
+      kind: "catalogue",
+      url: "https://mine.example/c.json",
+    });
+    expect(catalogues.installOrigin(undefined)).toEqual({ kind: "catalogue", url: null });
+  });
+});
+
+describe("the vouched fields", () => {
+  it("keep their text past the key-name rule, still redacted, and only as text", () => {
+    const redact = (text: string) => text.replaceAll("fake-secret-123456", REDACTED);
+    const payload = {
+      file: "src/node.py",
+      environment: "uv-python",
+      provider_host: "fake-secret-123456.example",
+      file_path: "src/other.py",
+    };
+    expect(redactPayload(payload, redact, [], VOUCHED_FIELDS)).toEqual({
+      file: "src/node.py",
+      environment: "uv-python",
+      provider_host: `${REDACTED}.example`,
+      file_path: REDACTED,
+    });
+    expect(
+      redactPayload({ file: { nested: "x" }, environment: null }, redact, [], VOUCHED_FIELDS),
+    ).toEqual({
+      file: REDACTED,
+      environment: null,
+    });
+    expect(redactPayload({ file: "src/node.py" }, redact)).toEqual({ file: REDACTED });
+  });
+});
+
+describe("Umami's batch request and the pipeline's batches", () => {
+  const usage = (n: number): QueuedReport => ({
+    sequence: n,
+    kind: "usage",
+    payload: { event: "package_used", n },
+  });
+  const crash: QueuedReport = { sequence: 99, kind: "error", payload: { report_id: "r", at: "t" } };
+
+  it("sends one event to /api/send and up to 50 to /api/batch, each named as its signal", () => {
+    expect(outgoingFor([usage(1)], ENDPOINTS, "1.0.0").url).toBe("https://umami.test/api/send");
+    const batch = outgoingFor([usage(1), usage(2)], ENDPOINTS, "1.0.0");
+    expect(batch.url).toBe("https://umami.test/api/batch");
+    expect(
+      (JSON.parse(batch.body) as { payload: { name: string; data: { n: number } } }[]).map(
+        (event) => [event.payload.name, event.payload.data.n],
+      ),
+    ).toEqual([
+      ["package_used", 1],
+      ["package_used", 2],
+    ]);
+    const unnamed = { sequence: 3, kind: "usage" as const, payload: {} };
+    expect(JSON.parse(outgoingFor(unnamed, ENDPOINTS, "1").body)).toMatchObject({
+      payload: { name: "usage" },
+    });
+  });
+
+  it("refuses an empty request, more than 50, a crash report with company, and a mixed batch", () => {
+    const many = Array.from({ length: MAX_BATCH + 1 }, (_, n) => usage(n));
+    expect(() => outgoingFor([], ENDPOINTS, "1")).toThrow("1 to 50 reports");
+    expect(() => outgoingFor(many, ENDPOINTS, "1")).toThrow("1 to 50 reports");
+    expect(() => outgoingFor([crash, crash], ENDPOINTS, "1")).toThrow("sent alone");
+    expect(() => outgoingFor([usage(1), crash], ENDPOINTS, "1")).toThrow("usage events only");
+  });
+
+  it("drains 120 events in three requests, and a crash report between them on its own", async () => {
+    const world = telemetryWorld("on");
+    const pipeline = new TelemetryPipeline(world.deps);
+    for (let n = 0; n < 60; n += 1) {
+      pipeline.recordUsage("package_used", { n });
+    }
+    pipeline.recordCrash({ crashed: "runtime" });
+    for (let n = 60; n < 120; n += 1) {
+      pipeline.recordUsage("package_used", { n });
+    }
+    expect(await pipeline.flush()).toEqual({ sent: 121, retryInMs: null });
+    expect(world.poster.sent.map((request) => request.url)).toEqual([
+      "https://umami.test/api/batch",
+      "https://umami.test/api/batch",
+      "https://glitchtip.test/api/42/envelope/",
+      "https://umami.test/api/batch",
+      "https://umami.test/api/batch",
+    ]);
+    expect(world.queue.reports).toEqual([]);
+  });
+
+  it("a batch that fails keeps every one of its events for the retry", async () => {
+    const world = telemetryWorld("on");
+    const pipeline = new TelemetryPipeline(world.deps);
+    world.poster.answer = () => ({ ok: false, detail: "503" });
+    pipeline.recordUsage("app_start", {});
+    pipeline.recordUsage("setup_step", {});
+    expect((await pipeline.flush()).sent).toBe(0);
+    expect(world.queue.reports).toHaveLength(2);
+    await settle();
+  });
+
+  it("a name that is not a signal is never queued", () => {
+    const world = telemetryWorld("on");
+    const pipeline = new TelemetryPipeline(world.deps);
+    expect(pipeline.recordUsage("usage" as never, {})).toBeNull();
+    expect(world.queue.reports).toEqual([]);
+    expect(world.logger.lines.join("\n")).toContain("names no known signal");
+  });
+});
+
+describe("the launch marker and the telemetry memory on disk", () => {
+  let scratch = "";
+  afterEach(() => {
+    fs.rmSync(scratch, { recursive: true, force: true });
+  });
+
+  it("keeps the marker until cleared, and the memory as written, readable by this user only", () => {
+    scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-marks-"));
+    const marks = new FsTelemetryMarks(scratch, new RecordingLogger());
+    expect(marks.readRunning()).toBeNull();
+    expect(marks.readMemory()).toBeNull();
+    marks.writeRunning("0.5.0");
+    expect(new FsTelemetryMarks(scratch, new RecordingLogger()).readRunning()).toBe("0.5.0");
+    expect(fs.statSync(path.join(scratch, "telemetry-running")).mode & 0o777).toBe(0o600);
+    marks.clearRunning();
+    marks.clearRunning();
+    expect(marks.readRunning()).toBeNull();
+    const memory = {
+      reached: ["launched"],
+      told: ["launched"],
+      providers: { official: { url: "https://c.example", official: true } },
+    };
+    marks.writeMemory(memory);
+    expect(marks.readMemory()).toEqual(memory);
+  });
+
+  it("reads a damaged memory as what it can trust, and logs a write it could not make", () => {
+    scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-marks-"));
+    const file = path.join(scratch, "telemetry-memory.json");
+    fs.writeFileSync(file, "{broken");
+    const logger = new RecordingLogger();
+    const marks = new FsTelemetryMarks(scratch, logger);
+    expect(marks.readMemory()).toBeNull();
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        reached: "x",
+        told: [1],
+        providers: { a: { url: 1 }, b: null, c: { url: "u", official: false } },
+      }),
+    );
+    expect(marks.readMemory()).toEqual({
+      reached: [],
+      told: [],
+      providers: { c: { url: "u", official: false } },
+    });
+    fs.writeFileSync(file, JSON.stringify({ providers: [] }));
+    expect(marks.readMemory()).toEqual({ reached: [], told: [], providers: {} });
+    fs.writeFileSync(file, "null");
+    expect(marks.readMemory()).toEqual({ reached: [], told: [], providers: {} });
+    const blocked = path.join(scratch, "a-file");
+    fs.writeFileSync(blocked, "");
+    new FsTelemetryMarks(path.join(blocked, "inside"), logger).writeRunning("1.0.0");
+    expect(logger.lines.join("\n")).toContain("telemetry-running could not be written");
+  });
+});

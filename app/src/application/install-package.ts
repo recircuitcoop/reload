@@ -23,6 +23,13 @@ import { entryFor, OFFICIAL_SOURCE_NAME, type CatalogueEntry } from "../domain/p
 import { PackageRefusal } from "../domain/packages/archive";
 import type { Declaration } from "../domain/packages/declaration";
 import type { UpdateMode } from "../domain/packages/versions";
+import {
+  packageInstalled,
+  packageInstallFailed,
+  type InstallOrigin,
+  type PackageFacts,
+  type Signal,
+} from "../domain/telemetry/reports";
 import type { Logger } from "../ports/logger";
 import type { InstalledOrigin, InstalledRecord } from "../ports/package-roots";
 import {
@@ -135,6 +142,8 @@ export async function restartAround(
 
 export interface PackageInstallerPorts extends CatalogueReads {
   readonly environment: PackageEnvironmentPorts;
+  /** Where the install events go (plan 0029): the usage signals, behind consent. */
+  readonly signal?: (signal: Signal) => void;
   /** The packages shipped with the app, whose names an install never takes. */
   readonly shipped: () => readonly { readonly name: string; readonly version: string }[];
   readonly restartRuntime: RestartRuntime;
@@ -149,9 +158,27 @@ export function describeOrigin(origin: InstalledOrigin | undefined): string | nu
   return origin.kind === "catalogue" ? origin.source : origin.path;
 }
 
+/** What the install events may say of an installed package, from its record. */
+export function recordFacts(record: InstalledRecord): PackageFacts {
+  return {
+    package: record.package,
+    version: record.version,
+    source: record.origin?.kind ?? "catalogue",
+    signed: record.signed,
+    environment: record.environment,
+  };
+}
+
 /** Whether a file names a package archive rather than a package folder. */
 export function isArchiveFile(file: string): boolean {
   return /\.(tgz|tar\.gz)$/i.test(file);
+}
+
+/** A path install's folder or `.tgz`, read as it was installed: unsigned. */
+export function fileOrigin(path: string): PackageOrigin {
+  return isArchiveFile(path)
+    ? { kind: "archive", path, publicKey: null }
+    : { kind: "path", folder: path };
 }
 
 /** One install or removal at a time, across both use cases. */
@@ -178,6 +205,10 @@ export class OneAtATime {
     }
   }
 }
+
+/** The code of a refusal #refusedName worded. */
+const nameRefusal = (why: string): string =>
+  why.endsWith("remove it first") ? "installed" : "reserved";
 
 export class PackageInstaller {
   readonly #ports: PackageInstallerPorts;
@@ -248,15 +279,18 @@ export class PackageInstaller {
   ): Promise<PackageOutcome> {
     return this.#one.run(`The install of ${id}`, async () => {
       const name = packageNameOf(id);
+      const where: InstallOrigin = { kind: "catalogue", url: this.#catalogues.urlOf(source) };
       const early = this.#refusedName(name);
       if (early !== null) {
-        return this.#refused(id, early);
+        return this.#refused(id, early, where, nameRefusal(early));
       }
       const official = source === OFFICIAL_SOURCE_NAME;
       if (!official && (await this.#catalogues.officialOffers(id))) {
         return this.#refused(
           id,
           `the official catalogue offers ${id} too, and its entry is the one installed`,
+          where,
+          "shadowed",
         );
       }
       let entry: CatalogueEntry | null;
@@ -266,15 +300,25 @@ export class PackageInstaller {
         entry = entryFor(resolved.catalogue, id);
         key = resolved.key;
       } catch (error) {
-        return this.#refused(id, `the catalogue could not be read: ${(error as Error).message}`);
+        return this.#refused(
+          id,
+          `the catalogue could not be read: ${(error as Error).message}`,
+          where,
+          "catalogue-unreadable",
+        );
       }
       if (entry === null) {
-        return this.#refused(id, "the catalogue does not list it");
+        return this.#refused(id, "the catalogue does not list it", where, "not-listed");
       }
       if (official && (!entry.verified || key === null)) {
         // Every package from the official catalogue is verified against its key; with none,
         // nothing is.
-        return this.#refused(id, "the catalogue is not signed, so nothing it offers is verified");
+        return this.#refused(
+          id,
+          "the catalogue is not signed, so nothing it offers is verified",
+          where,
+          "signature",
+        );
       }
       if (key === null && !unverifiedConfirmed) {
         return {
@@ -290,16 +334,17 @@ export class PackageInstaller {
       try {
         saved = await this.#catalogues.download(name, entry);
       } catch (error) {
-        return this.#refused(id, (error as Error).message);
+        return this.#refused(id, (error as Error).message, where, "download-failed");
       }
       if (key === null) {
         this.#ports.logger.warn(`an unverified package is installed from ${source}, as confirmed`);
       }
-      return this.#install({ kind: "archive", path: saved, publicKey: key }, name, {
-        kind: "catalogue",
-        source,
-        id,
-      });
+      return this.#install(
+        { kind: "archive", path: saved, publicKey: key },
+        name,
+        { kind: "catalogue", source, id },
+        where,
+      );
     });
   }
 
@@ -321,10 +366,7 @@ export class PackageInstaller {
       this.#ports.logger.warn(`an unsigned package is installed from ${file}, as confirmed`);
       // Reading the folder or file is this install's fetching; its name is read with it.
       this.#ports.environment.phase?.("fetching", null);
-      const origin: PackageOrigin = isArchiveFile(file)
-        ? { kind: "archive", path: file, publicKey: null }
-        : { kind: "path", folder: file };
-      return this.#install(origin, null, { kind: "file", path: file });
+      return this.#install(fileOrigin(file), null, { kind: "file", path: file }, { kind: "file" });
     });
   }
 
@@ -378,9 +420,7 @@ export class PackageInstaller {
         }
       } else {
         this.#ports.environment.phase?.("fetching", name);
-        origin = isArchiveFile(from.path)
-          ? { kind: "archive", path: from.path, publicKey: null }
-          : { kind: "path", folder: from.path };
+        origin = fileOrigin(from.path);
       }
       try {
         await buildPackageEnvironment(
@@ -424,9 +464,12 @@ export class PackageInstaller {
     origin: PackageOrigin,
     expected: string | null,
     from: InstalledOrigin,
+    where: InstallOrigin,
   ): Promise<PackageOutcome> {
+    let nodeTypes = 0;
     // Judged on the verified declaration, before anything is written.
     const admit = (declaration: Declaration): void => {
+      nodeTypes = declaration.types.length;
       if (expected !== null && declaration.package !== expected) {
         throw new PackageRefusal(
           "declaration",
@@ -435,10 +478,7 @@ export class PackageInstaller {
       }
       const refused = this.#refusedName(declaration.package);
       if (refused !== null) {
-        throw new PackageRefusal(
-          refused.endsWith("remove it first") ? "installed" : "reserved",
-          refused,
-        );
+        throw new PackageRefusal(nameRefusal(refused) as "installed" | "reserved", refused);
       }
     };
     let built: BuiltPackage;
@@ -446,8 +486,11 @@ export class PackageInstaller {
       built = await buildPackageEnvironment(origin, this.#ports.environment, admit, from);
     } catch (error) {
       // buildPackageEnvironment has logged the refusal with its reason.
+      const code = error instanceof PackageRefusal ? error.reason : "failed";
+      this.#ports.signal?.(packageInstallFailed(where, code));
       return { ok: false, error: `Not installed: ${(error as Error).message}` };
     }
+    this.#ports.signal?.(packageInstalled(recordFacts(built.record), where, nodeTypes));
     const { package: name, version, signed } = built.record;
     const took = await this.#ports.restartRuntime(`${name} was installed`);
     const restart =
@@ -463,8 +506,12 @@ export class PackageInstaller {
     };
   }
 
-  #refused(what: string, why: string): PackageOutcome {
+  /** A refusal, logged; an install's (not a repair's) is told with its code, never its words. */
+  #refused(what: string, why: string, where?: InstallOrigin, code?: string): PackageOutcome {
     this.#ports.logger.warn(`install: ${what} was refused: ${why}`);
+    if (where !== undefined && code !== undefined) {
+      this.#ports.signal?.(packageInstallFailed(where, code));
+    }
     return { ok: false, error: `Not installed: ${why}.` };
   }
 }

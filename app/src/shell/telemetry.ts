@@ -6,28 +6,37 @@
 // Every report goes through the pipeline, which reads the switch again each time: while the
 // question is unanswered this reports nothing, queues nothing and reads no machine identifier.
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import * as os from "node:os";
 import type { IpcMain } from "electron";
 import { CrashReports } from "../application/crash-reports";
 import type { Supervisor } from "../application/supervisor";
 import { TelemetryPipeline, type TelemetryDeps } from "../application/telemetry";
 import type { SecretRegistry } from "../domain/redaction/registry";
-import type { ChildName } from "../domain/supervision/child-state";
-import { usagePayload, type ReportedPackage, type Versions } from "../domain/telemetry/reports";
+import type { SeenProvider } from "../application/package-catalogues";
+import { UsageSignals, type KnownPackage } from "../application/usage-signals";
+import type { ChildName, ChildStatus } from "../domain/supervision/child-state";
+import {
+  appStart,
+  appStop,
+  appUncleanStop,
+  providerRegistered,
+  providerRemoved,
+  setupStep,
+  SETUP_STEPS,
+  type ReportedPackage,
+  type SetupStepReached,
+  type Signal,
+  type StopReason,
+  type Versions,
+} from "../domain/telemetry/reports";
 import type { Endpoints } from "../domain/telemetry/transports";
+import type { TelemetryMarks, TelemetryMemory } from "../ports/telemetry";
 import type { TelemetryReport, TelemetryStatus } from "../ui/contract";
 import { IPC } from "./ipc";
 
-/** A package as the package store lists it, as far as a usage report looks at it. */
-export interface ListedPackage {
-  readonly name: string;
-  readonly document: unknown;
-  /** Installed by a person, not shipped with the app. */
-  readonly installed: boolean;
-  /** For an installed package: whether a publisher's signature covered it. */
-  readonly signed: boolean;
-}
+/** A package as the package store lists it, as far as an event looks at it. */
+export type ListedPackage = KnownPackage;
 
 export interface TelemetryWiring extends Pick<
   TelemetryDeps,
@@ -43,9 +52,19 @@ export interface TelemetryWiring extends Pick<
   readonly registry: Pick<SecretRegistry, "redact">;
   /** Where the raw machine identifier is registered: the one log. */
   readonly sink: TelemetryDeps["secrets"];
-  /** The supervised children: a crash is read off each one's status; the runtime tells of nodes'. */
-  readonly supervisors: ReadonlyMap<ChildName, Pick<Supervisor, "onStatus" | "onNodeCrash">>;
+  /**
+   * The supervised children: a crash is read off each one's status, the runtime tells of nodes',
+   * and both tell what they observed for the usage signals.
+   */
+  readonly supervisors: ReadonlyMap<
+    ChildName,
+    Pick<Supervisor, "onStatus" | "onNodeCrash" | "onSignal">
+  >;
   readonly packages: () => readonly ListedPackage[];
+  /** The launch marker and the telemetry memory (plan 0029). */
+  readonly marks: TelemetryMarks;
+  /** How long this process has run, in ms: app_start's startup time and app_stop's uptime. */
+  readonly uptimeMs?: () => number;
 }
 
 /**
@@ -86,9 +105,30 @@ export function reportedPackages(listed: readonly ListedPackage[]): {
   return { named, unsigned };
 }
 
-/** Build the pipeline, answer the page's telemetry calls, count crashes, and start the sender. */
-export function wireTelemetry(deps: TelemetryWiring): TelemetryPipeline {
-  const { ipc, registry } = deps;
+/** What the rest of the shell reports through: the usage signals, every one behind consent. */
+export interface ShellTelemetry {
+  readonly pipeline: TelemetryPipeline;
+  /** One signal a package, update or setup path built. */
+  signal(signal: Signal): void;
+  /** A decided quit, before the children stop: app_stop, and the marker cleared. */
+  stopping(reason: StopReason): void;
+  /** A first-run step reached: told once, on this launch or the first one allowed to. */
+  reached(step: SetupStepReached): void;
+  /** The providers a listing saw: each one new is registered, each one gone removed. */
+  providers(seen: readonly SeenProvider[]): void;
+}
+
+/** A public key's fingerprint as provider_registered names it: 12 hex digits of its sha256. */
+export const fingerprintOf = (publicKey: string | null): string | null =>
+  publicKey === null ? null : createHash("sha256").update(publicKey).digest("hex").slice(0, 12);
+
+/**
+ * Build the pipeline, answer the page's telemetry calls, count crashes, tell every signal, and
+ * start the sender.
+ */
+export function wireTelemetry(deps: TelemetryWiring): ShellTelemetry {
+  const { ipc, registry, marks } = deps;
+  const uptimeMs = deps.uptimeMs ?? (() => process.uptime() * 1000);
   const pipeline = new TelemetryPipeline({
     ...deps,
     endpoints: telemetryEndpoints(deps.env, deps.built),
@@ -108,30 +148,90 @@ export function wireTelemetry(deps: TelemetryWiring): TelemetryPipeline {
     record: (payload) => pipeline.recordCrash(payload),
     versions,
   });
-  for (const supervisor of deps.supervisors.values()) {
+  const signals = new UsageSignals({
+    record: (name, payload) => pipeline.recordUsage(name, payload),
+    versions,
+    packages: deps.packages,
+  });
+
+  // ── what this launch remembers: the first-run steps told, the providers seen ──────────
+  const memory = marks.readMemory();
+  const firstLaunch = memory?.reached.includes("launched") !== true;
+  let remembered: TelemetryMemory = memory ?? { reached: [], told: [], providers: {} };
+  const remember = (next: TelemetryMemory): void => {
+    remembered = next;
+    marks.writeMemory(next);
+  };
+  /** Every step reached and not told yet, told now if the switch allows it. */
+  const tellSteps = (): void => {
+    const told = remembered.reached.filter(
+      (step) =>
+        !remembered.told.includes(step) &&
+        SETUP_STEPS.includes(step as SetupStepReached) &&
+        signals.record(setupStep(step as SetupStepReached)),
+    );
+    if (told.length > 0) {
+      remember({ ...remembered, told: [...remembered.told, ...told] });
+    }
+  };
+  const reached = (step: SetupStepReached): void => {
+    if (!remembered.reached.includes(step)) {
+      remember({ ...remembered, reached: [...remembered.reached, step] });
+    }
+    tellSteps();
+  };
+
+  // ── app_start once the children are up; app_unclean_stop for a launch that left its marker ─
+  const last = marks.readRunning();
+  if (last !== null) {
+    signals.record(appUncleanStop(last));
+  }
+  marks.writeRunning(deps.appVersion);
+  const states = new Map<ChildName, ChildStatus["state"]>();
+  let startupMs: number | null = null;
+  let startTold = false;
+  const reportStart = (): void => {
+    if (startupMs === null || startTold) {
+      return;
+    }
+    const { named, unsigned } = reportedPackages(deps.packages());
+    startTold = signals.record(
+      appStart({ startupMs, packages: named, unsignedPackages: unsigned, firstLaunch }),
+    );
+  };
+
+  for (const [child, supervisor] of deps.supervisors) {
     supervisor.onStatus((status) => {
       crashes.childStatus(status);
+      states.set(child, status.state);
+      // A new runtime generation may load other packages (an install restarts it).
+      signals.forgetPackages();
+      const up = [...deps.supervisors.keys()].every((name) => states.get(name) === "running");
+      if (up && startupMs === null) {
+        startupMs = uptimeMs();
+        reportStart();
+      }
+    });
+    supervisor.onSignal((signal) => {
+      signals.child(signal);
+      if (signal.kind === "deployed" && signal.nodesPerFlow.some((count) => count > 0)) {
+        reached("first_flow_deployed");
+      }
     });
   }
   deps.supervisors.get("runtime")?.onNodeCrash((stopped) => {
     crashes.nodeCrashed(stopped);
   });
 
-  const reportUsage = (): void => {
-    const { named, unsigned } = reportedPackages(deps.packages());
-    pipeline.recordUsage("app_start", {
-      ...usagePayload(versions, named),
-      unsigned_packages: unsigned,
-    });
-  };
   const status = (): TelemetryStatus => pipeline.state();
   ipc.handle(IPC.telemetry, status);
   ipc.handle(IPC.setTelemetry, (_event, on: unknown): TelemetryStatus => {
     if (typeof on === "boolean") {
       pipeline.answer(on);
-      // A yes is what lets this launch's usage report be queued.
+      // A yes is what lets this launch's start, and the steps reached so far, be told.
       if (on) {
-        reportUsage();
+        reportStart();
+        tellSteps();
       }
     }
     return status();
@@ -140,8 +240,37 @@ export function wireTelemetry(deps: TelemetryWiring): TelemetryPipeline {
     pipeline.pending().map((report) => ({ kind: report.kind, payload: report.payload })),
   );
 
-  // This launch's usage report: queued only when the switch is already on.
-  reportUsage();
+  reached("launched");
   pipeline.start();
-  return pipeline;
+  return {
+    pipeline,
+    signal: (signal) => {
+      signals.record(signal);
+    },
+    stopping: (reason) => {
+      signals.record(appStop(uptimeMs() / 1000, reason));
+      marks.clearRunning();
+    },
+    reached,
+    providers: (seen) => {
+      const before = remembered.providers;
+      for (const provider of seen) {
+        if (before[provider.name] === undefined) {
+          const fingerprint = fingerprintOf(provider.publicKey);
+          signals.record(providerRegistered(provider, fingerprint, provider.offered));
+        }
+      }
+      for (const [name, provider] of Object.entries(before)) {
+        if (!seen.some((candidate) => candidate.name === name)) {
+          signals.record(providerRemoved(provider));
+        }
+      }
+      const now = Object.fromEntries(
+        seen.map(({ name, url, official }) => [name, { url, official }]),
+      );
+      if (JSON.stringify(now) !== JSON.stringify(before)) {
+        remember({ ...remembered, providers: now });
+      }
+    },
+  };
 }

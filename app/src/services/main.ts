@@ -35,7 +35,12 @@ import { McpEndpoint, serveEndpointCall, stopServing } from "../application/mcp-
 import { watchParent } from "../application/parent-watchdog";
 import { answerPeerCalls, KeyPublisher } from "../application/peer-link";
 import { readOrCreate, registering } from "../application/secrets";
-import { redactingShellLink, serveShell, shellNotifier } from "../application/serve-shell";
+import {
+  redactingShellLink,
+  serveShell,
+  shellNotifier,
+  shellSignals,
+} from "../application/serve-shell";
 import { mcpChildLines, printCanary, sourceLog } from "../application/source-log";
 import { DEFAULT_API_BASE_URL } from "../domain/anytype/pins";
 import type { InitConfig, SecretPaths } from "../domain/channel/messages";
@@ -196,6 +201,10 @@ function buildEndpoint(config: InitConfig, secrets: SecretStore): McpEndpoint | 
       redact: (text) => registry.redact(text),
       clock: systemClock,
       logger,
+      // Every tools/call, for the usage signals the shell gates by consent (plan 0029).
+      observe: (call) => {
+        shellSignals(link)({ kind: "mcp-call", call });
+      },
       files: new FileDownloads({
         source: anytypeApi,
         key: () => secrets.read("anytype-api-key"),

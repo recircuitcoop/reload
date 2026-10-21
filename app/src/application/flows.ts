@@ -18,6 +18,7 @@ import { remapIds, withoutCredentials, type TabNode } from "../domain/flows/tab"
 import { configOf } from "../domain/forms/coerce";
 import { describedProblems, secretKeys, withoutSecrets } from "../domain/forms/form-model";
 import type { FieldProblem } from "../domain/packages/declaration";
+import type { ChildSignal } from "../domain/telemetry/reports";
 import type { Clock } from "../ports/clock";
 import type {
   FlowEngine,
@@ -151,6 +152,36 @@ function checkedName(value: unknown): string {
     return refuse("name", NAME_SENTENCE);
   }
   return name;
+}
+
+/** Node-RED's own nodes, which belong to no package, as a deploy's counts name them. */
+export const CORE_NODES = "node-red";
+
+/**
+ * A deploy's exact counts, for the usage signals (plan 0029): every node on each flow (a tab),
+ * in the flows' order, and how many of them each package's types make; Node-RED's own nodes
+ * count as `node-red`. Counted off the deployed flows, never off what a write asked for.
+ */
+export function deployCounts(
+  deployed: readonly unknown[],
+  packageOf: (type: string) => string | undefined,
+): ChildSignal {
+  const nodes = deployed.filter(isRecord);
+  const tabs = nodes.filter((node) => node["type"] === "tab").map((tab) => tab["id"]);
+  const perPackage = new Map<string, number>();
+  const nodesPerFlow = tabs.map((tab) => {
+    const onTab = nodes.filter((node) => node["z"] === tab && typeof node["type"] === "string");
+    for (const node of onTab) {
+      const name = packageOf(node["type"] as string) ?? CORE_NODES;
+      perPackage.set(name, (perPackage.get(name) ?? 0) + 1);
+    }
+    return onTab.length;
+  });
+  return {
+    kind: "deployed",
+    nodesPerFlow,
+    perPackage: [...perPackage].map(([name, count]) => ({ package: name, nodes: count })),
+  };
 }
 
 /** What a write deploys, for the guard; and the write itself. */

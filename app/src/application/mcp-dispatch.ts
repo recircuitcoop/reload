@@ -34,6 +34,7 @@ import { DOWNLOAD_TOOL, type FileDownloads, isOwnFileContents } from "./anytype-
 import type { McpSession, McpTool } from "../ports/anytype";
 import type { Clock } from "../ports/clock";
 import type { Logger } from "../ports/logger";
+import type { McpCallFacts } from "../domain/telemetry/reports";
 import type { McpAnswer, McpHandler } from "../ports/mcp-gateway";
 import { dataviewShim, type DataviewRefusal } from "./dataview-shim";
 import { unwrapMintedBody } from "./minted-body-shim";
@@ -55,6 +56,11 @@ export interface McpDispatchDeps {
   readonly logger: Logger;
   /** What answers API-download-file and resources/read, instead of the child. */
   readonly files: FileDownloads;
+  /**
+   * Told of every tools/call once it is answered, for the usage signals (plan 0029): the tool
+   * only when the validated set holds it, never its arguments or its result.
+   */
+  readonly observe?: (call: McpCallFacts) => void;
 }
 
 export const CHILD_UNAVAILABLE = "the Anytype MCP child is unavailable";
@@ -107,8 +113,42 @@ function validationFailed(refusal: DataviewRefusal): Json {
   return { content: [{ type: "text", text }], isError: true };
 }
 
+/** The `clientInfo.name` an initialize request gave; null when it gave none. */
+function clientOf(request: unknown): string | null {
+  const params = isObject(request) ? request["params"] : undefined;
+  const info = isObject(params) ? params["clientInfo"] : undefined;
+  const name = isObject(info) ? info["name"] : undefined;
+  return typeof name === "string" ? name.slice(0, 200) : null;
+}
+
+/** A tools/call's facts: its tool when the validated set holds it, and how it was answered. */
+function callFacts(
+  params: unknown,
+  served: ServedMcp | null,
+  client: string | null,
+  durationMs: number,
+  sent: McpAnswer,
+): McpCallFacts {
+  const name = isObject(params) ? params["name"] : undefined;
+  const tool =
+    served?.tools.some((listed) => listed.name === name) === true ? (name as string) : null;
+  const body = isObject(sent.body) ? sent.body : {};
+  const failure = isObject(body["error"]) ? body["error"]["code"] : undefined;
+  const answered = isObject(body["result"]) ? body["result"] : null;
+  return {
+    tool,
+    client,
+    durationMs,
+    ok: answered !== null && answered["isError"] !== true,
+    errorCode: typeof failure === "number" && Number.isInteger(failure) ? failure : null,
+  };
+}
+
 /** The MCP handler the gateway hands each admitted body to. */
 export function mcpDispatch(deps: McpDispatchDeps): McpHandler {
+  // shortcut: the client the latest initialize named; the endpoint keeps no sessions to tell
+  // two clients apart. Upgrade when it does.
+  let client: string | null = null;
   return async (body) => {
     const started = deps.clock.now();
     const request = parsed(body);
@@ -118,8 +158,16 @@ export function mcpDispatch(deps: McpDispatchDeps): McpHandler {
         ? answer
         : { status: answer.status, body: redacted(answer.body, deps.redact) };
     const method = isObject(request) ? request["method"] : undefined;
+    if (method === "initialize") {
+      client = clientOf(request);
+    }
     if (method === "tools/call" || method === "resources/read") {
-      logCall(deps, method, (request as Json)["params"], deps.clock.now() - started, sent);
+      const params = (request as Json)["params"];
+      const took = deps.clock.now() - started;
+      logCall(deps, method, params, took, sent);
+      if (method === "tools/call") {
+        deps.observe?.(callFacts(params, deps.served(), client, took, sent));
+      }
     }
     return sent;
   };

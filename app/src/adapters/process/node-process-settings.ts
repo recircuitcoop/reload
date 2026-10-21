@@ -10,6 +10,7 @@ import type { JournalStore } from "../../ports/journal-store";
 import type { Logger, SecretSink } from "../../ports/logger";
 import type { HeartbeatFactory, HeldInputs, NodeProcessSpec } from "../../ports/node-process";
 import type { Notifier } from "../../ports/notifier";
+import type { ChildSignal } from "../../domain/telemetry/reports";
 import type { ResourceWatchdog } from "../../ports/resource-watch";
 import type { NodeCrashSink } from "../../ports/telemetry";
 import type { ProcessTree } from "./process-tree";
@@ -62,6 +63,8 @@ export interface NodeProcessDeps {
   readonly held?: HeldInputs;
   /** Builds the heartbeat of a type that declares one (spec 2.4.2); without it, none is kept. */
   readonly heartbeat?: HeartbeatFactory;
+  /** Told of every step that ended, for the usage signals (plan 0029); absent in most tests. */
+  readonly steps?: (signal: ChildSignal) => void;
 }
 
 /**

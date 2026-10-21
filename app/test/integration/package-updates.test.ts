@@ -13,6 +13,7 @@ import fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { Signal } from "../../src/domain/telemetry/reports";
 
 import { FsBlockedUpdates } from "../../src/adapters/fs/blocked-updates";
 import { FsContentHashes } from "../../src/adapters/fs/content-hashes";
@@ -575,6 +576,37 @@ describe("applying an update", () => {
     expect(seen[0]?.code).not.toContain("the new version");
     // Swapped in before the next runtime started.
     expect(roots.installed("pinger")?.version).toBe("0.2.0");
+  });
+
+  it("tells package_updated once the new version is live, with the version it came from (plan 0029)", async () => {
+    const told: Signal[] = [];
+    const { updates } = await installed("pinger", "0.1.0");
+    publish("pinger", "0.2.0");
+    readiness = () => Promise.resolve({ deployed: [], ready: [] });
+    const telling = setUp({
+      catalogueUrl: CATALOGUE,
+      signal: (signal) => {
+        told.push(signal);
+      },
+    }).updates;
+    await updates.check();
+    await telling.check();
+    expect((await drive(telling.apply("pinger", "person"))).ok).toBe(true);
+    expect(told).toEqual([
+      {
+        name: "package_updated",
+        fields: {
+          package: "pinger",
+          version: "0.2.0",
+          source: "catalogue",
+          signed: true,
+          environment: expect.any(String) as unknown,
+          provider_host: new URL(CATALOGUE).hostname,
+          node_types: 1,
+          from_version: "0.1.0",
+        },
+      },
+    ]);
   });
 
   it("builds the new version, restarts only the runtime, waits for ready, and keeps the old one", async () => {

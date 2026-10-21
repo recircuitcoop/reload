@@ -188,6 +188,37 @@ describe("a node process", () => {
     expect(delivery.ends[0]?.message).toBe("no such folder");
   });
 
+  it("tells every ended step for the usage signals: the type, the time, and an error frame's facts only", async () => {
+    const node = raw();
+    const [, ok] = send(node.node, { do: "echo" });
+    const [, failed] = send(node.node, {
+      do: "fail",
+      message: "no such folder",
+      error_type: "FileNotFoundError",
+      file: "src/watch.py",
+      line: 41,
+    });
+    const [, odd] = send(node.node, { do: "fail", message: "odd", file: 7, line: "x" });
+    await waitFor("all three", () => ok.finished && failed.finished && odd.finished);
+    const step = { nodeKind: node.spec.identity.kind, nodeId: node.spec.identity.typeId };
+    const byOk = node.steps.map((signal) => (signal.kind === "step" ? signal : null));
+    expect(byOk.map((signal) => signal?.step.ok)).toEqual([true, false, false]);
+    expect(byOk[0]).toMatchObject({
+      kind: "step",
+      package: node.spec.identity.package,
+      step,
+      failure: null,
+    });
+    expect(byOk[1]?.failure).toEqual({
+      errorType: "FileNotFoundError",
+      message: "no such folder",
+      file: "src/watch.py",
+      line: 41,
+    });
+    expect(byOk[2]?.failure).toEqual({ errorType: null, message: "odd", file: null, line: null });
+    expect(byOk.every((signal) => (signal?.step.durationMs ?? -1) >= 0)).toBe(true);
+  });
+
   it("routes stderr, stray stdout, log frames and input-less errors to the one log", async () => {
     const node = raw();
     const [, delivery] = send(node.node, { do: "noise" });

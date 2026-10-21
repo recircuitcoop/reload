@@ -30,6 +30,7 @@ import {
 } from "../../src/application/install-package";
 import { PackageRemover, typesOf, type TypesInUse } from "../../src/application/remove-package";
 import type { CatalogueEntry, PackageCatalogue } from "../../src/domain/packages/catalogue";
+import type { Signal } from "../../src/domain/telemetry/reports";
 import type { HttpGetResult } from "../../src/ports/http-client";
 import { RecordingLogger } from "../fakes/children";
 import { Signer } from "../fakes/minisign-signer";
@@ -514,6 +515,95 @@ describe("the Packages page's listing", () => {
 
   it("maps a catalogue id to its package name", () => {
     expect(packageNameOf("my-package")).toBe("my_package");
+  });
+});
+
+describe("the install events (plan 0029)", () => {
+  it("tell each install, refusal and removal, by host or as a file, never a path or the refusal's words", async () => {
+    entries = [entry("pinger", ARCHIVE_URL), entry("gone", "https://catalogue.test/gone.tgz")];
+    served.set(ARCHIVE_URL, signedArchive(packageFiles(), signer));
+    const told: Signal[] = [];
+    const signal = (value: Signal): void => {
+      told.push(value);
+    };
+    const { installer } = setUp({
+      signal,
+      catalogueUrl: "https://fakeuser:fakepass@catalogue.test/catalogue.json?token=fake-tok",
+    });
+    expect((await installer.installFromCatalogue("pinger")).ok).toBe(true);
+    expect((await installer.installFromCatalogue("pinger")).ok).toBe(false);
+    expect((await installer.installFromCatalogue("gone")).ok).toBe(false);
+    expect((await installer.installFromCatalogue("absent")).ok).toBe(false);
+    expect((await installer.installFromCatalogue("anytype")).ok).toBe(false);
+    catalogueFails = new Error("no route to host");
+    expect((await installer.installFromCatalogue("fresh")).ok).toBe(false);
+    catalogueFails = null;
+    entries = [entry("fresh", ARCHIVE_URL, false)];
+    expect((await installer.installFromCatalogue("fresh")).ok).toBe(false);
+    // A refusal by the verification: its code.
+    entries = [entry("other", ARCHIVE_URL)];
+    expect((await installer.installFromCatalogue("other")).ok).toBe(false);
+    const folder = folderOf(packageFiles("filed", "0.2.0"));
+    expect((await installer.installFromFile(folder, true)).ok).toBe(true);
+    // The store says where each came from, for the step events.
+    const stored = new InstalledPackageStore(shipped(), roots, logger).documents();
+    expect(stored.map(({ name, origin }) => [name, origin])).toEqual([
+      ["anytype", undefined],
+      ["filed", "file"],
+      ["pinger", "catalogue"],
+    ]);
+    // Unconfirmed is a question, not a failure: nothing is told.
+    expect((await installer.installFromFile(folder, false)).ok).toBe(false);
+    const remover = new PackageRemover(
+      {
+        roots,
+        typesInUse: () => Promise.resolve({ deployed: [], undeployed: [] }),
+        forgetGenerated: () => undefined,
+        shipped: () => shipped().packages(),
+        restartRuntime: () => Promise.resolve(1),
+        logger,
+        signal,
+      },
+      new OneAtATime(),
+    );
+    expect((await remover.remove("filed")).ok).toBe(true);
+    expect(
+      told.map(({ name, fields }) => [name, fields["provider_host"], fields["reason"]]),
+    ).toEqual([
+      ["package_installed", "catalogue.test", undefined],
+      ["package_install_failed", "catalogue.test", "installed"],
+      ["package_install_failed", "catalogue.test", "download-failed"],
+      ["package_install_failed", "catalogue.test", "not-listed"],
+      ["package_install_failed", "catalogue.test", "reserved"],
+      ["package_install_failed", "catalogue.test", "catalogue-unreadable"],
+      ["package_install_failed", "catalogue.test", "signature"],
+      ["package_install_failed", "catalogue.test", "declaration"],
+      ["package_installed", "file", undefined],
+      ["package_removed", undefined, undefined],
+    ]);
+    expect(told[0]?.fields).toMatchObject({
+      package: "pinger",
+      version: "0.1.0",
+      source: "catalogue",
+      signed: true,
+      node_types: 1,
+    });
+    expect(told[8]?.fields).toMatchObject({
+      package: "unsigned",
+      version: null,
+      source: "file",
+      signed: false,
+    });
+    expect(told[9]?.fields).toEqual({
+      package: "unsigned",
+      version: null,
+      source: "file",
+      signed: false,
+    });
+    const text = JSON.stringify(told);
+    for (const leak of ["fakeuser", "fakepass", "fake-tok", folder, "filed", "not signed", "404"]) {
+      expect(text).not.toContain(leak);
+    }
   });
 });
 

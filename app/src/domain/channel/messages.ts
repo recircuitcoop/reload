@@ -8,6 +8,7 @@
 // INTERNAL: this is not the node protocol; node authors never see it.
 
 import { isNotice, isNoticeKind, type Notice, type NoticeKind } from "../notices/notices";
+import type { ChildSignal, StepFailure } from "../telemetry/reports";
 
 /** The version both ends speak. A message with any other `v` is refused. */
 export const CHANNEL_VERSION = 1;
@@ -265,7 +266,12 @@ export type ChildMessage =
    * A node instance's process exited unexpectedly (WI-0018-22), for the crash counts; `stopped`
    * when the crash-loop limit stopped it. No name: a node's name is the person's own words.
    */
-  | { readonly v: 1; readonly t: "node-crash"; readonly stopped: boolean };
+  | { readonly v: 1; readonly t: "node-crash"; readonly stopped: boolean }
+  /**
+   * What a child observed for the usage signals (plan 0029): a packaged node's step, an MCP
+   * tools/call, a deploy's counts. Facts only: the shell builds the event, behind consent.
+   */
+  | { readonly v: 1; readonly t: "signal"; readonly signal: ChildSignal };
 
 type Fields = Readonly<Record<string, unknown>>;
 
@@ -354,6 +360,111 @@ export function parseShellMessage(raw: unknown): ShellMessage | null {
   }
 }
 
+/** A text of at most `max` characters, or null. */
+const isTextUpTo = (value: unknown, max: number): value is string =>
+  isString(value) && value.length <= max;
+const isCount = (value: unknown): value is number =>
+  isNumber(value) && Number.isInteger(value) && value >= 0;
+const nullOr = <T>(value: unknown, is: (value: unknown) => value is T): T | null =>
+  is(value) ? value : null;
+
+/** A failed step's facts: each field its SDK may leave out is null, never a refusal. */
+function stepFailureOf(value: unknown): StepFailure | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  return {
+    errorType: nullOr(value["errorType"], (item) => isTextUpTo(item, 100)),
+    message: nullOr(value["message"], (item) => isTextUpTo(item, 2000)),
+    file: nullOr(value["file"], (item) => isTextUpTo(item, 200)),
+    line: nullOr(value["line"], isCount),
+  };
+}
+
+/** The `signal` message's facts, checked; null when any is not what a child sends. */
+export function parseChildSignal(value: unknown): ChildSignal | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  switch (value["kind"]) {
+    case "step": {
+      const step = value["step"];
+      if (
+        !isTextUpTo(value["package"], 214) ||
+        !isRecord(step) ||
+        (step["nodeKind"] !== "source" &&
+          step["nodeKind"] !== "node" &&
+          step["nodeKind"] !== "view") ||
+        !isTextUpTo(step["nodeId"], 200) ||
+        !isNumber(step["durationMs"]) ||
+        typeof step["ok"] !== "boolean"
+      ) {
+        return null;
+      }
+      return {
+        kind: "step",
+        package: value["package"],
+        step: {
+          nodeKind: step["nodeKind"],
+          nodeId: step["nodeId"],
+          durationMs: step["durationMs"],
+          ok: step["ok"],
+        },
+        failure: stepFailureOf(value["failure"]),
+      };
+    }
+    case "mcp-call": {
+      const call = value["call"];
+      if (
+        !isRecord(call) ||
+        !isNumber(call["durationMs"]) ||
+        typeof call["ok"] !== "boolean" ||
+        !(
+          call["errorCode"] === null ||
+          (isNumber(call["errorCode"]) && Number.isInteger(call["errorCode"]))
+        )
+      ) {
+        return null;
+      }
+      return {
+        kind: "mcp-call",
+        call: {
+          tool: nullOr(call["tool"], (item) => isTextUpTo(item, 200)),
+          client: nullOr(call["client"], (item) => isTextUpTo(item, 200)),
+          durationMs: call["durationMs"],
+          ok: call["ok"],
+          errorCode: call["errorCode"],
+        },
+      };
+    }
+    case "deployed": {
+      const flows = value["nodesPerFlow"];
+      const counts = value["perPackage"];
+      if (
+        !Array.isArray(flows) ||
+        !flows.every(isCount) ||
+        !Array.isArray(counts) ||
+        !counts.every(
+          (entry) =>
+            isRecord(entry) && isTextUpTo(entry["package"], 214) && isCount(entry["nodes"]),
+        )
+      ) {
+        return null;
+      }
+      return {
+        kind: "deployed",
+        nodesPerFlow: flows,
+        perPackage: (counts as Fields[]).map((entry) => ({
+          package: entry["package"] as string,
+          nodes: entry["nodes"] as number,
+        })),
+      };
+    }
+    default:
+      return null;
+  }
+}
+
 /** A child message as the shell receives it, or null when it is not one of this version. */
 export function parseChildMessage(raw: unknown): ChildMessage | null {
   const m = versioned(raw);
@@ -413,6 +524,10 @@ export function parseChildMessage(raw: unknown): ChildMessage | null {
       return typeof m["stopped"] === "boolean"
         ? { v: 1, t: "node-crash", stopped: m["stopped"] }
         : null;
+    case "signal": {
+      const signal = parseChildSignal(m["signal"]);
+      return signal === null ? null : { v: 1, t: "signal", signal };
+    }
     default:
       return null;
   }

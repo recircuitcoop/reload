@@ -22,6 +22,8 @@ export interface QuitDeps {
   readonly stopChildren: () => Promise<void>;
   /** Really quit, once the children have stopped. */
   readonly exit: () => void;
+  /** Told a decided quit is about to stop the children: app_stop is queued here (plan 0029). */
+  readonly stopping?: () => void;
   readonly logger: Logger;
 }
 
@@ -67,6 +69,7 @@ export class QuitFlow {
       }
     }
     this.#phase = "stopping";
+    this.#deps.stopping?.();
     logger.info("quitting: stopping the children");
     await this.#deps.stopChildren();
     this.#phase = "done";

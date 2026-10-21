@@ -99,7 +99,12 @@ class Node:
             send({"t": "done", "in": input_id})
             send({"t": "done", "in": input_id})
         elif action == "fail":
-            send({"t": "error", "in": input_id, "message": data.get("message", "failed")})
+            frame = {"t": "error", "in": input_id, "message": data.get("message", "failed")}
+            # Plan 0029: where it was thrown, as the SDKs add it; sent as given, well formed or not.
+            for field in ("error_type", "file", "line"):
+                if field in data:
+                    frame[field] = data[field]
+            send(frame)
         elif action == "report":
             # Revision 2.1 (spec 4.2.1): notes and results on done, sent as given, bounds and all.
             frame = {"t": "done", "in": input_id}

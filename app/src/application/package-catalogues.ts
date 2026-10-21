@@ -22,6 +22,7 @@ import {
   type CatalogueSource,
   type PackageCatalogue,
 } from "../domain/packages/catalogue";
+import type { InstallOrigin } from "../domain/telemetry/reports";
 import { judgeCatalogueVersion, type VersionFinding } from "../domain/packages/versions";
 import type { ArchiveCache } from "../ports/archive-cache";
 import type { HttpClient } from "../ports/http-client";
@@ -68,6 +69,26 @@ export interface CatalogueReads {
   readonly http: HttpClient;
   /** Keep a fetched archive on disk, and answer where; the installer reads it from there. */
   readonly saveDownload: (name: string, bytes: Uint8Array) => string;
+  /** The official catalogue's address; empty or absent in a build that has none. */
+  readonly catalogueUrl?: string;
+  /**
+   * Told every provider a listing saw, for the provider events (plan 0029): the official one
+   * when this build has one, and every registered source the settings name. Not told when the
+   * settings could not be read, so a source is never taken for removed on a bad read.
+   */
+  readonly providers?: (seen: readonly SeenProvider[]) => void;
+}
+
+/** A provider (catalogue) as a listing saw it. */
+export interface SeenProvider {
+  /** `official`, or a registered source's name. */
+  readonly name: string;
+  readonly url: string;
+  readonly official: boolean;
+  /** The public key its packages are verified with; null for a keyless source. */
+  readonly publicKey: string | null;
+  /** How many packages it offers; 0 when it could not be read. */
+  readonly offered: number;
 }
 
 /** One catalogue, resolved: its entries, and the key its archives are verified with. */
@@ -193,12 +214,55 @@ export class PackageCatalogues {
         }
       }),
     );
+    if (sourcesProblem === null) {
+      this.#reads.providers?.([
+        ...(this.#reads.catalogueUrl === undefined || this.#reads.catalogueUrl === ""
+          ? []
+          : [
+              {
+                name: OFFICIAL_SOURCE_NAME,
+                url: this.#reads.catalogueUrl,
+                official: true,
+                publicKey: this.#reads.catalogueKey,
+                offered: official?.entries.length ?? 0,
+              },
+            ]),
+        ...sources.map((source, index) => ({
+          name: source.name,
+          url: source.url,
+          official: false,
+          publicKey: source.publicKey,
+          offered: listings[index]?.offers.length ?? 0,
+        })),
+      ]);
+    }
     return {
       official: official === null ? [] : offersOf(official, installed, officialIds),
       officialProblem,
       sources: listings,
       sourcesProblem,
     };
+  }
+
+  /** Where an installed package came from, as the install events say it (plan 0029). */
+  installOrigin(from: InstalledOrigin | undefined): InstallOrigin {
+    return from?.kind === "file"
+      ? { kind: "file" }
+      : { kind: "catalogue", url: from === undefined ? null : this.urlOf(from.source) };
+  }
+
+  /** The address of the catalogue called `name`; null when there is none, or it is unknown. */
+  urlOf(name: string): string | null {
+    if (name === OFFICIAL_SOURCE_NAME) {
+      return this.#reads.catalogueUrl === undefined || this.#reads.catalogueUrl === ""
+        ? null
+        : this.#reads.catalogueUrl;
+    }
+    try {
+      return this.source(name)?.url ?? null;
+    } catch {
+      return null;
+    }
   }
 
   /** The registered source `name`, or null. Throws when the settings cannot be read. */

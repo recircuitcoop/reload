@@ -49,6 +49,8 @@ export interface Input {
   readonly delivery: InputDelivery;
   /** queued: not written to any process yet; sent: written; awaiting: presented (spec 8.1). */
   state: InputState;
+  /** When this instance took it on (clock ms): a step's duration starts here. */
+  readonly at?: number;
 }
 
 /** An input held at the bound: not journaled yet, not sent (spec 7.6 "hold"). */

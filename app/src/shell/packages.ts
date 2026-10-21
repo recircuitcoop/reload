@@ -20,7 +20,7 @@ import {
   type RestartRuntime,
 } from "../application/install-package";
 import type { ArchiveCache } from "../ports/archive-cache";
-import type { CatalogueReads } from "../application/package-catalogues";
+import type { CatalogueReads, SeenProvider } from "../application/package-catalogues";
 import { readSources } from "../application/package-sources";
 import { PackageBoard } from "../application/package-board";
 import type { InstallPhase } from "../application/package-environment";
@@ -54,6 +54,8 @@ export interface ShellPackagesOptions extends Omit<
   readonly catalogueUrl: string;
   /** The official catalogue's minisign public key; null in a build that has none. */
   readonly catalogueKey: string | null;
+  /** Told the providers each listing saw, for the provider events (plan 0029). */
+  readonly providers?: (seen: readonly SeenProvider[]) => void;
   readonly catalogueCache: CatalogueCacheStore;
   readonly runtime: Supervisor;
   readonly editor: EditorNodes;
@@ -261,6 +263,8 @@ export function wirePackages(given: ShellPackagesOptions): PackageBoard {
     http: options.http,
     saveDownload,
     catalogueKey: options.catalogueKey,
+    catalogueUrl: options.catalogueUrl,
+    ...(options.providers === undefined ? {} : { providers: options.providers }),
     catalogue: () =>
       options.catalogueUrl === ""
         ? Promise.reject(new Error("this build is configured with no package catalogue"))
@@ -315,6 +319,7 @@ export function wirePackages(given: ShellPackagesOptions): PackageBoard {
       shipped: () => shipped().map((listed) => listed.name),
       restartRuntime,
       logger,
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
     },
     one,
   );

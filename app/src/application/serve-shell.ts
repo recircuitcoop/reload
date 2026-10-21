@@ -16,6 +16,7 @@ import {
 } from "../domain/channel/messages";
 import { redactStrings } from "../domain/redaction/registry";
 import type { ChildName } from "../domain/supervision/child-state";
+import type { ChildSignal } from "../domain/telemetry/reports";
 import type { Clock } from "../ports/clock";
 import type { Logger } from "../ports/logger";
 import type { Notifier } from "../ports/notifier";
@@ -162,6 +163,13 @@ export function shellNotifier(link: ShellLink): Notifier {
     clear: (kind, subject) => {
       link.post({ v: 1, t: "notice-clear", kind, subject });
     },
+  };
+}
+
+/** What a child observed for the usage signals, told to the shell, which builds the events. */
+export function shellSignals(link: ShellLink): (signal: ChildSignal) => void {
+  return (signal) => {
+    link.post({ v: 1, t: "signal", signal });
   };
 }
 

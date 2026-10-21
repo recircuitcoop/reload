@@ -36,7 +36,8 @@ import type { Logger } from "../ports/logger";
 import type { Notifier } from "../ports/notifier";
 import type { InstalledOrigin, InstalledRecord } from "../ports/package-roots";
 import {
-  isArchiveFile,
+  fileOrigin,
+  recordFacts,
   restartAround,
   type ListedPackage,
   type OneAtATime,
@@ -46,6 +47,7 @@ import {
   type UpdateLine,
 } from "./install-package";
 import { PackageCatalogues, type CatalogueReads, type UpdateArchives } from "./package-catalogues";
+import { packageUpdated, type Signal } from "../domain/telemetry/reports";
 import {
   inspectPackage,
   stagePackageEnvironment,
@@ -82,6 +84,8 @@ export interface PackageUpdatesPorts extends CatalogueReads {
   readonly logger: Logger;
   /** Where the check keeps a newer release's archive and verdict, across launches. */
   readonly archives: ArchiveCache;
+  /** Where the update event goes (plan 0029): the usage signals, behind consent. */
+  readonly signal?: (signal: Signal) => void;
 }
 
 /** What the last check found about one package. */
@@ -337,7 +341,9 @@ export class PackageUpdates {
     } catch (error) {
       return this.#failed("Not updated", reasonOf(error));
     }
+    let nodeTypes = 0;
     const admit = (declaration: Declaration): void => {
+      nodeTypes = declaration.types.length;
       if (declaration.package !== name) {
         throw new PackageRefusal("declaration", `it declares ${declaration.package}, not ${name}`);
       }
@@ -370,6 +376,11 @@ export class PackageUpdates {
         ? "the runtime did not come back running, so its instances could not be confirmed"
         : await this.waitForReady(name);
     if (problem === null) {
+      const live = environment.roots.installed(name);
+      const where = this.#catalogues.installOrigin(from);
+      if (live !== undefined) {
+        this.#ports.signal?.(packageUpdated(recordFacts(live), where, nodeTypes, record.version));
+      }
       logger.info(
         `update: ${name} ${record.version} → ${built} is live; only the runtime restarted, in ` +
           `${String(took)} ms`,
@@ -581,13 +592,6 @@ export class PackageUpdates {
     this.#ports.logger.warn(`update: ${what.toLowerCase()}: ${why}`);
     return { ok: false, error: `${what}: ${why}.` };
   }
-}
-
-/** A path install's folder or `.tgz`, read as it was installed: unsigned. */
-function fileOrigin(path: string): PackageOrigin {
-  return isArchiveFile(path)
-    ? { kind: "archive", path, publicKey: null }
-    : { kind: "path", folder: path };
 }
 
 function movedDetail(record: InstalledRecord): string {

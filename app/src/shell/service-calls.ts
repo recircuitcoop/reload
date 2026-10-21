@@ -15,6 +15,7 @@ export function wireServiceCalls(
   services: Supervisor,
   token: () => string | null,
   anytypeApp: Promise<AnytypeAppState>,
+  paired: () => void = () => undefined,
 ): void {
   const callServices = async (op: CallOp, args: unknown): Promise<unknown> => {
     const result = await services.call(op, args);
@@ -47,9 +48,12 @@ export function wireServiceCalls(
     ask();
   });
   ipc.handle(IPC.anytypePairStart, () => callServices("anytype.pair.start", null));
-  ipc.handle(IPC.anytypePairComplete, (_event, code: unknown) =>
-    callServices("anytype.pair.complete", code),
-  );
+  // A pairing that completed is a first-run step reached (plan 0029).
+  ipc.handle(IPC.anytypePairComplete, async (_event, code: unknown) => {
+    const answer = await callServices("anytype.pair.complete", code);
+    paired();
+    return answer;
+  });
   ipc.handle(IPC.mcpEndpoint, () => callServices("mcp.endpoint", null));
   ipc.handle(IPC.mcpEndpointMove, (_event, host: unknown, port: unknown) =>
     callServices("mcp.endpoint.move", { host, port }),
