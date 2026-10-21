@@ -255,11 +255,36 @@ describe.each(SDK_LANGUAGES)("conformance: the %s SDK's kitchen reference node",
     await waitFor("working", () => node.frames.some((f) => f.t === "status"));
     node.send({ t: "ping", id: "busy" });
     await waitFor("the busy pong", () => node.frames.filter((f) => f.t === "pong").length === 2);
+    // The kitchen node has a health check (C26), so each pong carries its answer.
     expect(node.frames.filter((f) => f.t === "pong")).toEqual([
-      { t: "pong", id: "idle" },
-      { t: "pong", id: "busy" },
+      { t: "pong", id: "idle", healthy: true },
+      { t: "pong", id: "busy", healthy: true },
     ]);
     expect(node.terminal("running")).toEqual([]);
+    expect(node.rejected).toEqual([]);
+  });
+
+  it("C26 health: the health check answers in the pong, and a check that fails answers false", async () => {
+    const node = session(language);
+    node.start();
+    await node.ready();
+    const answers: unknown[] = [];
+    for (const [index, value] of [false, "raise", true].entries()) {
+      const id = `health-${String(index)}`;
+      node.send({ t: "input", id, event: { type: "t.v1", data: { do: "health", value } } });
+      await waitFor(`health ${String(index)}`, () => node.terminal(id).length === 1);
+      node.send({ t: "ping", id: `p${String(index)}` });
+      await waitFor(`pong ${String(index)}`, () =>
+        node.frames.some((f) => f.t === "pong" && f.id === `p${String(index)}`),
+      );
+      answers.push(node.frames.find((f) => f.t === "pong" && f.id === `p${String(index)}`));
+    }
+    expect(answers).toEqual([
+      { t: "pong", id: "p0", healthy: false },
+      { t: "pong", id: "p1", healthy: false },
+      { t: "pong", id: "p2", healthy: true },
+    ]);
+    expect(node.frames).toContainEqual(expect.objectContaining({ t: "log", level: "error" }));
     expect(node.rejected).toEqual([]);
   });
 

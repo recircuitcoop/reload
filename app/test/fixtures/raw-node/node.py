@@ -44,6 +44,7 @@ class Node:
         self.running_cancelled = threading.Event()
         self.waiting = {}  # action views: input id -> True
         self.deaf = False  # set by {"do": "deaf"}: pings go unanswered, as in a stuck process
+        self.healthy = None  # set by {"do": "health", "value": ...}: the pong's health answer
         threading.Thread(target=self.worker, daemon=True).start()
 
     # -- the serial worker (spec 4.3.3: a serial node queues its inputs) -------------------
@@ -68,6 +69,9 @@ class Node:
             send({"t": "done", "in": input_id})
         elif action == "deaf":
             self.deaf = True
+            send({"t": "done", "in": input_id})
+        elif action == "health":
+            self.healthy = data.get("value")
             send({"t": "done", "in": input_id})
         elif action == "burst":
             self.burst(input_id, data["frames"], data["threads"])
@@ -213,7 +217,10 @@ class Node:
             # Said on stderr too, so a test can wait for the answer before moving its clock.
             print(f"pinged {frame['id']}", file=sys.stderr, flush=True)
             if not self.deaf:
-                send({"t": "pong", "id": frame["id"]})
+                pong = {"t": "pong", "id": frame["id"]}
+                if self.healthy is not None:
+                    pong["healthy"] = self.healthy
+                send(pong)
         elif kind == "close":
             if self.config.get("ignore_close"):
                 return

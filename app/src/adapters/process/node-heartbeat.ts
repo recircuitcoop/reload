@@ -39,6 +39,8 @@ export class NodeHeartbeat {
   readonly #logger: Logger;
   readonly #watch: HeartbeatWatch;
   readonly #subject: string;
+  /** The node's own last health answer (spec 4.2 `pong`); null before it gave one. */
+  #healthy: boolean | null = null;
   /** The pings sent and not yet answered: their ids, and what settles each. */
   readonly #waiting = new Map<string, () => void>();
 
@@ -82,11 +84,40 @@ export class NodeHeartbeat {
     this.#waiting.clear();
   }
 
-  /** A `pong`: the ping it answers is a beat; one for an id never sent is ignored. */
-  pong(id: string): void {
+  /**
+   * A `pong`: the ping it answers is a beat, whatever its health says; one for an id never sent
+   * is ignored. Its `healthy` is carried as it is: a turn to false is said once, and a turn back
+   * to true withdraws it (the old helper's Observation.health; spec 4.2).
+   */
+  pong(id: string, healthy?: boolean): void {
     const answered = this.#waiting.get(id);
     this.#waiting.delete(id);
-    answered?.();
+    if (answered === undefined) {
+      return;
+    }
+    answered();
+    if (healthy === undefined || healthy === this.#healthy) {
+      return;
+    }
+    const firstAnswer = this.#healthy === null;
+    this.#healthy = healthy;
+    if (healthy) {
+      if (!firstAnswer) {
+        this.#logger.info("its health check says it is working again");
+      }
+      this.#deps.notifier.clear("node-unhealthy", this.#subject);
+      return;
+    }
+    this.#logger.warn("its health check says it is not working");
+    try {
+      this.#deps.notifier.raise({
+        kind: "node-unhealthy",
+        subject: this.#subject,
+        detail: "Its own health check says it is not working",
+      });
+    } catch (error) {
+      this.#logger.error(`the health notice could not be raised: ${String(error)}`);
+    }
   }
 
   #ping(timeoutMs: number): Promise<void> {

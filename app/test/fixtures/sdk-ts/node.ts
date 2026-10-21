@@ -43,12 +43,17 @@ async function runKitchen(): Promise<void> {
   declarePorts(["out"]);
   const info = await start();
   const cancels = new Map<string, () => void>();
+  // What the health check answers (C26): {"do": "health", "value": true | false | "raise"}.
+  let health: unknown = true;
 
   await run({
     input: async (id, event) => {
       const data = (event.data ?? {}) as Record<string, unknown>;
       const action = typeof data["do"] === "string" ? data["do"] : "echo";
-      if (action === "echo") {
+      if (action === "health") {
+        health = data["value"];
+        done(id);
+      } else if (action === "echo") {
         emit("out", data["value"], id);
         done(id);
       } else if (action === "burst") {
@@ -133,6 +138,12 @@ async function runKitchen(): Promise<void> {
     },
     fire: (data) => {
       emit("out", data); // no input id: a new run (C12, spec 4.1 fire)
+    },
+    health: () => {
+      if (health === "raise") {
+        throw new Error("the index is on fire");
+      }
+      return health === true;
     },
   });
 }

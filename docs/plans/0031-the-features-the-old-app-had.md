@@ -100,7 +100,7 @@ test's id; nothing is marked without a test.
    `test_helper_detection.py::test_the_anytype_desktop_app_is_never_judged_stale`. Left too:
    `test_addon_manifest.py`'s five stability rows about heartbeats and `restartable` (WI-0031-03's
    fields).
-3. **WI-0031-03 — B,** a heartbeat a package may declare, judged like the MCP child's. **DONE** 2026-10-21: `reload.heartbeat` on a type, `ping`/`pong` frames (spec 2.4.2, 4.1, 4.2, C25), judged by the MCP child's own `application/heartbeat.ts`. One row stays undecided: `test_an_unhealthy_answer_is_carried_as_it_is` (a `pong` carries no health answer).
+3. **WI-0031-03 — B,** a heartbeat a package may declare, judged like the MCP child's. **DONE** 2026-10-21: `reload.heartbeat` on a type, `ping`/`pong` frames (spec 2.4.2, 4.1, 4.2, C25), judged by the MCP child's own `application/heartbeat.ts`. A `pong` may carry the node's own health answer, `healthy` (set by each SDK's health hook; C26), carried to a once-only notice.
 4. **WI-0031-04 — C,** `restartable: false` in the declaration, honoured by the supervisor. **DONE** 2026-10-21: honoured where plugins are restarted, the node process adapter (`adapters/process/node-process.ts`); `application/supervisor.ts` restarts only the runtime and services processes, which no package declares.
 5. **WI-0031-05 — E,** `reload --status`, `--quit`, `--log` on the single running instance.
    **DONE 2026-10-21:** `shell/command-line.ts`; the answer returns as a 0600 file in userData.

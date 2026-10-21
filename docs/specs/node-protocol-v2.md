@@ -519,7 +519,7 @@ Every frame is a JSON object with a string field `t`.
 | `present` | `in`, `content` | Action views: show this to the person. | Set the journal entry to `awaiting` with `content`, and apply section 8. |
 | `snapshot` | `content`, `state`, optional `in` | Snapshot views: record this. | Store the snapshot with the type's actions, the instance id and the time. |
 | `closed` | — | In answer to `close`. | Stop waiting for the acknowledgement. |
-| `pong` | `id` | In answer to `ping`. | Record a heartbeat for the process (2.4.2). A `pong` for an `id` it did not send is ignored. |
+| `pong` | `id`, optional `healthy` (boolean) | In answer to `ping`. `healthy` is the node's own health check's answer: `false` when the check said so or failed; absent when the node has no check. | Record a heartbeat for the process (2.4.2), whatever `healthy` says: an answer is a sign of life. Carry `healthy` as it is: when it turns `false`, log it and tell the person once that the node says it is not working; when it turns `true` again, withdraw that notice. Absent changes nothing. A `pong` for an `id` it did not send is ignored. |
 
 #### 4.2.1 Notes and results on `done` (revision 2.1)
 
@@ -721,7 +721,11 @@ The schemas state the shape a frame has once the runtime has applied the revisio
     "pong": {
       "type": "object",
       "required": ["t", "id"],
-      "properties": { "t": { "const": "pong" }, "id": { "$ref": "#/$defs/id" } }
+      "properties": {
+        "t": { "const": "pong" },
+        "id": { "$ref": "#/$defs/id" },
+        "healthy": { "type": "boolean" }
+      }
     },
     "viewContent": {
       "type": "object",
@@ -1255,7 +1259,8 @@ A node SDK (any language) conforms when it:
 - [ ] (2.1) lets `done` carry `notes` and `results` (4.2.1), and provides
       `progress(in, done, total, eta_s?)`, a `status` with `in` (4.2.2);
 - [ ] answers every `ping` with a `pong` of its `id` itself, from the loop that reads frames,
-      while handlers are running too (2.4.2);
+      while handlers are running too (2.4.2), and lets the node give a health check whose answer
+      the `pong` carries as `healthy` (`false` when the check fails);
 - [ ] answers `close` with `closed`, then exits 0 within 5 s;
 - [ ] treats EOF on stdin as `close`, and exits without error;
 - [ ] never logs credentials;
@@ -1316,6 +1321,7 @@ Plan 0031 adds:
 | # | Test | Passes when |
 |---|---|---|
 | C25 | heartbeat | each `ping` gets one `pong` with its `id`, also while an input is running; on the runtime side, a type that declares `reload.heartbeat` and stops answering is killed, restarted under the usual rules and the person told once, and a type that declares none is never pinged |
+| C26 | health | a node's health check answers in the `pong` as `healthy`, and a check that fails answers `false`; on the runtime side, `healthy: false` tells the person once, without killing anything, and `healthy: true` withdraws it |
 
 C15 binds the runtime, not SDKs. Of these, C1, C4 to C8, C10 to C12, C14 and C15 were exercised
 by the spike, by hand and by script. **[UNPROVEN]** C2, C3, C9 and C13 as automated tests, and

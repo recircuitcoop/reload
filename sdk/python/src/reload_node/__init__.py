@@ -315,6 +315,14 @@ class Node:
 
         threading.Thread(target=work, daemon=True).start()
 
+    def _ask_health(self, on_health: Callable[[], bool]) -> bool:
+        """The node's own answer; a check that raises has answered too: not healthy."""
+        try:
+            return bool(on_health())
+        except Exception as caught:  # noqa: BLE001 - reported, and answered as not healthy
+            self.log(f"the health check raised: {caught}", "error")
+            return False
+
     def run(
         self,
         on_input: Callable[[str, dict[str, Any]], None] | None = None,
@@ -323,12 +331,18 @@ class Node:
         on_trigger: Callable[[str, dict[str, Any], dict[str, Any]], None] | None = None,
         on_fire: Callable[[dict[str, Any]], None] | None = None,
         on_close: Callable[[], None] | None = None,
+        on_health: Callable[[], bool] | None = None,
     ) -> None:
         """Sends ready, dispatches frames; on close sends closed and returns; on EOF calls
         on_close and returns (spec 6.4). Unknown frame types, and fields this SDK does not
         know, are ignored (spec 1.3). Every handler this SDK dispatches runs on its own daemon
         thread, so ``run()`` returning (close, or EOF) lets the process exit at once without
         waiting on work still in flight -- matching the close deadline (spec 4.4: 5 s).
+
+        ``on_health`` is the node's own health check (spec 2.4.2): asked at each ``ping``, on
+        the loop that reads frames, so it must answer quickly. Its answer goes back as the
+        ``pong``'s ``healthy``; one that raises is not healthy. Without it, a ``pong`` carries
+        no answer.
         """
         self.ready()
         for raw in sys.stdin:
@@ -376,7 +390,10 @@ class Node:
                 # loop still reads (spec 2.4.2, 4.1); every handler runs on its own thread.
                 ping_id = frame.get("id")
                 if isinstance(ping_id, str):
-                    self.send({"t": "pong", "id": ping_id})
+                    pong: dict[str, Any] = {"t": "pong", "id": ping_id}
+                    if on_health is not None:
+                        pong["healthy"] = self._ask_health(on_health)
+                    self.send(pong)
             elif t == "close":
                 if on_close is not None:
                     on_close()

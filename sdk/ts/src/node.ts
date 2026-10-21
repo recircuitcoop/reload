@@ -51,6 +51,25 @@ export interface Handlers {
   /** Created event sources only: the person fired the event from the app (spec 4.1 `fire`). */
   fire?(data: Readonly<Record<string, unknown>>): void | Promise<void>;
   close?(): void | Promise<void>;
+  /**
+   * The node's own health check (spec 2.4.2): asked at each `ping`, on the loop that reads
+   * frames, so it must answer at once. Its answer goes back as the `pong`'s `healthy`; one that
+   * throws is not healthy. Without it, a `pong` carries no answer.
+   */
+  health?(): boolean;
+}
+
+/** The node's own answer; a check that throws has answered too: not healthy. */
+function askHealth(handlers: Handlers): boolean {
+  try {
+    return handlers.health?.() === true;
+  } catch (caught) {
+    log(
+      `the health check threw: ${caught instanceof Error ? caught.message : String(caught)}`,
+      "error",
+    );
+    return false;
+  }
 }
 
 /** A `media` image (spec 8.1): `src` is a `data:image/(png|jpeg|gif|webp)` URI or a `.png`/
@@ -405,7 +424,11 @@ export async function run(handlers: Handlers): Promise<void> {
         });
     } else if (frame["t"] === "ping" && typeof frame["id"] === "string") {
       // Answered on the loop that reads frames (spec 2.4.2, 4.1): handlers run apart from it.
-      send({ t: "pong", id: frame["id"] });
+      send({
+        t: "pong",
+        id: frame["id"],
+        ...(handlers.health === undefined ? {} : { healthy: askHealth(handlers) }),
+      });
     } else if (frame["t"] === "close") {
       await handlers.close?.();
       closeAndExit();

@@ -488,6 +488,9 @@
         },
         "id": {
           "$ref": "#/$defs/id"
+        },
+        "healthy": {
+          "type": "boolean"
         }
       }
     },

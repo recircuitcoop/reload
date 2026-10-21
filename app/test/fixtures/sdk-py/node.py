@@ -44,6 +44,8 @@ def sized_value(input_id: str, size: int) -> str:
 def run_kitchen() -> None:
     node = Node(ports=["out"])
     cancels: dict[str, threading.Event] = {}
+    # What the health check answers (C26): {"do": "health", "value": true | false | "raise"}.
+    health: dict[str, object] = {"value": True}
 
     def on_input(input_id: str, event: dict[str, Any]) -> None:
         data = event.get("data")
@@ -107,6 +109,9 @@ def run_kitchen() -> None:
             node.log("a log frame", "warn")
             node.error(None, "an error of no input")
             node.done(input_id)
+        elif action == "health":
+            health["value"] = data.get("value")
+            node.done(input_id)
         elif action == "crash":
             os._exit(data.get("code", 3))
         elif action == "done-then-crash":
@@ -123,7 +128,12 @@ def run_kitchen() -> None:
     def on_fire(data: dict[str, Any]) -> None:
         node.emit("out", data)  # no input id: a new run (C12, spec 4.1 fire)
 
-    node.run(on_input=on_input, on_cancel=on_cancel, on_fire=on_fire)
+    def on_health() -> bool:
+        if health["value"] == "raise":
+            raise RuntimeError("the index is on fire")
+        return health["value"] is True
+
+    node.run(on_input=on_input, on_cancel=on_cancel, on_fire=on_fire, on_health=on_health)
 
 
 def run_ask() -> None:

@@ -28,6 +28,8 @@ export type NoticeKind =
   | "limits-unreadable"
   /** A node's process stopped answering its heartbeat and was stopped (spec 2.4.2). */
   | "node-stuck"
+  /** A node's own health check says it is not working (spec 4.2 `pong`). */
+  | "node-unhealthy"
   /** The Anytype MCP child stopped for good after the breaker's limit (§4.1 point 2). */
   | "mcp-child-stopped"
   /** The Anytype MCP child went silent and was restarted (§4.1 point 2). */
@@ -81,6 +83,7 @@ export const NOTICE_KINDS: readonly NoticeKind[] = [
   "anytype-over-limit",
   "limits-unreadable",
   "node-stuck",
+  "node-unhealthy",
   "mcp-child-stopped",
   "mcp-child-restarted",
   "endpoint-degraded",
@@ -217,6 +220,8 @@ function composeWords(notice: Notice): Message {
       };
     case "node-stuck":
       return { title: `The node ${subject} stopped answering`, body: sentences(detail) };
+    case "node-unhealthy":
+      return { title: `The node ${subject} says it is not working`, body: sentences(detail) };
     case "mcp-child-stopped":
       // The body is the service's sentence and nothing else: it already says why, and a remedy
       // invented here would be a second, worse account of it (notification.py HOST_DEGRADED).

@@ -123,6 +123,49 @@ describe("a node process's heartbeat", () => {
     h.subject.pong("ping-1"); // forgotten: nothing to settle
   });
 
+  it("carries the node's health answer as it is: said once when it turns false, withdrawn when true", async () => {
+    const h = harness();
+    let sent = 0;
+    /** Ping, and answer that ping with `healthy`. */
+    const answer = async (healthy?: boolean): Promise<void> => {
+      const ping = h.target()?.ping(30_000);
+      h.subject.pong(`ping-${String((sent += 1))}`, healthy);
+      await ping;
+    };
+    await answer(true);
+    await answer(undefined);
+    expect(h.notifier.notices).toEqual([]);
+    await answer(false);
+    await answer(false);
+    expect(h.notifier.notices).toEqual([
+      {
+        kind: "node-unhealthy",
+        subject: "raw",
+        detail: "Its own health check says it is not working",
+      },
+    ]);
+    expect(h.logger.has(/its health check says it is not working$/)).toBe(true);
+    expect(h.killed).toEqual([]);
+    await answer(true);
+    expect(h.notifier.cleared).toEqual(["node-unhealthy raw", "node-unhealthy raw"]);
+    expect(h.logger.has(/its health check says it is working again$/)).toBe(true);
+    // A pong for a ping never sent carries nothing, health included.
+    h.subject.pong("ping-99", false);
+    expect(h.notifier.notices).toHaveLength(1);
+  });
+
+  it("a health notice that cannot be raised is logged", async () => {
+    const notifier = new RecordingNotifier();
+    notifier.raise = () => {
+      throw new Error("no window");
+    };
+    const h = harness({ notifier });
+    const ping = h.target()?.ping(30_000);
+    h.subject.pong("ping-1", false);
+    await ping;
+    expect(h.logger.has(/the health notice could not be raised: Error: no window/)).toBe(true);
+  });
+
   it("stuck: logs it, tells the person once, and kills the process group", () => {
     const h = harness();
     h.stale(95_000);

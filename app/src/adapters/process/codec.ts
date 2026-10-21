@@ -74,7 +74,8 @@ export type NodeFrame =
   | { t: "present"; in: string; content: ViewContent }
   | { t: "snapshot"; content: ViewContent; state: unknown; in?: string }
   | { t: "closed" }
-  | { t: "pong"; id: string };
+  /** `healthy`: the node's own health check's answer, when it has one (spec 4.2). */
+  | { t: "pong"; id: string; healthy?: boolean };
 
 const RUNTIME_FRAMES = ["start", "input", "cancel", "action", "trigger", "fire", "close", "ping"];
 const NODE_FRAMES = [

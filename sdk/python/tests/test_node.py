@@ -471,6 +471,39 @@ def test_run_answers_every_ping_with_a_pong_of_its_id_without_any_handler(
     ]
 
 
+def test_a_health_check_answers_in_the_pong_and_one_that_raises_is_not_healthy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    out, _ = patch_io(monkeypatch)
+    answers: list[object] = [True, False, RuntimeError("the index is on fire")]
+
+    def check() -> bool:
+        answer = answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return bool(answer)
+
+    node = start_node(
+        monkeypatch,
+        {"t": "ping", "id": "p1"},
+        {"t": "ping", "id": "p2"},
+        {"t": "ping", "id": "p3"},
+        {"t": "close"},
+    )
+    node.run(on_health=check)
+    frames = frames_of(out)
+    assert [f for f in frames if f["t"] == "pong"] == [
+        {"t": "pong", "id": "p1", "healthy": True},
+        {"t": "pong", "id": "p2", "healthy": False},
+        {"t": "pong", "id": "p3", "healthy": False},
+    ]
+    assert {
+        "t": "log",
+        "level": "error",
+        "msg": "the health check raised: the index is on fire",
+    } in frames
+
+
 def test_run_calls_on_close_and_sends_closed_on_an_explicit_close(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

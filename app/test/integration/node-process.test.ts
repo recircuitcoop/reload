@@ -610,6 +610,40 @@ describe("a node process whose type declares a heartbeat (spec 2.4.2)", () => {
     expect(node.node.pid).toBeNull();
   });
 
+  it("a node whose own health check says it is not working is said once, kept running, and withdrawn when well", async () => {
+    const { node, clock } = beating();
+    await ready(node);
+    const pid = node.node.pid;
+    clock.advance(0);
+    await waitFor("the first ping", () => pings(node) === 1);
+    await flushPongs();
+    const [, sick] = send(node.node, { do: "health", value: false });
+    await waitFor("sick", () => sick.finished);
+    for (let pass = 2; pass <= 3; pass += 1) {
+      clock.advance(30_000);
+      await waitFor(`ping ${String(pass)}`, () => pings(node) === pass);
+      await flushPongs();
+    }
+    expect(node.notifier.notices).toEqual([
+      {
+        kind: "node-unhealthy",
+        subject: "raw",
+        detail: "Its own health check says it is not working",
+      },
+    ]);
+    expect(compose(node.notifier.notices[0] ?? { kind: "node-unhealthy", subject: "" }).title).toBe(
+      "The node raw says it is not working",
+    );
+    const [, well] = send(node.node, { do: "health", value: true });
+    await waitFor("well", () => well.finished);
+    clock.advance(30_000);
+    await waitFor("ping 4", () => pings(node) === 4);
+    await waitFor("the withdrawal", () => node.notifier.cleared.includes("node-unhealthy raw"));
+    // An answer, healthy or not, is a sign of life: nothing was killed.
+    expect(node.node.pid).toBe(pid);
+    expect(node.notifier.notices).toHaveLength(1);
+  });
+
   it("a type that declares no heartbeat is never pinged, nor is a runtime that keeps none", async () => {
     let built = 0;
     const counting: HeartbeatFactory = (watch) => {

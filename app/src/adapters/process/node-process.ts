@@ -424,7 +424,7 @@ class ChildNodeProcess implements NodeProcess {
         this.#log("info", "close acknowledged");
         return;
       case "pong":
-        this.#heartbeat?.pong(frame.id);
+        this.#heartbeat?.pong(frame.id, frame.healthy);
         return;
     }
   }
