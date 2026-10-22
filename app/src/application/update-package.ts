@@ -38,6 +38,7 @@ import type { Notifier } from "../ports/notifier";
 import type { InstalledOrigin, InstalledRecord } from "../ports/package-roots";
 import {
   isArchiveFile,
+  restartAround,
   type ListedPackage,
   type OneAtATime,
   type PackageOutcome,
@@ -350,22 +351,13 @@ export class PackageUpdates {
     }
     // Swapped in once the old instances have stopped, so they close on their own files.
     const built = staged.record.version;
-    const swap: { done: boolean; refused: string | null } = { done: false, refused: null };
-    const swapIn = (): void => {
-      if (swap.done) {
-        return;
-      }
-      swap.done = true;
-      try {
-        staged.swap();
-      } catch (error) {
-        swap.refused = reasonOf(error);
-      }
-    };
-    const took = await this.#ports.restartRuntime(`${name} was updated to ${built}`, swapIn);
-    swapIn(); // a runtime that was not running, or never stopped, had nothing to wait for
-    if (swap.refused !== null) {
-      return this.#failed("Not updated", swap.refused);
+    const { took, refused } = await restartAround(
+      this.#ports.restartRuntime,
+      `${name} was updated to ${built}`,
+      () => void staged.swap(),
+    );
+    if (refused !== null) {
+      return this.#failed("Not updated", refused);
     }
     const problem =
       took === null
@@ -451,19 +443,24 @@ export class PackageUpdates {
   ): Promise<PackageOutcome> {
     const { environment, logger, notifier } = this.#ports;
     const name = record.package;
-    try {
-      environment.roots.rollBack(name);
-    } catch (error) {
+    // Swapped back once the failed version's instances have stopped, as it was swapped in.
+    const { refused } = await restartAround(
+      this.#ports.restartRuntime,
+      `${name} ${failed} was rolled back to ${record.version}`,
+      () => {
+        environment.roots.rollBack(name);
+      },
+    );
+    if (refused !== null) {
       logger.error(
-        `update: ${name} ${failed} failed (${problem}) and could not be swapped back: ${reasonOf(error)}`,
+        `update: ${name} ${failed} failed (${problem}) and could not be swapped back: ${refused}`,
       );
       return this.#failed(
         "Not updated",
         `${name} ${failed} failed (${problem}), and ${record.version} could not be put back: ` +
-          reasonOf(error),
+          refused,
       );
     }
-    await this.#ports.restartRuntime(`${name} ${failed} was rolled back to ${record.version}`);
     const reason = `it was rolled back to ${record.version}: ${problem}`;
     if (block) {
       try {

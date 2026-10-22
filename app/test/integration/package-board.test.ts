@@ -44,6 +44,8 @@ let settings: JsonSettingsStore;
 let logger: RecordingLogger;
 let now: number;
 let restarts: string[];
+/** What the old runtime's node processes do as their stop arrives. */
+let stopping: () => void;
 let types: readonly string[] | null;
 
 beforeEach(() => {
@@ -57,6 +59,7 @@ beforeEach(() => {
   pushed = [];
   manifest = {};
   restarts = [];
+  stopping = () => undefined;
   types = [];
 });
 
@@ -162,8 +165,12 @@ function setUp(shipped: { name: string; version: string; folder: string }[] = []
       forward?.progress(phase, name);
     },
   };
-  const restartRuntime = (reason: string) => {
+  // As the supervisor does it: the old runtime stops, the work while stopped runs, then the
+  // next one starts.
+  const restartRuntime = (reason: string, whileStopped?: () => void) => {
     restarts.push(reason);
+    stopping();
+    whileStopped?.();
     return Promise.resolve(100);
   };
   const reads = {
@@ -469,6 +476,22 @@ describe("update and Go back (D5)", () => {
     now += DAY;
     await setUp().board.start();
     expect(roots.kept("monty")).toBeUndefined();
+  });
+
+  it("Go back swaps the version it leaves out only once its instances have stopped", async () => {
+    const folder = writeFolder("monty", "0.1.0");
+    const { board } = setUp();
+    await board.start();
+    await board.installFolder(folder);
+    writeFolder("monty", "0.2.0");
+    await board.checkFolder("monty");
+    expect(await board.update("monty")).toEqual({ ok: true });
+    const atStop: (string | undefined)[] = [];
+    stopping = () => atStop.push(roots.installed("monty")?.version);
+    expect(await board.goBack("monty")).toEqual({ ok: true });
+    // The 0.2.0 instances closed on 0.2.0's files; 0.1.0 was live for the next start.
+    expect(atStop).toEqual(["0.2.0"]);
+    expect(roots.installed("monty")?.version).toBe("0.1.0");
   });
 
   it("after seven days Go back is refused, and the next start prunes what was kept", async () => {

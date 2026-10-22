@@ -37,12 +37,13 @@ import { parsePackagePolicy, unregisteredOf, withRegistration } from "../domain/
 import type { Logger } from "../ports/logger";
 import type { InstalledRecord, LivePackage, PackageRoots } from "../ports/package-roots";
 import type { PackageSettingsStore } from "../ports/settings-store";
-import type {
-  ListedPackage,
-  OneAtATime,
-  PackageInstaller,
-  PackageOutcome,
-  RestartRuntime,
+import {
+  restartAround,
+  type ListedPackage,
+  type OneAtATime,
+  type PackageInstaller,
+  type PackageOutcome,
+  type RestartRuntime,
 } from "./install-package";
 import {
   PHASE_PERCENT,
@@ -488,10 +489,19 @@ export class PackageBoard {
       return refused({ reason: "rollback-expired" });
     }
     return this.#oneAtATime(`${name} going back`, async () => {
-      roots.rollBack(name);
-      // The version it left is offered again, and never blocked; it outlives a restart.
-      roots.amend(name, { left: { version: offer.version, at: this.#ports.now() } });
-      const took = await restartRuntime(`${name} went back to ${offer.previous}`);
+      // Swapped back once the instances of the version it leaves have stopped.
+      const { took, refused: notBack } = await restartAround(
+        restartRuntime,
+        `${name} went back to ${offer.previous}`,
+        () => {
+          roots.rollBack(name);
+          // The version it left is offered again, and never blocked; it outlives a restart.
+          roots.amend(name, { left: { version: offer.version, at: this.#ports.now() } });
+        },
+      );
+      if (notBack !== null) {
+        throw new Error(notBack);
+      }
       const problem =
         took === null
           ? "the runtime did not come back running, so its instances could not be confirmed"

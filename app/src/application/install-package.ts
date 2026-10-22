@@ -100,6 +100,36 @@ export interface PackagesState {
  */
 export type RestartRuntime = (reason: string, whileStopped?: () => void) => Promise<number | null>;
 
+/**
+ * Restart the runtime with `change` made while it is stopped, so the old processes close on the
+ * files they started with (test_plugin_update_apply.py: the plugin is still on its old version
+ * when the stop arrives). `change` runs once: between the generations, or straight after when
+ * nothing was running to wait for. Resolves with how long the restart took, and what `change`
+ * threw, if anything.
+ */
+export async function restartAround(
+  restartRuntime: RestartRuntime,
+  reason: string,
+  change: () => void,
+): Promise<{ readonly took: number | null; readonly refused: string | null }> {
+  let done = false;
+  let refused: string | null = null;
+  const once = (): void => {
+    if (done) {
+      return;
+    }
+    done = true;
+    try {
+      change();
+    } catch (error) {
+      refused = (error as Error).message;
+    }
+  };
+  const took = await restartRuntime(reason, once);
+  once();
+  return { took, refused };
+}
+
 export interface PackageInstallerPorts extends CatalogueReads {
   readonly environment: PackageEnvironmentPorts;
   /** The packages shipped with the app, whose names an install never takes. */

@@ -531,6 +531,19 @@ describe("applying an update", () => {
     expect(roots.installed("pinger")?.version).toBe("0.3.0");
   });
 
+  it("a failed version is swapped back only once its instances have stopped", async () => {
+    const { updates } = await installed("pinger", "0.1.0");
+    publish("pinger", "0.2.0");
+    await updates.check();
+    readiness = () => Promise.resolve({ deployed: ["n1"], ready: [] });
+    const atStop: (string | undefined)[] = [];
+    stopping = () => atStop.push(roots.installed("pinger")?.version);
+    expect(await drive(updates.apply("pinger", "person"))).toMatchObject({ ok: false });
+    // Each stop found the version whose instances were closing still live.
+    expect(atStop).toEqual(["0.1.0", "0.2.0"]);
+    expect(roots.installed("pinger")?.version).toBe("0.1.0");
+  });
+
   it("updates a package no flow uses at once, and leaves every other package as it was", async () => {
     const { updates, installer } = await installed("pinger", "0.1.0");
     publish("other", "1.0.0");
