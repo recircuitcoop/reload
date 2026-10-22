@@ -44,7 +44,7 @@ test("launch at login moves only after the OS said yes, Anytype is started and q
   };
   let anytypePid: number | null = null;
   try {
-    const { app, window } = await launchApp({
+    const { app, window, output } = await launchApp({
       ...env,
       RELOAD_E2E_HOOKS: "1",
       RELOAD_TEST_AUTOSTART_DIR: autostart,
@@ -52,9 +52,14 @@ test("launch at login moves only after the OS said yes, Anytype is started and q
     });
     await waitForRunning(window, "runtime");
 
-    // ── Anytype was not running, so Reload started it ───────────────────────────────────
+    // ── Anytype was not running, so Reload started it, and only then the host ────────────
     await expect.poll(() => fakeAnytypePid(anytype), { timeout: 15_000 }).not.toBeNull();
     anytypePid = fakeAnytypePid(anytype);
+    const log = output.join("");
+    const anytypeAt = log.indexOf("started the Anytype desktop app");
+    expect(anytypeAt).toBeGreaterThanOrEqual(0);
+    expect(log.indexOf("runtime generation 1 forked")).toBeGreaterThan(anytypeAt);
+    expect(log.indexOf("services generation 1 forked")).toBeGreaterThan(anytypeAt);
 
     // ── launch at login, through General's Start at login switch ──────────────────────────
     const general = await openGeneral(window);

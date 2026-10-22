@@ -45,6 +45,18 @@ describe("StalenessJudge", () => {
     },
   );
 
+  it("the MCP child: exactly at its 90 s window is not stale, a millisecond past is, and one answer clears it", () => {
+    const judge = new StalenessJudge(MCP_STABILITY);
+    judge.observe(null, 0, true);
+    // It answered at 1 s, then stopped answering.
+    expect(judge.observe(1_000, 1_000, true)).toBe("fresh");
+    expect(judge.observe(1_000, 91_000, true)).toBe("fresh");
+    expect(judge.observe(1_000, 91_001, true)).toBe("stale");
+    // One answer: fresh again, its window starting from that answer.
+    expect(judge.observe(95_000, 95_000, true)).toBe("fresh");
+    expect(judge.observe(95_000, 185_000, true)).toBe("fresh");
+  });
+
   it("gives a child it has just seen its whole window before saying anything", () => {
     const judge = new StalenessJudge(PROMISED);
     expect(judge.observe(null, 0, true)).toBe("deferred");
