@@ -26,6 +26,8 @@
 // * A call to a tool whose body the child wraps passes the unwrap shim last (minted-body-shim.ts,
 //   plan 0023; temporary): its `body` argument is forwarded flat, so Anytype receives the
 //   document and not `{"body": ...}`.
+// * Each initialize opens an MCP session (`Mcp-Session-Id`), so a call is told for the usage
+//   signals with the name its own session's client gave, not the latest one's.
 // * The ids a client chose are echoed exactly; a body with no readable id is answered with a
 //   null id, never an invented one.
 
@@ -62,6 +64,8 @@ export interface McpDispatchDeps {
    * never its arguments, its uri or its result. initialize, ping and the lists are not work.
    */
   readonly observe?: (call: McpCallFacts) => void;
+  /** A new MCP session's id; a counter when none is given (tests). */
+  readonly newSession?: () => string;
 }
 
 export const CHILD_UNAVAILABLE = "the Anytype MCP child is unavailable";
@@ -153,23 +157,38 @@ function callFacts(
   };
 }
 
+/** How many MCP sessions' client names are kept: the oldest goes past it. */
+export const MAX_SESSIONS = 64;
+
 /** The MCP handler the gateway hands each admitted body to. */
 export function mcpDispatch(deps: McpDispatchDeps): McpHandler {
-  // shortcut: the client the latest initialize named; the endpoint keeps no sessions to tell
-  // two clients apart. Upgrade when it does.
-  let client: string | null = null;
-  return async (body) => {
+  // Each initialize opens a session (Mcp-Session-Id), and the name its client gave is the
+  // session's: two AI apps on the endpoint at once are each told as themselves.
+  const clients = new Map<string, string | null>();
+  let opened = 0;
+  return async (body, session) => {
     const started = deps.clock.now();
     const request = parsed(body);
     const answer = await dispatch(request, deps.served, deps.files);
-    const sent =
+    let sent: McpAnswer =
       answer.body === null
         ? answer
         : { status: answer.status, body: redacted(answer.body, deps.redact) };
     const method = isObject(request) ? request["method"] : undefined;
-    if (method === "initialize") {
-      client = clientOf(request);
+    if (method === "initialize" && answer.status === 200) {
+      opened += 1;
+      const id = deps.newSession?.() ?? `session-${String(opened)}`;
+      clients.set(id, clientOf(request));
+      for (const oldest of clients.keys()) {
+        if (clients.size <= MAX_SESSIONS) {
+          break;
+        }
+        clients.delete(oldest);
+      }
+      sent = { ...sent, session: id };
     }
+    const client =
+      session === undefined || session === null ? null : (clients.get(session) ?? null);
     if (method === "tools/call" || method === "resources/read") {
       const params = (request as Json)["params"];
       const took = deps.clock.now() - started;

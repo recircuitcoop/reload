@@ -520,6 +520,48 @@ describe("the Streamable HTTP exchange", () => {
     expect(accepted).toEqual({ status: 202, text: "" });
   });
 
+  it("sends back the session an initialize opened, and hands the handler each request's", async () => {
+    const sessions: (string | null | undefined)[] = [];
+    const { port } = await serving({
+      handle: (_body, session) => {
+        sessions.push(session);
+        return Promise.resolve({ status: 200, body: { ok: true }, session: "fake-session-1" });
+      },
+    });
+    const sent = await new Promise<string | undefined>((resolve, reject) => {
+      const body = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize" });
+      const outgoing = http.request(
+        {
+          host: "127.0.0.1",
+          port,
+          method: "POST",
+          path: "/mcp",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${TOKEN}`,
+            "content-length": String(Buffer.byteLength(body)),
+          },
+          agent: false,
+        },
+        (response) => {
+          response.resume();
+          response.on("end", () => {
+            const header = response.headers["mcp-session-id"];
+            resolve(typeof header === "string" ? header : undefined);
+          });
+        },
+      );
+      outgoing.on("error", reject);
+      outgoing.end(body);
+    });
+    expect(sent).toBe("fake-session-1");
+    await request(port, "{}", { headers: { "mcp-session-id": "fake-session-1" } });
+    // A header that is no session id (a space, or past 128 characters) is none.
+    await request(port, "{}", { headers: { "mcp-session-id": "a b" } });
+    await request(port, "{}", { headers: { "mcp-session-id": "x".repeat(129) } });
+    expect(sessions).toEqual([null, "fake-session-1", null, null]);
+  });
+
   it("is 503 while the child is unavailable, an MCP error and not a second child", async () => {
     const { port } = await serving({ served: () => null });
     expect(await post(port, { jsonrpc: "2.0", id: 4, method: "tools/list" })).toEqual([

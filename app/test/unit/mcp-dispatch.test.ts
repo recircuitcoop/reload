@@ -11,7 +11,12 @@ import {
   oversizedMessage,
   MAX_FILE_BYTES,
 } from "../../src/application/anytype-file-download";
-import { CHILD_UNAVAILABLE, mcpDispatch, type ServedMcp } from "../../src/application/mcp-dispatch";
+import {
+  CHILD_UNAVAILABLE,
+  MAX_SESSIONS,
+  mcpDispatch,
+  type ServedMcp,
+} from "../../src/application/mcp-dispatch";
 import { MCP_PROTOCOL_VERSION } from "../../src/domain/anytype/pins";
 import { SessionError } from "../../src/domain/anytype/errors";
 import { sourceLog } from "../../src/application/source-log";
@@ -84,6 +89,8 @@ describe("the MCP exchange", () => {
     const initialized = await send({ jsonrpc: "2.0", id: "init-a", method: "initialize" });
     expect(initialized).toEqual({
       status: 200,
+      // The MCP session it opened, sent back as Mcp-Session-Id.
+      session: "session-1",
       body: {
         jsonrpc: "2.0",
         id: "init-a",
@@ -645,15 +652,20 @@ describe("every tools/call and resources/read is told for the usage signals (pla
       files: unpairedFiles(new RecordingLogger()),
       observe: (facts) => told.push(facts),
     });
-    const send = (payload: unknown) => handle(new TextEncoder().encode(JSON.stringify(payload)));
+    let opened: string | null = null;
+    const send = (payload: unknown) =>
+      handle(new TextEncoder().encode(JSON.stringify(payload)), opened);
     // Before any initialize: no client.
     await send(call(1, "get_object", { secret: "fake-argument-token-1234567890" }));
-    await send({
+    const initialized = await send({
       jsonrpc: "2.0",
       id: 2,
       method: "initialize",
       params: { clientInfo: { name: "fake-client-A" } },
     });
+    // The session it opened: every later call of this client names it.
+    opened = initialized.session ?? null;
+    expect(opened).toBe("session-1");
     session.answer = () => ({ content: [], isError: true });
     await send(call(3, "get_object"));
     await send(call(4, "API-delete-everything-fake-unknown"));
@@ -690,5 +702,43 @@ describe("every tools/call and resources/read is told for the usage signals (pla
     ]);
     // Never the arguments, the uri, the result or an unknown name.
     expect(JSON.stringify(told)).not.toMatch(/fake-argument-token|delete-everything|fake-private/);
+  });
+
+  it("names each call's client by its own session, not by the latest initialize", async () => {
+    const session = new RecordingSession();
+    const told: { client: string | null }[] = [];
+    let minted = 0;
+    const handle = mcpDispatch({
+      served: () => ({ session, tools: [TOOL] }),
+      redact: (text) => text,
+      clock: new FakeClock(),
+      logger: new RecordingLogger(),
+      files: unpairedFiles(new RecordingLogger()),
+      observe: (facts) => told.push(facts),
+      newSession: () => `s${String((minted += 1))}`,
+    });
+    const send = (payload: unknown, sessionId: string | null) =>
+      handle(new TextEncoder().encode(JSON.stringify(payload)), sessionId);
+    const open = async (name: string) =>
+      (
+        await send(
+          { jsonrpc: "2.0", id: 1, method: "initialize", params: { clientInfo: { name } } },
+          null,
+        )
+      ).session ?? null;
+    const a = await open("claude-ai");
+    const b = await open("cursor-vscode");
+    await send(call(2, "get_object"), a);
+    await send(call(3, "get_object"), b);
+    await send(call(4, "get_object"), "a-session-nobody-opened");
+    await send(call(5, "get_object"), null);
+    expect([a, b]).toEqual(["s1", "s2"]);
+    expect(told.map((facts) => facts.client)).toEqual(["claude-ai", "cursor-vscode", null, null]);
+    // Past MAX_SESSIONS, the oldest session's name is forgotten.
+    for (let n = 0; n < MAX_SESSIONS; n += 1) {
+      await open(`client-${String(n)}`);
+    }
+    await send(call(6, "get_object"), a);
+    expect(told.at(-1)?.client).toBeNull();
   });
 });

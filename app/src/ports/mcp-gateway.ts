@@ -6,13 +6,16 @@
 export interface McpAnswer {
   readonly status: number;
   readonly body: unknown;
+  /** The MCP session an initialize opened: sent back as `Mcp-Session-Id`. */
+  readonly session?: string;
 }
 
 /**
  * Answer one request body, received whole and admitted by every check before it. The bytes are
  * handed over undecoded: what they mean, including whether they are text, is the handler's.
+ * `session` is the request's `Mcp-Session-Id`, when it sent a well-formed one.
  */
-export type McpHandler = (body: Uint8Array) => Promise<McpAnswer>;
+export type McpHandler = (body: Uint8Array, session?: string | null) => Promise<McpAnswer>;
 
 export interface ServedAddress {
   readonly host: string;

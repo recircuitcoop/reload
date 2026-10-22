@@ -218,7 +218,7 @@ export class HttpMcpGateway implements McpListener {
       }
       let answer: McpAnswer;
       try {
-        answer = await this.#handle(body);
+        answer = await this.#handle(body, sessionOf(request.headers["mcp-session-id"]));
       } catch (error) {
         this.#logger.error(`the MCP endpoint could not answer a request: ${String(error)}`);
         send(response, 500, { error: "internal error" }, true);
@@ -230,7 +230,7 @@ export class HttpMcpGateway implements McpListener {
         response.end();
         return;
       }
-      send(response, answer.status, answer.body);
+      send(response, answer.status, answer.body, false, answer.session);
     } finally {
       this.#admitted -= 1;
     }
@@ -284,12 +284,21 @@ export class HttpMcpGateway implements McpListener {
   }
 }
 
-/** One JSON answer. `close` ends the connection after it, for an answer sent with a body unread. */
+/** A request's `Mcp-Session-Id`: visible ASCII of at most 128 characters, else none. */
+function sessionOf(header: string | string[] | undefined): string | null {
+  return typeof header === "string" && /^[\x21-\x7e]{1,128}$/.test(header) ? header : null;
+}
+
+/**
+ * One JSON answer. `close` ends the connection after it, for an answer sent with a body unread;
+ * `session` is the MCP session an initialize opened.
+ */
 function send(
   response: http.ServerResponse,
   status: number,
   payload: unknown,
   close = false,
+  session?: string,
 ): void {
   if (response.headersSent || response.destroyed) {
     return;
@@ -300,6 +309,7 @@ function send(
     "content-length": String(Buffer.byteLength(body)),
     "cache-control": "no-store",
     ...(close ? { connection: "close" } : {}),
+    ...(session === undefined ? {} : { "mcp-session-id": session }),
   });
   response.end(body);
 }

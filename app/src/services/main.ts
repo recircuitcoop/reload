@@ -201,10 +201,11 @@ function buildEndpoint(config: InitConfig, secrets: SecretStore): McpEndpoint | 
       redact: (text) => registry.redact(text),
       clock: systemClock,
       logger,
-      // Every tools/call, for the usage signals the shell gates by consent (plan 0029).
+      // Every tools/call and resources/read, for the usage signals the shell gates by consent.
       observe: (call) => {
         shellSignals(link)({ kind: "mcp-call", call });
       },
+      newSession: () => randomBytes(16).toString("hex"),
       files: new FileDownloads({
         source: anytypeApi,
         key: () => secrets.read("anytype-api-key"),
