@@ -162,8 +162,16 @@ function probeConfig(id: string, overrides: Message = {}): Message {
     retry: { attempts: "4", backoff: "1.5" },
     volumes: [
       { name: "media", path: "/Volumes/media", size_gb: "2000", readonly: "true" },
-      { name: "scratch", path: "/tmp/scratch", size_gb: "", readonly: false },
+      {
+        name: "scratch",
+        path: "/tmp/scratch",
+        size_gb: "",
+        readonly: false,
+        globs: ["*.wav", "*.mp3"],
+      },
     ],
+    formats: ["mp3"],
+    sizes: ["2", "4.5"],
     ...overrides,
   };
 }
@@ -219,9 +227,17 @@ describe("a generated type's instance", () => {
         level: 2,
         retry: { attempts: 4, backoff: 1.5 },
         volumes: [
-          { name: "media", path: "/Volumes/media", size_gb: 2000, readonly: true },
-          { name: "scratch", path: "/tmp/scratch", readonly: false },
+          {
+            name: "media",
+            path: "/Volumes/media",
+            size_gb: 2000,
+            readonly: true,
+            globs: ["WAV/**/*.WAV"],
+          },
+          { name: "scratch", path: "/tmp/scratch", readonly: false, globs: ["*.wav", "*.mp3"] },
         ],
+        formats: ["mp3"],
+        sizes: [2, 4.5],
       },
       credentials: { token: "s3cret" },
       data_dir: path.join(scratch, "instances", "p1"),
@@ -258,7 +274,10 @@ describe("a generated type's instance", () => {
   it("registers every secret as a password credential with Node-RED", () => {
     setUp();
     expect(red.options.get(PROBE)).toEqual({
-      credentials: { token: { type: "password" }, apikey: { type: "password" } },
+      credentials: {
+        token: { type: "password" },
+        apikey: { type: "password" },
+      },
     });
   });
 

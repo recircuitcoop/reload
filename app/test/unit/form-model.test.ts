@@ -132,9 +132,10 @@ describe("formModel", () => {
     expect(byKey(fields, "volumes").fields?.map((f) => f.control)).toEqual(["text", "checkbox"]);
   });
 
-  it("draws an array of anything but objects as text, for the validator to judge", () => {
+  it("draws an array of single values as a list, each element as text when it says no type", () => {
     const { fields: list } = formModel({ properties: { tags: { type: "array", items: {} } } });
-    expect(list[0]?.control).toBe("text");
+    expect(list[0]?.control).toBe("list");
+    expect(list[0]?.element?.control).toBe("text");
   });
 
   it("publishes an empty form for a schema that declares no properties", () => {

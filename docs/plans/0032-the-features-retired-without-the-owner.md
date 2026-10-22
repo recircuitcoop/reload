@@ -68,6 +68,13 @@ Each group's work item is `WI-0032-NN`, where NN is the group's number in the ce
 (`WI-0032-09` is group 9). `WI-0032-41` is the plugin-settings work: a plugin writes its own
 settings.
 
+## Done
+
+- **Group 1** (branch `port/0032-forms-data`): a list of values, ticked options, several lines
+  of text and a path with Browse… are controls of their own in the canvas form, in a table's rows
+  as at the top; a number carries its bounds and step; a list is saved as a list. 22 rows
+  ported; the 23rd, a list of secrets, is group 3's.
+
 Each ported row moves to `ported` with the id of the test that proves the old behaviour. Each
 row an audit called `internal` or `equivalent` gets its new evidence in `reason`, and keeps no
 `owner_ack`.

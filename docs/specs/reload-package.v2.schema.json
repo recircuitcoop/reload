@@ -55,7 +55,16 @@
       },
       "if": {
         "required": ["reload"],
-        "properties": { "reload": { "anyOf": [{ "required": ["spaces"] }, { "required": ["types"] }] } }
+        "properties": {
+          "reload": {
+            "anyOf": [
+              { "required": ["spaces"] },
+              { "required": ["types"] },
+              { "required": ["multiline"] },
+              { "required": ["path"] }
+            ]
+          }
+        }
       },
       "then": { "properties": { "type": { "const": "string" } }, "required": ["type"] }
     },
@@ -68,9 +77,17 @@
           "required": ["of"],
           "properties": { "of": { "type": "string", "minLength": 1 } }
         },
-        "advanced": { "const": true }
+        "advanced": { "const": true },
+        "multiline": { "const": true },
+        "path": { "enum": ["file", "folder"] }
       },
-      "anyOf": [{ "required": ["spaces"] }, { "required": ["types"] }, { "required": ["advanced"] }],
+      "anyOf": [
+        { "required": ["spaces"] },
+        { "required": ["types"] },
+        { "required": ["advanced"] },
+        { "required": ["multiline"] },
+        { "required": ["path"] }
+      ],
       "not": { "required": ["spaces", "types"] }
     },
     "eventName": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_]*)+\\.v[1-9][0-9]*$" },

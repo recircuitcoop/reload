@@ -48,6 +48,7 @@ export default defineConfig({
         // The generated types' form code runs only in the Node-RED editor's page; the e2e
         // drives it there (test/e2e/generated-types.e2e.ts).
         "src/adapters/nodered/editor-forms.ts",
+        "src/adapters/nodered/editor-options.ts",
       ],
       // Plan 0018 §6: the common targets overall (80% lines, 70% branches), and 95/90 PER FILE
       // on the critical set, where a bug costs the person their data, secrets or trust. Each

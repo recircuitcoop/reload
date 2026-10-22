@@ -182,8 +182,12 @@ A third key, `advanced` (`true`), says where a property is shown, not what it of
 first-run Setup never shows it, and the editor draws it under an **Advanced** disclosure, closed
 when the form opens. It suits a property the person rarely changes, such as where the node reads
 a value from or which address it calls. The property is still saved with its value (its default,
-when the person never changed it). `advanced` is the one key that may stand alone, on a property
-of any type.
+when the person never changed it). `advanced` may stand alone, on a property of any type.
+
+Two keys say how a `type: "string"` property is typed, and may stand alone (plan 0032):
+`multiline` (`true`) draws a box of several lines, and `path` (`"file"` or `"folder"`) draws a
+text input with a **Browse…** button that chooses a file or a folder. The value stays the text.
+Either may annotate an array's `items`, so a list of paths has Browse… on each element.
 
 ```json
 "properties": {
@@ -192,9 +196,9 @@ of any type.
 }
 ```
 
-1. A `reload` MUST declare at least one of `spaces`, `types` and `advanced`, and never both
-   `spaces` and `types`: an empty object, or both, is refused. A property whose `reload`
-   declares `spaces` or `types` MUST be `"type": "string"`. This holds at every depth the form
+1. A `reload` MUST declare at least one of `spaces`, `types`, `advanced`, `multiline` and
+   `path`, and never both `spaces` and `types`: an empty object, or both, is refused. A property
+   whose `reload` declares `spaces`, `types`, `multiline` or `path` MUST be `"type": "string"`. This holds at every depth the form
    draws: top-level properties, the properties of a nested object, and those of an array's
    `items`. The declaration schema (2.6) refuses each case.
 2. `types.of` SHOULD name a sibling property that itself declares `reload.spaces`.
@@ -257,10 +261,14 @@ A type MAY set its own limits in `reload.limits`:
 
    | Schema | Form control |
    |---|---|
-   | `type: string` | text input |
-   | `number` or `integer` | number input |
+   | `type: string` | text input (`reload.multiline`: several lines; `reload.path`: with Browse…) |
+   | `number` or `integer` | number input, carrying `minimum`, `maximum` and `multipleOf` |
    | `boolean` | checkbox |
    | `enum` | select |
+   | `array` whose `items` are an `enum` | one checkbox per option |
+   | `array` of any other single value | a list: one control of the element per value, added and removed |
+   | `object` | its properties, as a group |
+   | `array` of objects | a table: one row of its properties per element |
    | a secret | password input |
 
    `title` gives the label, `description` a tip, and `default` the default value.
@@ -331,7 +339,16 @@ A type MAY set its own limits in `reload.limits`:
       },
       "if": {
         "required": ["reload"],
-        "properties": { "reload": { "anyOf": [{ "required": ["spaces"] }, { "required": ["types"] }] } }
+        "properties": {
+          "reload": {
+            "anyOf": [
+              { "required": ["spaces"] },
+              { "required": ["types"] },
+              { "required": ["multiline"] },
+              { "required": ["path"] }
+            ]
+          }
+        }
       },
       "then": { "properties": { "type": { "const": "string" } }, "required": ["type"] }
     },
@@ -344,9 +361,17 @@ A type MAY set its own limits in `reload.limits`:
           "required": ["of"],
           "properties": { "of": { "type": "string", "minLength": 1 } }
         },
-        "advanced": { "const": true }
+        "advanced": { "const": true },
+        "multiline": { "const": true },
+        "path": { "enum": ["file", "folder"] }
       },
-      "anyOf": [{ "required": ["spaces"] }, { "required": ["types"] }, { "required": ["advanced"] }],
+      "anyOf": [
+        { "required": ["spaces"] },
+        { "required": ["types"] },
+        { "required": ["advanced"] },
+        { "required": ["multiline"] },
+        { "required": ["path"] }
+      ],
       "not": { "required": ["spaces", "types"] }
     },
     "eventName": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_]*)+\\.v[1-9][0-9]*$" },

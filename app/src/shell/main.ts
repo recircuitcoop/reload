@@ -94,6 +94,7 @@ import type * as Contract from "../ui/contract";
 import packageJson from "../../package.json";
 import { anytypeAppPath, type DesktopWired, wireDesktop } from "./desktop";
 import { DeliveredNotices, e2eHooksOn, exposeE2eHooks } from "./e2e-hooks";
+import { browseFor } from "./editor-browse";
 import { noticeHandlers, wireRunNotices } from "./run-notices";
 import { IPC } from "./ipc";
 import { wireMigration } from "./migration";
@@ -199,6 +200,7 @@ const appWindow = new AppWindow({
   hidden: hiddenWindows,
   logger,
   openExternal: (url) => void shell.openExternal(url),
+  browse: (request) => void browseFor(request, { dialog, editor }),
 });
 const push = new PushEvents(appWindow.toPage);
 const { bringForward } = appWindow;

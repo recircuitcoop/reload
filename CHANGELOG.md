@@ -28,6 +28,9 @@ before you open Reload, and remove InnyTypes once Reload has opened. See
   `reload_node`), and the packing tool is `tools/reload-pack`. A package that still uses
   `inny-package.json` or the `innytype` keyword is refused with a message naming the new ones.
   The shipped packages are now `reload_anytype` and `reload_folder`.
+- **A list setting is no longer lost when a step's form is saved.** The canvas form draws a list
+  of values, ticked options, several lines of text and a file or folder with Browse…, in a table's
+  rows as anywhere else, and saves a list as a list.
 
 ## 0.3.0 — 2026-10-15
 

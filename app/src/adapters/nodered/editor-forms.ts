@@ -3,16 +3,14 @@
 // Bundled on its own for the browser (`npm run build:editor`) and written once into the
 // generated folder as reload-forms.html, which Node-RED puts in the editor page with every node
 // definition. Each generated type calls `window.ReloadForms` from its oneditprepare, oneditsave
-// and property validators. It draws the form model of domain/forms (text, number, integer,
-// checkbox, select, nested groups and tables whose rows are added, removed and reordered),
-// marks the required fields, and validates the node with ajv before it can be deployed
-// cleanly: a node whose values the schema refuses is shown invalid, with the reason.
+// and property validators. It draws the form model of domain/forms (text, several lines of text,
+// a path with Browse…, number, integer, checkbox, select, ticked options, a list of values,
+// nested groups, and tables whose rows are added, removed and reordered), marks the required
+// fields, and validates the node with ajv before it can be deployed cleanly: a node whose
+// values the schema refuses is shown invalid, with the reason.
 //
-// A string property whose options come from Anytype (`reload.spaces`, `reload.types.of`;
-// plan 0022 §B) is a select filled from the admin route /red/reload/options as the form opens:
-// "Reading your spaces…", then the names, each storing its plain id or key. A types select reads
-// its sibling space and reads again when that changes; with no space it is empty and disabled.
-// Not paired, the sentence shows in place of the options, and the stored value stays.
+// A string property whose options come from Anytype is a select filled as the form opens
+// (editor-options.ts, with the DOM helpers both files draw with).
 //
 // A property marked `reload.advanced` (spec 2.4.1) is drawn as any other, but in a closed
 // "Advanced" disclosure after the others; it is read back from there the same way.
@@ -25,6 +23,7 @@
 
 import { Ajv2020, type ValidateFunction } from "ajv/dist/2020.js";
 
+import { browseUrl } from "../../domain/forms/browse";
 import { coerceObject } from "../../domain/forms/coerce";
 import { RELOAD_ANNOTATION } from "../../domain/forms/reload-keyword";
 import {
@@ -34,20 +33,12 @@ import {
   dynamicSelect,
   formModel,
   moveRow,
-  optionsQueryOf,
   removeRow,
   withoutSecrets,
-  type DynamicSelect,
   type Field,
-  type OptionsState,
 } from "../../domain/forms/form-model";
-import {
-  parseOptionsAnswer,
-  refusal,
-  type OptionsAnswer,
-  type OptionsQuery,
-} from "../../domain/forms/node-options";
 import type { JsonSchema } from "../../domain/packages/declaration";
+import { element, LOADING, rowOf, showSelect, wireOptions } from "./editor-options";
 
 type Values = Record<string, unknown>;
 
@@ -112,21 +103,6 @@ function validate(type: string, node: Values, key: string): true | string {
 
 // ── drawing ──────────────────────────────────────────────────────────────────────────────
 
-function element<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  attributes: Record<string, string> = {},
-  text?: string,
-): HTMLElementTagNameMap[K] {
-  const made = document.createElement(tag);
-  for (const [name, value] of Object.entries(attributes)) {
-    made.setAttribute(name, value);
-  }
-  if (text !== undefined) {
-    made.textContent = text;
-  }
-  return made;
-}
-
 /** A field's label; a required one is marked with an asterisk and a class. */
 function labelFor(field: Field, path: string): HTMLLabelElement {
   const label = element("label", { for: `reload-input-${path}` }, field.label);
@@ -145,8 +121,11 @@ function textOf(value: unknown): string {
   return typeof value === "string" ? value : JSON.stringify(value);
 }
 
-/** One scalar control, holding `value`. */
-function scalar(field: Field, path: string, value: unknown): HTMLElement {
+/** The inputs a Browse… may fill, by number, for the form open now. */
+let browsing: HTMLInputElement[] = [];
+
+/** One control of `field`, holding `value`: anything but a group or a table. */
+function control(field: Field, path: string, value: unknown): HTMLElement {
   const id = `reload-input-${path}`;
   const common = { id, "data-reload-field": path, "data-testid": `reload-field-${path}` };
   if (field.reload !== undefined) {
@@ -177,17 +156,99 @@ function scalar(field: Field, path: string, value: unknown): HTMLElement {
     }
     case "number":
     case "integer": {
-      const step = field.control === "integer" ? "1" : "any";
-      const input = element("input", { ...common, type: "number", step, style: "width:70%" });
+      const step = field.step ?? (field.control === "integer" ? 1 : "any");
+      const bounds = Object.fromEntries(
+        (["min", "max"] as const).flatMap((at) => {
+          const bound = field[at];
+          return bound === undefined ? [] : [[at, String(bound)]];
+        }),
+      );
+      const attributes = { ...common, ...bounds, type: "number", step: String(step) };
+      const input = element("input", { ...attributes, style: "width:70%" });
       input.value = textOf(value);
       return input;
     }
-    default: {
+    case "textarea": {
+      const box = element("textarea", { ...common, rows: "4", style: "width:70%" });
+      box.value = textOf(value);
+      return box;
+    }
+    case "path": {
+      const holder = element("div", { "data-reload-path": path, style: "display:inline-block" });
+      const input = element("input", { ...common, type: "text", style: "width:70%" });
+      input.value = textOf(value);
+      const browse = element("button", { type: "button", "data-testid": `reload-browse-${path}` });
+      browse.textContent = BROWSE_LABEL;
+      const number = browsing.push(input) - 1;
+      browse.addEventListener("click", () => {
+        window.open(browseUrl(field.pathKind ?? "file", number));
+      });
+      holder.append(input, browse);
+      return holder;
+    }
+    case "multiselect": {
+      const chosen = Array.isArray(value) ? value : [];
+      const holder = element("div", { ...common, role: "group", "data-reload-multi": path });
+      (field.options ?? []).forEach((option, index) => {
+        const box = element("input", {
+          type: "checkbox",
+          style: "width:auto",
+          "data-reload-option": String(index),
+          "data-testid": `reload-option-${path}-${String(index)}`,
+        });
+        box.checked = chosen.some((each) => String(each) === String(option));
+        const label = element("label", { style: "width:auto;margin-right:12px" });
+        label.append(box, ` ${String(option)}`);
+        holder.append(label);
+      });
+      return holder;
+    }
+    case "list":
+      return list(field, path, Array.isArray(value) ? value : []);
+    case "text": {
       const input = element("input", { ...common, type: "text", style: "width:70%" });
       input.value = textOf(value);
       return input;
     }
+    case "group":
+    case "table":
+    case "password":
+      throw new Error(`Reload: a ${field.control} is drawn by the form, not as one control`);
+    default: {
+      // Every control has a drawing: one without is a build error, never a field left off.
+      const missing: never = field.control;
+      throw new Error(`Reload: no drawing for the ${String(missing)} control`);
+    }
   }
+}
+
+/** A list of single values: one control of its element each, removed or added one at a time. */
+function list(field: Field, path: string, values: readonly unknown[]): HTMLElement {
+  const holder = element("div", { "data-reload-list": path, "data-testid": `reload-list-${path}` });
+  const element_ = field.element ?? { ...field, control: "text" };
+  const redraw = (next: readonly unknown[]): void => {
+    holder.replaceChildren();
+    next.forEach((value, index) => {
+      const itemPath = `${path}.${String(index)}`;
+      const item = element("div", { "data-reload-item": itemPath });
+      item.append(control(element_, itemPath, value));
+      const remove = element("button", { type: "button", "data-testid": "reload-item-remove" });
+      remove.textContent = "Remove";
+      remove.addEventListener("click", () => {
+        redraw(readList(holder, element_).filter((_, at) => at !== index));
+      });
+      item.append(remove);
+      holder.append(item);
+    });
+    const add = element("button", { type: "button", "data-testid": `reload-item-add-${path}` });
+    add.textContent = "Add";
+    add.addEventListener("click", () => {
+      redraw([...readList(holder, element_), element_.default ?? ""]);
+    });
+    holder.append(add);
+  };
+  redraw(values);
+  return holder;
 }
 
 /** The controls of `fields`, holding `values`, under `container`; the advanced ones folded. */
@@ -212,7 +273,7 @@ function draw(container: HTMLElement, fields: readonly Field[], values: Values, 
     } else if (field.control === "table") {
       row.append(table(field, path, Array.isArray(value) ? (value as Values[]) : []));
     } else {
-      row.append(scalar(field, path, value));
+      row.append(control(field, path, value));
     }
     if (field.reload !== undefined) {
       row.append(
@@ -234,87 +295,8 @@ function draw(container: HTMLElement, fields: readonly Field[], values: Values, 
   wireOptions(container, fields);
 }
 
-// ── options read from Anytype (plan 0022 §B) ─────────────────────────────────────────────
-
-const LOADING: OptionsState = { kind: "loading" };
-
-/** A dynamic select drawn as the model says, and its note's sentence. */
-function showSelect(select: HTMLSelectElement, model: DynamicSelect): void {
-  select.replaceChildren(
-    ...model.options.map((option) => element("option", { value: option.value }, option.label)),
-  );
-  select.value = model.value;
-  select.disabled = model.disabled;
-  const note = select.parentElement?.querySelector<HTMLElement>("[data-reload-note]");
-  if (note !== null && note !== undefined) {
-    note.textContent = model.sentence ?? "";
-    note.hidden = model.sentence === null;
-  }
-}
-
-/** The options route's answer; any failure to reach it is "unavailable", never a throw. */
-async function fetchOptions(query: OptionsQuery): Promise<OptionsAnswer> {
-  const search =
-    query.source === "spaces"
-      ? new URLSearchParams({ source: "spaces" })
-      : new URLSearchParams({ source: "types", space: query.spaceId });
-  try {
-    // Relative to the editor's own /red/: the same origin, behind the same Host check.
-    const response = await fetch(`reload/options?${search.toString()}`, { cache: "no-store" });
-    return parseOptionsAnswer(await response.json()) ?? refusal("unavailable");
-  } catch {
-    return refusal("unavailable");
-  }
-}
-
-/** The control of `key`'s row under `container`, when it has one. */
-function controlOf(container: Element, key: string): Element | null {
-  return rowOf(container, key)?.children[1] ?? null;
-}
-
-/**
- * Fill every dynamic select among `fields` directly under `container`. Only the newest
- * request of a select is shown: a slow answer for a space no longer chosen is dropped.
- */
-function wireOptions(container: Element, fields: readonly Field[]): void {
-  for (const field of fields) {
-    const select = controlOf(container, field.key);
-    const reload = field.reload;
-    if (reload === undefined || !(select instanceof HTMLSelectElement)) {
-      continue;
-    }
-    // A types select's space: the sibling `of` names, read live at each refresh.
-    const of = reload.source === "types" ? reload.of : null;
-    const sibling = of === null ? null : controlOf(container, of);
-    let asked = 0;
-    const refresh = (keepUnlisted: boolean): void => {
-      const value = select.value;
-      const siblings =
-        of !== null && (sibling instanceof HTMLSelectElement || sibling instanceof HTMLInputElement)
-          ? { [of]: sibling.value }
-          : {};
-      const query = optionsQueryOf(field, siblings);
-      asked += 1;
-      const mine = asked;
-      if (query === null) {
-        showSelect(select, dynamicSelect(field, value, { kind: "waiting" }));
-        return;
-      }
-      showSelect(select, dynamicSelect(field, value, LOADING));
-      void fetchOptions(query).then((answer) => {
-        if (mine === asked) {
-          const state: OptionsState = { kind: "answered", answer };
-          showSelect(select, dynamicSelect(field, value, state, keepUnlisted));
-        }
-      });
-    };
-    // The person chose another space: its types are read again, and a type it lacks cleared.
-    sibling?.addEventListener("change", () => {
-      refresh(false);
-    });
-    refresh(true);
-  }
-}
+/** The button beside a path field. */
+const BROWSE_LABEL = "Browse…";
 
 /** A table: one row of the columns per element, and buttons to add, remove and reorder. */
 function table(field: Field, path: string, rows: readonly Values[]): HTMLElement {
@@ -373,39 +355,44 @@ function table(field: Field, path: string, rows: readonly Values[]): HTMLElement
 const isRecord = (value: unknown): value is Values =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-/** The direct child of `parent` carrying `attribute` = `value`, never one nested deeper. */
-function own(parent: Element, attribute: string, value: string): Element | null {
-  return [...parent.children].find((child) => child.getAttribute(attribute) === value) ?? null;
+/** The value of `field` as drawn by `drawn`: text as text, as Node-RED keeps it. */
+function valueOf(field: Field, drawn: Element): unknown {
+  switch (field.control) {
+    case "group":
+      return read(drawn, field.fields ?? []);
+    case "table":
+      return readRows(drawn, field.fields ?? []);
+    case "list":
+      return readList(drawn, field.element ?? { ...field, control: "text" });
+    case "multiselect":
+      return (field.options ?? []).filter(
+        (_, index) =>
+          drawn.querySelector<HTMLInputElement>(`[data-reload-option="${String(index)}"]`)
+            ?.checked === true,
+      );
+    case "path":
+      return drawn.querySelector("input")?.value ?? "";
+    default:
+      if (drawn instanceof HTMLInputElement && drawn.type === "checkbox") {
+        return drawn.checked;
+      }
+      return drawn instanceof HTMLInputElement ||
+        drawn instanceof HTMLSelectElement ||
+        drawn instanceof HTMLTextAreaElement
+        ? drawn.value
+        : undefined;
+  }
 }
 
-/** `key`'s row directly under `container`, or in its own Advanced disclosure; never deeper. */
-function rowOf(container: Element, key: string): Element | null {
-  const advanced = [...container.children].find((child) =>
-    child.hasAttribute("data-reload-advanced"),
-  );
-  return (
-    own(container, "data-reload-key", key) ??
-    (advanced === undefined ? null : own(advanced, "data-reload-key", key))
-  );
-}
-
-/** The values of `fields` as drawn under `container`: text as text, as Node-RED keeps it. */
+/** The values of `fields` as drawn under `container`; a secret is never among them. */
 function read(container: Element, fields: readonly Field[]): Values {
   const values: Values = {};
   for (const field of fields) {
-    const row = rowOf(container, field.key);
-    if (row === null) {
-      continue;
-    }
-    const control = row.children[1];
-    if (field.control === "group" && control !== undefined) {
-      values[field.key] = read(control, field.fields ?? []);
-    } else if (field.control === "table" && control !== undefined) {
-      values[field.key] = readRows(control, field.fields ?? []);
-    } else if (control instanceof HTMLInputElement && control.type === "checkbox") {
-      values[field.key] = control.checked;
-    } else if (control instanceof HTMLInputElement || control instanceof HTMLSelectElement) {
-      values[field.key] = control.value;
+    const drawn = rowOf(container, field.key)?.children[1];
+    const value =
+      drawn === undefined || field.control === "password" ? undefined : valueOf(field, drawn);
+    if (value !== undefined) {
+      values[field.key] = value;
     }
   }
   return values;
@@ -415,6 +402,12 @@ function readRows(holder: Element, columns: readonly Field[]): Values[] {
   return [...holder.children]
     .filter((child) => child.hasAttribute("data-reload-row"))
     .map((line) => read(line, columns));
+}
+
+function readList(holder: Element, item: Field): unknown[] {
+  return [...holder.children]
+    .filter((child) => child.hasAttribute("data-reload-item"))
+    .map((line) => (line.children[0] === undefined ? "" : valueOf(item, line.children[0])));
 }
 
 /** The form container of the open edit dialog for `type`. */
@@ -430,6 +423,7 @@ function containerOf(type: string): HTMLElement {
 function prepare(type: string, node: Values): void {
   const container = containerOf(type);
   container.replaceChildren();
+  browsing = [];
   draw(container, registered(type).fields, node, "");
 }
 
@@ -441,6 +435,15 @@ function save(type: string, node: Values): void {
   }
 }
 
+/** A path chosen with Browse… (shell/editor-browse.ts), into the field it was asked for. */
+function browsed(field: number, path: string): void {
+  const input = browsing[field];
+  if (input !== undefined && input.isConnected) {
+    input.value = path;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+}
+
 declare global {
   interface Window {
     ReloadForms?: {
@@ -448,13 +451,14 @@ declare global {
       validate: typeof validate;
       prepare: typeof prepare;
       save: typeof save;
+      browsed: typeof browsed;
     };
     /** Definitions Node-RED put in the page before this code: defined now. */
     ReloadFormsPending?: [string, JsonSchema][];
   }
 }
 
-window.ReloadForms = { define, validate, prepare, save };
+window.ReloadForms = { define, validate, prepare, save, browsed };
 for (const [type, schema] of window.ReloadFormsPending ?? []) {
   define(type, schema);
 }

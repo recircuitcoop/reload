@@ -8,6 +8,7 @@ import * as path from "node:path";
 import type { BrowserWindow } from "electron";
 import { afterAll, describe, expect, it } from "vitest";
 import type { Supervisor } from "../../src/application/supervisor";
+import type { BrowseRequest } from "../../src/domain/forms/browse";
 import type { ChildName, ChildStatus } from "../../src/domain/supervision/child-state";
 import { wireChildCalls } from "../../src/shell/child-calls";
 import { IPC } from "../../src/shell/ipc";
@@ -56,6 +57,7 @@ function appWindow() {
   const options: unknown[] = [];
   const logger = new RecordingLogger();
   const opened: string[] = [];
+  const browsed: BrowseRequest[] = [];
   const window = new AppWindow({
     createWindow: (given) => {
       options.push(given);
@@ -68,8 +70,9 @@ function appWindow() {
     hidden: true,
     logger,
     openExternal: (url) => opened.push(url),
+    browse: (request) => browsed.push(request),
   });
-  return { window, made, options, logger, opened };
+  return { window, made, options, logger, opened, browsed };
 }
 
 describe("the app window", () => {
@@ -112,6 +115,20 @@ describe("the app window", () => {
       action: "allow",
     });
     expect(opened).toEqual([link]);
+  });
+
+  it("turns a path field's Browse… into the native dialog, never a window", () => {
+    const { window, made, browsed, opened } = appWindow();
+    window.open();
+    const handler = made[0]?.openHandler;
+    if (handler === undefined) throw new Error("no window open handler");
+    expect(handler({ url: "reload-browse:folder?n=2" })).toEqual({ action: "deny" });
+    expect(handler({ url: "reload-browse:file?n=0" })).toEqual({ action: "deny" });
+    expect(browsed).toEqual([
+      { kind: "folder", field: 2 },
+      { kind: "file", field: 0 },
+    ]);
+    expect(opened).toEqual([]);
   });
 
   it("brings the one window forward, opening one when there is none", () => {

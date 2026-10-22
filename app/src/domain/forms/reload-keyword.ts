@@ -1,11 +1,13 @@
 // The `reload` annotation of a config schema property (spec 2.4.1, plan 0022 §B, decision D9):
 // where a property's options come from, as the form layer needs to know it.
 //
-// Everything Reload-specific about a property lives in its one `reload` object. Three keys
+// Everything Reload-specific about a property lives in its one `reload` object. Five keys
 // are defined: `{"spaces": true}` (the paired Anytype's spaces), `{"types": {"of": "<p>"}}`
-// (the types of the space chosen in sibling property `p`) and `{"advanced": true}` (never shown
-// in Setup, and under Advanced in the editor). This only reads the declaration; resolving the
-// options against Anytype is the options route's job (WI-0022-09), not this.
+// (the types of the space chosen in sibling property `p`), `{"advanced": true}` (never shown
+// in Setup, and under Advanced in the editor), `{"multiline": true}` (a text drawn as several
+// lines) and `{"path": "file" | "folder"}` (a text chosen with Browse…). This only reads the
+// declaration; resolving the options against Anytype is the options route's job (WI-0022-09),
+// not this.
 //
 // Pure: no I/O, no library.
 
@@ -53,4 +55,20 @@ export function reloadOptions(property: JsonSchema): ReloadOptions | null {
 export function isAdvanced(property: JsonSchema): boolean {
   const annotation = property[RELOAD_KEYWORD];
   return isRecord(annotation) && annotation["advanced"] === true;
+}
+
+/** Whether a string property declares `reload.multiline`: drawn as a box of several lines. */
+export function isMultiline(property: JsonSchema): boolean {
+  const annotation = property[RELOAD_KEYWORD];
+  return property["type"] === "string" && isRecord(annotation) && annotation["multiline"] === true;
+}
+
+/** What a string property's Browse… chooses (`reload.path`); null when it declares none. */
+export function pathKind(property: JsonSchema): "file" | "folder" | null {
+  const annotation = property[RELOAD_KEYWORD];
+  if (property["type"] !== "string" || !isRecord(annotation)) {
+    return null;
+  }
+  const kind = annotation["path"];
+  return kind === "file" || kind === "folder" ? kind : null;
 }

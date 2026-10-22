@@ -99,7 +99,12 @@ interface EditorNode {
   valid: boolean;
   validationErrors: string[];
   label: string;
+  count: unknown;
   volumes: unknown;
+  formats: unknown;
+  sizes: unknown;
+  root: unknown;
+  notes: unknown;
 }
 interface EditorRed {
   view: { importNodes(nodes: unknown[]): void };
@@ -118,8 +123,12 @@ const PROBE_FIELDS = {
   retry: { attempts: "2", backoff: "0.25" },
   volumes: [
     { name: "media", path: "/Volumes/media", size_gb: "1500", readonly: "true" },
-    { name: "tmp", path: "/tmp", size_gb: "", readonly: false },
+    { name: "tmp", path: "/tmp", size_gb: "", readonly: false, globs: ["*.wav", "*.mp3"] },
   ],
+  notes: "first line\nsecond line",
+  root: "/Volumes/media",
+  formats: ["mp3"],
+  sizes: ["2", "4.5"],
 };
 
 test("a fixture package with every control deploys, its start frame carries the coerced, validated config, and a real flow reaches debug", async () => {
@@ -188,9 +197,19 @@ test("a fixture package with every control deploys, its start frame carries the 
         level: 3,
         retry: { attempts: 2, backoff: 0.25 },
         volumes: [
-          { name: "media", path: "/Volumes/media", size_gb: 1500, readonly: true },
-          { name: "tmp", path: "/tmp", readonly: false },
+          {
+            name: "media",
+            path: "/Volumes/media",
+            size_gb: 1500,
+            readonly: true,
+            globs: ["WAV/**/*.WAV"],
+          },
+          { name: "tmp", path: "/tmp", readonly: false, globs: ["*.wav", "*.mp3"] },
         ],
+        notes: "first line\nsecond line",
+        root: "/Volumes/media",
+        formats: ["mp3"],
+        sizes: [2, 4.5],
       },
       credentials: { token: SECRET },
       data_dir: path.join(userData, "instances", "pr"),
@@ -222,7 +241,7 @@ test("a fixture package with every control deploys, its start frame carries the 
   }
 });
 
-test("the form in the real editor: every control, required marked, rows added, removed and reordered, validated before deploy", async () => {
+test("the form in the real editor: every control, required marked, rows added, removed and reordered, lists kept, validated before deploy", async () => {
   const { scratch, userData, env } = scratchDirectories();
   const launched: ElectronApplication[] = [];
   try {
@@ -243,9 +262,10 @@ test("the form in the real editor: every control, required marked, rows added, r
           y: 100,
           label: "",
           volumes: [
-            { name: "a", path: "/a" },
+            { name: "a", path: "/a", globs: ["*.wav"] },
             { name: "b", path: "/b" },
           ],
+          sizes: ["2"],
         },
       ]);
       const node = RED.nodes.node("f1");
@@ -262,13 +282,29 @@ test("the form in the real editor: every control, required marked, rows added, r
     const form = frame.getByTestId(`reload-form-${PROBE}`);
     await expect(form).toBeVisible();
     const field = (path: string) => form.getByTestId(`reload-field-${path}`);
-    for (const each of ["label", "ratio", "count", "enabled", "mode", "level"]) {
+    // Every control the old settings window had, each drawn as its own kind of input.
+    for (const each of ["label", "ratio", "count", "enabled", "mode", "level", "formats"]) {
       await expect(field(each)).toHaveCount(1);
     }
     await expect(field("retry.attempts")).toHaveCount(1);
     await expect(field("volumes.1.name")).toHaveValue("b");
-    // Required fields are marked: label, count, volumes, retry.attempts and each row's name
-    // and path; the token, a credential, in the type's own template.
+    await expect(field("notes")).toHaveJSProperty("tagName", "TEXTAREA");
+    await expect(form.getByTestId("reload-browse-root")).toHaveCount(1);
+    await expect(form.getByTestId("reload-option-formats-1")).toHaveCount(1);
+    await expect(form.getByTestId("reload-list-sizes")).toHaveCount(1);
+    // A number carries its bounds and step, in a list as anywhere.
+    await expect(field("sizes.0")).toHaveAttribute("min", "1");
+    await expect(field("sizes.0")).toHaveAttribute("max", "100");
+    await expect(field("sizes.0")).toHaveAttribute("step", "0.5");
+    // A table's cells are the controls their columns already have: a path, a list.
+    for (const row of ["volumes.0", "volumes.1"]) {
+      await expect(form.getByTestId(`reload-browse-${row}.path`)).toHaveCount(1);
+      await expect(form.getByTestId(`reload-list-${row}.globs`)).toHaveCount(1);
+    }
+    // A column's default list fills a row that has none.
+    await expect(field("volumes.1.globs.0")).toHaveValue("WAV/**/*.WAV");
+    // Required fields are marked: label, count, volumes, retry.attempts, each row's name and
+    // path; the token, a credential, in the type's own template.
     await expect(form.getByTestId("reload-required")).toHaveCount(3 + 1 + 2 * 2);
     await expect(frame.getByTestId("reload-required-token")).toHaveCount(1);
     await expect(frame.locator("#node-input-token")).toHaveCount(1);
@@ -291,26 +327,47 @@ test("the form in the real editor: every control, required marked, rows added, r
       .getByTestId("reload-action-up")
       .dispatchEvent("click");
     await expect(field("volumes.0.name")).toHaveValue("b");
+    // The list column of a row: one more value, typed in.
+    await form.getByTestId("reload-item-add-volumes.1.globs").dispatchEvent("click");
+    await field("volumes.1.globs.1").fill("*.flac");
+    // Browse… chooses a folder with the native dialog, answered here as a person would.
+    await app.evaluate(({ dialog }, chosen) => {
+      dialog.showOpenDialog = () => Promise.resolve({ canceled: false, filePaths: [chosen] });
+    }, "/Volumes/chosen");
+    await form.getByTestId("reload-browse-root").dispatchEvent("click");
+    await expect(field("root")).toHaveValue("/Volumes/chosen");
+    await field("notes").fill("one\ntwo");
+    await form.getByTestId("reload-option-formats-0").check();
+    await form.getByTestId("reload-item-add-sizes").dispatchEvent("click");
+    await field("sizes.1").fill("4.5");
     await field("label").fill("Filled");
     await field("count").fill("5");
     await field("retry.attempts").fill("1");
     await frame.locator("#node-input-token").fill(SECRET);
     await frame.locator("#node-dialog-ok").dispatchEvent("click");
 
-    const saved = await editor.evaluate(() => {
-      const RED = (window as unknown as { RED: EditorRed }).RED;
-      const node = RED.nodes.node("f1");
-      RED.editor.validateNode(node);
-      return { valid: node.valid, label: node.label, volumes: node.volumes };
-    });
-    expect(saved).toEqual({
+    const read = () =>
+      editor.evaluate(() => {
+        const RED = (window as unknown as { RED: EditorRed }).RED;
+        const node = RED.nodes.node("f1");
+        RED.editor.validateNode(node);
+        const { valid, label, count, volumes, formats, sizes, root, notes } = node;
+        return { valid, label, count, volumes, formats, sizes, root, notes };
+      });
+    const saved = {
       valid: true,
       label: "Filled",
+      count: "5",
       volumes: [
-        { name: "b", path: "/b", size_gb: "", readonly: false },
-        { name: "a", path: "/a", size_gb: "", readonly: false },
+        { name: "b", path: "/b", size_gb: "", readonly: false, globs: ["WAV/**/*.WAV"] },
+        { name: "a", path: "/a", size_gb: "", readonly: false, globs: ["*.wav", "*.flac"] },
       ],
-    });
+      formats: ["wav"],
+      sizes: ["2", "4.5"],
+      root: "/Volumes/chosen",
+      notes: "one\ntwo",
+    };
+    expect(await read()).toEqual(saved);
 
     // Deployed from the editor: the start frame holds what the form held, coerced.
     await frame.locator("#red-ui-header-button-deploy").click();
@@ -321,9 +378,13 @@ test("the form in the real editor: every control, required marked, rows added, r
       count: 5,
       retry: { attempts: 1 },
       volumes: [
-        { name: "b", path: "/b", readonly: false },
-        { name: "a", path: "/a", readonly: false },
+        { name: "b", path: "/b", readonly: false, globs: ["WAV/**/*.WAV"] },
+        { name: "a", path: "/a", readonly: false, globs: ["*.wav", "*.flac"] },
       ],
+      formats: ["wav"],
+      sizes: [2, 4.5],
+      root: "/Volumes/chosen",
+      notes: "one\ntwo",
     });
     expect(started?.["credentials"]).toEqual({ token: SECRET });
 

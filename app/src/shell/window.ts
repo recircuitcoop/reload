@@ -2,6 +2,7 @@
 // launch or a dock click, and the one path every message to the page takes. Apart from main.ts so
 // the composition root only constructs; main.ts hands in Electron's BrowserWindow.
 import type { BrowserWindow, BrowserWindowConstructorOptions } from "electron";
+import { parseBrowse, type BrowseRequest } from "../domain/forms/browse";
 import { isAnytypeLink } from "../domain/views/popout";
 import type { Logger } from "../ports/logger";
 
@@ -15,6 +16,8 @@ export interface AppWindowDeps {
   readonly logger: Logger;
   /** Hand an anytype:// link to the desktop app (Run history's Open in Anytype). */
   readonly openExternal: (url: string) => void;
+  /** A path field's Browse… in the canvas form (domain/forms/browse.ts). */
+  readonly browse: (request: BrowseRequest) => void;
 }
 
 export class AppWindow {
@@ -46,8 +49,14 @@ export class AppWindow {
     });
     void window.loadURL(this.#deps.url);
     // An Anytype object the page opens (Run history's Open in Anytype) goes to Anytype, never
-    // into a window; any other window the page opens is as Electron makes it.
+    // into a window; a Browse… of the canvas form is the native dialog; any other window the
+    // page opens is as Electron makes it.
     window.webContents.setWindowOpenHandler(({ url }) => {
+      const browse = parseBrowse(url);
+      if (browse !== null) {
+        this.#deps.browse(browse);
+        return { action: "deny" };
+      }
       if (!isAnytypeLink(url)) {
         return { action: "allow" };
       }

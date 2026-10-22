@@ -42,6 +42,19 @@
           "enabled": { "type": "boolean", "title": "Enabled", "default": false },
           "mode": { "enum": ["fast", "slow"], "title": "Mode", "default": "fast" },
           "level": { "enum": [1, 2, 3], "title": "Level" },
+          "notes": { "type": "string", "title": "Notes", "reload": { "multiline": true } },
+          "root": { "type": "string", "title": "Root", "reload": { "path": "folder" } },
+          "formats": {
+            "type": "array",
+            "title": "Formats",
+            "items": { "enum": ["wav", "mp3"] },
+            "uniqueItems": true
+          },
+          "sizes": {
+            "type": "array",
+            "title": "Sizes",
+            "items": { "type": "number", "minimum": 1, "maximum": 100, "multipleOf": 0.5 }
+          },
           "token": { "type": "string", "title": "Token", "writeOnly": true },
           "apikey": { "type": "string", "title": "API key", "x-secret": true },
           "retry": {
@@ -62,7 +75,18 @@
               "required": ["name", "path"],
               "properties": {
                 "name": { "type": "string", "title": "Name", "minLength": 1 },
-                "path": { "type": "string", "title": "Path", "minLength": 1 },
+                "path": {
+                  "type": "string",
+                  "title": "Path",
+                  "minLength": 1,
+                  "reload": { "path": "folder" }
+                },
+                "globs": {
+                  "type": "array",
+                  "title": "Globs",
+                  "items": { "type": "string", "minLength": 1 },
+                  "default": ["WAV/**/*.WAV"]
+                },
                 "size_gb": { "type": "number", "title": "Size (GB)" },
                 "readonly": { "type": "boolean", "title": "Read only", "default": false }
               }

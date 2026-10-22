@@ -6,6 +6,7 @@
 // client registry, its canvas's nodes and `RED.nodes.dirty()`, editor client code (arch_pivot
 // P11 §4), and the only thing done is a press of its own Deploy button.
 
+import { browsedScript } from "../../domain/forms/browse";
 import type { Cancel, Clock } from "../../ports/clock";
 import type {
   EditorNode,
@@ -159,6 +160,11 @@ export class EditorFrame implements EditorWindow, EditorNodes, EditorPresence {
       `The deploy did not finish within ${String(this.#deployMs / 1000)} s; ` +
       "the editor says why."
     );
+  }
+
+  /** Hand a path chosen with Browse… to field `field` of the editor's open form. */
+  async browsed(field: number, path: string): Promise<void> {
+    await this.#run(browsedScript(field, path));
   }
 
   /** The script's answer in the editor's frame; null with no editor, a failure or a timeout. */

@@ -10,7 +10,13 @@
 // Pure: no I/O, no DOM, no library.
 
 import type { JsonSchema } from "../packages/declaration";
-import { isAdvanced, reloadOptions, type ReloadOptions } from "./reload-keyword";
+import {
+  isAdvanced,
+  isMultiline,
+  pathKind,
+  reloadOptions,
+  type ReloadOptions,
+} from "./reload-keyword";
 import {
   READING_SPACES,
   READING_TYPES,
@@ -26,6 +32,14 @@ export type Control =
   | "checkbox"
   | "select"
   | "password"
+  /** A text of several lines (`reload.multiline`). */
+  | "textarea"
+  /** A file or folder's path, typed or chosen with Browse… (`reload.path`). */
+  | "path"
+  /** An array whose items are an `enum`: each option ticked or not. */
+  | "multiselect"
+  /** An array of single values: one control per element, added and removed. */
+  | "list"
   /** A nested object: its own fields, drawn as a group. */
   | "group"
   /** An array of objects: rows of its fields (plan 0005's table), added, removed, reordered. */
@@ -43,8 +57,16 @@ export interface Field {
   readonly required: boolean;
   /** `default`, when there is one. */
   readonly default?: unknown;
-  /** A select's options, in the schema's order. */
+  /** A select's options, or a multiselect's, in the schema's order. */
   readonly options?: readonly unknown[];
+  /** A number's `minimum`, `maximum` and `multipleOf`, for its input to carry. */
+  readonly min?: number;
+  readonly max?: number;
+  readonly step?: number;
+  /** What a path's Browse… chooses. */
+  readonly pathKind?: "file" | "folder";
+  /** A list's element: the control each of its values is drawn with. */
+  readonly element?: Field;
   /**
    * Where a text field's options come from, when its property declares them through `reload`
    * (spec 2.4.1); resolving them is the options route's job. The value stays a plain string.
@@ -103,12 +125,24 @@ export function rowSchemaOf(property: JsonSchema): JsonSchema | null {
   return isRecord(items) && typeOf(items) === "object" ? items : null;
 }
 
+/** An array's items schema, when it declares one. */
+function itemsOf(property: JsonSchema): JsonSchema | null {
+  const items = property["items"];
+  return isRecord(items) ? items : null;
+}
+
 function controlOf(property: JsonSchema): Control {
   if (isSecret(property)) {
     return "password";
   }
   if (Array.isArray(property["enum"])) {
     return "select";
+  }
+  if (reloadOptions(property) === null && pathKind(property) !== null) {
+    return "path";
+  }
+  if (reloadOptions(property) === null && isMultiline(property)) {
+    return "textarea";
   }
   switch (typeOf(property)) {
     case "boolean":
@@ -120,13 +154,32 @@ function controlOf(property: JsonSchema): Control {
     case "object":
       return "group";
     case "array":
-      // Only an array of objects is a table; anything else is typed as text, and the
-      // validator says what is wrong with it.
-      return rowSchemaOf(property) === null ? "text" : "table";
+      return arrayControlOf(property);
     default:
       return "text";
   }
 }
+
+/**
+ * An array of objects is a table, of options a multiselect, of anything else a list, each
+ * element drawn with its own control. With no items, or as a list of tables, it is typed as
+ * text, and the validator says what is wrong.
+ */
+function arrayControlOf(property: JsonSchema): Control {
+  if (rowSchemaOf(property) !== null) {
+    return "table";
+  }
+  const items = itemsOf(property);
+  if (items === null || rowSchemaOf(items) !== null) {
+    return "text";
+  }
+  return Array.isArray(items["enum"]) ? "multiselect" : "list";
+}
+
+const numberAt = (property: JsonSchema, key: string): number | undefined => {
+  const value = property[key];
+  return typeof value === "number" ? value : undefined;
+};
 
 function fieldOf(key: string, property: JsonSchema, required: boolean): Field {
   const control = controlOf(property);
@@ -146,6 +199,25 @@ function fieldOf(key: string, property: JsonSchema, required: boolean): Field {
   }
   if (control === "select") {
     field.options = property["enum"] as readonly unknown[];
+  }
+  if (control === "multiselect") {
+    field.options = (itemsOf(property) as JsonSchema)["enum"] as readonly unknown[];
+  }
+  if (control === "list") {
+    field.element = fieldOf(key, itemsOf(property) as JsonSchema, false);
+  }
+  if (control === "number" || control === "integer") {
+    const bounds = { min: "minimum", max: "maximum", step: "multipleOf" } as const;
+    for (const [name, keyword] of Object.entries(bounds) as [keyof typeof bounds, string][]) {
+      const value = numberAt(property, keyword);
+      if (value !== undefined) {
+        field[name] = value;
+      }
+    }
+  }
+  const kind = control === "path" ? pathKind(property) : null;
+  if (kind !== null) {
+    field.pathKind = kind;
   }
   const reload = control === "text" ? reloadOptions(property) : null;
   if (reload !== null) {
