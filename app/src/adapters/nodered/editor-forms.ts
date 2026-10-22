@@ -9,6 +9,10 @@
 // fields, and validates the node with ajv before it can be deployed cleanly: a node whose
 // values the schema refuses is shown invalid, with the reason.
 //
+// Saving keeps what passes and nothing that fails (domain/forms/kept-on-save.ts): a refused
+// field keeps its value from before, a refused row the row that was at its place, and the
+// editor says what was not kept; opening the form again shows what was typed beside why.
+//
 // A string property whose options come from Anytype is a select filled as the form opens
 // (editor-options.ts, with the DOM helpers both files draw with).
 //
@@ -21,12 +25,14 @@
 // drawn here in its group, as Node-RED's own inputs are drawn: "set" shown, never its value.
 //
 // This file runs only in the editor's browser page, so no unit test loads it; it is excluded
-// from coverage like the preload bridge, and the e2e drives it in the real editor.
+// from coverage like the preload bridge, and the e2e drives it in the real editor. So does the
+// form's every rule: what is kept on a save is domain/forms/kept-on-save.ts, unit-tested.
 
 import { Ajv2020, type ValidateFunction } from "ajv/dist/2020.js";
 
 import { browseUrl } from "../../domain/forms/browse";
 import { coerceObject } from "../../domain/forms/coerce";
+import { keptOnSave, notKeptSentence } from "../../domain/forms/kept-on-save";
 import { RELOAD_ANNOTATION } from "../../domain/forms/reload-keyword";
 import {
   ADVANCED_LABEL,
@@ -448,24 +454,44 @@ function containerOf(type: string): HTMLElement {
 /** The node whose form is open: its credentials say which secrets are set. */
 let editing: Values | null = null;
 
-/** oneditprepare: draw the form with the node's values. */
+/** What a save did not keep, by node id: shown with its reasons as that node's form opens. */
+const refusedOf = new Map<string, { values: Values; sentence: string }>();
+
+/** oneditprepare: draw the form with the node's values, or with what it last refused. */
 function prepare(type: string, node: Values): void {
   const container = containerOf(type);
   container.replaceChildren();
   editing = node;
   browsing = [];
-  draw(container, registered(type).fields, node, "");
+  const refused = refusedOf.get(String(node["id"]));
+  refusedOf.delete(String(node["id"]));
+  if (refused !== undefined) {
+    const said = { class: "form-tips reload-refused", "data-testid": "reload-refused" };
+    container.append(element("div", said, refused.sentence));
+  }
+  draw(container, registered(type).fields, { ...node, ...refused?.values }, "");
 }
 
 /**
- * oneditsave: the drawn values back onto the node, and each secret drawn in a group to its
- * credential. True when a secret changed, which Node-RED cannot see itself.
+ * oneditsave: what passes back onto the node, what fails left as it was (kept-on-save.ts), and
+ * each secret drawn in a group to its credential. True when a secret changed, which Node-RED
+ * cannot see itself.
  */
 function save(type: string, node: Values): boolean {
+  const entry = registered(type);
   const container = containerOf(type);
-  const values = read(container, registered(type).fields);
-  for (const [key, value] of Object.entries(values)) {
+  const submitted = read(container, entry.fields);
+  const previous = ownOf(entry, node);
+  const kept = keptOnSave(entry.schema, previous, submitted, (value) =>
+    entry.validate(value) ? [] : problems(entry.validate),
+  );
+  for (const [key, value] of Object.entries(kept.values)) {
     node[key] = value;
+  }
+  if (kept.refused.length > 0) {
+    const sentence = notKeptSentence(describedProblems(entry.schema, kept.refused));
+    refusedOf.set(String(node["id"]), { values: submitted, sentence });
+    window.RED?.notify(sentence, "warning");
   }
   return saveSecrets(container, node);
 }
@@ -506,6 +532,8 @@ declare global {
       save: typeof save;
       browsed: typeof browsed;
     };
+    /** The editor's own RED, as far as the form uses it. */
+    RED?: { notify(message: string, type: string): void };
     /** Definitions Node-RED put in the page before this code: defined now. */
     ReloadFormsPending?: [string, JsonSchema][];
   }

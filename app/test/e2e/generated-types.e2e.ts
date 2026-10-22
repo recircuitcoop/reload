@@ -243,7 +243,7 @@ test("a fixture package with every control deploys, its start frame carries the 
   }
 });
 
-test("the form in the real editor: every control, required marked, rows added, removed and reordered, lists kept, validated before deploy", async () => {
+test("the form in the real editor: every control, required marked, rows added, removed and reordered, lists kept, a bad entry kept out, validated before deploy", async () => {
   const { scratch, userData, env } = scratchDirectories();
   const launched: ElectronApplication[] = [];
   try {
@@ -377,12 +377,40 @@ test("the form in the real editor: every control, required marked, rows added, r
     };
     expect(await read()).toEqual(saved);
 
+    // One bad entry keeps out only itself: the count before stays, the row being added is
+    // left out, the good change is kept, and the editor says what was not kept.
+    await expect(form).toHaveCount(0);
+    await editor.evaluate(() => {
+      const RED = (window as unknown as { RED: EditorRed }).RED;
+      RED.editor.edit(RED.nodes.node("f1"));
+    });
+    await expect(field("count")).toHaveValue("5");
+    await field("count").fill("0");
+    await field("label").fill("Kept");
+    await table.getByTestId("reload-action-add").dispatchEvent("click");
+    await frame.locator("#node-dialog-ok").dispatchEvent("click");
+    await expect(frame.locator(".red-ui-notification").last()).toContainText(
+      "Not saved: Count: must be 1 or more. Volumes, row 3, Name: must not be empty.",
+    );
+    expect(await read()).toEqual({ ...saved, label: "Kept" });
+    // Opened again, once the tray has closed, the form shows what was typed beside why it
+    // was not kept.
+    await expect(form).toHaveCount(0);
+    await editor.evaluate(() => {
+      const RED = (window as unknown as { RED: EditorRed }).RED;
+      RED.editor.edit(RED.nodes.node("f1"));
+    });
+    await expect(form.getByTestId("reload-refused")).toContainText("Count: must be 1 or more.");
+    await expect(field("count")).toHaveValue("0");
+    await frame.locator("#node-dialog-cancel").dispatchEvent("click");
+    expect(await read()).toEqual({ ...saved, label: "Kept" });
+
     // Deployed from the editor: the start frame holds what the form held, coerced.
     await frame.locator("#red-ui-header-button-deploy").click();
     await expect.poll(() => startFrame(userData, "f1"), { timeout: 15_000 }).not.toBeNull();
     const started = startFrame(userData, "f1");
     expect(started?.["config"]).toMatchObject({
-      label: "Filled",
+      label: "Kept",
       count: 5,
       retry: { attempts: 1 },
       volumes: [

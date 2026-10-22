@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import { AjvSchemaValidator } from "../../src/adapters/schema/ajv-validator";
 import { coerceObject } from "../../src/domain/forms/coerce";
 import { formModel, type Field } from "../../src/domain/forms/form-model";
+import { keptOnSave } from "../../src/domain/forms/kept-on-save";
 import { isMultiline, pathKind } from "../../src/domain/forms/reload-keyword";
 import type { JsonSchema } from "../../src/domain/packages/declaration";
 
@@ -164,9 +165,12 @@ describe("a list through the form", () => {
     });
   });
 
-  it("a list whose elements break their constraint is refused, naming the element", () => {
+  it("a list whose elements break their constraint is refused, and the list before stays", () => {
     const validator = new AjvSchemaValidator();
-    const drawn = coerceObject(schema, { sizes: ["2", "0"] });
-    expect(validator.check(schema, drawn).map((problem) => problem.path)).toEqual(["/sizes/1"]);
+    const kept = keptOnSave(schema, { sizes: [3] }, { sizes: ["2", "0"] }, (value) =>
+      validator.check(schema, value),
+    );
+    expect(kept.refused.map((problem) => problem.path)).toEqual(["/sizes/1"]);
+    expect(kept.values).toEqual({ sizes: [3] });
   });
 });

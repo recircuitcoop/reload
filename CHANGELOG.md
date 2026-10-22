@@ -33,6 +33,9 @@ before you open Reload, and remove InnyTypes once Reload has opened. See
   rows as anywhere else, and saves a list as a list.
 - **A secret inside a group of settings is kept**, as a credential like any other; a package that
   puts a secret in a table's rows or a list is refused, naming it, as it could not be kept.
+- **One bad entry no longer costs the good ones.** Saving a step's form keeps every value that
+  passes, keeps the value before for one that fails (a refused row keeps the row that was there),
+  and says what was not saved.
 
 ## 0.3.0 — 2026-10-15
 

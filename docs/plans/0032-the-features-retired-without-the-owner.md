@@ -81,6 +81,8 @@ settings.
   rows of a plugin writing its own settings (written by, who and when, a secret obtained at run
   time) are not ported: they need a node→runtime write in the protocol and both SDKs, put to the
   plan's owner as a decision.
+- **Group 28** (same branch): a save keeps what passes and nothing that fails, field by field and
+  row by row at every depth, says what was not kept, and shows it again beside why. 14 rows.
 
 Each ported row moves to `ported` with the id of the test that proves the old behaviour. Each
 row an audit called `internal` or `equivalent` gets its new evidence in `reason`, and keeps no
