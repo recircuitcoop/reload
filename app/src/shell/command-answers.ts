@@ -91,6 +91,8 @@ export interface AnswerDeps {
   readonly pid: number;
   /** The answer files, when they cannot be written. */
   readonly replies: Unwritable;
+  /** Whether the process that asked still runs as itself; rejects when it cannot be checked. */
+  readonly askerRuns: (pid: number, identity: string) => Promise<boolean>;
   readonly logger: Logger;
 }
 
@@ -122,17 +124,33 @@ export function takeQuestions(dir: string, deps: AnswerDeps, now: number): void 
   for (const name of names) {
     const id = QUESTION_NAME.exec(name)?.[1];
     const question = id === undefined ? null : takeQuestion(path.join(dir, name), id, now);
-    if (question !== null) {
-      removeStaleReplies(dir, now);
-      answerQuestion(question, deps);
+    if (question === null) {
+      continue;
     }
+    removeStaleReplies(dir, now);
+    // Only while the very process that asked still runs: one interrupted or killed while
+    // Reload could not answer must not quit it once it can. Unchecked is not "it runs".
+    deps.askerRuns(question.pid, question.identity).then(
+      (runs) => {
+        if (runs) {
+          answerQuestion(question, deps);
+        } else {
+          deps.logger.info(`left \`reload --${question.command}\` unanswered: its asker is gone`);
+        }
+      },
+      () => {
+        deps.logger.info(
+          `left \`reload --${question.command}\` unanswered: its asker is unchecked`,
+        );
+      },
+    );
   }
 }
 
 /**
  * One question, read and removed; null when it is not one to answer: not a small regular file
- * (a link is never followed), not of this moment (an asker that gave up, or was killed, long
- * ago must not quit a later Reload), not a question, or taken back by its asker meanwhile.
+ * (a link is never followed), older than PICKUP_MS (its asker has given up on it by then, and
+ * must not quit a later Reload), not a question, or taken back by its asker meanwhile.
  */
 function takeQuestion(file: string, id: string, now: number): Question | null {
   let text: string;
@@ -140,7 +158,7 @@ function takeQuestion(file: string, id: string, now: number): Question | null {
     const fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
     try {
       const stat = fs.fstatSync(fd);
-      if (!stat.isFile() || stat.size > 1024 || now - stat.mtimeMs > PICKUP_MS * 2) {
+      if (!stat.isFile() || stat.size > 8192 || now - stat.mtimeMs > PICKUP_MS) {
         fs.rmSync(file, { force: true });
         return null;
       }

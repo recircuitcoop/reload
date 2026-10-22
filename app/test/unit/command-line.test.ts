@@ -25,7 +25,6 @@ import {
   LOG_TAIL_LINES,
   logText,
   PICKUP_MS,
-  plainText,
   questionFile,
   replyFile,
   STALE_REPLY_MS,
@@ -36,6 +35,8 @@ import {
 } from "../../src/shell/command-line";
 import { runShell } from "../../src/shell/lifecycle";
 import {
+  identityOf,
+  plainText,
   RUN_STATE_FILENAME,
   UncheckedIdentity,
   writePrivateFile,
@@ -95,15 +96,20 @@ function deps(overrides: Partial<AnswerDeps> = {}) {
     },
     pid: 4000,
     replies: unwritable("answer to a terminal command", () => null, logger),
+    askerRuns: () => Promise.resolve(true),
     logger,
     ...overrides,
   };
   return { answer, logger, quits };
 }
 
+/** The asking process, and its identity as the process table gives it. */
+const ASKER = { pid: 4321, identity: "t9 /Applications/Reload.app/Contents/MacOS/Reload --quit" };
+const EXECUTABLE = "/Applications/Reload.app/Contents/MacOS/Reload";
+
 /** A question as the asking process leaves it. */
 const put = (command: string, id = ID) => {
-  writePrivateFile(questionFile(userData, id), JSON.stringify({ command, id }));
+  writePrivateFile(questionFile(userData, id), JSON.stringify({ command, id, ...ASKER }));
 };
 
 /** The reply the running instance wrote for the question, once it is there. */
@@ -169,8 +175,13 @@ describe("the asking process", () => {
           const reply = options.instance(question);
           if (reply !== null) fs.writeFileSync(replyFile(userData, ID), JSON.stringify(reply));
         },
-        identity: options.identity ?? ((pid) => alive.get(pid) ?? null),
+        identity: (pid) =>
+          pid === ASKER.pid
+            ? ASKER.identity
+            : (options.identity ?? ((other: number) => alive.get(other) ?? null))(pid),
         notices: NOTICES_FILENAME,
+        pid: ASKER.pid,
+        executable: EXECUTABLE,
       });
     return { code, printed, taken, alive, out: () => printed.join("") };
   }
@@ -207,6 +218,23 @@ describe("the asking process", () => {
     );
   });
 
+  it("says Reload is starting while it holds the single-instance lock before its first record", () => {
+    fs.symlinkSync("my-mac.local-4242", path.join(userData, "SingletonLock"));
+    const holder = new Map([[4242, `t8 ${EXECUTABLE}`]]);
+    const quit = asking({ alive: holder });
+    expect(quit.code("quit")).toBe(1);
+    expect(quit.printed).toEqual([
+      "Reload is starting and cannot answer yet. Try again in a moment.\n",
+    ]);
+    const status = asking({ alive: holder });
+    expect(status.code("status")).toBe(0);
+    expect(status.printed).toEqual(quit.printed);
+    // A lock left by a Reload that is gone, its pid another program's now: not a start.
+    const left = asking({ alive: new Map([[4242, "t2 /usr/bin/vim notes.txt"]]) });
+    expect(left.code("quit")).toBe(1);
+    expect(left.printed).toEqual(["Reload is not running.\n"]);
+  });
+
   it("quit with nothing running says plainly that Reload is not running, and exits 1", () => {
     // A record left by a Reload that is gone, its pid another program's now: not running.
     writeRunState([SHELL]);
@@ -223,7 +251,7 @@ describe("the asking process", () => {
       instance: () => ({ code: 0, text: "Reload is up.\n" }),
     });
     expect(code("status")).toBe(0);
-    expect(taken).toEqual([{ question: { command: "status", id: ID }, mode: 0o600 }]);
+    expect(taken).toEqual([{ question: { command: "status", id: ID, ...ASKER }, mode: 0o600 }]);
     expect(printed).toEqual(["Reload is up.\n"]);
     expect(fs.readdirSync(userData)).toEqual([RUN_STATE_FILENAME]);
   });
@@ -454,17 +482,39 @@ describe("the running instance answers", () => {
     // A question whose id is not its name's.
     writePrivateFile(
       questionFile(userData, ids[2] ?? ""),
-      JSON.stringify({ command: "status", id: ID }),
+      JSON.stringify({ command: "status", id: ID, ...ASKER }),
     );
     // A link, never followed; and a question its asker gave up on long ago.
     const elsewhere = path.join(userData, "elsewhere.json");
-    fs.writeFileSync(elsewhere, JSON.stringify({ command: "quit", id: ids[3] }));
+    fs.writeFileSync(elsewhere, JSON.stringify({ command: "quit", id: ids[3], ...ASKER }));
     fs.symlinkSync(elsewhere, questionFile(userData, ids[3] ?? ""));
     put("quit", ids[4]);
-    const old = (Date.now() - PICKUP_MS * 3) / 1000;
+    // Older than the pickup window: its asker gave up on it, so it is never acted on.
+    const old = (Date.now() - PICKUP_MS - 1000) / 1000;
     fs.utimesSync(questionFile(userData, ids[4] ?? ""), old, old);
     take(answer);
     expect(fs.readdirSync(userData)).toEqual(["elsewhere.json"]);
+  });
+
+  it("never answers a question whose asker is gone or cannot be checked, a quit least of all", async () => {
+    const asked: [number, string][] = [];
+    const { answer, quits } = deps({
+      askerRuns: (pid, identity) => {
+        asked.push([pid, identity]);
+        return asked.length === 1 ? Promise.resolve(false) : Promise.reject(new Error("EPERM"));
+      },
+    });
+    put("quit");
+    take(answer);
+    put("quit", "f".repeat(32));
+    take(answer);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(asked).toEqual([
+      [ASKER.pid, ASKER.identity],
+      [ASKER.pid, ASKER.identity],
+    ]);
+    expect(quits).toEqual([]);
+    expect(fs.readdirSync(userData)).toEqual([]);
   });
 
   it("status: what runs, and that nothing was refused, when nothing was", async () => {
@@ -705,8 +755,17 @@ describe("the shell", () => {
       logger: new RecordingLogger(),
     });
     expect(fs.existsSync(left)).toBe(false);
-    put("quit");
+    // Asked by a process that runs (this one), checked against the real process table; a
+    // question from a process that does not is left unanswered.
+    const gone = "a".repeat(32);
+    put("quit", gone);
+    const asker = { pid: process.pid, identity: identityOf(process.pid, process.platform) };
+    writePrivateFile(
+      questionFile(userData, ID),
+      JSON.stringify({ command: "quit", id: ID, ...asker }),
+    );
     expect(await replyFor()).toEqual({ code: 0, text: "" });
+    expect(fs.existsSync(replyFile(userData, gone))).toBe(false);
     expect(requests).toEqual([{ ask: true }]);
     app.emit("second-instance", {}, [], "/", undefined);
     expect(forward).toBe(1);

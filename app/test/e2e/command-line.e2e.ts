@@ -145,6 +145,52 @@ test("a stopped Reload survives reload --status and --quit, which say it did not
   }
 });
 
+test("a --quit interrupted or killed while Reload could not answer is never acted on once it can", async () => {
+  test.setTimeout(120_000);
+  const { scratch, userData, env } = scratchDirectories();
+  const apps: ElectronApplication[] = [];
+  const questions = () => fs.readdirSync(userData).filter((name) => name.startsWith("command-"));
+  try {
+    const { app, window, output } = await launchApp(env);
+    apps.push(app);
+    await waitForRunning(window, "runtime");
+    const shellPid = await app.evaluate(() => process.pid);
+    const runState = path.join(userData, "run-state.json");
+    await expect
+      .poll(() => (fs.existsSync(runState) ? fs.readFileSync(runState, "utf8") : ""))
+      .toContain(`"pid":${String(shellPid)}`);
+    for (const signal of ["SIGINT", "SIGKILL"] as const) {
+      process.kill(shellPid, "SIGSTOP");
+      try {
+        const asker = spawn(ELECTRON_BINARY, [APP, "--quit"], { env, stdio: "ignore" });
+        const ended = new Promise((resolve) => asker.once("close", resolve));
+        // Its question is waiting for a Reload that cannot take it; then the asker is stopped.
+        await expect.poll(questions, { timeout: 20_000 }).toHaveLength(1);
+        const signalled = Date.now();
+        asker.kill(signal);
+        await ended;
+        expect(Date.now() - signalled).toBeLessThan(2_000);
+      } finally {
+        process.kill(shellPid, "SIGCONT");
+      }
+      // Awake, it takes the question, finds its asker gone, and leaves it unanswered.
+      await expect
+        .poll(() => output.join("").split("left `reload --quit` unanswered: its asker is gone"), {
+          timeout: 20_000,
+        })
+        .toHaveLength(signal === "SIGINT" ? 2 : 3);
+      expect(questions()).toEqual([]);
+      expect(isAlive(shellPid)).toBe(true);
+    }
+    expect(output.join("")).not.toContain("answering `reload --quit` from a terminal");
+    const exited = exitOf(app);
+    expect((await reload("--quit", env)).code).toBe(0);
+    expect(await exited).toBe(0);
+  } finally {
+    await cleanUp(apps, scratch);
+  }
+});
+
 test("reload --quit --force stops every recorded process of a stopped Reload itself, asking nobody", async () => {
   // The shell is given its polite stop before it is killed.
   test.setTimeout(120_000);

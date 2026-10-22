@@ -16,8 +16,11 @@
 // running instance takes and removes (answerQuestions). The answer comes back as a file named by
 // the same id, which the instance builds itself; it never writes where a question says. The
 // folder is this OS user's own, so only the same user can ask or read an answer; there is no
-// port. A question nobody takes within PICKUP_MS is taken back, so a Reload that wakes later
-// never acts on it.
+// port. A question nobody takes within PICKUP_MS is taken back. A question carries its asker's
+// pid and identity, and the instance acts on one only while that very process still runs and
+// within PICKUP_MS of its writing: an asker interrupted or killed while it waited (it blocks,
+// so it can run no handler to take its question back) leaves nothing a Reload that wakes later
+// acts on.
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import * as path from "node:path";
@@ -27,6 +30,8 @@ import {
   confirmQuit,
   forceQuit,
   identityOf,
+  isPid,
+  plainText,
   readRunState,
   RUN_STATE_FILENAME,
   stillRuns,
@@ -62,7 +67,7 @@ export const WAIT_MS: Readonly<Record<Asked, number>> = {
 /** How many of the log's last lines `--log` shows. */
 export const LOG_TAIL_LINES = 50;
 
-/** How old an answer nobody took gets before the instance removes it at its next start. */
+/** How old an answer nobody took gets before the instance removes it, at each question. */
 export const STALE_REPLY_MS = 5 * 60_000;
 
 /** The command on this command line, or null for an ordinary launch. */
@@ -80,6 +85,9 @@ export function commandOf(argv: readonly string[]): Command | null {
 export interface Question {
   readonly command: Asked;
   readonly id: string;
+  /** The asking process, and its identity (shell/run-state.ts identityOf) when it asked. */
+  readonly pid: number;
+  readonly identity: string;
 }
 
 const REPLY_ID = /^[0-9a-f]{32}$/;
@@ -88,9 +96,15 @@ export function isQuestion(value: unknown): value is Question {
   if (typeof value !== "object" || value === null) {
     return false;
   }
-  const { command, id } = value as Record<string, unknown>;
+  const { command, id, pid, identity } = value as Record<string, unknown>;
   return (
-    (command === "status" || command === "quit") && typeof id === "string" && REPLY_ID.test(id)
+    (command === "status" || command === "quit") &&
+    typeof id === "string" &&
+    REPLY_ID.test(id) &&
+    isPid(pid) &&
+    typeof identity === "string" &&
+    identity !== "" &&
+    identity.length <= 4096
   );
 }
 
@@ -104,18 +118,6 @@ export const replyFile = (dir: string, id: string): string => path.join(dir, `co
 
 export const questionFile = (dir: string, id: string): string =>
   path.join(dir, `command-${id}.question`);
-
-/** Text for the terminal: no control character (C0, DEL, C1) but the newline and the tab. */
-export function plainText(text: string): string {
-  let plain = "";
-  for (const char of text) {
-    const code = char.codePointAt(0) ?? 0;
-    if (code === 9 || code === 10 || (code >= 0x20 && (code < 0x7f || code > 0x9f))) {
-      plain += char;
-    }
-  }
-  return plain;
-}
 
 // ── the asking process ──────────────────────────────────────────────────────────────────────
 
@@ -138,6 +140,9 @@ export interface AskDeps {
   /** The identity of a pid now (shell/run-state.ts identityOf). */
   readonly identity: Identity;
   readonly notices: CommandFiles["notices"];
+  /** This process, which the question names, and the executable Reload runs as. */
+  readonly pid: number;
+  readonly executable: string;
 }
 
 /** Asks the running instance and prints its answer; the exit code. */
@@ -149,6 +154,11 @@ export function ask(command: Asked, deps: AskDeps): number {
   const runState = path.join(dir, RUN_STATE_FILENAME);
   const records = readRunState(runState);
   if (!mayRun(records, deps.identity)) {
+    if (starting(dir, deps)) {
+      // Holding the lock before its first record lands: running, not yet answerable.
+      print("Reload is starting and cannot answer yet. Try again in a moment.\n");
+      return command === "status" ? 0 : 1;
+    }
     if (command === "status") {
       print(statusFromFiles(dir, deps));
       return 0;
@@ -201,6 +211,30 @@ function mayRun(records: ReturnType<typeof readRunState>, identity: Identity): b
   return shell !== undefined && stillRuns(shell, identity) !== false;
 }
 
+/**
+ * Whether a Reload holds the single-instance lock: Chromium's lock is a link in the user-data
+ * folder to `<host>-<pid>` (POSIX), read here, never taken; its pid must still run this
+ * executable. shortcut: POSIX only; Windows' lock is a mutex, with plan 0025.
+ */
+function starting(dir: string, deps: Pick<AskDeps, "identity" | "executable">): boolean {
+  let target: string;
+  try {
+    target = fs.readlinkSync(path.join(dir, "SingletonLock"));
+  } catch {
+    return false;
+  }
+  const pid = Number(/-(\d+)$/.exec(target)?.[1]);
+  if (!isPid(pid)) {
+    return false;
+  }
+  try {
+    return deps.identity(pid)?.includes(deps.executable) ?? false;
+  } catch {
+    // The process table could not say: a lock held, possibly; not "not running".
+    return true;
+  }
+}
+
 /** The recorded processes that still run, or could not be checked. */
 const recordedRunning = (records: ReturnType<typeof readRunState>, identity: Identity) =>
   Array.isArray(records)
@@ -222,7 +256,10 @@ function askInstance(
   const unanswered = (ms: number) => `Reload did not answer within ${String(ms / 1000)} seconds.\n`;
   try {
     try {
-      writePrivateFile(question, JSON.stringify({ command, id: deps.id } satisfies Question));
+      const identity = deps.identity(deps.pid);
+      if (identity === null) throw new Error("this process is not in the process table");
+      const asked: Question = { command, id: deps.id, pid: deps.pid, identity };
+      writePrivateFile(question, JSON.stringify(asked));
     } catch (error) {
       return { reply: null, unanswered: `Reload could not be asked: ${String(error)}\n` };
     }
@@ -371,6 +408,8 @@ export function runCommandLine(
     sleep,
     identity,
     notices: files.notices,
+    pid: process.pid,
+    executable: process.execPath,
   });
   process.exit(code);
 }

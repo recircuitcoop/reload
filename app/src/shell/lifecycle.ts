@@ -16,7 +16,7 @@ import {
   type Running,
   type Unwritable,
 } from "./command-answers";
-import { RUN_STATE_FILENAME, writeRunState } from "./run-state";
+import { identityOfLater, RUN_STATE_FILENAME, writeRunState } from "./run-state";
 
 export interface LifecycleDeps {
   readonly app: Pick<
@@ -55,6 +55,7 @@ export function runShell(deps: LifecycleDeps): void {
     quit: () => quitFlow.request({ ask: true }),
     pid: process.pid,
     replies,
+    askerRuns: async (pid, identity) => (await identityOfLater(pid, process.platform)) === identity,
     logger,
   });
   app.on("quit", stopAnswering);
