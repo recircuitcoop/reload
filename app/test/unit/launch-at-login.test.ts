@@ -163,6 +163,30 @@ describe("ElectronLoginItem (macOS, Windows): the real call, with Electron's app
     }).toThrow("still starts Reload at login");
   });
 
+  it("a load that fails leaves no half registered login item", () => {
+    // macOS keeps a requires-approval item pending; approved later in System Settings it would
+    // start Reload at login with the switch off. The refused registration is taken back.
+    const { app, calls } = mockApp(() => ({ openAtLogin: false, status: "requires-approval" }));
+    expect(() => {
+      new ElectronLoginItem(app).register();
+    }).toThrow(LoginItemError);
+    expect(calls).toEqual([{ openAtLogin: true }, { openAtLogin: false }]);
+    // A withdrawal Electron itself refuses still ends in the refusal, not in its own throw.
+    let first = true;
+    const stubborn = new ElectronLoginItem({
+      setLoginItemSettings: () => {
+        if (!first) {
+          throw new Error("not allowed");
+        }
+        first = false;
+      },
+      getLoginItemSettings: () => ({ openAtLogin: false, status: "requires-approval" }),
+    });
+    expect(() => {
+      stubborn.register();
+    }).toThrow("did not register Reload to start at login (requires-approval)");
+  });
+
   it("a throw from Electron is a refusal too", () => {
     const item = new ElectronLoginItem({
       setLoginItemSettings: () => {

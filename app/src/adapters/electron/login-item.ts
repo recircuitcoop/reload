@@ -36,11 +36,28 @@ export class ElectronLoginItem implements LoginItem {
     if (answer.openAtLogin !== on) {
       // macOS 13 and later say why (requires-approval, not-found); the others only say no.
       const status = answer.status === undefined ? "" : ` (${answer.status})`;
+      if (on) {
+        this.#withdraw();
+      }
       throw new LoginItemError(
         on
           ? `the operating system did not register Reload to start at login${status}`
           : `the operating system still starts Reload at login${status}`,
       );
+    }
+  }
+
+  /**
+   * Take back a registration the OS did not take (macos.py: a load that fails leaves no half
+   * registered login item). macOS keeps a "requires-approval" item pending: approved later in
+   * System Settings, it would start Reload at login while the switch reads off. Best effort: the
+   * refusal is what the person is told either way.
+   */
+  #withdraw(): void {
+    try {
+      this.#app.setLoginItemSettings({ openAtLogin: false });
+    } catch {
+      // Nothing more can be done here; the refusal that follows says the switch is off.
     }
   }
 }
