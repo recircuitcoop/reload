@@ -60,12 +60,23 @@ export class SecretRegistry {
 
 /**
  * `value` with every string in it, keys included, passed through `redact`: a message bound for
- * another process, redacted whole. Only plain objects and arrays are walked; bytes, numbers and
- * anything else pass as they are.
+ * another process, redacted whole. Plain objects and arrays are walked, and an Error is posted as
+ * a new one with its message and stack redacted; bytes, numbers and anything else pass as they
+ * are.
  */
 export function redactStrings(value: unknown, redact: (text: string) => string): unknown {
   if (typeof value === "string") {
     return redact(value);
+  }
+  if (value instanceof Error) {
+    const copy = new Error(redact(value.message));
+    copy.name = redact(value.name);
+    if (value.stack === undefined) {
+      delete copy.stack;
+    } else {
+      copy.stack = redact(value.stack);
+    }
+    return copy;
   }
   if (Array.isArray(value)) {
     return value.map((item: unknown) => redactStrings(item, redact));

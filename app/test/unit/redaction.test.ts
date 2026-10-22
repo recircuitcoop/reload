@@ -1,7 +1,7 @@
 // The secret registry (domain/redaction), the port of logs.py's protect/redact/REDACTOR.
 import { inspect } from "node:util";
 import { describe, expect, it } from "vitest";
-import { REDACTED, SecretRegistry } from "../../src/domain/redaction/registry";
+import { REDACTED, redactStrings, SecretRegistry } from "../../src/domain/redaction/registry";
 
 const KEY = "fake-anytype-key-that-must-not-be-written-13579";
 
@@ -45,5 +45,23 @@ describe("the secret registry", () => {
     expect(inspect(registry, { showHidden: true, depth: 5 })).not.toContain(KEY);
     expect(String(registry)).not.toContain(KEY);
     expect(JSON.stringify({ registry })).not.toContain(KEY);
+  });
+});
+
+describe("redactStrings: a whole message bound for another process", () => {
+  const redact = (text: string): string => text.replaceAll("s3cret", REDACTED);
+
+  it("redacts an Error's message, name and stack, and leaves the original as it was", () => {
+    const original = new Error("the key s3cret was refused");
+    original.name = "s3cretError";
+    const copy = redactStrings({ error: original }, redact) as { error: Error };
+    expect(copy.error).toBeInstanceOf(Error);
+    expect(copy.error.message).toBe(`the key ${REDACTED} was refused`);
+    expect(copy.error.name).toBe(`${REDACTED}Error`);
+    expect(copy.error.stack).not.toContain("s3cret");
+    expect(original.message).toBe("the key s3cret was refused");
+    const bare = new Error("s3cret");
+    delete bare.stack;
+    expect((redactStrings(bare, redact) as Error).stack).toBeUndefined();
   });
 });
