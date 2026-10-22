@@ -214,6 +214,7 @@ function harness() {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-v2-"));
   const flowsFile = path.join(scratch, "flows.json");
   const boardsFile = path.join(scratch, "boards.json");
+  const shown: string[] = [];
   const notices = new NoticeBoard({ deliver: () => undefined, store: null, logger });
   const updateCalls = wireAppCalls({
     ipc: ipcMain,
@@ -238,6 +239,8 @@ function harness() {
     settings,
     packages: board,
     notifier: notices,
+    showInFolder: (file: string) => shown.push(file),
+    platform: "darwin",
     openReleaseNotes: () => undefined,
     pending,
     sampleFile: flowsFile,
@@ -269,6 +272,7 @@ function harness() {
     canvas,
     boardsFile,
     notices,
+    shown,
   };
 }
 
@@ -787,14 +791,33 @@ describe("AppApi v2 calls, through the shell to its processes", () => {
     // A refused flows file is shown in the window in its notice's words, pushed when raised.
     h.notices.raise({ kind: "flows-file-refused", subject: "/u/flows.json", detail: "Fix it" });
     h.flush();
-    const refused = { title: "Reload did not load your flows", body: "Fix it." };
+    const refused = {
+      title: "Reload didn't load your flows",
+      body: "Fix it.",
+      canSave: false,
+      showIn: "finder",
+    };
     expect(h.sent).toContainEqual([
       IPC.statusChanged,
       expect.objectContaining({ flowsFile: refused }),
     ]);
     expect(await h.api.status()).toMatchObject({ value: { flowsFile: refused } });
+    // Show in Finder shows the file in its folder.
+    expect(await h.api.showFlowsFile()).toEqual({ ok: true, value: null });
+    expect(h.shown).toEqual(["/u/flows.json"]);
     h.notices.clear("flows-file-refused", "/u/flows.json");
     expect(await h.api.status()).toMatchObject({ value: { flowsFile: null } });
+    expect(await h.api.showFlowsFile()).toEqual({ ok: true, value: null });
+    expect(h.shown).toHaveLength(1);
+    // Broken while running: Save the flows that are running is offered, and asks the runtime.
+    h.notices.raise({ kind: "flows-file-damaged", subject: "/u/flows.json", detail: "Running" });
+    expect(await h.api.status()).toMatchObject({
+      value: { flowsFile: { title: "Your flows file is damaged", canSave: true } },
+    });
+    h.runtime.answers.set("flows.saveRunning", () => ({ ok: true, value: null }));
+    expect(await h.api.saveRunningFlows()).toEqual({ ok: true, value: null });
+    h.runtime.answers.set("flows.saveRunning", () => ({ ok: false, error: "No copy" }));
+    expect(await h.api.saveRunningFlows()).toEqual(FAILED);
     h.services.answers.set("anytype.status", () => ({ ok: false, code: "down", error: "d" }));
     expect(await h.api.status()).toMatchObject({ value: { pill: "running" } });
     expect(await h.api.retention()).toEqual({ ok: true, value: { days: 90 } });

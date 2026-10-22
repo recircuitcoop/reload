@@ -508,6 +508,8 @@ async function start(): Promise<void> {
     currentVersion: () => app.getVersion(),
     notifier: notices,
     openReleaseNotes: (tag) => void shell.openExternal(releases.notesUrl(tag)),
+    showInFolder: shell.showItemInFolder.bind(shell),
+    platform: process.platform,
     quit: () => {
       app.quit();
     },

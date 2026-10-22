@@ -210,6 +210,7 @@ describe("DeployGuard", () => {
       problem: "is not valid JSON",
       safeCopy: "/u/flows.json.broken-x",
       backup: null,
+      running: false,
     };
     const { deployGuard, logger, asked } = guard(SETS, [refused]);
     for (const [route, body] of [
@@ -222,7 +223,9 @@ describe("DeployGuard", () => {
         status: 409,
         body: { code: "flows_file_refused" },
       });
-      expect(JSON.stringify(answer)).toContain("A copy is kept at /u/flows.json.broken-x.");
+      expect(JSON.stringify(answer)).toContain(
+        "Reload kept a copy of it at /u/flows.json.broken-x.",
+      );
     }
     expect(asked()).toBe(0);
     expect(logger.lines).toContain("WARN refused a deploy: /u/flows.json is not valid JSON");

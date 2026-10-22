@@ -73,7 +73,7 @@ export const IPC = {
   packageCall: "reload:package-call",
   /** send, shell → page: a package was installed, removed, updated or re-checked. */
   packagesChanged: "reload:packages-changed",
-  /** invoke: the status, and Run history's retention (`status.get`, `retention.get`, `retention.set`). */
+  /** invoke: the status, and Run history's retention (`status.get`, `retention.get`, `retention.set`), and the flows file banner's buttons (`flowsFile.save`, `flowsFile.show`). */
   generalCall: "reload:general-call",
   /** send, shell → page: the status pill, banner or badge changed, with them. */
   statusChanged: "reload:status-changed",

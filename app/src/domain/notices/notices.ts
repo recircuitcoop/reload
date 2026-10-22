@@ -46,8 +46,10 @@ export type NoticeKind =
   | "credentials-reset"
   /** Both Reload and the app it was renamed from held data; the old data was left (plan 0028). */
   | "old-data-left"
-  /** Node-RED's flows file or its credentials file cannot be parsed: kept, never deployed over. */
+  /** A flows file Node-RED could not load at the start: kept, never saved over. */
   | "flows-file-refused"
+  /** A flows file broken while Reload runs: the flows still run; kept, never saved over. */
+  | "flows-file-damaged"
   /** A run started (plan 0022 §I, ux-writing "Notifications"); stops after five good runs. */
   | "run-started"
   /** A run finished: what the flow did. */
@@ -73,6 +75,7 @@ export const NOTICE_KINDS: readonly NoticeKind[] = [
   "credentials-reset",
   "old-data-left",
   "flows-file-refused",
+  "flows-file-damaged",
   "run-started",
   "run-done",
   "run-failed",
@@ -242,9 +245,11 @@ function composeWords(notice: Notice): Message {
       };
     case "old-data-left":
       return { title: "Reload kept its own data", body: sentences(detail) };
+    // The sentence names the file, its copy, the backup and what to do (domain/flows).
     case "flows-file-refused":
-      // The sentence names the file, its copy, the backup and what to do (domain/flows).
-      return { title: "Reload did not load your flows", body: sentences(detail) };
+      return { title: "Reload didn't load your flows", body: sentences(detail) };
+    case "flows-file-damaged":
+      return { title: "Your flows file is damaged", body: sentences(detail) };
     case "run-started":
     case "run-done":
     case "run-failed":

@@ -6,6 +6,7 @@
 // counts them from run records, hidden places included.
 import type { IpcMain } from "electron";
 import { DEFAULT_RETENTION_DAYS } from "../application/runs";
+import { SAVE_RUNNING_OP } from "../application/flow-files";
 import type { NoticeBoard } from "../application/notices";
 import type { Supervisor } from "../application/supervisor";
 import type { AnytypeStatus } from "../domain/anytype/status";
@@ -16,7 +17,7 @@ import type { Logger } from "../ports/logger";
 import type { RunRetentionSetting } from "../ports/settings-store";
 import type { Answer } from "../ui/answer";
 import { RETENTION_CHOICES, type Retention, type StatusView } from "../ui/general-contract";
-import { guarded, opOf, refused, unknownOp } from "./answer";
+import { fromChild, guarded, opOf, refused, unknownOp } from "./answer";
 import { IPC } from "./ipc";
 import type { PendingQuestions } from "./views";
 
@@ -25,11 +26,15 @@ export interface GeneralCallsDeps {
   /** Every supervised child: the runtime and the services process. */
   readonly children: readonly Pick<Supervisor, "status" | "onStatus">[];
   /** The runtime's supervisor: the banner's Down sentence names its crash-loop limit. */
-  readonly runtime: Pick<Supervisor, "crashLoop">;
+  readonly runtime: Pick<Supervisor, "crashLoop" | "call">;
   readonly services: Pick<Supervisor, "call">;
   readonly pending: PendingQuestions;
   /** The notices current now: a refused flows file is shown in the window too. */
   readonly notices: Pick<NoticeBoard, "current" | "onChange">;
+  /** The banner's Show in Finder: the file shown in its folder (Electron's showItemInFolder). */
+  readonly showInFolder: (file: string) => void;
+  /** Finder on macOS, a folder elsewhere: the button's word. */
+  readonly platform: NodeJS.Platform;
   readonly retention: RunRetentionSetting;
   readonly toPage: (channel: string, ...args: unknown[]) => void;
   readonly logger: Logger;
@@ -39,9 +44,16 @@ export function wireGeneralCalls(deps: GeneralCallsDeps): void {
   const { ipc, children, services, pending, notices, retention, toPage, logger } = deps;
   /** Anytype's state, as last read; the pill needs it only while the runtime runs. */
   let anytype: AnytypeStatus | null = null;
+  /** The first refused flows file's notice: the window shows one at a time. */
+  const flowsFileNotice = () =>
+    notices
+      .current()
+      .find(
+        (notice) => notice.kind === "flows-file-refused" || notice.kind === "flows-file-damaged",
+      );
   const view = (): StatusView => {
     const statuses: ChildStatus[] = children.map((child) => child.status());
-    const refused = notices.current().find((notice) => notice.kind === "flows-file-refused");
+    const refused = flowsFileNotice();
     return {
       pill: statusPill({ children: statuses, anytype }),
       banner: runtimeBanner(statuses),
@@ -50,7 +62,14 @@ export function wireGeneralCalls(deps: GeneralCallsDeps): void {
         crashes: deps.runtime.crashLoop.maxCrashes,
         minutes: deps.runtime.crashLoop.windowMs / 60_000,
       },
-      flowsFile: refused === undefined ? null : compose(refused),
+      flowsFile:
+        refused === undefined
+          ? null
+          : {
+              ...compose(refused),
+              canSave: refused.kind === "flows-file-damaged",
+              showIn: deps.platform === "darwin" ? "finder" : "folder",
+            },
     };
   };
   const readAnytype = async (): Promise<void> => {
@@ -74,11 +93,20 @@ export function wireGeneralCalls(deps: GeneralCallsDeps): void {
   };
   ipc.handle(IPC.generalCall, (_event, call: unknown) => {
     const { op, args } = opOf(call);
-    return guarded(op, logger, async (): Promise<Answer<StatusView | Retention>> => {
+    return guarded(op, logger, async (): Promise<Answer<StatusView | Retention | null>> => {
       switch (op) {
         case "status.get":
           await readAnytype();
           return { ok: true, value: view() };
+        case "flowsFile.save":
+          return fromChild<null>(await deps.runtime.call(SAVE_RUNNING_OP, null), op, logger);
+        case "flowsFile.show": {
+          const shown = flowsFileNotice();
+          if (shown !== undefined) {
+            deps.showInFolder(shown.subject);
+          }
+          return { ok: true, value: null };
+        }
         case "retention.get":
           return { ok: true, value: days() };
         case "retention.set": {

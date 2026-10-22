@@ -92,6 +92,7 @@ export default defineConfig({
             "src/domain/flows/flow-file.ts",
             "src/adapters/fs/flow-files.ts",
             "src/application/flow-files.ts",
+            "src/adapters/nodered/guarded-storage.ts",
             // trust boundaries
             "src/application/mcp-dispatch.ts",
             "src/application/mcp-endpoint.ts",

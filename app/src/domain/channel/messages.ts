@@ -126,6 +126,8 @@ export type CallOp =
   | "mcp.endpoint.move"
   /** Which instances of some packages' types are deployed and ready (WI-0018-17's update). */
   | "package.ready"
+  /** Save the flows that are running over a flows file broken meanwhile (application/flow-files.ts). */
+  | "flows.saveRunning"
   /** One instance's last status (Setup waits for the folder source's first scan). */
   | "node.status";
 
@@ -171,6 +173,7 @@ const CALL_OPS: readonly string[] = [
   "mcp.endpoint",
   "mcp.endpoint.move",
   "package.ready",
+  "flows.saveRunning",
   "node.status",
 ];
 

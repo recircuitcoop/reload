@@ -17,6 +17,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DeclaredPackageStore } from "../../src/adapters/fs/declared-package-store";
 import { EmbeddedNodeRed } from "../../src/adapters/nodered/engine";
 import { nodeRedLogging } from "../../src/adapters/nodered/logging";
+import { NODE_RED_FILE_STORAGE } from "../../src/adapters/nodered/guarded-storage";
 import { nodeRedSettings } from "../../src/adapters/nodered/settings";
 import { pickFreeLoopbackPort } from "../../src/adapters/net/free-port";
 import { DeployGuard } from "../../src/application/deploy-guard";
@@ -173,7 +174,11 @@ describe("the runtime raises them to a connected editor", () => {
         credentialSecret: "a-test-credential-secret",
         coreNodesDir: CORE_NODES_DIR,
         logging: nodeRedLogging(new LeveledRecorder()),
-        readOnly: false,
+        // Node-RED's own storage, unguarded: these tests refuse no file.
+        storageModule: createRequire(import.meta.url)(NODE_RED_FILE_STORAGE) as Record<
+          string,
+          unknown
+        >,
       }),
       guard: new DeployGuard({
         engine: { nodeSets: () => built.nodeSets() },

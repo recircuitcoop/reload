@@ -10,6 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { EmbeddedNodeRed } from "../../src/adapters/nodered/engine";
 import { NodeRedFlows } from "../../src/adapters/nodered/flows";
 import { nodeRedLogging } from "../../src/adapters/nodered/logging";
+import { NODE_RED_FILE_STORAGE } from "../../src/adapters/nodered/guarded-storage";
 import { nodeRedSettings } from "../../src/adapters/nodered/settings";
 import { pickFreeLoopbackPort } from "../../src/adapters/net/free-port";
 import { AjvSchemaValidator } from "../../src/adapters/schema/ajv-validator";
@@ -89,7 +90,11 @@ describe("flow administration in the embedded Node-RED", () => {
         credentialSecret: "a-test-credential-secret",
         coreNodesDir: CORE_NODES_DIR,
         logging: nodeRedLogging(new Quiet()),
-        readOnly: false,
+        // Node-RED's own storage, unguarded: these tests refuse no file.
+        storageModule: createRequire(import.meta.url)(NODE_RED_FILE_STORAGE) as Record<
+          string,
+          unknown
+        >,
       }),
       guard,
     });

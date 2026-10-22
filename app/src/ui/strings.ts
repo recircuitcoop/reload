@@ -19,6 +19,8 @@
 // for another reason than the connection, three or more uses in one refusal, a shipped package's
 // refusal, and the "not available yet" answer of a call whose work item has not landed.
 
+import { TIME_STRINGS } from "./strings-time";
+
 export const STRINGS = {
   // ── Navigation and page titles ───────────────────────────────────────────────────────────
   "nav.main": "Reload", // decided (WI-0022-11): the main sidebar's spoken name, the product's
@@ -259,7 +261,11 @@ export const STRINGS = {
   "flows.refused.noForm": "This step has no form to fill in.",
   "flows.refused.notInstalled":
     "A step of this flow comes from a package that isn't installed. Add it in Configuration › General.",
-  "flows.refused.flowsFile": "Reload did not load your flows file: see the message above.",
+  "flows.refused.flowsFile": "Reload can't save your flows now: see the message above.",
+  // The flows file banner's buttons (application/flow-files.ts).
+  "flowsFile.save": "Save the flows that are running", // decided
+  "flowsFile.showInFinder": "Show in Finder", // decided
+  "flowsFile.showInFolder": "Show in folder", // decided
   "runState.copying": "copying",
   "runState.running": "running",
   "runState.waiting": "waiting for you",
@@ -525,19 +531,8 @@ export const STRINGS = {
   "canvas.palette.createdSource":
     "Emits {type}, created in the app. Add it to a flow on its canvas in Configuration › Flows, and wire a message into its input: its payload is checked against the type's schema.",
 
-  // ── Accessibility of the words; times ────────────────────────────────────────────────────
-  "a11y.close": "Close",
-  "a11y.more": "More",
-  "time.today": "today",
-  "time.yesterday": "yesterday",
-  "time.sunday": "Sunday",
-  "time.monday": "Monday",
-  "time.tuesday": "Tuesday",
-  "time.wednesday": "Wednesday",
-  "time.thursday": "Thursday",
-  "time.friday": "Friday",
-  "time.saturday": "Saturday",
-  "time.hover": "{date}, {time}",
+  // ── Accessibility of the words; times (strings-time.ts, kept apart for the 600-line limit) ──
+  ...TIME_STRINGS,
 } as const;
 
 export type Strings = typeof STRINGS;

@@ -182,4 +182,8 @@ export interface AppApiV2 {
   retention(): Promise<Answer<Retention>>;
   /** 7, 30, 90 or 365 days, or null for Forever. */
   setRetention(days: number | null): Promise<Answer<Retention>>;
+  /** The banner's Save the flows that are running: written over the damaged flows file. */
+  saveRunningFlows(): Promise<Answer<null>>;
+  /** The banner's Show in Finder: the damaged flows file, in its folder. */
+  showFlowsFile(): Promise<Answer<null>>;
 }

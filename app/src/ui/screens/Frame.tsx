@@ -12,6 +12,7 @@ import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } fro
 import type { AppApi, QuitChoice, QuitQuestion } from "../contract";
 import type { StatusPill as Pill, StatusView } from "../general-contract";
 import { StatusPill, type StatusPillState } from "../components/atoms/StatusPill";
+import { Button } from "../components/atoms/Button";
 import { DialogButtons } from "../components/molecules/DialogButtons";
 import { InlineMessage } from "../components/molecules/InlineMessage";
 import { TabStrip } from "../components/molecules/TabStrip";
@@ -98,7 +99,7 @@ export function Frame({ api }: { readonly api: AppApi }) {
   const banner =
     view === null ? null : (
       <>
-        <FlowsFileBanner refused={view.flowsFile} />
+        <FlowsFileBanner refused={view.flowsFile} api={api} />
         <Banner view={view} api={api} />
       </>
     );
@@ -118,16 +119,49 @@ function StatusPillOf({ pill }: { readonly pill: Pill }) {
   );
 }
 
-/** A refused flows file (application/flow-files.ts), in the notice's own words, until fixed. */
-function FlowsFileBanner({ refused }: { readonly refused: StatusView["flowsFile"] }) {
+/**
+ * A refused flows file (application/flow-files.ts), in the notice's own words, until fixed: Show
+ * in Finder always, and Save the flows that are running when it broke while they run.
+ */
+function FlowsFileBanner({
+  refused,
+  api,
+}: {
+  readonly refused: StatusView["flowsFile"];
+  readonly api: AppApi;
+}) {
   if (refused === null) {
     return null;
   }
   return (
-    <InlineMessage kind="failed" testId="flows-file-banner">
-      <strong className="block">{refused.title}</strong>
-      {refused.body}
-    </InlineMessage>
+    <div data-testid="flows-file-banner" className="flex flex-col gap-2">
+      <InlineMessage kind="failed">
+        <strong className="block">{refused.title}</strong>
+        {refused.body}
+      </InlineMessage>
+      <div className="flex gap-2">
+        {refused.canSave ? (
+          <Button
+            kind="primary"
+            data-testid="flows-file-save"
+            onClick={() => {
+              void api.saveRunningFlows();
+            }}
+          >
+            {t("flowsFile.save")}
+          </Button>
+        ) : null}
+        <Button
+          kind="secondary"
+          data-testid="flows-file-show"
+          onClick={() => {
+            void api.showFlowsFile();
+          }}
+        >
+          {t(refused.showIn === "finder" ? "flowsFile.showInFinder" : "flowsFile.showInFolder")}
+        </Button>
+      </div>
+    </div>
   );
 }
 

@@ -40,8 +40,8 @@ export interface NodeRedSettingsInput {
   /** The folder of @node-red/nodes, whose `core/` holds Node-RED's own nodes. */
   readonly coreNodesDir: string;
   readonly logging: NodeRedLoggingSettings;
-  /** A flows file is refused (application/flow-files.ts): Node-RED then writes none of its files. */
-  readonly readOnly: boolean;
+  /** Node-RED's own file storage, guarded (guarded-storage.ts): saves refused while a file is. */
+  readonly storageModule: Record<string, unknown>;
 }
 
 /** The whole `settings` object `RED.init` is given. */
@@ -49,7 +49,7 @@ export function nodeRedSettings(input: NodeRedSettingsInput): Record<string, unk
   return {
     userDir: input.userDir,
     flowFile: "flows.json",
-    readOnly: input.readOnly,
+    storageModule: input.storageModule,
     credentialSecret: input.credentialSecret,
     httpAdminRoot: ADMIN_ROOT,
     // No HTTP-in nodes exist (they are excluded), so Node-RED serves no node routes at all.

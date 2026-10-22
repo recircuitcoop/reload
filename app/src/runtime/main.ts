@@ -5,12 +5,13 @@
 // call) and runs the ppid watchdog.
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import * as fs from "node:fs";
+import { createRequire } from "node:module";
 import * as os from "node:os";
 import * as path from "node:path";
 import { BundledRuntimeLocator } from "../adapters/process/bundled-runtime-locator";
 import { processHostOver, shellLinkOver } from "../adapters/electron/parent-port";
 import { DeclaredPackageStore } from "../adapters/fs/declared-package-store";
-import { keepRefusedFlowFiles } from "../adapters/fs/flow-files";
+import { keepBrokenFlowFiles } from "../adapters/fs/flow-files";
 import { FsTemplateSource } from "../adapters/fs/flow-templates";
 import { JsonFlowMetaStore } from "../adapters/fs/flows-meta-store";
 import { JsonSettingsStore } from "../adapters/fs/settings-store";
@@ -22,6 +23,11 @@ import { NodeRedFlows } from "../adapters/nodered/flows";
 import { generateTypes, REGISTER_GLOBAL } from "../adapters/nodered/generator";
 import { TypeRegistration, type NodeRedNodeApi } from "../adapters/nodered/registration";
 import { nodeRedLogging } from "../adapters/nodered/logging";
+import {
+  GuardedStorage,
+  NODE_RED_FILE_STORAGE,
+  type NodeRedFileStorage,
+} from "../adapters/nodered/guarded-storage";
 import { nodeRedSettings } from "../adapters/nodered/settings";
 import { guardMissingExamplesFailure } from "../adapters/nodered/examples";
 import { minimalEnvironment, resolveCommand } from "../adapters/process/command";
@@ -37,7 +43,7 @@ import { noticeAnytypeRefusals } from "../application/anytype-refusals";
 import { DeployGuard } from "../application/deploy-guard";
 import { answerEditorCall } from "../application/editor-events";
 import { EventTypeService, isEventOp } from "../application/event-types";
-import { FlowFiles } from "../application/flow-files";
+import { FlowFiles, SAVE_RUNNING_OP } from "../application/flow-files";
 import { FlowAdmin, flowNodeTypeOf, isFlowOp } from "../application/flows";
 import { JournalReplay } from "../application/journal-replay";
 import { isRunActionOp, RunActions } from "../application/run-actions";
@@ -52,7 +58,7 @@ import { printCanary, sourceLog } from "../application/source-log";
 import { ViewService } from "../application/views";
 import { enabledNodes, InstanceReadiness } from "../application/instance-readiness";
 import { anytypeKeyVariables } from "../domain/anytype/pins";
-import { FLOW_FILES } from "../domain/flows/flow-file";
+import { FLOW_FILES, refusedFlowFileSentence } from "../domain/flows/flow-file";
 import type { InitConfig, StopReason } from "../domain/channel/messages";
 import type { RuntimeLocator } from "../ports/runtime-locator";
 import {
@@ -185,6 +191,9 @@ let packageOfType: (type: string) => string | undefined = () => undefined;
 // Flow administration (plan 0022 §D): one tab is one flow, and the runtime owns its writes.
 let flows: FlowAdmin | null = null;
 let flowNodeType: (type: string) => ReturnType<typeof flowNodeTypeOf> | undefined = () => undefined;
+// Save the flows that are running, over a flows file broken meanwhile: null once saved, else why not.
+let savedRunning: () => Promise<string | null> = () =>
+  Promise.resolve("the Reload runtime is still starting");
 
 // A step's dynamic options (plan 0022 §B, D9): the services process holds the Anytype key, so
 // the spaces and types a form chooses from are asked of it over the direct channel. One
@@ -338,14 +347,24 @@ async function startNodeRed(config: InitConfig): Promise<void> {
   const userDir = path.join(config.userDir, "node-red");
   const generatedDir = path.join(userDir, "generated");
   fs.mkdirSync(generatedDir, { recursive: true });
-  // Before Node-RED reads them: a flows file it cannot parse is kept, and never written over.
-  const flowFiles = new FlowFiles({
+  // Before Node-RED reads them, and at every save: a flows file it could not load is kept, and
+  // never written over. Node-RED's own storage is loaded by path: it stays outside the bundle.
+  const storage = new GuardedStorage(
+    createRequire(__filename)(NODE_RED_FILE_STORAGE) as NodeRedFileStorage,
+    () => {
+      const [refused] = flowFiles.refused();
+      return refused === undefined ? null : refusedFlowFileSentence(refused);
+    },
+  );
+  const flowFiles: FlowFiles = new FlowFiles({
     files: FLOW_FILES.map((name) => path.join(userDir, name)),
-    check: () => keepRefusedFlowFiles(userDir, FLOW_FILES, new Date()),
+    check: () => keepBrokenFlowFiles(userDir, FLOW_FILES, new Date()),
+    saveRunning: (files) => storage.saveRunning(files),
     notifier: shellNotifier(link),
     logger,
   });
-  const readOnly = flowFiles.refused().length > 0;
+  flowFiles.refused();
+  savedRunning = () => flowFiles.saveRunning();
 
   const packages = new InstalledPackageStore(
     new DeclaredPackageStore(PACKAGE_ROOTS, logger),
@@ -403,7 +422,7 @@ async function startNodeRed(config: InitConfig): Promise<void> {
       credentialSecret,
       coreNodesDir: CORE_NODES_DIR,
       logging: nodeRedLogging(nodeRedLogger),
-      readOnly,
+      storageModule: storage.module(),
     }),
     guard,
     nodeOptions: (query) => nodeOptions.resolve(query),
@@ -480,6 +499,11 @@ serveShell({
     // One instance's last status, from the processes of this generation.
     if (op === "node.status") {
       return Promise.resolve(readiness.status(args));
+    }
+    if (op === SAVE_RUNNING_OP) {
+      return savedRunning().then((why) =>
+        why === null ? { ok: true, value: null } : { ok: false, error: why },
+      );
     }
     if (
       views === null ||

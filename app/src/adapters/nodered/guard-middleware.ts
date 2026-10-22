@@ -58,7 +58,7 @@ function checkDeploy(guard: Guard, route: FlowsRoute): RequestHandler {
   };
 }
 
-/** The writes to the flows, each parsed and checked before Node-RED's admin API sees it. */
+/** The writes to the flows, each checked before Node-RED's admin API sees it. */
 export function deployGuard(guard: Guard, adminRoot: string): Router {
   const router = express.Router();
   const parse = [
@@ -68,5 +68,7 @@ export function deployGuard(guard: Guard, adminRoot: string): Router {
   router.post(`${adminRoot}/flows`, ...parse, checkDeploy(guard, "flows"));
   router.post(`${adminRoot}/flow`, ...parse, checkDeploy(guard, "flow"));
   router.put(`${adminRoot}/flow/:id`, ...parse, checkDeploy(guard, "flow"));
+  // No body, so no types; refused only while a flows file is (the storage refuses it too).
+  router.delete(`${adminRoot}/flow/:id`, checkDeploy(guard, "flow"));
   return router;
 }
