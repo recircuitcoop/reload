@@ -27,12 +27,17 @@ export class ElectronLoginItem implements LoginItem {
   }
 
   #set(on: boolean): void {
+    let answer: { openAtLogin: boolean; status?: string };
     try {
       this.#app.setLoginItemSettings({ openAtLogin: on });
+      answer = this.#app.getLoginItemSettings();
     } catch (error) {
+      // Either call may throw after the item was registered: it is taken back all the same.
+      if (on) {
+        this.#withdraw();
+      }
       throw new LoginItemError(`the operating system refused the login item: ${String(error)}`);
     }
-    const answer = this.#app.getLoginItemSettings();
     if (answer.openAtLogin !== on) {
       // macOS 13 and later say why (requires-approval, not-found); the others only say no.
       const status = answer.status === undefined ? "" : ` (${answer.status})`;

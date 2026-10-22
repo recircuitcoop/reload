@@ -187,6 +187,40 @@ describe("ElectronLoginItem (macOS, Windows): the real call, with Electron's app
     }).toThrow("did not register Reload to start at login (requires-approval)");
   });
 
+  it("a throw after the item may have been registered takes it back too", () => {
+    // setLoginItemSettings registers, then throws; or the read-back throws afterwards.
+    const asked: boolean[] = [];
+    const throwsAfter = new ElectronLoginItem({
+      setLoginItemSettings: (settings) => {
+        asked.push(settings.openAtLogin);
+        if (settings.openAtLogin) {
+          throw new Error("registered, then failed");
+        }
+      },
+      getLoginItemSettings: () => ({ openAtLogin: true }),
+    });
+    expect(() => {
+      throwsAfter.register();
+    }).toThrow(LoginItemError);
+    expect(asked).toEqual([true, false]);
+
+    const { app, calls } = mockApp(() => {
+      throw new Error("cannot read back");
+    });
+    expect(() => {
+      new ElectronLoginItem(app).register();
+    }).toThrow("the operating system refused the login item");
+    expect(calls).toEqual([{ openAtLogin: true }, { openAtLogin: false }]);
+    // Turning it off that cannot be read back is said, and nothing more is asked.
+    const off = mockApp(() => {
+      throw new Error("cannot read back");
+    });
+    expect(() => {
+      new ElectronLoginItem(off.app).unregister();
+    }).toThrow(LoginItemError);
+    expect(off.calls).toEqual([{ openAtLogin: false }]);
+  });
+
   it("a throw from Electron is a refusal too", () => {
     const item = new ElectronLoginItem({
       setLoginItemSettings: () => {
