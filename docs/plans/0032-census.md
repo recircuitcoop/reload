@@ -47,7 +47,7 @@ Owner: "finish ALL plans completely." (docs/plans/0031-the-features-the-old-app-
 | 33 | [SAFETY] Node processes left behind after a runtime crash | 2 | M | none |
 | 34 | [SAFETY] A kill sent to a process id after the process has exited | 1 | S | none |
 | 35 | [SAFETY] The login item stays registered when macOS asks for approval | 1 | S | done: ported (port/0032-small-safety) |
-| 36 | Update offers and notices that are not true | 3 | S | none |
+| 36 | Update offers and notices that are not true | 3 | S | done: ported (port/0032-small-safety) |
 | 37 | Saving one setting restarts every node in every flow | 2 | M | none |
 | 38 | Show what the runtime refused, and open the right place from a notice | 2 | S | none |
 | 39 | 'See what would be sent' shows the exact body that will be posted | 1 | S | none |

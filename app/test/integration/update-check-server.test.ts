@@ -171,8 +171,16 @@ describe("the self-update check over real HTTPS", () => {
     published.set(`/${fileName}`, artifact);
 
     const { check, events, notifier, selfUpdater } = checker({ publicKey: signer.publicKeyText });
+    // A staged release is announced once staging completes: not while it is still downloading.
+    const stage = selfUpdater.checkForUpdates.bind(selfUpdater);
+    let announcedEarly = true;
+    selfUpdater.checkForUpdates = () => {
+      announcedEarly = notifier.notices.some((notice) => notice.kind === "core-update-available");
+      return stage();
+    };
     const outcome = await check.check();
     expect(events).toEqual(["check", "found 1.2.3", "progress", "downloaded"]);
+    expect(announcedEarly).toBe(false);
 
     expect(outcome).toMatchObject({
       ok: true,
@@ -335,7 +343,8 @@ describe("the self-update check over real HTTPS", () => {
     const outcome = await check.check();
     expect(events).toEqual(["check", "found 1.2.3", "failed no-connection"]);
     expect(outcome).toMatchObject({ ok: true });
-    expect(notifier.notices).toContainEqual(
+    // Nothing is ready, so nothing says it installs when you quit.
+    expect(notifier.notices).not.toContainEqual(
       expect.objectContaining({ kind: "core-update-available" }),
     );
     check.installAtQuit();

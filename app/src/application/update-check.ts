@@ -165,17 +165,20 @@ export class UpdateCheck {
     }
 
     notifier.clear("core-update-refused", NOTICE_SUBJECT);
-    notifier.raise({
-      kind: "core-update-available",
-      subject: NOTICE_SUBJECT,
-      version: parsed.version,
-    });
     try {
       await this.#ports.selfUpdater.checkForUpdates(parsed);
       this.#staged = true;
       this.#emit({ kind: "progress", percent: 100 });
       this.#emit({ kind: "downloaded" });
+      // "Ready, installs when you quit" only once it is (test_helper_notification.py: a staged
+      // release is announced once staging completes), never before nor after a failed staging.
+      notifier.raise({
+        kind: "core-update-available",
+        subject: NOTICE_SUBJECT,
+        version: parsed.version,
+      });
     } catch (error) {
+      notifier.clear("core-update-available", NOTICE_SUBJECT);
       if (error instanceof ReleaseMismatchError) {
         // The platform updater was served something other than what verified: never staged.
         return this.#refused(`${metadataUrl}: ${error.message}`, "safety-check");

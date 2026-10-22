@@ -276,6 +276,44 @@ async function installed(name: string, version: string) {
 }
 
 describe("the version check", () => {
+  it("an archive that disagrees with its catalogue entry's version is not offered", async () => {
+    // test_a_git_manifest_that_disagrees_with_its_tag_is_not_offered: the entry says 0.2.0 and
+    // the archive at it declares 0.2.1, so offering it could only fail at Apply.
+    const { installer, updates } = await installed("pinger", "0.1.0");
+    publish("pinger", "0.2.0", { declares: "0.2.1" });
+    await updates.check();
+    expect((await line(installer, updates, "pinger"))?.update).toEqual({
+      kind: "unchecked",
+      version: null,
+      detail: "the catalogue offers version 0.2.0, and its archive holds pinger 0.2.1",
+      apply: false,
+    });
+    expect(told).toEqual([]);
+  });
+
+  it("an entry naming a newer version with no archive left is not offered", async () => {
+    // test_a_package_release_that_cannot_be_judged_is_not_offered[a release with no files left].
+    const { installer, updates } = await installed("pinger", "0.1.0");
+    publish("pinger", "0.2.0");
+    served.delete(archiveUrl("pinger", "0.2.0"));
+    await updates.check();
+    expect((await line(installer, updates, "pinger"))?.update).toMatchObject({
+      kind: "unchecked",
+      detail: expect.stringContaining(
+        "the catalogue offers version 0.2.0, and its archive could not be fetched",
+      ) as unknown,
+      apply: false,
+    });
+    entries = entries.map((entry) =>
+      Object.fromEntries(Object.entries(entry).filter(([key]) => key !== "archive")),
+    ) as unknown as CatalogueEntry[];
+    await updates.check();
+    expect((await line(installer, updates, "pinger"))?.update?.detail).toContain(
+      "this build installs packages from an archive only",
+    );
+    expect(told).toEqual([]);
+  });
+
   it("shows a newer catalogue version on the page, with Apply, and tells it in exactly one notice", async () => {
     const { installer, updates } = await installed("pinger", "0.1.0");
     expect((await line(installer, updates, "pinger"))?.update).toBeNull();
@@ -541,8 +579,13 @@ describe("applying an update", () => {
 
   it("refuses an archive whose declaration disagrees about its version", async () => {
     const { updates } = await installed("pinger", "0.1.0");
-    publish("pinger", "0.2.0", { declares: "0.1.0" });
+    publish("pinger", "0.2.0");
     await updates.check();
+    // The archive changed under its entry between the check and Apply.
+    served.set(
+      archiveUrl("pinger", "0.2.0"),
+      signedArchive(packageFiles("pinger", "0.1.0"), signer),
+    );
     expect(await updates.apply("pinger", "person")).toMatchObject({
       ok: false,
       error: expect.stringContaining("which is not newer than 0.1.0") as unknown,

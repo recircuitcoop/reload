@@ -25,7 +25,6 @@ import type { Declaration } from "../domain/packages/declaration";
 import {
   actionFor,
   compareVersions,
-  judgeCatalogueVersion,
   judgeFolder,
   modeFor,
   type PackagePolicy,
@@ -216,18 +215,7 @@ export class PackageUpdates {
       };
     }
     if (origin.kind === "catalogue") {
-      try {
-        const { catalogue } = await this.#catalogues.resolve(origin.source);
-        const entry = entryFor(catalogue, origin.id);
-        return entry === null
-          ? { kind: "unchecked", reason: `the ${origin.source} catalogue no longer lists it` }
-          : judgeCatalogueVersion(record.version, entry.version);
-      } catch (error) {
-        return {
-          kind: "unchecked",
-          reason: `the ${origin.source} catalogue cannot be read: ${reasonOf(error)}`,
-        };
-      }
+      return this.#catalogues.judge(record, origin, this.#ports.environment);
     }
     try {
       const now = await inspectPackage(fileOrigin(origin.path), this.#ports.environment);

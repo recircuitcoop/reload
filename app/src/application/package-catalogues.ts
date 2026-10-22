@@ -22,7 +22,10 @@ import {
   type CatalogueSource,
   type PackageCatalogue,
 } from "../domain/packages/catalogue";
+import { judgeCatalogueVersion, type VersionFinding } from "../domain/packages/versions";
 import type { HttpClient } from "../ports/http-client";
+import type { InstalledOrigin, InstalledRecord } from "../ports/package-roots";
+import { inspectPackage, type PackageEnvironmentPorts } from "./package-environment";
 
 /** The largest package archive fetched from a catalogue; one byte more and it is abandoned. */
 export const MAX_ARCHIVE_BYTES = 256 * 1024 * 1024;
@@ -201,6 +204,51 @@ export class PackageCatalogues {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * A package installed from a catalogue, against its entry there now. A newer version is offered
+   * only once its archive is fetched, verified and found to hold that package at that version
+   * (test_plugin_version_check.py: a release that cannot be judged, or whose manifest disagrees
+   * with its tag, is not offered): an offer that can only fail at Apply is not one.
+   */
+  async judge(
+    record: InstalledRecord,
+    from: Extract<InstalledOrigin, { kind: "catalogue" }>,
+    environment: Pick<PackageEnvironmentPorts, "source" | "verifier" | "validator" | "sha256">,
+  ): Promise<VersionFinding> {
+    let resolved: ResolvedCatalogue;
+    try {
+      resolved = await this.resolve(from.source);
+    } catch (error) {
+      return {
+        kind: "unchecked",
+        reason: `the ${from.source} catalogue cannot be read: ${reasonOf(error)}`,
+      };
+    }
+    const entry = entryFor(resolved.catalogue, from.id);
+    if (entry === null) {
+      return { kind: "unchecked", reason: `the ${from.source} catalogue no longer lists it` };
+    }
+    const finding = judgeCatalogueVersion(record.version, entry.version);
+    if (finding.kind !== "newer") {
+      return finding;
+    }
+    const offered = `the catalogue offers version ${finding.version}`;
+    try {
+      const path = await this.download(record.package, entry);
+      const origin = { kind: "archive" as const, path, publicKey: resolved.key };
+      const { declaration } = await inspectPackage(origin, environment);
+      if (declaration.package !== record.package || declaration.version !== finding.version) {
+        return {
+          kind: "unchecked",
+          reason: `${offered}, and its archive holds ${declaration.package} ${declaration.version}`,
+        };
+      }
+    } catch (error) {
+      return { kind: "unchecked", reason: `${offered}, and ${reasonOf(error)}` };
+    }
+    return finding;
   }
 
   /** Fetch the archive an entry names and keep it; resolves with where, or rejects with why. */
