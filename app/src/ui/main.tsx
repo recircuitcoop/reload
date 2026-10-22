@@ -2,6 +2,7 @@
 // bridge, with one store per domain read (ui/store.ts). Bundled by build:pages into dist/ui/main.js
 // and loaded by the app page, ui/index.html, whose whole window the frame fills.
 import { createRoot } from "react-dom/client";
+import { askAnytypeOnFocus } from "./anytype-focus";
 import type { AppApi } from "./contract";
 import { Frame } from "./screens/Frame";
 import { createStores, StoresContext } from "./store";
@@ -15,6 +16,7 @@ declare global {
 const mount = document.getElementById("frame");
 if (mount !== null) {
   const api = window.reload.app;
+  askAnytypeOnFocus(window, api);
   createRoot(mount).render(
     <StoresContext.Provider value={createStores(api)}>
       <Frame api={api} />

@@ -117,8 +117,8 @@ export function GeneralScreen({
 /**
  * Anytype's state, asked every ANYTYPE_POLL_MS, and its spaces once it is ready; `checkAgain`
  * reads the spaces again from Anytype itself, past the services process's memory of them, and
- * asks an Anytype that did not answer again. Coming back to the window does the same while
- * Anytype is unreachable: it is never asked again on a timer (helper/restart.py).
+ * asks an Anytype that did not answer again (never on a timer, helper/restart.py). Coming back
+ * to the window asks too, on every screen (ui/anytype-focus.ts).
  */
 export function useAnytype(api: AppApi) {
   const [status, set] = useState<AnytypeStatus | null>(null);
@@ -156,15 +156,6 @@ export function useAnytype(api: AppApi) {
       api.checkAnytype().then(set, () => undefined);
     }
   }, [api, unreachable]);
-  useEffect(() => {
-    if (!unreachable) {
-      return;
-    }
-    window.addEventListener("focus", checkAgain);
-    return () => {
-      window.removeEventListener("focus", checkAgain);
-    };
-  }, [unreachable, checkAgain]);
   return { status, spaces, set, checkAgain };
 }
 
