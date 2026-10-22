@@ -455,9 +455,8 @@ async function start(): Promise<DesktopWired["notices"] | null> {
     clock: systemClock,
     logger,
   });
-  // WI-0018-24: minisigned before any download; null on a platform this app cannot self-update.
-  // The repo, key and release host: overridable only in a build that is not installed (the e2e's
-  // local fake release host, plan 0022 §G; never GitHub in a test).
+  // WI-0018-24: minisigned before any download; null where this app cannot self-update. Repo,
+  // key and host: overridable only in a build that is not installed (plan 0022 §G's fake host).
   const source = updateSource({
     packaged: app.isPackaged,
     env: process.env,
@@ -578,6 +577,7 @@ async function start(): Promise<DesktopWired["notices"] | null> {
     wirePreview({ menu: Menu, dialog, documents: () => packageStore.documents(), preview, logger });
   }
   appWindow.open();
+  await anytypeStarted; // the host after Anytype, as the old helper launched them (launcher.py:860)
   for (const supervisor of supervisors.values()) {
     supervisor.start();
   }
