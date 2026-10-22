@@ -110,6 +110,11 @@ const ALLOWED_LINES = [
     "the old name, once, and links to plans",
   ],
   [
+    "docs/plans/0032-census.md",
+    [/docs\/plans\/0003-innytypes-helper\.md/, /"D4 InnyTypes rollback/],
+    "quotes the owner's earlier answers where they were written",
+  ],
+  [
     "app/test/integration/independent-client.test.ts",
     [/INNYTYPES\)_MCP/, /InnyTypes\)/],
     "reads the old Python app's connection guide",
