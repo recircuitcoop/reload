@@ -69,7 +69,17 @@ export function exampleReadiness(
 
 // ── a step's form, from its schema ──────────────────────────────────────────────────────────
 
-export type SetupFieldKind = "text" | "secret" | "number" | "integer" | "boolean" | "enum";
+export type SetupFieldKind =
+  | "text"
+  /** `reload.multiline`: several lines, newlines kept. */
+  | "multiline"
+  /** `reload.path`: a file or folder's path, typed or chosen with Browse…. */
+  | "path"
+  | "secret"
+  | "number"
+  | "integer"
+  | "boolean"
+  | "enum";
 
 /** One field of a step form. */
 export interface SetupField {
@@ -86,6 +96,8 @@ export interface SetupField {
     { readonly source: "spaces" } | { readonly source: "types"; readonly of: string } | null;
   /** `reload.advanced` (spec 2.4.1): never drawn in Setup, but its value is sent back as it is. */
   readonly advanced: boolean;
+  /** What a path's Browse… chooses; null for any other kind. */
+  readonly pathKind: "file" | "folder" | null;
   readonly default: unknown;
 }
 
@@ -110,8 +122,17 @@ function kindOf(property: Record<string, unknown>): SetupFieldKind | null {
     case "array":
       // A group or a table is set up on the canvas, not in Setup.
       return null;
-    default:
-      return "text";
+    default: {
+      // How a text is typed, as the canvas form reads `reload` (domain/forms/reload-keyword.ts).
+      const annotation = property["reload"];
+      if (property["type"] !== "string" || !isRecord(annotation) || reloadOf(property) !== null) {
+        return "text";
+      }
+      if (annotation["path"] === "file" || annotation["path"] === "folder") {
+        return "path";
+      }
+      return annotation["multiline"] === true ? "multiline" : "text";
+    }
   }
 }
 
@@ -159,6 +180,10 @@ export function setupFields(schema: Readonly<Record<string, unknown>>): SetupFie
         options: kind === "enum" ? (property["enum"] as unknown[]).map((each) => String(each)) : [],
         reload: reloadOf(property),
         advanced: isRecord(property["reload"]) && property["reload"]["advanced"] === true,
+        pathKind:
+          kind === "path" && isRecord(property["reload"])
+            ? (property["reload"]["path"] as "file" | "folder")
+            : null,
         default: property["default"],
       },
     ];

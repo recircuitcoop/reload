@@ -130,6 +130,11 @@ export interface ChosenFolder {
   readonly folder: string | null;
 }
 
+/** A step form's Browse… in Setup: the file or folder the person chose; null when cancelled. */
+export interface ChosenPath {
+  readonly path: string | null;
+}
+
 /**
  * The `packages` push (plan 0022 §F): an install's phase as it starts (fetching, verifying,
  * building, swapping) with its percentage and when, or null when something else changed: a

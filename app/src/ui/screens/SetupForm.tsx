@@ -12,6 +12,7 @@ import type { NodeForm, NodeOptions } from "../flow-contract";
 import { Button } from "../components/atoms/Button";
 import { Select } from "../components/atoms/Select";
 import { Switch } from "../components/atoms/Switch";
+import { Textarea } from "../components/atoms/Textarea";
 import { TextField } from "../components/atoms/TextField";
 import { Field } from "../components/molecules/Field";
 import { InlineMessage } from "../components/molecules/InlineMessage";
@@ -188,6 +189,48 @@ function SetupFormField({ api, field, draft, problem, onConnect, onChange }: Fie
                   onChange(chosen ?? "");
                 }}
               />
+            );
+          }
+          if (field.kind === "multiline") {
+            // Several lines, kept as typed: a single-line input would strip the newlines.
+            return (
+              <Textarea
+                id={control.id}
+                {...(control.describedBy === undefined ? {} : { describedBy: control.describedBy })}
+                state={problem === undefined ? "default" : "error"}
+                value={text}
+                onValueChange={onChange}
+              />
+            );
+          }
+          if (field.kind === "path") {
+            const browse = () => {
+              void api.choosePath(field.pathKind ?? "file").then((chosen) => {
+                if (chosen.ok && chosen.value.path !== null) {
+                  onChange(chosen.value.path);
+                }
+              });
+            };
+            return (
+              <div className="flex items-center gap-2">
+                <TextField
+                  id={control.id}
+                  testId={`setup-field-${field.key}-text`}
+                  {...(control.describedBy === undefined
+                    ? {}
+                    : { describedBy: control.describedBy })}
+                  state={problem === undefined ? "default" : "error"}
+                  value={text}
+                  onValueChange={onChange}
+                />
+                <Button
+                  kind="secondary"
+                  data-testid={`setup-field-${field.key}-browse`}
+                  onClick={browse}
+                >
+                  {t("setup.form.browse")}
+                </Button>
+              </div>
             );
           }
           if (field.reload !== null) {

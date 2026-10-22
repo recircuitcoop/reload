@@ -38,6 +38,7 @@
     "electron": "44.4.5",
     "electron-builder": "26.15.3",
     "esbuild": "0.28.2",
+    "happy-dom": "21.0.4",
     "tailwindcss": "4.3.3",
     "vitest": "5.0.2"
   },

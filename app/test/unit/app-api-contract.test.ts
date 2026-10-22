@@ -235,6 +235,10 @@ const CALLS: Record<string, { call: (api: AppApi) => Promise<unknown>; sent: unk
     call: (api) => api.unregisterPackage("reload_summarize"),
     sent: [IPC.packageCall, { op: "package.unregister", args: { name: "reload_summarize" } }],
   },
+  choosePath: {
+    call: (api) => api.choosePath("file"),
+    sent: [IPC.setupCall, { op: "setup.choosePath", args: { kind: "file" } }],
+  },
   chooseInstallFolder: {
     call: (api) => api.chooseInstallFolder(),
     sent: [IPC.packageCall, { op: "package.chooseFolder", args: null }],

@@ -123,6 +123,27 @@ describe("a step's form", () => {
     );
   });
 
+  it("draws several lines as several lines, and a path with Browse…, as the canvas does", () => {
+    const fields = setupFields({
+      properties: {
+        body: { type: "string", reload: { multiline: true } },
+        root: { type: "string", reload: { path: "folder" } },
+        file: { type: "string", reload: { path: "file", advanced: true } },
+        odd: { type: "string", reload: { path: "device" } },
+        space: { type: "string", reload: { spaces: true, multiline: true } },
+      },
+    });
+    expect(fields.map((field) => [field.key, field.kind, field.pathKind])).toEqual([
+      ["body", "multiline", null],
+      ["root", "path", "folder"],
+      ["file", "path", "file"],
+      ["odd", "text", null],
+      ["space", "text", null],
+    ]);
+    // A multiline value is sent as typed, its newlines and all.
+    expect(valuesOf(fields, { body: "one\ntwo\n" })).toEqual({ body: "one\ntwo\n" });
+  });
+
   it("opens with the step's values, else the defaults, and never shows a secret", () => {
     const fields = setupFields(SCHEMA);
     expect(

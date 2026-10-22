@@ -25,6 +25,7 @@ import type {
   BoardChanged,
   BoardView,
   ChosenFolder,
+  ChosenPath,
   LogFile,
   PackagesChanged,
   PackagesView,
@@ -119,6 +120,8 @@ export interface AppApiV2 {
    * while the starter flow is not installed yet.
    */
   chooseSetupFolder(): Promise<Answer<ChosenFolder>>;
+  /** A step form's Browse… in Setup: the shell's chooser for a file or a folder. */
+  choosePath(kind: "file" | "folder"): Promise<Answer<ChosenPath>>;
   /**
    * "Try with a sample": the bundled sample copied into the starter's folder, once the starter is
    * on and its source has looked at the folder, so the run is real.

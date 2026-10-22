@@ -59,6 +59,7 @@ export const STRINGS = {
   "setup.anytype.connected.one": "Connected. Found {n} space.",
   "setup.anytype.connected.other": "Connected. Found {n} spaces.",
   "setup.continue": "Continue",
+  "setup.form.browse": "Browse…",
   "setup.back": "Back",
   "setup.example.title": "Start with an example?",
   "setup.example.body":

@@ -172,6 +172,7 @@ export type {
   BoardLayout,
   BoardView,
   ChosenFolder,
+  ChosenPath,
   Retention,
   RollbackOffer,
   RuntimeBanner,

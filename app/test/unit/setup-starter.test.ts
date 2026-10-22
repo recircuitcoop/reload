@@ -128,6 +128,7 @@ function harness(previous?: { stored: Record<string, unknown>; flow: FakeFlow })
   const stored: Record<string, unknown> = previous?.stored ?? {};
   const pushed: unknown[] = [];
   const chooser = { folder: folder as string | null };
+  const chosen: { properties?: string[] }[] = [];
   const sleeps: number[] = [];
   wireSetup({
     ipc,
@@ -147,11 +148,13 @@ function harness(previous?: { stored: Record<string, unknown>; flow: FakeFlow })
       loaded: () => true,
     },
     dialog: {
-      showOpenDialog: () =>
-        Promise.resolve({
+      showOpenDialog: ((options: { properties?: string[] }) => {
+        chosen.push(options);
+        return Promise.resolve({
           canceled: chooser.folder === null,
           filePaths: chooser.folder === null ? [] : [chooser.folder],
-        }),
+        });
+      }) as never,
     },
     sampleFile,
     logger: new RecordingLogger(),
@@ -193,6 +196,7 @@ function harness(previous?: { stored: Record<string, unknown>; flow: FakeFlow })
     flow,
     pushed,
     chooser,
+    chosen,
     folder,
     settle,
     setDown,
@@ -420,6 +424,30 @@ describe("the starter flow, installed by Setup", () => {
       nodeId: SOURCE,
       values: { folder: h.folder },
     });
+  });
+
+  it("answers a step form's Browse… with the file or folder chosen, writing nothing", async () => {
+    const h = harness();
+    h.chooser.folder = "/Volumes/chosen";
+    expect(await h.call("setup.choosePath", { kind: "folder" })).toEqual({
+      ok: true,
+      value: { path: "/Volumes/chosen" },
+    });
+    expect(await h.call("setup.choosePath", { kind: "file" })).toEqual({
+      ok: true,
+      value: { path: "/Volumes/chosen" },
+    });
+    h.chooser.folder = null;
+    expect(await h.call("setup.choosePath", { kind: "file" })).toEqual({
+      ok: true,
+      value: { path: null },
+    });
+    expect(h.calls.filter(([op]) => op === "flow.node.configure")).toEqual([]);
+    expect(h.chosen.map((options) => options.properties)).toEqual([
+      ["openDirectory"],
+      ["openFile"],
+      ["openFile"],
+    ]);
   });
 
   it("writes again while the canvas is still loading, and says so only after a long wait", async () => {

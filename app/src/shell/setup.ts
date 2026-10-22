@@ -46,7 +46,7 @@ import type { Logger } from "../ports/logger";
 import type { SetupSetting } from "../ports/settings-store";
 import type { TelemetrySetting } from "../ports/telemetry";
 import type { Answer } from "../ui/answer";
-import type { ChosenFolder } from "../ui/general-contract";
+import type { ChosenFolder, ChosenPath } from "../ui/general-contract";
 import { guarded, opOf, refused, unknownOp } from "./answer";
 import { IPC } from "./ipc";
 import { SetupStarter } from "./setup-starter";
@@ -222,27 +222,38 @@ export function wireSetup(deps: SetupDeps): void {
   };
   ipc.handle(IPC.setupCall, (_event, call: unknown) => {
     const { op, args } = opOf(call);
-    return guarded(op, logger, async (): Promise<Answer<SetupState | ChosenFolder | null>> => {
-      switch (op) {
-        case "setup.get":
-          // A removal a quit cut short is made again here: the window reads this as it opens.
-          void removeSkippedStarter();
-          return { ok: true, value: withStarterStarted(current()) };
-        case "setup.move":
-          return move(args);
-        case "setup.complete":
-          return { ok: true, value: store({ ...current(), completed: true }) };
-        case "setup.chooseFolder": {
-          const flowId = starterId();
-          return flowId.ok ? starter.chooseFolder(flowId.value) : flowId;
+    return guarded(
+      op,
+      logger,
+      async (): Promise<Answer<SetupState | ChosenFolder | ChosenPath | null>> => {
+        switch (op) {
+          case "setup.get":
+            // A removal a quit cut short is made again here: the window reads this as it opens.
+            void removeSkippedStarter();
+            return { ok: true, value: withStarterStarted(current()) };
+          case "setup.move":
+            return move(args);
+          case "setup.complete":
+            return { ok: true, value: store({ ...current(), completed: true }) };
+          case "setup.chooseFolder": {
+            const flowId = starterId();
+            return flowId.ok ? starter.chooseFolder(flowId.value) : flowId;
+          }
+          case "setup.choosePath": {
+            // A step form's Browse…: only the chooser; Continue writes what the field then holds.
+            const kind = args["kind"] === "file" ? "openFile" : "openDirectory";
+            const chosen = await deps.dialog.showOpenDialog({ properties: [kind] });
+            const path = chosen.canceled ? null : (chosen.filePaths[0] ?? null);
+            return { ok: true, value: { path } };
+          }
+          case "setup.trySample": {
+            const flowId = starterId();
+            return flowId.ok ? starter.trySample(flowId.value) : flowId;
+          }
+          default:
+            return unknownOp(op, "setup", logger);
         }
-        case "setup.trySample": {
-          const flowId = starterId();
-          return flowId.ok ? starter.trySample(flowId.value) : flowId;
-        }
-        default:
-          return unknownOp(op, "setup", logger);
-      }
-    });
+      },
+    );
   });
 }
