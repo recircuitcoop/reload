@@ -199,11 +199,13 @@ export function wireUpdateCalls(deps: UpdateCallsDeps): UpdateCalls {
           if (typeof on !== "boolean") {
             return refused("failed", "refused.failed");
           }
-          const policy = parseUpdatePolicy(settings.readUpdate());
+          // Only the switch changes: whatever else the person stored stays as it was, and
+          // nothing they never set (a channel, check_jitter) is written in.
+          const stored = settings.readUpdate();
+          parseUpdatePolicy(stored); // a broken setting is refused, never rewritten
           settings.writeUpdate({
+            ...(stored as Readonly<Record<string, unknown>> | undefined),
             auto_check: on,
-            channel: policy.channel,
-            check_jitter: policy.checkJitterSeconds,
           });
           const next = view();
           toPage(IPC.updateStateChanged, next);

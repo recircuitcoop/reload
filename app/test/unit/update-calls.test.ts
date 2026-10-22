@@ -239,12 +239,16 @@ describe("Reload's own update calls", () => {
     });
   });
 
-  it("the Check automatically switch keeps the channel; Release notes opens this version's tag", async () => {
-    const h = harness({ stored: { update: { channel: "beta" } } });
+  it("the Check automatically switch writes the switch alone; Release notes opens this version's tag", async () => {
+    const h = harness({ stored: { update: { channel: "beta", check_jitter: 120 } } });
     const on = await h.call("update.setAutoCheck", { on: true });
     expect(on.value?.autoCheck).toBe(true);
-    // The spread of each check is kept too: the switch changes the switch alone.
-    expect(h.stored["update"]).toEqual({ auto_check: true, channel: "beta", check_jitter: 3600 });
+    // What the person stored stays as it was; the switch changes the switch alone.
+    expect(h.stored["update"]).toEqual({ auto_check: true, channel: "beta", check_jitter: 120 });
+    // Nothing they never set is written in.
+    const fresh = harness({ stored: {} });
+    await fresh.call("update.setAutoCheck", { on: true });
+    expect(fresh.stored["update"]).toEqual({ auto_check: true });
     expect(h.pushed.at(-1)?.autoCheck).toBe(true);
     expect(await h.call("update.setAutoCheck", { on: "yes" })).toMatchObject({ ok: false });
     expect(await h.call("update.releaseNotes")).toEqual({ ok: true, value: null });
