@@ -83,6 +83,8 @@ settings.
   plan's owner as a decision.
 - **Group 28** (same branch): a save keeps what passes and nothing that fails, field by field and
   row by row at every depth, says what was not kept, and shows it again beside why. 14 rows.
+- **Group 31** (same branch): a value for a property the type no longer declares is kept by every
+  deploy and comes back when declared again. 1 row.
 
 Each ported row moves to `ported` with the id of the test that proves the old behaviour. Each
 row an audit called `internal` or `equivalent` gets its new evidence in `reason`, and keeps no

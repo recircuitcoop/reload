@@ -299,6 +299,17 @@ describe("a generated type's instance", () => {
     expect(JSON.stringify(frame["config"])).not.toContain("pw");
   });
 
+  it("starts with a value its type no longer declares, never handing it to the process", async () => {
+    setUp();
+    create(PROBE, probeConfig("old", { quality: "low" }), { token: "t" });
+    const file = path.join(scratch, "instances", "old", "start.json");
+    await waitFor(
+      "the whole start frame",
+      () => fs.existsSync(file) && fs.readFileSync(file, "utf8").endsWith("}"),
+    );
+    expect(startFrame("old")["config"]).not.toHaveProperty("quality");
+  });
+
   it("starts nothing when the schema refuses its config, says why, and fails its inputs", async () => {
     setUp();
     const node = create(PROBE, probeConfig("bad", { count: "three", volumes: [] }));

@@ -16,7 +16,7 @@ import RED from "node-red";
 import type { OptionsAnswer, OptionsQuery } from "../../domain/forms/node-options";
 import type { NodeRedEditorEvents, NodeSet, NodeSetSummary } from "../../ports/node-red-engine";
 import type { RequestGuard } from "../../ports/request-guard";
-import { deployGuard, hostCheck, upgradeHostCheck } from "./guard-middleware";
+import { deployGuard, hostCheck, keepUndeclared, upgradeHostCheck } from "./guard-middleware";
 import { optionsRoute } from "./options-route";
 import { ADMIN_ROOT } from "./settings";
 
@@ -33,6 +33,8 @@ export interface EmbeddedNodeRedOptions {
   readonly guard: RequestGuard;
   /** A step's dynamic options, for the canvas form's `/red/reload/options` (plan 0022 §B). */
   readonly nodeOptions?: (query: OptionsQuery) => Promise<OptionsAnswer>;
+  /** A generated type's declared properties; null for any other type (kept-undeclared.ts). */
+  readonly declared?: (type: string) => ReadonlySet<string> | null;
 }
 
 export class EmbeddedNodeRed implements NodeRedEditorEvents {
@@ -51,6 +53,9 @@ export class EmbeddedNodeRed implements NodeRedEditorEvents {
     RED.init(this.#server, options.settings);
     web.use(hostCheck(options.guard));
     web.use(deployGuard(options.guard, ADMIN_ROOT));
+    if (options.declared !== undefined) {
+      web.use(keepUndeclared(ADMIN_ROOT, options.declared, () => this.deployedFlows()));
+    }
     // Behind the Host check like the admin API, and answered before Node-RED sees the path.
     if (options.nodeOptions !== undefined) {
       web.use(optionsRoute(ADMIN_ROOT, options.nodeOptions));

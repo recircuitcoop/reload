@@ -274,7 +274,8 @@ A type MAY set its own limits in `reload.limits`:
    `title` gives the label, `description` a tip, and `default` the default value. A save keeps
    what passes and nothing that fails: a property the schema refuses keeps its value from before,
    and a table's refused row the row that was at its place (or none), at every depth; the editor
-   says what was not kept.
+   says what was not kept. A value for a property the type no longer declares is kept by a
+   deploy, and comes back when the property is declared again; it never reaches the node.
 2. Secret properties MUST become Node-RED credentials, stored encrypted in `flows_cred.json` with
    the runtime's credential secret. They MUST NOT appear in `flows.json`. A secret inside a nested
    object is a credential named by its path (`"account.token"`), drawn in its group and delivered

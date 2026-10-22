@@ -36,6 +36,8 @@ before you open Reload, and remove InnyTypes once Reload has opened. See
 - **One bad entry no longer costs the good ones.** Saving a step's form keeps every value that
   passes, keeps the value before for one that fails (a refused row keeps the row that was there),
   and says what was not saved.
+- **A value for a setting a package stopped declaring is kept**, and comes back when it is declared
+  again.
 
 ## 0.3.0 — 2026-10-15
 

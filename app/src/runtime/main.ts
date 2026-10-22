@@ -47,6 +47,7 @@ import { EventTypeService, isEventOp } from "../application/event-types";
 import { FlowFiles } from "../application/flow-files";
 import { deployCounts, FlowAdmin, flowNodeTypeOf, isFlowOp } from "../application/flows";
 import { Heartbeat } from "../application/heartbeat";
+import { propertiesOf } from "../domain/forms/form-model";
 import { JournalReplay } from "../application/journal-replay";
 import { isRunActionOp, RunActions } from "../application/run-actions";
 import { isRunOp, RunService } from "../application/runs";
@@ -451,6 +452,10 @@ async function startNodeRed(config: InitConfig): Promise<void> {
     }),
     guard,
     nodeOptions: (query) => nodeOptions.resolve(query),
+    declared: (type) => {
+      const config = flowNodeType(type)?.config;
+      return config === undefined ? null : new Set(propertiesOf(config).map(([key]) => key));
+    },
   });
   nodeRed = engine;
   // Listening before Node-RED starts, so the first `flows:started` is not missed (spec 7.2).

@@ -156,6 +156,8 @@ test("a fixture package with every control deploys, its start frame carries the 
         z: "tab1",
         name: "probe",
         ...PROBE_FIELDS,
+        // A value for a property the type does not declare (any more): kept by every deploy.
+        quality: "low",
         credentials: { token: SECRET },
         wires: [["dbg-first"], ["dbg-second"]],
       },
@@ -233,8 +235,17 @@ test("a fixture package with every control deploys, its start frame carries the 
 
     // The secret is a credential: in flows_cred.json, encrypted, and never in flows.json.
     const nodeRed = path.join(userData, "node-red");
-    expect(fs.readFileSync(path.join(nodeRed, "flows.json"), "utf8")).not.toContain(SECRET);
+    const flowsFile = () => fs.readFileSync(path.join(nodeRed, "flows.json"), "utf8");
+    expect(flowsFile()).not.toContain(SECRET);
     expect(fs.readFileSync(path.join(nodeRed, "flows_cred.json"), "utf8")).not.toContain(SECRET);
+
+    // A deploy that leaves out the undeclared value, as the editor's does, keeps it.
+    const redeployed = flows.map((node) =>
+      node.id === "pr" ? { ...node, quality: undefined, label: "relabelled" } : node,
+    );
+    expect((await request(port, "POST", "/red/flows", redeployed)).status).toBe(204);
+    await expect.poll(flowsFile).toContain("relabelled");
+    expect(flowsFile()).toContain('"quality":"low"');
 
     await quit(app);
     await expect.poll(() => processesNaming(userData), { timeout: 10_000 }).toEqual([]);
