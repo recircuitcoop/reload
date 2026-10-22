@@ -25,20 +25,21 @@ export function wireServiceCalls(
   };
   ipc.handle(IPC.anytypeStatus, () => callServices("anytype.status", null));
   ipc.handle(IPC.anytypeCheck, () => callServices("anytype.check", null));
-  // Reload saw the Anytype desktop app start (or found it running): Anytype is asked again,
-  // given a bounded while for its API to come up. A services process not up yet is asked as
-  // soon as it is: the ask waits for it, never lost.
+  // What the launch did about Anytype is told to the services process once it runs, never
+  // lost: an Anytype Reload has just started gets a bounded while for its API to come up (so it
+  // is not reported unreachable on every launch); adopted, missing or failed, it is asked once,
+  // as the old launcher did, with no wait.
   void anytypeApp.then((state) => {
-    if (state !== "started" && state !== "adopted") {
-      return;
-    }
-    let asked = false;
+    const waitMs = state === "started" ? ANYTYPE_START_WAIT_MS : 0;
+    // Once for each generation of the services process: a restarted one starts quiet too.
+    let asked = 0;
     const ask = (): void => {
-      if (asked || services.status().state !== "running") {
+      const { state, generation } = services.status();
+      if (state !== "running" || generation === asked) {
         return;
       }
-      asked = true;
-      void services.call("anytype.check", { waitMs: ANYTYPE_START_WAIT_MS });
+      asked = generation;
+      void services.call("anytype.check", { waitMs });
     };
     services.onStatus(ask);
     ask();

@@ -121,43 +121,71 @@ describe("bringing the MCP child up", () => {
     expect(ctx.subject.status().detail).toContain("did not answer at http://127.0.0.1:31009");
     expect(ctx.launcher.children).toEqual([]);
     expect(ctx.subject.session()).toBeNull();
-    // At start Anytype gets its bounded while to come up, asked once a second; no notice yet.
-    await ctx.advance(ANYTYPE_START_WAIT_MS, ANYTYPE_WAIT_STEP_MS);
-    const asked = ctx.api.probes.length;
-    expect(asked).toBe(ANYTYPE_START_WAIT_MS / ANYTYPE_WAIT_STEP_MS + 1);
+    // The shell says the launch adopted, missed or failed Anytype: one ask, no wait, told once.
+    ctx.subject.checkAgain(0);
+    await ctx.advance(0);
+    expect(ctx.api.probes).toHaveLength(2);
     expect(ctx.notifier.notices.map((n) => n.kind)).toEqual(["anytype-unreachable"]);
-    // After it, however far the clock moves, nothing asks again: waiting changes nothing.
+    // However far the clock moves, nothing asks again: waiting changes nothing.
     ctx.api.up = true;
     await ctx.advance(600_000, 10_000);
-    expect(ctx.api.probes).toHaveLength(asked);
+    expect(ctx.api.probes).toHaveLength(2);
     expect(ctx.subject.status().state).toBe("unreachable");
     expect(ctx.launcher.children).toEqual([]);
   });
 
-  it("an Anytype Reload has just launched is waited for while its API comes up, without the window", async () => {
+  it("an Anytype Reload has just launched is waited for, up to 60 s, while its API comes up", async () => {
     const ctx = service();
     ctx.api.up = false;
     ctx.subject.start();
-    await ctx.advance(ANYTYPE_START_WAIT_MS + 1_000, ANYTYPE_WAIT_STEP_MS);
-    expect(ctx.subject.status().state).toBe("unreachable");
-    // Reload launches Anytype (the shell's ask): its API answers 20 s later, and Reload connects.
+    await ctx.advance(0);
+    // Quiet at start: the launch may still be under way.
+    expect(ctx.notifier.notices).toEqual([]);
+    // The shell: Reload launched Anytype. A longer wait asked for is held to 60 s.
     expect(await serveAnytypeCall(ctx.subject, "anytype.check", { waitMs: 600_000 })).toMatchObject(
-      {
-        ok: true,
-      },
+      { ok: true },
     );
-    await ctx.advance(19_000, ANYTYPE_WAIT_STEP_MS);
+    await ctx.advance(20_000, ANYTYPE_WAIT_STEP_MS);
     expect(ctx.subject.status().state).toBe("unreachable");
+    expect(ctx.notifier.notices).toEqual([]);
     ctx.api.up = true;
     await ctx.advance(1_000, ANYTYPE_WAIT_STEP_MS);
     expect(ctx.subject.status().state).toBe("ready");
-    expect(ctx.notifier.cleared).toContain("anytype-unreachable Anytype");
-    // An ask while the first start still waits acts too ("starting" or "unreachable").
-    const early = service();
-    early.api.up = false;
-    early.subject.checkAgain(5_000);
-    await early.advance(0);
-    expect(early.api.probes).toHaveLength(1);
+    expect(ctx.notifier.notices).toEqual([]);
+  });
+
+  it("a launched Anytype that never answers is told once at the end of its 60 s, and asked no more", async () => {
+    const ctx = service();
+    ctx.api.up = false;
+    ctx.subject.start();
+    await ctx.advance(0);
+    ctx.subject.checkAgain(ANYTYPE_START_WAIT_MS);
+    await ctx.advance(ANYTYPE_START_WAIT_MS - 1_000, ANYTYPE_WAIT_STEP_MS);
+    expect(ctx.notifier.notices).toEqual([]);
+    // A plain ask meanwhile (the person comes back to the window) never cuts the wait short.
+    ctx.subject.checkAgain(0);
+    await ctx.advance(0);
+    expect(ctx.notifier.notices).toEqual([]);
+    await ctx.advance(2_000, ANYTYPE_WAIT_STEP_MS);
+    expect(ctx.notifier.notices.map((n) => n.kind)).toEqual(["anytype-unreachable"]);
+    const asked = ctx.api.probes.length;
+    await ctx.advance(600_000, 10_000);
+    expect(ctx.api.probes).toHaveLength(asked);
+  });
+
+  it("the launch wait runs on the monotonic clock: setting the wall clock forward never ends it", async () => {
+    const ctx = service();
+    ctx.api.up = false;
+    ctx.subject.start();
+    await ctx.advance(0);
+    ctx.subject.checkAgain(ANYTYPE_START_WAIT_MS);
+    await ctx.advance(0);
+    // The wall clock jumps a day ahead; the monotonic clock (the fake's own) does not.
+    const real = ctx.clock.now.bind(ctx.clock);
+    Object.assign(ctx.clock, { monotonic: real, now: () => real() + 86_400_000 });
+    await ctx.advance(10_000, ANYTYPE_WAIT_STEP_MS);
+    expect(ctx.notifier.notices).toEqual([]);
+    expect(ctx.subject.status().state).toBe("unreachable");
   });
 
   it("tells the person once, logs once per state, and asks again only when asked to", async () => {

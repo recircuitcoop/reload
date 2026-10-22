@@ -181,7 +181,7 @@ describe("wireQuit, wireServiceCalls, wireDesktop and the e2e hooks", () => {
             : { ok: true, value: op },
         );
       },
-      status: () => ({ state: "running" }),
+      status: () => ({ state: "running", generation: 1 }),
       onStatus: () => undefined,
     } as unknown as Supervisor;
     let kept: string | null = null;
@@ -204,41 +204,52 @@ describe("wireQuit, wireServiceCalls, wireDesktop and the e2e hooks", () => {
     expect(asked.map((entry) => (entry as unknown[])[0])).not.toContain("mcp.token");
   });
 
-  it("an Anytype Reload launched is asked about once the services process runs, not before", async () => {
+  it("what the launch did about Anytype is told to each services process once it runs, not before", async () => {
     const { handle } = ipc();
     const asked: unknown[] = [];
-    let state = "starting";
+    let status = { state: "starting", generation: 1 };
     const listeners: (() => void)[] = [];
     const services = {
       call: (op: string, args: unknown) => {
         asked.push([op, args]);
         return Promise.resolve({ ok: true, value: null });
       },
-      status: () => ({ state }),
+      status: () => status,
       onStatus: (listener: () => void) => listeners.push(listener),
     } as unknown as Supervisor;
     wireServiceCalls({ handle }, services, () => null, Promise.resolve("started"));
     await Promise.resolve();
     await Promise.resolve();
     expect(asked).toEqual([]);
-    state = "running";
-    for (const listener of listeners) listener();
-    for (const listener of listeners) listener();
+    const tell = (): void => {
+      for (const listener of listeners) listener();
+    };
+    status = { state: "running", generation: 1 };
+    tell();
+    tell();
+    // Started by Reload: its API gets 60 s, asked once for this process.
     expect(asked).toEqual([["anytype.check", { waitMs: 60_000 }]]);
-    // An Anytype that is missing, or failed to start, is not waited for.
-    const none: unknown[] = [];
-    wireServiceCalls(
-      { handle },
-      {
-        call: (op: string) => none.push(op),
-        status: () => ({ state: "running" }),
-        onStatus: () => undefined,
-      } as unknown as Supervisor,
-      () => null,
-      Promise.resolve("missing"),
-    );
-    await Promise.resolve();
-    expect(none).toEqual([]);
+    // A services process restarted after a crash starts quiet too: it is told again.
+    status = { state: "running", generation: 2 };
+    tell();
+    expect(asked).toHaveLength(2);
+    // Adopted, missing or failed: asked at once, with no wait, as the old launcher did.
+    for (const state of ["adopted", "missing", "failed"] as const) {
+      const once: unknown[] = [];
+      wireServiceCalls(
+        { handle },
+        {
+          call: (op: string, args: unknown) => once.push([op, args]),
+          status: () => ({ state: "running", generation: 1 }),
+          onStatus: () => undefined,
+        } as unknown as Supervisor,
+        () => null,
+        Promise.resolve(state),
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(once).toEqual([["anytype.check", { waitMs: 0 }]]);
+    }
   });
 
   it("wireDesktop builds the one board, and with no login item the switch refuses", () => {

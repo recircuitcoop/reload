@@ -153,8 +153,14 @@ export class AnytypeService {
   #child: McpChild | null = null;
   #tools: readonly McpTool[] = [];
   #crashesInARow = 0;
-  /** Until when Anytype, just launched, is still asked while its API comes up (clock time). */
+  /**
+   * Until when an Anytype Reload has just launched is still asked while its API comes up, on the
+   * monotonic clock. Corrected 2026-10-22: the old launcher waited for nothing; this wait exists
+   * only so a launch Reload made itself is not reported as unreachable before the API is up.
+   */
   #waitUntil = 0;
+  /** Until the shell's first ask, an unanswered start is not told: the launch may be under way. */
+  #quiet = false;
   /** The person was told Anytype did not answer; told again only after it answered once. */
   #told = false;
   #retry: Cancel | null = null;
@@ -203,9 +209,9 @@ export class AnytypeService {
 
   /** Bring the service up. Returns at once: nothing here waits for Anytype. */
   start(): void {
-    // At start Anytype is often only just launched (by Reload, or at login): its API is given
-    // a bounded while to come up before Reload says it did not answer.
-    this.#waitUntil = this.#deps.clock.now() + ANYTYPE_START_WAIT_MS;
+    // Quiet: an Anytype that does not answer yet is not told about until the shell has said
+    // what the launch did (checkAgain): just started by Reload, it gets its while to come up.
+    this.#quiet = true;
     void this.#bringUp();
   }
 
@@ -236,7 +242,9 @@ export class AnytypeService {
         ? `asking Anytype again, for up to ${String(waitMs / 1000)} s while it comes up`
         : "asking Anytype again",
     );
-    this.#waitUntil = this.#deps.clock.now() + waitMs;
+    this.#quiet = false;
+    // A plain ask (focus, Check again) never cuts short the wait for an Anytype just launched.
+    this.#waitUntil = Math.max(this.#waitUntil, this.#now() + waitMs);
     this.#retry?.();
     this.#retry = null;
     void this.#bringUp();
@@ -352,12 +360,12 @@ export class AnytypeService {
       // A failed start, not a crash: no attempt spent. While Anytype was just launched it is
       // given its bounded while (start, checkAgain); after that, no timer. Said once per state.
       const detail = `Anytype's local API did not answer at ${apiBaseUrl}; start the Anytype desktop app`;
-      if (this.#deps.clock.now() < this.#waitUntil) {
+      if (this.#now() < this.#waitUntil) {
         this.#setState("unreachable", detail);
         this.#retry = this.#deps.clock.after(ANYTYPE_WAIT_STEP_MS, () => void this.#bringUp());
         return;
       }
-      if (!this.#told) {
+      if (!this.#told && !this.#quiet) {
         this.#told = true;
         this.#notice(
           "anytype-unreachable",
@@ -374,6 +382,11 @@ export class AnytypeService {
   }
 
   /** Quit, or a newer attempt started while this one waited on Anytype. */
+  /** The clock the launch wait is measured on: monotonic, whatever the wall clock does. */
+  #now(): number {
+    return this.#deps.clock.monotonic?.() ?? this.#deps.clock.now();
+  }
+
   #superseded(attempt: number): boolean {
     return this.#stopping || attempt !== this.#attempt;
   }
