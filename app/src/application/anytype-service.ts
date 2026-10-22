@@ -326,7 +326,11 @@ export class AnytypeService {
       // A failed start, not a crash: no timer and no attempt spent. Said once per state.
       const detail = `Anytype's local API did not answer at ${apiBaseUrl}; start the Anytype desktop app`;
       if (this.#state !== "unreachable") {
-        this.#notice("anytype-unreachable", detail, ANYTYPE);
+        this.#notice(
+          "anytype-unreachable",
+          "Anytype did not answer. Open the Anytype desktop app, then come back to Reload",
+          ANYTYPE,
+        );
       }
       this.#setState("unreachable", detail);
       return;

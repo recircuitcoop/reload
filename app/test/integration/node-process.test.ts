@@ -613,7 +613,7 @@ describe("a node process whose type declares a heartbeat (spec 2.4.2)", () => {
         },
       ]);
       expect(compose(node.notifier.notices[0] ?? { kind: "node-stuck", subject: "" }).title).toBe(
-        "The node raw stopped answering",
+        "The node raw stopped making progress",
       );
       // Then it is stopped, and the next process starts at once: the wait was the backoff.
       await waitFor(
@@ -710,7 +710,11 @@ describe("a node process whose type declares a heartbeat (spec 2.4.2)", () => {
     await waitFor("well", () => well.finished);
     clock.advance(30_000);
     await waitFor("ping 4", () => pings(node) === 4);
-    await waitFor("the withdrawal", () => node.notifier.cleared.includes("node-unhealthy raw"));
+    // Once withdrawn at creation (redeploy), and once now that it is well.
+    await waitFor(
+      "the withdrawal",
+      () => node.notifier.cleared.filter((c) => c === "node-unhealthy raw").length === 2,
+    );
     // An answer, healthy or not, is a sign of life: nothing was killed.
     expect(node.node.pid).toBe(pid);
     expect(node.notifier.notices).toHaveLength(1);

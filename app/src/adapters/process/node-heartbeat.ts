@@ -64,7 +64,10 @@ export class NodeHeartbeat {
   #restart: Cancel | null = null;
   /** The process now exiting was stopped for being stuck. */
   #stuckExit = false;
-  #startedAt = 0;
+  /** The current process's last progress marker; undefined before its first answer. */
+  #marker: number | undefined;
+  /** Since when, on the monotonic clock, its marker has kept moving; null while it has not. */
+  #progressSince: number | null = null;
 
   constructor(spec: NodeProcessSpec, deps: NodeProcessDeps, target: HeartbeatTarget) {
     if (spec.stability === undefined || deps.heartbeat === undefined) {
@@ -99,7 +102,8 @@ export class NodeHeartbeat {
 
   /** The process sent `ready`: its window starts now, and the first ping goes at once. */
   started(): void {
-    this.#startedAt = this.#deps.clock.now();
+    this.#marker = undefined;
+    this.#progressSince = null;
     this.#watch.start({ ping: (timeoutMs) => this.#ping(timeoutMs) });
   }
 
@@ -137,21 +141,35 @@ export class NodeHeartbeat {
     this.#waiting.delete(id);
     waiting.cancel();
     waiting.answer(progress);
-    this.#answered();
+    this.#answered(progress);
     if (healthy !== undefined && healthy !== this.#healthy) {
       this.#health(healthy);
     }
   }
 
   /** A process answers: a stuck episode is over, and a whole window of answers ends the run. */
-  #answered(): void {
+  /**
+   * An answer. Recovered is progress, not an answer: a wedged process answers too. Only once its
+   * marker has kept moving for a whole window is a stuck run over, its notice withdrawn and its
+   * restart backoff back to the first step. A node that sends no marker moves with each answer.
+   */
+  #answered(progress: number | undefined): void {
+    const now = this.#deps.clock.monotonic?.() ?? this.#deps.clock.now();
+    const moved = progress === undefined || progress !== this.#marker;
+    this.#marker = progress;
+    if (!moved) {
+      this.#progressSince = null;
+      return;
+    }
+    this.#progressSince ??= now;
+    if (now - this.#progressSince < this.#window) {
+      return;
+    }
+    this.#stuckInARow = 0;
     if (this.#stuckSaid) {
       this.#stuckSaid = false;
-      this.#logger.info("answers again after being stuck");
+      this.#logger.info("makes progress again after being stuck");
       this.#deps.notifier.clear("node-stuck", this.#subject);
-    }
-    if (this.#deps.clock.now() - this.#startedAt >= this.#window) {
-      this.#stuckInARow = 0;
     }
   }
 

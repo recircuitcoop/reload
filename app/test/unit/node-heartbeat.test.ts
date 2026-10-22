@@ -212,32 +212,51 @@ describe("a node process's heartbeat", () => {
     expect(h.subject.takeStuckExit()).toBe(false);
   });
 
-  it("each stuck restart in a row waits longer, and the episode is said once until a process answers", async () => {
+  it("each stuck restart in a row waits longer: a wedged process that still answers ends no run", async () => {
+    const h = harness();
+    h.stale(95_000);
+    h.clock.advance(250);
+    // The restarted process answers, but with a frozen marker: the same input wedged it again.
+    h.subject.started();
+    await h.answer(undefined, 7);
+    await h.answer(undefined, 7);
+    h.clock.advance(60_000);
+    await h.answer(undefined, 7);
+    h.stale(95_000);
+    expect(h.logger.has(/restarting it in 500 ms$/)).toBe(true);
+    // Answers are no recovery: the notice stands, said once for the whole run.
+    expect(h.notifier.cleared).toEqual([]);
+    expect(h.notifier.notices).toHaveLength(1);
+    h.clock.advance(500);
+    // Progress that does not last a whole window does not end the run either.
+    h.subject.started();
+    await h.answer(undefined, 1);
+    h.clock.advance(30_000);
+    await h.answer(undefined, 2);
+    h.clock.advance(30_000);
+    await h.answer(undefined, 2);
+    h.stale(95_000);
+    expect(h.logger.has(/restarting it in 750 ms$/)).toBe(true);
+    expect(h.killed).toEqual([4242, 4242]);
+    expect(h.notifier.cleared).toEqual([]);
+  });
+
+  it("a marker that keeps moving for a whole window is recovery: the notice is withdrawn and the backoff starts again", async () => {
     const h = harness();
     h.stale(95_000);
     h.clock.advance(250);
     h.subject.started();
-    h.stale(95_000);
-    expect(h.logger.has(/restarting it in 500 ms$/)).toBe(true);
-    expect(h.notifier.notices).toHaveLength(1);
-    h.clock.advance(500);
-    expect(h.killed).toEqual([4242, 4242]);
-    // A new process answers: the episode is over, its notice withdrawn.
-    h.subject.started();
-    await h.answer(undefined, 1);
+    for (let marker = 1; marker <= 4; marker += 1) {
+      await h.answer(undefined, marker);
+      h.clock.advance(30_000);
+    }
+    await h.answer(undefined, 5);
     expect(h.notifier.cleared).toEqual(["node-stuck raw"]);
-    expect(h.logger.has(/answers again after being stuck$/)).toBe(true);
-    // Still inside its first window, the run of stuck restarts is not over yet.
-    h.stale(95_000);
-    expect(h.logger.has(/restarting it in 750 ms$/)).toBe(true);
-    expect(h.notifier.notices).toHaveLength(2);
-    // A process that answers past a whole window ends the run: the next starts again at 250.
-    h.clock.advance(750);
-    h.subject.started();
-    h.clock.advance(90_000);
-    await h.answer(undefined, 2);
+    expect(h.logger.has(/makes progress again after being stuck$/)).toBe(true);
     h.stale(95_000);
     expect(h.logger.lines.at(-1)?.text).toMatch(/restarting it in 250 ms$/);
+    // A new run is a new episode: said again.
+    expect(h.notifier.notices).toHaveLength(2);
   });
 
   it("a stuck process of a type never restarted is stopped without a notice of its own, and with none running nothing is killed", () => {

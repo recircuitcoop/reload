@@ -19,6 +19,16 @@ export function clearNodeNotices(notifier: Notifier, subject: string): void {
 }
 
 /**
+ * An instance gets no more processes: one condition, one notice. What was said about how it
+ * ran (stuck, unhealthy) is withdrawn, and the stop is said.
+ */
+export function raiseStopped(notifier: Notifier, notice: Notice): void {
+  notifier.clear("node-stuck", notice.subject);
+  notifier.clear("node-unhealthy", notice.subject);
+  notifier.raise(notice);
+}
+
+/**
  * Why an instance gets no more processes, for its status and log (`text`), and the one notice
  * that says so: the crash-loop limit, or a type that says never to restart it (spec 2.4.2),
  * worded for a process that exited or one stopped because it made no progress.

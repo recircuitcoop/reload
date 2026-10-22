@@ -41,7 +41,7 @@ import { inputJournalFor, type Admitted, type Input, type InputJournal } from ".
 import { prepareInstance, type NodeProcessDeps } from "./node-process-settings";
 import { readPipes, watchExit } from "./exit-watch";
 import { nodeHeartbeat, type NodeHeartbeat } from "./node-heartbeat";
-import { clearNodeNotices, stoppedFor } from "./node-notices";
+import { clearNodeNotices, raiseStopped, stoppedFor } from "./node-notices";
 import { RefusedPorts } from "./refused-ports";
 import { NodeResourceGuard } from "./resource-guard";
 import { ViewDeadlines } from "./view-deadlines";
@@ -325,7 +325,7 @@ class ChildNodeProcess implements NodeProcess {
     }
     this.#journal.failHeld(new Error(`the node process ${text}`));
     try {
-      this.#deps.notifier.raise(notice);
+      raiseStopped(this.#deps.notifier, notice);
     } catch (error) {
       this.#log("error", `the crash-loop notice could not be raised: ${String(error)}`);
     }

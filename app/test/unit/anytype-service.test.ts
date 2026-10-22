@@ -139,8 +139,7 @@ describe("bringing the MCP child up", () => {
       {
         kind: "anytype-unreachable",
         subject: "Anytype",
-        detail:
-          "Anytype's local API did not answer at http://127.0.0.1:31009; start the Anytype desktop app",
+        detail: "Anytype did not answer. Open the Anytype desktop app, then come back to Reload",
       },
     ]);
     const said = (state: string) =>

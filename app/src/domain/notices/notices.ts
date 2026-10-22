@@ -233,7 +233,7 @@ function composeWords(notice: Notice): Message {
         ),
       };
     case "node-stuck":
-      return { title: `The node ${subject} stopped answering`, body: sentences(detail) };
+      return { title: `The node ${subject} stopped making progress`, body: sentences(detail) };
     case "node-unhealthy":
       return { title: `The node ${subject} says it is not working`, body: sentences(detail) };
     case "mcp-child-stopped":
