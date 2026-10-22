@@ -190,6 +190,28 @@ describe("the shipped-package manifest ships, and the tooling that wrote it does
     }
   });
 
+  it("both configs ship the packages' source maps and sources, and the build's list of them", () => {
+    // A failed step's file and line are the source's only through the bundle's .map (plan 0029),
+    // and are sent only as dist/shipped-sources.json lists them.
+    for (const config of [CONFIG, RELEASE_CONFIG]) {
+      const block = /^extraResources:\n((?:\s+.*\n)+)/m.exec(config)?.[1] ?? "";
+      const packages = /- from: "\.\.\/packages"\n\s+to: "packages"\n\s+filter: \[([^\]]*)\]/.exec(
+        block,
+      )?.[1];
+      expect(packages, "packages/ is copied beside the app").toBeDefined();
+      const excluded = (packages ?? "")
+        .split(",")
+        .map((entry) => entry.trim().replaceAll('"', ""))
+        .filter((entry) => entry.startsWith("!"));
+      expect(excluded.filter((entry) => /\.map|src|dist/.test(entry))).toEqual([]);
+      expect(packages).toContain('"**/*"');
+      const files = /^files:\n((?:\s+.*\n)+)/m.exec(config)?.[1] ?? "";
+      expect(files).toContain("- dist/**/*");
+      // Only dependencies' maps are left out, never the app's own dist/.
+      expect(files).not.toMatch(/"!dist\/\*\*\/\*\.map"|"!\*\*\/\*\.map"/);
+    }
+  });
+
   it("after-pack.cjs refuses an asar without the manifest, or with dist/build in it", async () => {
     const { createPackage } = await import("@electron/asar");
     const required = createRequire(__filename);
