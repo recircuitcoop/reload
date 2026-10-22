@@ -61,6 +61,14 @@ every ledger row against its old test, the other checks behaviour under failure.
    required values caught), 29 (a broken package shown, not hidden), 2, 1 (the controls), 4, 37
    (saving one setting restarts every node), 38.
 3. **Wave 3, supervision and process control:** groups 9, 10, 11, 12, 13, 14, 15, 23, 24.
+   With them, **WI-0032-41, a plugin writes its own settings** (group 3's write-back half, 14
+   rows): a `reload.writtenBy` key (`plugin` or `both`; spec 2.4.1 and the declaration schema);
+   a node→runtime message that writes declared values, in both SDKs and the conformance suite,
+   refused for a property the author left to the person or in another package's name; a store per
+   instance, beside its data folder and never flows.json, holding each value with who wrote it
+   and when, merged over the deployed config at start and on each write without a redeploy;
+   plugin-written secrets kept encrypted with the credential secret, never readable back; and the
+   editor drawing such a field read-only, with "Set by <package>, <time>".
 4. **Wave 4, packages and updates:** groups 6, 7, 8, 16, 17, 18, 19, 21, 39.
 5. Group 25 (per-OS proofs) joins WI-0031-10 and plan 0025.
 
@@ -78,9 +86,7 @@ settings.
   named by its path, drawn in its group; a secret in a table's rows, or a list of secrets, is
   refused at the declaration naming its path; a secret's default is kept. 5 rows ported, and
   group 1's list of secrets `replaced` by that refusal, as it cannot be a credential. The 14
-  rows of a plugin writing its own settings (written by, who and when, a secret obtained at run
-  time) are not ported: they need a node→runtime write in the protocol and both SDKs, put to the
-  plan's owner as a decision.
+  rows of a plugin writing its own settings moved to WI-0032-41 (wave 3).
 - **Group 28** (same branch): a save keeps what passes and nothing that fails, field by field and
   row by row at every depth, says what was not kept, and shows it again beside why. 14 rows.
 - **Group 31** (same branch): a value for a property the type no longer declares is kept by every
