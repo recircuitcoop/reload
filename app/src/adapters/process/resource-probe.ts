@@ -8,14 +8,16 @@
 //
 // * `ps` runs with LC_ALL=C and TZ=UTC: its start time is then the same text on every machine,
 //   which is what the identity check compares (a locale's month names broke it elsewhere).
-// * Children are counted within the process's own process group. Every node process is started
-//   as the leader of its own group (process-tree.ts), so a node process and its tree are judged
-//   on their own and never count against the runtime that started them.
+// * Children are counted by parent, at any depth, as the old helper did: a child that left its
+//   process group still counts. Only a host's node processes are left out of the host's count
+//   (each leads its own process group, process-tree.ts): they are judged on their own.
+// * Identity is the start time from `ps` and the executable: on macOS the first `txt` file
+//   `lsof` lists, on Linux /proc/<pid>/exe. Never the command name, which a node can change.
 // * A number the platform will not give (no lsof, a process gone between the two calls) is null
 //   on its own: the other numbers are still judged.
 
 import { execFile } from "node:child_process";
-import { readdir } from "node:fs/promises";
+import { readdir, readlink } from "node:fs/promises";
 import { promisify } from "node:util";
 
 import type { ProcessReading, ResourceProbe } from "../../ports/resource-watch";
@@ -43,9 +45,6 @@ export const plainRunner: CommandRunner = async (file, args) => {
   }
 };
 
-const countFds = async (pid: number): Promise<number> =>
-  (await readdir(`/proc/${String(pid)}/fd`)).length;
-
 /** `ps` CPU time, `[[dd-]hh:]mm:ss[.cc]` (Linux and macOS spell it differently), in seconds. */
 function cpuSecondsOf(time: string): number | null {
   const [clock = "", days = "0"] = time.split("-").reverse();
@@ -59,22 +58,22 @@ function cpuSecondsOf(time: string): number | null {
   return parts.reduce((total, part) => total * 60 + part, 0) + Number(days) * 86_400;
 }
 
-/** pid, ppid, pgid, rss, time, then `lstart` (five words in the C locale), then the command. */
-const COLUMNS = "pid=,ppid=,pgid=,rss=,time=,lstart=,comm=";
+/** pid, ppid, pgid, rss, time, then `lstart`: five words in the C locale. */
+const COLUMNS = "pid=,ppid=,pgid=,rss=,time=,lstart=";
 
 interface Row {
   readonly ppid: number;
   readonly pgid: number;
   readonly rssKb: number;
   readonly time: string;
-  readonly identity: string;
+  readonly started: string;
 }
 
 function rowsOf(table: string): Map<number, Row> {
   const rows = new Map<number, Row>();
   for (const line of table.split("\n")) {
     const words = line.trim().split(/\s+/);
-    if (words.length < 11) {
+    if (words.length < 10) {
       continue;
     }
     const [pid, ppid, pgid, rss, time] = words as [string, string, string, string, string];
@@ -83,77 +82,112 @@ function rowsOf(table: string): Map<number, Row> {
       pgid: Number(pgid),
       rssKb: Number(rss),
       time,
-      identity: words.slice(5).join(" "),
+      started: words.slice(5, 10).join(" "),
     });
   }
   return rows;
 }
 
-/** Every process below `pid` in its own process group, at any depth. */
-function descendantsOf(pid: number, rows: Map<number, Row>): number {
-  const group = rows.get(pid)?.pgid;
+/**
+ * Every process below `pid`, by parent, at any depth (the old helper's count): a child that left
+ * its process group still counts. A host's node processes are the exception: each leads a
+ * process group of its own (process-tree.ts) and is judged on its own, so for a host a direct
+ * child that leads its own group is left out, with its whole tree.
+ */
+function descendantsOf(pid: number, rows: Map<number, Row>, host: boolean): number {
   const parents = new Set([pid]);
   let found = 0;
   let grew = true;
   while (grew) {
     grew = false;
     for (const [child, row] of rows) {
-      if (row.pgid === group && parents.has(row.ppid) && !parents.has(child)) {
-        parents.add(child);
-        found += 1;
-        grew = true;
+      if (!parents.has(row.ppid) || parents.has(child)) {
+        continue;
       }
+      if (host && row.ppid === pid && row.pgid === child) {
+        continue; // a node process the host started
+      }
+      parents.add(child);
+      found += 1;
+      grew = true;
     }
   }
   return found;
 }
 
-/** `lsof -F f` writes `p<pid>`, then one `f<descriptor>` line per file; only numbers are files. */
-function openFilesOf(lsof: string): Map<number, number> {
-  const counts = new Map<number, number>();
+/** What one `lsof -F fn` says of each pid: its open files, and its executable (first `txt`). */
+interface Listed {
+  readonly files: Map<number, number>;
+  readonly executables: Map<number, string>;
+}
+
+/** `p<pid>`, then for each file `f<descriptor>` and `n<name>`; only numbered ones are files. */
+function listedOf(lsof: string): Listed {
+  const files = new Map<number, number>();
+  const executables = new Map<number, string>();
   let pid = -1;
+  let fd = "";
   for (const line of lsof.split("\n")) {
     if (line.startsWith("p")) {
       pid = Number(line.slice(1));
-      counts.set(pid, 0);
-    } else if (/^f\d+$/.test(line)) {
-      counts.set(pid, (counts.get(pid) ?? 0) + 1);
+      files.set(pid, 0);
+    } else if (line.startsWith("f")) {
+      fd = line.slice(1);
+      if (/^\d+$/.test(fd)) {
+        files.set(pid, (files.get(pid) ?? 0) + 1);
+      }
+    } else if (line.startsWith("n") && fd === "txt" && !executables.has(pid)) {
+      executables.set(pid, line.slice(1));
     }
   }
-  return counts;
+  return { files, executables };
 }
+
+/** On Linux, from /proc: each pid's open files and its executable, each left out if unreadable. */
+export interface ProcReader {
+  fds(pid: number): Promise<number>;
+  executable(pid: number): Promise<string>;
+}
+
+const proc: ProcReader = {
+  fds: async (pid) => (await readdir(`/proc/${String(pid)}/fd`)).length,
+  executable: (pid) => readlink(`/proc/${String(pid)}/exe`),
+};
 
 export function resourceProbeFor(
   platform: NodeJS.Platform,
   runCommand: CommandRunner = plainRunner,
-  fds: (pid: number) => Promise<number> = countFds,
+  procfs: ProcReader = proc,
 ): ResourceProbe {
   if (platform === "win32") {
     // Not measured on Windows yet: no reading, never a crash.
     return () => Promise.resolve(new Map());
   }
-  const openFiles = async (pids: readonly number[]): Promise<Map<number, number>> => {
+  const listed = async (pids: readonly number[]): Promise<Listed> => {
     if (platform === "linux") {
-      const counts = new Map<number, number>();
+      const found: Listed = { files: new Map(), executables: new Map() };
       for (const pid of pids) {
-        try {
-          counts.set(pid, await fds(pid));
-        } catch {
-          // gone, or not ours to read: left unread
-        }
+        await procfs.fds(pid).then(
+          (count) => found.files.set(pid, count),
+          () => undefined, // gone, or not ours to read: left unread
+        );
+        await procfs.executable(pid).then(
+          (path) => found.executables.set(pid, path),
+          () => undefined,
+        );
       }
-      return counts;
+      return found;
     }
     try {
       const list = pids.map(String).join(",");
-      return openFilesOf(
-        await runCommand("/usr/sbin/lsof", ["-n", "-P", "-w", "-p", list, "-F", "f"]),
+      return listedOf(
+        await runCommand("/usr/sbin/lsof", ["-n", "-P", "-w", "-p", list, "-F", "fn"]),
       );
     } catch {
-      return new Map();
+      return { files: new Map(), executables: new Map() };
     }
   };
-  return async (pids) => {
+  return async (pids, hosts = new Set()) => {
     const readings = new Map<number, ProcessReading>();
     if (pids.length === 0) {
       return readings;
@@ -163,16 +197,18 @@ export function resourceProbeFor(
       const own = rows.get(pid);
       return own === undefined ? [] : [{ pid, own }];
     });
-    const files =
-      present.length === 0 ? new Map<number, number>() : await openFiles(present.map((p) => p.pid));
+    const { files, executables } =
+      present.length === 0
+        ? { files: new Map<number, number>(), executables: new Map<number, string>() }
+        : await listed(present.map((p) => p.pid));
     for (const { pid, own } of present) {
       readings.set(pid, {
-        identity: own.identity,
+        identity: { started: own.started, executable: executables.get(pid) ?? null },
         sample: {
           memoryMb: own.rssKb / 1024,
           cpuSeconds: cpuSecondsOf(own.time),
           openFiles: files.get(pid) ?? null,
-          children: descendantsOf(pid, rows),
+          children: descendantsOf(pid, rows, hosts.has(pid)),
         },
       });
     }

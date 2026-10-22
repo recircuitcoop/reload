@@ -94,13 +94,32 @@ describe("limits as written", () => {
       "memory is not a limit (the limits are memory_mb, cpu_percent, cpu_window_s, grace_s, " +
         "open_files, children)",
     );
-    expect(limitsProblem({ grace_s: 0 })).toBe("grace_s must be a number greater than zero");
-    expect(limitsProblem({ children: 1.5 })).toBe(
-      "children must be a whole number greater than zero",
+    expect(limitsProblem({ grace_s: 0 })).toBe(
+      "grace_s must be a number greater than zero, and finite",
     );
-    expect(limitsProblem({ memory_mb: "1" })).toBe("memory_mb must be a number greater than zero");
+    expect(limitsProblem({ memory_mb: Infinity })).toBe(
+      "memory_mb must be a number greater than zero, and finite",
+    );
+    expect(limitsProblem({ memory_mb: 1e308 })).not.toBeNull();
+    expect(limitsProblem({ children: 1.5 })).toBe(
+      "children must be a whole number greater than zero, and finite",
+    );
+    expect(limitsProblem({ memory_mb: "1" })).toBe(
+      "memory_mb must be a number greater than zero, and finite",
+    );
     expect(limitsProblem([])).toBe("must be an object of limits");
     expect(limitsProblem(null)).toBe("must be an object of limits");
+  });
+});
+
+describe("a watch that could not look for a while", () => {
+  it("starts every grace window and the CPU window again", () => {
+    const watch = new ResourceWatch(DEFAULT_LIMITS);
+    watch.observe(sample({ memoryMb: 2000, cpuSeconds: 0 }), 0);
+    watch.restart();
+    expect(watch.observe(sample({ memoryMb: 2000, cpuSeconds: 3600 }), 3_600_000)).toEqual([
+      { limit: "memory", value: 2000, allowed: 1024, durationMs: 0, sustained: false },
+    ]);
   });
 });
 

@@ -341,6 +341,10 @@ export class Supervisor {
 
   #onExit(code: number): void {
     this.#handle = null;
+    // A last stop over a limit ends the child only if its exit is that stop's crash: a quit or a
+    // planned restart that came first leaves the next ordinary crash ordinary.
+    const forGood = this.#overLimitForGood;
+    this.#overLimitForGood = null;
     this.#cancelKill?.();
     this.#cancelKill = null;
     this.#calls.failAll("stopped");
@@ -356,13 +360,11 @@ export class Supervisor {
       this.#fork();
       return;
     }
-    this.#onCrash(code);
+    this.#onCrash(code, forGood);
   }
 
-  #onCrash(code: number): void {
+  #onCrash(code: number, forGood: string | null): void {
     this.#crashesInARow += 1;
-    const forGood = this.#overLimitForGood;
-    this.#overLimitForGood = null;
     if (forGood !== null || !this.#breaker.recordCrash()) {
       // The crash-loop limit: stop restarting, say so on the page, and raise one notice.
       const message = forGood ?? crashLoopMessage(this.#deps.child, this.#deps.settings.crashLoop);

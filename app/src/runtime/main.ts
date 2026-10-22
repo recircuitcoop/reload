@@ -38,7 +38,7 @@ import { SystemRuntimeLocator } from "../adapters/process/runtime-locator";
 import { AjvSchemaValidator } from "../adapters/schema/ajv-validator";
 import { openSqliteJournal, type SqliteJournal } from "../adapters/sqlite/journal";
 import { openSqliteSnapshots } from "../adapters/sqlite/snapshots";
-import { systemClock } from "../adapters/system/clock";
+import { monotonicClock, systemClock } from "../adapters/system/clock";
 import { syncWriter } from "../adapters/system/sync-writer";
 import { noticeAnytypeRefusals } from "../application/anytype-refusals";
 import { DeployGuard } from "../application/deploy-guard";
@@ -265,7 +265,7 @@ function generateNodeTypes(
         // The resource watchdog of every node process (plan 0031 group A).
         watchdog: resourceWatchdog({
           probe: resourceProbeFor(process.platform),
-          clock: systemClock,
+          clock: monotonicClock,
           pace: DEFAULT_WATCH_PACE,
           log: (level, message) => {
             logger[level](message);

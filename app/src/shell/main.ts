@@ -70,7 +70,7 @@ import { MinisignVerifier } from "../adapters/signature/minisign";
 import { JsonBoardStore } from "../adapters/fs/board-store";
 import { JsonPlacementStore } from "../adapters/fs/placement-store";
 import { pickFreeLoopbackPort } from "../adapters/net/free-port";
-import { systemClock } from "../adapters/system/clock";
+import { monotonicClock, systemClock } from "../adapters/system/clock";
 import { ElectronUpdaterInstaller } from "../adapters/update/electron-updater-installer";
 import { AnytypeApp } from "../application/anytype-app";
 import { watchManaged } from "../application/managed-watch";
@@ -374,7 +374,7 @@ async function start(): Promise<DesktopWired["notices"] | null> {
   watchManaged({
     probe: resourceProbeFor(process.platform),
     settings: new JsonSettingsStore(path.join(userDir, "shell-settings.json")),
-    clock: systemClock,
+    clock: monotonicClock,
     logger,
     notifier: notices,
     signal: process.kill.bind(process),

@@ -26,6 +26,7 @@ import type { Notifier } from "../ports/notifier";
 import type { LimitDefaultsSetting } from "../ports/settings-store";
 import type { Cancel, Clock } from "../ports/clock";
 import type {
+  ProcessIdentity,
   ProcessReading,
   ResourceProbe,
   ResourceWatchdog,
@@ -70,13 +71,28 @@ export function readPersonalLimits(
   }
 }
 
+/**
+ * Whether two readings are one process: the same start time, and the same executable where both
+ * reads could say (a read that could not name it does not make it someone else).
+ */
+export function sameProcess(a: ProcessIdentity, b: ProcessIdentity): boolean {
+  return (
+    a.started === b.started &&
+    (a.executable === null || b.executable === null || a.executable === b.executable)
+  );
+}
+
+/** The pids among `entries` that host node processes. */
+const hostsOf = (entries: readonly Entry[]): ReadonlySet<number> =>
+  new Set(entries.filter((entry) => entry.target.hostsNodes === true).map((e) => e.target.pid));
+
 /** One watched process, and what the watch knows of it. */
 interface Entry {
   readonly target: WatchedProcess;
   /** A fresh judge per process: a restarted process gets its whole grace window again. */
   readonly judge: ResourceWatch;
   /** Who it was when first read; null until then. */
-  identity: string | null;
+  identity: ProcessIdentity | null;
   /** Being stopped: no longer sampled, and its kill (if any) scheduled. */
   stopping: boolean;
   kill: Cancel | null;
@@ -89,6 +105,8 @@ interface Entry {
 export function resourceWatchdog(deps: WatchDeps): ResourceWatchdog {
   const entries = new Set<Entry>();
   let timer: Cancel | null = null;
+  /** When the last pass ended; null before the first. */
+  let lastPass: number | null = null;
   const log = deps.log;
 
   const ended = (entry: Entry): boolean => !entries.has(entry) || !entry.target.current();
@@ -109,49 +127,77 @@ export function resourceWatchdog(deps: WatchDeps): ResourceWatchdog {
     }
   };
 
-  /** Read `entry` again just before a signal: false (and dropped) unless it is still itself. */
-  const stillItself = async (entry: Entry): Promise<boolean> => {
+  /**
+   * Read `entry` again just before a signal: "same" only if it is still itself. A read that
+   * failed is one failed pass ("unknown"): nothing is sent, and the entry is kept. Only a process
+   * that is gone, or is someone else now, leaves the watch.
+   */
+  const check = async (entry: Entry): Promise<"same" | "unknown" | "ended"> => {
     const { pid } = entry.target;
-    let identity: string | undefined;
+    let identity: ProcessIdentity | undefined;
     try {
-      identity = (await deps.probe([pid])).get(pid)?.identity;
+      identity = (await deps.probe([pid], hostsOf([entry]))).get(pid)?.identity;
     } catch (error) {
       log("error", `process ${String(pid)} could not be checked before a signal: ${String(error)}`);
+      return ended(entry) ? "ended" : "unknown";
     }
     if (ended(entry)) {
-      return false;
+      return "ended";
     }
-    if (identity === undefined || identity !== entry.identity) {
+    if (
+      identity === undefined ||
+      entry.identity === null ||
+      !sameProcess(identity, entry.identity)
+    ) {
       log("warn", `process ${String(pid)} is gone or is another process now; nothing is sent`);
       drop(entry);
-      return false;
+      return "ended";
     }
-    return true;
+    return "same";
+  };
+
+  /** SIGKILL after the stop timeout, if it is still itself; a failed check tries again later. */
+  const killLater = (entry: Entry, after: number): void => {
+    entry.kill = deps.clock.after(after, () => {
+      entry.kill = null;
+      void (async () => {
+        if (ended(entry)) {
+          return;
+        }
+        const seen = await check(entry);
+        if (seen === "same") {
+          log("warn", `process ${String(entry.target.pid)} did not stop when asked; ending it`);
+          entry.target.kill();
+          drop(entry);
+        } else if (seen === "unknown") {
+          killLater(entry, deps.pace.sampleEveryMs);
+        }
+      })();
+    });
   };
 
   const stop = async (entry: Entry, breaches: readonly Breach[]): Promise<void> => {
     const { target } = entry;
     const why = breaches.map(describeBreach).join("; ");
     entry.stopping = true;
-    if (!(await stillItself(entry))) {
+    const seen = await check(entry);
+    if (seen !== "same") {
+      // Unknown: sampled again next tick, its grace clock kept, so it is judged again then.
+      entry.stopping = seen === "ended";
       return;
     }
     log("warn", `process ${String(target.pid)} is over its limits (${why}); stopping it politely`);
     target.stopped(why);
     target.stop();
-    entry.kill = deps.clock.after(deps.pace.stopTimeoutMs, () => {
-      entry.kill = null;
-      void (async () => {
-        if (!ended(entry) && (await stillItself(entry))) {
-          log("warn", `process ${String(target.pid)} did not stop when asked; ending it`);
-          target.kill();
-        }
-        drop(entry);
-      })();
-    });
+    killLater(entry, deps.pace.stopTimeoutMs);
   };
 
   const tick = async (): Promise<void> => {
+    // A gap of more than two ticks between the end of the last pass and this one's start (a
+    // sleep, a held event loop): nothing seen before it is known to have lasted through it, so
+    // every grace window starts again. The time a pass itself takes is not a gap.
+    const started = deps.clock.now();
+    const gap = lastPass !== null && started - lastPass > 2 * deps.pace.sampleEveryMs;
     for (const entry of entries) {
       if (!entry.target.current()) {
         drop(entry);
@@ -161,23 +207,29 @@ export function resourceWatchdog(deps: WatchDeps): ResourceWatchdog {
     let readings: ReadonlyMap<number, ProcessReading> = new Map();
     try {
       if (sampled.length > 0) {
-        readings = await deps.probe(sampled.map((entry) => entry.target.pid));
+        readings = await deps.probe(
+          sampled.map((entry) => entry.target.pid),
+          hostsOf(sampled),
+        );
       }
     } catch (error) {
       log("error", `one pass of the resource watchdog failed: ${String(error)}`);
     }
     const now = deps.clock.now();
     for (const entry of sampled) {
+      if (gap) {
+        entry.judge.restart();
+      }
       const reading = readings.get(entry.target.pid);
       if (ended(entry) || reading === undefined) {
         continue; // gone, or not measured: nothing is judged from no reading
       }
-      if (entry.identity !== null && entry.identity !== reading.identity) {
+      if (entry.identity !== null && !sameProcess(entry.identity, reading.identity)) {
         log("warn", `process ${String(entry.target.pid)} is another process now; not watched`);
         drop(entry);
         continue;
       }
-      entry.identity = reading.identity;
+      entry.identity ??= reading.identity;
       const breaches = entry.judge.observe(reading.sample, now);
       for (const breach of breaches) {
         if (breach.durationMs === 0) {
@@ -193,6 +245,7 @@ export function resourceWatchdog(deps: WatchDeps): ResourceWatchdog {
         void stop(entry, sustained);
       }
     }
+    lastPass = deps.clock.now();
     schedule();
   };
 

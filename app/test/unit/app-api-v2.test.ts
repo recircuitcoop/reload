@@ -885,6 +885,12 @@ describe("AppApi v2 calls, through the shell to its processes", () => {
       },
     });
     expect(h.settings.stored["limits"]).toEqual(raised);
+    // A number the file could not hold is refused too, never written as null.
+    expect(await h.api.setLimits({ ...raised, memory_mb: Infinity })).toMatchObject({
+      ok: false,
+      refused: { problems: [{ path: "memory_mb", message: "not-positive" }] },
+    });
+    expect(h.settings.stored["limits"]).toEqual(raised);
     expect(await h.raw(IPC.generalCall, { op: "limits.set", args: { limits: "lots" } })).toEqual({
       ok: false,
       refused: { reason: "invalid", sentence: "general.limits.refused", problems: [] },

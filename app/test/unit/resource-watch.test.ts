@@ -35,38 +35,55 @@ function harness(reading: (pid: number) => ResourceSample | null) {
   const logger = new RecordingLogger();
   /** The pids of each read of the process table, in order. */
   const passes: number[][] = [];
+  /** The hosts each read was given. */
+  const hostsAsked: number[][] = [];
+  /** What the watch's clock is ahead of the timers: a sleep, as the watch sees it. */
+  let skew = 0;
   const events: string[] = [];
   const identities = new Map<number, string>();
-  let failing = false;
-  const probe: ResourceProbe = (pids) => {
+  const executables = new Map<number, string | null>();
+  /** Fail the read this many reads from now (0: the next one); null: none fails. */
+  let failIn: number | null = null;
+  const probe: ResourceProbe = (pids, hosts = new Set()) => {
     passes.push([...pids]);
-    if (failing) {
-      failing = false;
-      return Promise.reject(new Error("ps: the process table could not be read"));
+    hostsAsked.push([...hosts]);
+    if (failIn !== null) {
+      failIn -= 1;
+      if (failIn < 0) {
+        failIn = null;
+        return Promise.reject(new Error("ps: the process table could not be read"));
+      }
     }
     const readings = new Map<number, ProcessReading>();
     for (const pid of pids) {
       const sample = reading(pid);
       if (sample !== null) {
-        readings.set(pid, { sample, identity: identities.get(pid) ?? `started-${String(pid)}` });
+        readings.set(pid, {
+          sample,
+          identity: {
+            started: identities.get(pid) ?? `started-${String(pid)}`,
+            executable: executables.get(pid) ?? "/usr/bin/python3",
+          },
+        });
       }
     }
     return Promise.resolve(readings);
   };
   const watchdog = resourceWatchdog({
     probe,
-    clock,
+    clock: { now: () => clock.now() + skew, after: (ms, callback) => clock.after(ms, callback) },
     pace: DEFAULT_WATCH_PACE,
     log: (level, message) => {
       logger[level](message);
     },
   });
   const alive = new Set<number>();
-  const target = (pid: number, limits = DEFAULT_LIMITS): WatchedProcess => {
+  const target = (pid: number, limits = DEFAULT_LIMITS, hostsNodes = false): WatchedProcess => {
     alive.add(pid);
     return {
       pid,
       limits,
+      hostsNodes,
       stop: () => events.push(`SIGTERM ${String(pid)}`),
       kill: () => events.push(`SIGKILL ${String(pid)}`),
       current: () => alive.has(pid),
@@ -83,8 +100,13 @@ function harness(reading: (pid: number) => ResourceSample | null) {
     watchdog,
     target,
     identities,
-    failNextPass: () => {
-      failing = true;
+    executables,
+    hostsAsked,
+    sleep: (ms: number) => {
+      skew += ms;
+    },
+    failNextPass: (skip = 0) => {
+      failIn = skip;
     },
     exit: (pid: number) => alive.delete(pid),
     tick: async (times = 1) => {
@@ -209,15 +231,67 @@ describe("the resource watchdog", () => {
     ).toHaveLength(1);
   });
 
-  it("logs a check before a signal that throws, and sends nothing", async () => {
+  it("counts a check before a signal that throws as one failed pass: nothing sent, and judged again next tick", async () => {
     const h = harness(() => HUNGRY);
     h.watchdog(h.target(10));
     await h.tick(7);
-    h.failNextPass();
+    h.failNextPass(1);
     h.clock.advance(EVERY);
-    // The sample passes; the read just before the SIGTERM fails.
+    // The sample passes; the read just before the SIGTERM fails: nothing is sent...
     await settle();
     expect(h.signals()).toEqual([]);
+    expect(h.logger.has(/process 10 could not be checked before a signal/)).toBe(true);
+    // ...and it is still watched: the next tick finds it sustained and stops it.
+    await h.tick(1);
+    expect(h.signals()).toEqual(["SIGTERM 10"]);
+  });
+
+  it("tries the kill again later when the check before it fails", async () => {
+    const h = harness(() => HUNGRY);
+    h.watchdog(h.target(10));
+    await h.tick(8);
+    h.failNextPass();
+    h.clock.advance(STOP);
+    await settle();
+    expect(h.signals()).toEqual(["SIGTERM 10"]);
+    h.clock.advance(EVERY);
+    await settle();
+    expect(h.signals()).toEqual(["SIGTERM 10", "SIGKILL 10"]);
+  });
+
+  it("starts every grace window again after a gap, so one reading before a sleep is never an hour over", async () => {
+    const h = harness(() => HUNGRY);
+    h.watchdog(h.target(10));
+    await h.tick(1); // over its line, once, just before the lid closes
+    h.sleep(3_600_000);
+    await h.tick(1); // awake: a gap of an hour, not an hour over the line
+    expect(h.signals()).toEqual([]);
+    await h.tick(6); // over again for 60 s since waking: still a spike
+    expect(h.signals()).toEqual([]);
+    await h.tick(1);
+    expect(h.signals()).toEqual(["SIGTERM 10"]);
+  });
+
+  it("takes a read that could not name the executable as the same process, a different one as another", async () => {
+    const h = harness(() => QUIET);
+    h.watchdog(h.target(10));
+    await h.tick(1);
+    h.executables.set(10, null); // lsof could not say, this once
+    await h.tick(1);
+    h.executables.set(10, "/usr/bin/python3");
+    await h.tick(1);
+    expect(h.passes).toHaveLength(3);
+    h.executables.set(10, "/bin/other");
+    await h.tick(3);
+    expect(h.passes).toHaveLength(4);
+  });
+
+  it("tells the probe which watched processes host node processes", async () => {
+    const h = harness(() => QUIET);
+    h.watchdog(h.target(10, DEFAULT_LIMITS, true));
+    h.watchdog(h.target(20));
+    await h.tick(1);
+    expect(h.hostsAsked).toEqual([[10]]);
   });
 
   it("judges the others in the same pass when one process vanished from it", async () => {
@@ -318,6 +392,9 @@ describe("the settings file's limits", () => {
   });
 
   it("are refused, naming the file and the problem, when they are not limits", () => {
+    expect(() => store({ limits: { memory_mb: null } }).readLimitDefaults()).toThrow(
+      /memory_mb must be a number greater than zero, and finite/,
+    );
     expect(() => store({ limits: { max_rss_mb: 4096 } }).readLimitDefaults()).toThrow(
       /the limits setting in .*shell-settings\.json: max_rss_mb is not a limit/,
     );

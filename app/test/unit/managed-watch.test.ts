@@ -12,7 +12,11 @@ import {
 } from "../../src/application/managed-watch";
 import { DEFAULT_WATCH_PACE } from "../../src/application/resource-watch";
 import type { ChildName, ChildState, ChildStatus } from "../../src/domain/supervision/child-state";
-import { DEFAULT_LIMITS, type ResourceSample } from "../../src/domain/supervision/resources";
+import {
+  DEFAULT_LIMITS,
+  type DeclaredLimits,
+  type ResourceSample,
+} from "../../src/domain/supervision/resources";
 import type { ProcessReading } from "../../src/ports/resource-watch";
 import { FakeClock } from "../fakes/clock";
 import { RecordingLogger, RecordingNotifier } from "../fixtures/raw-node/fixture";
@@ -93,17 +97,20 @@ function harness(samples: Record<number, ResourceSample>) {
   const clock = new FakeClock();
   const notifier = new RecordingNotifier();
   const passes: number[][] = [];
+  const hostsAsked: number[][] = [];
+  const settings: { limits: DeclaredLimits | undefined } = { limits: undefined };
   const signals: [number, string][] = [];
   const parts = {
-    probe: (pids: readonly number[]) => {
+    probe: (pids: readonly number[], hosts: ReadonlySet<number> = new Set()) => {
       passes.push([...pids]);
+      hostsAsked.push([...hosts]);
       const readings = new Map<number, ProcessReading>();
       for (const pid of pids) {
-        readings.set(pid, { sample: samples[pid] ?? QUIET, identity: `started-${String(pid)}` });
+        readings.set(pid, { sample: samples[pid] ?? QUIET, identity: identity(pid) });
       }
       return Promise.resolve(readings);
     },
-    settings: { readLimitDefaults: () => undefined },
+    settings: { readLimitDefaults: (): DeclaredLimits | undefined => settings.limits },
     clock,
     logger: new RecordingLogger(),
     notifier,
@@ -115,6 +122,8 @@ function harness(samples: Record<number, ResourceSample>) {
     clock,
     notifier,
     passes,
+    hostsAsked,
+    settings,
     signals,
     parts,
     sampled: () => passes.flat(),
@@ -126,6 +135,8 @@ function harness(samples: Record<number, ResourceSample>) {
     },
   };
 }
+
+const identity = (pid: number) => ({ started: `started-${String(pid)}`, executable: "/x" });
 
 const noAnytype = (): Promise<WatchedAnytype> => Promise.resolve(new FakeAnytype(null));
 
@@ -225,7 +236,7 @@ describe("the shell's managed processes", () => {
       const readings = new Map<number, ProcessReading>();
       for (const pid of pids) {
         const sample = hungry.has(pid) ? HUNGRY : QUIET;
-        readings.set(pid, { sample, identity: `started-${String(pid)}` });
+        readings.set(pid, { sample, identity: identity(pid) });
       }
       return Promise.resolve(readings);
     };
@@ -255,6 +266,32 @@ describe("the shell's managed processes", () => {
     runtime.set("running", 200);
     await h.tick(8);
     expect(runtime.stops.at(-1)).toEqual([200, null]);
+  });
+
+  it("read the person's limits again at every start, so a fix and a Restart take effect", async () => {
+    const h = harness({ 100: HUNGRY, 101: HUNGRY });
+    const runtime = new FakeChild("runtime");
+    watchManaged({ ...h.parts, children: [runtime], anytype: noAnytype() });
+    runtime.set("running", 100);
+    await h.tick(8);
+    expect(runtime.stops).toHaveLength(1);
+    h.settings.limits = { memory_mb: 4096 }; // the person raises it...
+    runtime.set("down", null);
+    runtime.set("running", 101); // ...and the next generation is watched against it
+    await h.tick(10);
+    expect(runtime.stops).toHaveLength(1);
+  });
+
+  it("tell the probe the runtime hosts node processes, and the services process does not", async () => {
+    const h = harness({});
+    const runtime = new FakeChild("runtime");
+    const services = new FakeChild("services");
+    watchManaged({ ...h.parts, children: [runtime, services], anytype: noAnytype() });
+    runtime.set("running", 100);
+    services.set("running", 200);
+    await settle();
+    await h.tick(1);
+    expect(h.hostsAsked).toEqual([[100]]);
   });
 
   it("send nothing to a child once a quit has begun, even one 55 s over its limit", async () => {
@@ -303,7 +340,7 @@ describe("the shell's managed processes", () => {
         throw Object.assign(new Error("kill ESRCH"), { code: "ESRCH" });
       },
     });
-    expect(deps.limits).toEqual({ ...DEFAULT_LIMITS, memoryMb: 4096 });
+    expect(deps.limits()).toEqual({ ...DEFAULT_LIMITS, memoryMb: 4096 });
     expect(deps.now()).toBe(0);
     expect(() => {
       deps.kill(100);

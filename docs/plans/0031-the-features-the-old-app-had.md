@@ -80,16 +80,20 @@ test's id; nothing is marked without a test.
    it. A type's limits are `types[i].reload.limits` (spec 2.4.2); the person's are `limits` in
    `shell-settings.json`, edited in General › Advanced's Stability defaults (the old helper form's
    six numbers), and a broken one is told to the person naming the file. Defaults are the old app's: 1024 MB, 90 % over 120 s, 1024 files, 32
-   children, 60 s of grace, a sample every 10 s, 10 s from SIGTERM to SIGKILL. One `ps` and one
-   `lsof` per tick for every watched process, and an identity check (pid, start time, executable)
-   before every signal. Three rows that need this branch and WI-0031-03's together go to
-   WI-0031-03 after the merge:
-   `test_helper_tick.py` `test_the_mcp_child_is_watched_against_its_own_limits_and_not_the_helper_wide_ones`,
-   `test_one_pass_reads_the_heartbeats_and_samples_every_managed_process`, and
+   children, 60 s of grace, a sample every 10 s, 10 s from SIGTERM to SIGKILL. Each of the two
+   watchdogs (the runtime's, the shell's) reads the process table once a tick for all it
+   watches (see As built for the cost), and checks identity (pid, start time, executable) just
+   before every signal. Five rows that need this branch and WI-0031-03's together are
+   undecided with wi WI-0031-03, for the round after the merge: `test_helper_tick.py`
+   `test_one_lookup_answers_for_every_managed_process_and_not_only_for_plugins` (the MCP child's
+   own limits), `test_the_mcp_child_is_watched_against_its_own_limits_and_not_the_helper_wide_ones`,
+   `test_one_pass_reads_the_heartbeats_and_samples_every_managed_process`,
+   `test_a_plugin_is_watched_against_the_profile_its_manifest_published`, and
    `test_helper_detection.py::test_the_anytype_desktop_app_is_never_judged_stale`. Left too:
    `test_addon_manifest.py`'s five stability rows about heartbeats and `restartable` (WI-0031-03's
-   fields), and `test_application_tab.py::test_helper_form_publishes_all_supervision_numbers`
-   (twelve numbers; the other six are fixed constants).
+   fields); and `test_application_tab.py::test_helper_form_publishes_all_supervision_numbers`,
+   undecided with wi WI-0032-09: six of its twelve numbers are edited again, the other six are
+   plan 0032 group 9.
 3. **WI-0031-03 — B,** a heartbeat a package may declare, judged like the MCP child's.
 4. **WI-0031-04 — C,** `restartable: false` in the declaration, honoured by the supervisor.
 5. **WI-0031-05 — E,** `reload --status`, `--quit`, `--log` on the single running instance.
@@ -115,9 +119,20 @@ words.
 
 ## As built
 
-- **A, children are counted within a process's own process group.** Every node process leads its
-  own group, so a node process and its tree never count against the runtime that started it:
-  in the old app a flow of 33 nodes would have tripped the runtime's limit of 32 children.
+- **A, children are counted by parent, a host's node processes left out.** As the old app did,
+  every descendant counts, at any depth, a child that left its process group included. The one
+  change: the runtime's node processes (each leads a process group of its own, and is a direct
+  child of the runtime) are left out of the runtime's count with their trees, because each is
+  judged on its own; in the old app a flow of 33 nodes would have tripped the runtime's 32.
+- **A, the cost of looking.** Two watchdogs, not one lookup: the runtime watches its node
+  processes and the shell watches the runtime, the services process and an Anytype it started.
+  Each reads the process table once a tick for all it watches (one `ps`, and on macOS one
+  `lsof -p a,b,c`; Linux reads /proc), so two `ps` and two `lsof` every 10 s, not aligned; plus
+  one more read just before each SIGTERM and SIGKILL. Measured on this Mac with 30 processes, one
+  read for all of them takes about 190 ms, against 4.8 s for one read each.
+- **A, sleep and time.** Grace windows are measured on a monotonic clock, and a gap of more than
+  two ticks between passes starts every grace window again: one reading over a line before a
+  sleep is never taken for an hour over it.
 - **A, the watchdog's own breaker.** Five stops over a limit in ten minutes and the process is
   not started again (the old `BreakerSettings`): a stop takes at least the 60 s grace window, so
   the crash-loop limit of five in two minutes could never end a loop of stops.

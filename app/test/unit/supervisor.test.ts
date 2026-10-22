@@ -412,6 +412,19 @@ describe("the watchdog's last stop over a resource limit (plan 0031)", () => {
     expect(supervisor.status().state).toBe("down");
   });
 
+  it("forgets a last stop overtaken by a planned restart, so a later crash is ordinary", () => {
+    const { supervisor, launcher, clock } = supervised(obedient);
+    supervisor.start();
+    clock.advance(1);
+    supervisor.stopOverLimit("The Reload runtime went over its resource limits 5 times.");
+    supervisor.restart("types"); // the planned stop's exit is the one that comes
+    launcher.current.exit(0);
+    clock.advance(1);
+    expect(supervisor.status().state).toBe("running");
+    launcher.current.exit(1);
+    expect(supervisor.status().state).toBe("down");
+  });
+
   it("tells whoever watches it when a quit or a planned restart begins", async () => {
     const { supervisor, clock } = supervised(obedient);
     let told = 0;

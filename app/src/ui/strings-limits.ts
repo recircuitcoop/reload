@@ -5,7 +5,7 @@
 export const LIMIT_STRINGS = {
   "general.limits": "Stability defaults", // decided (the old helper form's group)
   "general.limits.line":
-    "What a plugin may use before Reload stops it and starts it again. A plugin can ask for more itself.", // decided
+    "What a plugin, Reload's own background processes, and an Anytype Reload started may use. A plugin or a background process that goes over is stopped and started again; Anytype is quit, not started again. A plugin can ask for more itself.", // decided
   "general.limits.memory": "Memory (MB)", // decided
   "general.limits.cpu": "CPU (percent of one core)", // decided
   "general.limits.cpuWindow": "CPU measured over (seconds)", // decided

@@ -215,6 +215,10 @@ and the stop counts against the crash-loop limit; five stops in ten minutes and 
 again. An Anytype app is not started again. The person is told once an episode. A platform that
 cannot measure a number leaves it unjudged (Windows is not measured yet).
 
+Children are every process below the watched one, by parent, at any depth: a child that left its
+process group still counts. The runtime's node processes are the one exception: each is judged on
+its own, so it and its tree are never counted among the runtime's children.
+
 A type MAY set its own limits in `reload.limits`:
 
 ```json

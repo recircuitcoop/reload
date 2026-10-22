@@ -61,6 +61,12 @@ export interface DeclaredLimits {
 const NUMBERS = ["memory_mb", "cpu_percent", "cpu_window_s", "grace_s"] as const;
 const COUNTS = ["open_files", "children"] as const;
 
+/**
+ * The largest limit Reload holds exactly. Not a policy (the old app had no upper bound): a larger
+ * number, Infinity included, would not survive being written to the file and read back.
+ */
+const MAX_LIMIT = Number.MAX_SAFE_INTEGER;
+
 /** What is wrong with one limit as written: not one we know, not above zero, not whole. */
 export interface LimitProblem {
   readonly key: string;
@@ -82,7 +88,7 @@ export function limitProblems(value: unknown): readonly LimitProblem[] | null {
     const count = (COUNTS as readonly string[]).includes(key);
     if (!count && !(NUMBERS as readonly string[]).includes(key)) {
       problems.push({ key, problem: "not-a-limit" });
-    } else if (typeof number !== "number" || !(number > 0)) {
+    } else if (typeof number !== "number" || !(number > 0) || number > MAX_LIMIT) {
       problems.push({ key, problem: count ? "not-whole" : "not-positive" });
     } else if (count && !Number.isInteger(number)) {
       problems.push({ key, problem: "not-whole" });
@@ -103,7 +109,7 @@ export function limitsProblem(value: unknown): string | null {
   }
   return first.problem === "not-a-limit"
     ? `${first.key} is not a limit (the limits are ${[...NUMBERS, ...COUNTS].join(", ")})`
-    : `${first.key} must be ${first.problem === "not-whole" ? "a whole number" : "a number"} greater than zero`;
+    : `${first.key} must be ${first.problem === "not-whole" ? "a whole number" : "a number"} greater than zero, and finite`;
 }
 
 /** The limits in force, written as a declaration or the settings file writes them. */
@@ -214,6 +220,16 @@ export class ResourceWatch {
       breaches.push({ limit, value, allowed, durationMs, sustained: durationMs > limits.graceMs });
     }
     return breaches;
+  }
+
+  /**
+   * The watch could not look for a while (the machine slept, the event loop was held): a value
+   * seen over its line before the gap is not known to have stayed over through it, so every
+   * grace window starts again, and CPU is measured afresh.
+   */
+  restart(): void {
+    this.#overSince.clear();
+    this.#cpu.length = 0;
   }
 
   #cpuOverWindow(seconds: number | null, now: number): number | null {

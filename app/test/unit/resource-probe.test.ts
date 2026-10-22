@@ -1,35 +1,55 @@
 // How the watched processes are measured (adapters/process/resource-probe.ts): one `ps` for
-// every pid's memory, CPU, descendants and identity, one `lsof` (macOS) or /proc (Linux) for open
-// files, and no reading on Windows (tests/test_helper_tick.py: one lookup for every process).
+// every pid's memory, CPU, descendants and start time, one `lsof` (macOS) or /proc (Linux) for
+// open files and the executable, and no reading on Windows (tests/test_helper_detection.py).
 
+import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import {
   plainRunner,
   resourceProbeFor,
   type CommandRunner,
+  type ProcReader,
 } from "../../src/adapters/process/resource-probe";
 
 const STARTED = "Wed Oct 21 10:00:00 2026";
 
-/** One `ps -o pid,ppid,pgid,rss,time,lstart,comm` line, as LC_ALL=C writes it. */
-const row = (pid: number, ppid: number, pgid: number, rssKb: number, time: string, comm: string) =>
+/** One `ps -o pid,ppid,pgid,rss,time,lstart` line, as LC_ALL=C writes it. */
+const row = (pid: number, ppid: number, pgid: number, rssKb: number, time: string) =>
   `${String(pid).padStart(5)} ${String(ppid).padStart(5)} ${String(pgid).padStart(5)} ` +
-  `${String(rssKb)} ${time} ${STARTED} ${comm}`;
+  `${String(rssKb)} ${time} ${STARTED}`;
 
-// 100 is the runtime (group 1); 101 its own helper, 102 that helper's child, both in its group;
-// 300 a node process it started, the leader of its own group, with 301 below it; 200 not its.
+// 100 is the runtime (group 1): 101 its own helper and 102 that helper's child; 103 a child of
+// its that left the group (setsid). 300 is a node process it started, the leader of its own
+// group, with 301 below it and 302, a child the node detached into a group of its own.
 const TABLE = [
-  row(100, 1, 1, 204800, "1:02.50", "/Applications/Reload.app/Contents/MacOS/Reload Helper"),
-  row(101, 100, 1, 1024, "0:00.10", "/usr/bin/git"),
-  row(102, 101, 1, 1024, "0:00.10", "/bin/sh"),
-  row(300, 100, 300, 2048, "0:00.10", "/usr/bin/python3"),
-  row(301, 300, 300, 1024, "0:00.10", "/bin/sleep"),
-  row(200, 1, 200, 1024, "0:00.10", "/sbin/other"),
+  row(100, 1, 1, 204800, "1:02.50"),
+  row(101, 100, 1, 1024, "0:00.10"),
+  row(102, 101, 1, 1024, "0:00.10"),
+  row(300, 100, 300, 2048, "0:00.10"),
+  row(301, 300, 300, 1024, "0:00.10"),
+  row(302, 300, 302, 1024, "0:00.10"),
+  row(200, 1, 200, 1024, "0:00.10"),
   "",
 ].join("\n");
 
-const LSOF = ["p100", "fcwd", "ftxt", "f0", "f1", "f2", "f12", "p300", "f0", ""].join("\n");
+const LSOF = [
+  "p100",
+  "fcwd",
+  "n/Users/me",
+  "ftxt",
+  "n/Applications/Reload.app/Contents/MacOS/Reload Helper",
+  "ftxt",
+  "n/usr/lib/dyld",
+  "f0",
+  "n/dev/null",
+  "f1",
+  "f2",
+  "f12",
+  "p300",
+  "f0",
+  "",
+].join("\n");
 
 function runner(answers: Record<string, string | Error>, calls: string[] = []): CommandRunner {
   return (file, args) => {
@@ -44,18 +64,26 @@ function runner(answers: Record<string, string | Error>, calls: string[] = []): 
 
 const MAC = { "/bin/ps": TABLE, "/usr/sbin/lsof": LSOF };
 
+const linuxProc = (fds: Record<number, number>, exes: Record<number, string>): ProcReader => ({
+  fds: (pid) =>
+    fds[pid] === undefined ? Promise.reject(new Error("EACCES")) : Promise.resolve(fds[pid]),
+  executable: (pid) =>
+    exes[pid] === undefined ? Promise.reject(new Error("EACCES")) : Promise.resolve(exes[pid]),
+});
+
 describe("a sample", () => {
   it("carries memory, CPU, open files, children and identity for every pid asked about", async () => {
     const readings = await resourceProbeFor("darwin", runner(MAC))([100, 300]);
     expect(readings.get(100)).toEqual({
-      identity: `${STARTED} /Applications/Reload.app/Contents/MacOS/Reload Helper`,
-      sample: { memoryMb: 200, cpuSeconds: 62.5, openFiles: 4, children: 2 },
+      identity: {
+        started: STARTED,
+        executable: "/Applications/Reload.app/Contents/MacOS/Reload Helper",
+      },
+      sample: { memoryMb: 200, cpuSeconds: 62.5, openFiles: 4, children: 5 },
     });
-    expect(readings.get(300)?.sample).toEqual({
-      memoryMb: 2,
-      cpuSeconds: 0.1,
-      openFiles: 1,
-      children: 1,
+    expect(readings.get(300)).toEqual({
+      identity: { started: STARTED, executable: null },
+      sample: { memoryMb: 2, cpuSeconds: 0.1, openFiles: 1, children: 2 },
     });
   });
 
@@ -63,24 +91,39 @@ describe("a sample", () => {
     const calls: string[] = [];
     await resourceProbeFor("darwin", runner(MAC, calls))([100, 101, 102, 300, 301]);
     expect(calls).toEqual([
-      "/bin/ps -A -o pid=,ppid=,pgid=,rss=,time=,lstart=,comm=",
-      "/usr/sbin/lsof -n -P -w -p 100,101,102,300,301 -F f",
+      "/bin/ps -A -o pid=,ppid=,pgid=,rss=,time=,lstart=",
+      "/usr/sbin/lsof -n -P -w -p 100,101,102,300,301 -F fn",
     ]);
   });
 
-  it("never counts a node process, or its tree, among the children of the process that started it", async () => {
-    const readings = await resourceProbeFor("darwin", runner(MAC))([100]);
-    // 101 and 102 are the runtime's own; 300 and 301 are a node process's group, judged alone.
-    expect(readings.get(100)?.sample.children).toBe(2);
+  it("counts every descendant by parent, a child that left its group included, as the old helper did", async () => {
+    const readings = await resourceProbeFor("darwin", runner(MAC))([300]);
+    // 301 in its group, and 302 that detached itself: both are the node process's children.
+    expect(readings.get(300)?.sample.children).toBe(2);
   });
 
-  it("counts open files from /proc on Linux, and leaves a pid it cannot read unread", async () => {
-    const probe = resourceProbeFor("linux", runner({ "/bin/ps": TABLE }), (pid) =>
-      pid === 100 ? Promise.resolve(7) : Promise.reject(new Error("EACCES")),
+  it("never counts a host's node processes, or their trees, among the host's children", async () => {
+    const asHost = await resourceProbeFor("darwin", runner(MAC))([100], new Set([100]));
+    // 101 and 102 are the runtime's own; 300 (and 301, 302) is a node process, judged alone.
+    expect(asHost.get(100)?.sample.children).toBe(2);
+    const notAHost = await resourceProbeFor("darwin", runner(MAC))([100]);
+    expect(notAHost.get(100)?.sample.children).toBe(5);
+  });
+
+  it("reads open files and the executable from /proc on Linux, leaving out what it cannot read", async () => {
+    const probe = resourceProbeFor(
+      "linux",
+      runner({ "/bin/ps": TABLE }),
+      linuxProc({ 100: 7 }, { 100: "/opt/Reload/reload" }),
     );
     const readings = await probe([100, 300]);
     expect(readings.get(100)?.sample.openFiles).toBe(7);
+    expect(readings.get(100)?.identity).toEqual({
+      started: STARTED,
+      executable: "/opt/Reload/reload",
+    });
     expect(readings.get(300)?.sample.openFiles).toBeNull();
+    expect(readings.get(300)?.identity.executable).toBeNull();
   });
 
   it("is no reading, never a crash, on Windows", async () => {
@@ -102,9 +145,10 @@ describe("a sample", () => {
     ).rejects.toThrow("no ps");
   });
 
-  it("leaves open files unread when lsof cannot run, and still reads the rest", async () => {
+  it("leaves open files and the executable unread when lsof cannot run, and still reads the rest", async () => {
     const readings = await resourceProbeFor("darwin", runner({ "/bin/ps": TABLE }))([100]);
     expect(readings.get(100)?.sample).toMatchObject({ memoryMb: 200, openFiles: null });
+    expect(readings.get(100)?.identity.executable).toBeNull();
   });
 
   it("of this very process is read from the real platform on macOS and Linux", async () => {
@@ -116,15 +160,15 @@ describe("a sample", () => {
     expect(reading?.sample.cpuSeconds).toBeGreaterThan(0);
     expect(reading?.sample.openFiles).toBeGreaterThan(2);
     expect(reading?.sample.children).toBeGreaterThanOrEqual(0);
-    // Locale-free: the C locale's weekday and month, and the same text read twice.
-    expect(reading?.identity).toMatch(
+    // Locale-free: the C locale's weekday and month; and the executable, not the command name.
+    expect(reading?.identity.started).toMatch(
       /^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) /,
     );
+    expect(reading?.identity.executable).toBe(fs.realpathSync(process.execPath));
     // Asked beside a pid that is gone (lsof then exits 1, and still lists this one).
     const gone = 2 ** 22 + 7;
     const again = await resourceProbeFor(process.platform)([process.pid, gone]);
-    expect(again.get(process.pid)?.identity).toBe(reading?.identity);
-    expect(again.get(process.pid)?.sample.openFiles).toBeGreaterThan(2);
+    expect(again.get(process.pid)?.identity).toEqual(reading?.identity);
     expect(again.has(gone)).toBe(false);
   });
 });
@@ -144,8 +188,8 @@ describe("the commands the probe runs", () => {
 describe("ps CPU time", () => {
   /** The CPU seconds the probe reads from one `time` column. */
   async function cpu(time: string): Promise<number | null | undefined> {
-    const table = `${row(100, 1, 100, 1024, time, "/bin/x")}\n`;
-    const probe = resourceProbeFor("linux", runner({ "/bin/ps": table }), () => Promise.resolve(1));
+    const table = `${row(100, 1, 100, 1024, time)}\n`;
+    const probe = resourceProbeFor("linux", runner({ "/bin/ps": table }), linuxProc({}, {}));
     return (await probe([100])).get(100)?.sample.cpuSeconds;
   }
 

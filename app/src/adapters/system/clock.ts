@@ -11,3 +11,13 @@ export const systemClock: Clock = {
     };
   },
 };
+
+/**
+ * The same timers, on a clock that only moves while the machine is awake and never jumps with a
+ * change of the wall clock: what a grace window is measured on (plan 0031), so a sleep is not
+ * read as time spent over a limit.
+ */
+export const monotonicClock: Clock = {
+  now: () => performance.now(),
+  after: (ms, callback) => systemClock.after(ms, callback),
+};

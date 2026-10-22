@@ -42,7 +42,8 @@ export interface WatchedAnytype {
 
 export interface ManagedWatchDeps {
   readonly watchdog: ResourceWatchdog;
-  readonly limits: ResourceLimits;
+  /** The person's limits, read again at every start: a fix and a Restart take effect. */
+  readonly limits: () => ResourceLimits;
   readonly notifier: Notifier;
   readonly now: () => number;
   /** End a process now (SIGKILL), by pid; safe when it is already gone. */
@@ -71,7 +72,7 @@ export function managedWatch(parts: ManagedWatchParts): ManagedWatchDeps {
         logger[level](message);
       },
     }),
-    limits: readPersonalLimits(parts.settings, logger, parts.notifier),
+    limits: () => readPersonalLimits(parts.settings, logger, parts.notifier),
     notifier: parts.notifier,
     now: () => parts.clock.now(),
     kill: (pid) => {
@@ -140,7 +141,9 @@ export function watchChild(supervisor: WatchedChild, deps: ManagedWatchDeps): vo
     let forGood: string | null = null;
     cancel = deps.watchdog({
       pid,
-      limits: deps.limits,
+      limits: deps.limits(),
+      // The runtime starts the node processes; each is watched on its own, not as its child.
+      hostsNodes: supervisor.child === "runtime",
       stop: () => {
         supervisor.stopOverLimit(forGood);
       },
@@ -173,7 +176,7 @@ export function watchStartedAnytype(app: WatchedAnytype, deps: ManagedWatchDeps)
   }
   const cancel = deps.watchdog({
     pid,
-    limits: deps.limits,
+    limits: deps.limits(),
     stop: () => {
       app.stopOverLimit();
     },
