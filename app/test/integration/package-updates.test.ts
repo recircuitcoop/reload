@@ -531,6 +531,23 @@ describe("applying an update", () => {
     expect(roots.installed("pinger")?.version).toBe("0.3.0");
   });
 
+  it("a swap that cannot record its content hash is not made: Not updated, the old one live", async () => {
+    const { updates } = await installed("pinger", "0.1.0");
+    publish("pinger", "0.2.0");
+    await updates.check();
+    // The hash file's write fails, as a full disk would make it.
+    fs.mkdirSync(path.join(base, "content-hashes.json.tmp"));
+    const outcome = await drive(updates.apply("pinger", "person"));
+    expect(outcome).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("Not updated") as unknown,
+    });
+    expect(roots.installed("pinger")?.version).toBe("0.1.0");
+    fs.rmdirSync(path.join(base, "content-hashes.json.tmp"));
+    expect(await drive(updates.apply("pinger", "person"))).toMatchObject({ ok: true });
+    expect(roots.installed("pinger")?.version).toBe("0.2.0");
+  });
+
   it("a failed version is swapped back only once its instances have stopped", async () => {
     const { updates } = await installed("pinger", "0.1.0");
     publish("pinger", "0.2.0");

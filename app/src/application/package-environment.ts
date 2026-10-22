@@ -258,8 +258,10 @@ async function judgeAndBuild(
       // A repair: the same version, in its place; what the last update kept is left as it is.
       return { record, live: ports.roots.replaceLive(declaration.package), previous: null };
     }
-    const swapped = ports.roots.swapIn(declaration.package);
+    // Recorded before the swap, the last step that can fail: a hash that cannot be written then
+    // leaves the old version live, as "Not updated" says. The swap itself puts it back.
     ports.contentHashes.record(declaration.package, declaration.version, hash);
+    const swapped = ports.roots.swapIn(declaration.package);
     ports.logger.info(
       `package ${record.package} ${record.version} is installed in its own ` +
         `${record.environment} environment (content ${record.contentHash})`,
