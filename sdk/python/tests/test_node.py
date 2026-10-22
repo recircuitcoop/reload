@@ -562,13 +562,32 @@ def test_a_health_check_answers_in_the_pong_and_one_that_raises_or_hangs_is_not_
     assert {
         "t": "log",
         "level": "error",
-        "msg": "the health check raised: the index is on fire",
+        "msg": "the health check raised: RuntimeError('the index is on fire')",
     } in frames
     assert {
         "t": "log",
         "level": "warn",
         "msg": "the health check took longer than 0.05 s",
     } in frames
+
+
+def test_a_health_check_that_raises_system_exit_answers_not_healthy_and_pongs_go_on(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    out, _ = patch_io(monkeypatch)
+    node = start_node(monkeypatch)
+
+    def exits() -> bool:
+        raise SystemExit(3)
+
+    node._pong("p1", exits)
+    node._pong("p2", lambda: True)
+    assert [(f["id"], f["healthy"]) for f in pongs(out)] == [("p1", False), ("p2", True)]
+    assert {
+        "t": "log",
+        "level": "error",
+        "msg": "the health check raised: SystemExit(3)",
+    } in frames_of(out)
 
 
 def test_one_health_check_at_a_time_and_the_frame_loop_is_never_held(

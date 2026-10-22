@@ -366,8 +366,8 @@ class Node:
         def ask() -> None:
             try:
                 answers.append(on_health() is True)
-            except Exception as caught:  # noqa: BLE001 - reported, and answered as not healthy
-                self.log(f"the health check raised: {caught}", "error")
+            except BaseException as caught:  # noqa: BLE001 - SystemExit too: never lose a pong
+                self.log(f"the health check raised: {caught!r}", "error")
                 answers.append(False)
             finally:
                 with self._health_lock:
@@ -378,7 +378,7 @@ class Node:
         if not answered.wait(HEALTH_TIMEOUT_S):
             self.log(f"the health check took longer than {HEALTH_TIMEOUT_S} s", "warn")
             return False
-        return answers[0]
+        return bool(answers) and answers[0]
 
     def _pong(self, ping_id: str, on_health: Callable[[], bool] | None) -> None:
         """One ``pong``: its id, the health check's answer for this very ping, and the progress
