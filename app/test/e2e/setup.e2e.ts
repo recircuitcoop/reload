@@ -18,6 +18,7 @@ import { toolSignature } from "../../src/adapters/anytype/tool-surface";
 import { ANYTYPE_VERSION, PACKAGE_VERSION } from "../../src/domain/anytype/pins";
 import { STRINGS } from "../../src/ui/strings";
 import { FakeAnytypeServer } from "../fakes/anytype";
+import { fakeAnytypeApp, fakeAnytypePid, isAlive } from "../fakes/anytype-app";
 import {
   anytypeKeyFile,
   APP,
@@ -779,5 +780,45 @@ test("a 0.2.1 user never sees setup", async () => {
   } finally {
     await cleanUp(apps, withFlows.scratch);
     await cleanUp([], answered.scratch);
+  }
+});
+
+test("an Anytype Reload starts, its API slow to come up, is connected without the window", async () => {
+  test.setTimeout(120_000);
+  const { scratch, env, canaryKey } = scratchDirectories();
+  // Anytype is not running: Reload starts the fake app, and its API answers only 10 s later.
+  const anytypeApp = fakeAnytypeApp(scratch, process.execPath);
+  const anytype = new FakeAnytypeServer(canaryKey);
+  anytype.spaces = [{ id: "sp-work", name: "Work" }];
+  const url = await anytype.start();
+  const port = Number(new URL(url).port);
+  await anytype.close();
+  let anytypePid: number | null = null;
+  const apps: ElectronApplication[] = [];
+  try {
+    const { app, output } = await launchApp({
+      ...env,
+      RELOAD_ANYTYPE_APP: anytypeApp,
+      ANYTYPE_API_BASE_URL: url,
+      RELOAD_TEST_ANYTYPE: JSON.stringify({
+        entry: path.join(FAKE, "server.mjs"),
+        surface: fakeSurface(scratch),
+      }),
+    });
+    apps.push(app);
+    await expect.poll(() => fakeAnytypePid(anytypeApp), { timeout: 15_000 }).not.toBeNull();
+    anytypePid = fakeAnytypePid(anytypeApp);
+    await new Promise((resolve) => setTimeout(resolve, 10_000));
+    await anytype.start(port);
+    // Nobody touches the window: the services process connects on its own.
+    await expect.poll(() => output.join(""), { timeout: 40_000 }).toMatch(/anytype: ready/);
+    expect(output.join("")).not.toMatch(/notice: Reload cannot reach Anytype/);
+    await quit(app);
+  } finally {
+    if (anytypePid !== null && isAlive(anytypePid)) {
+      process.kill(anytypePid, "SIGKILL");
+    }
+    await anytype.close();
+    await cleanUp(apps, scratch);
   }
 });

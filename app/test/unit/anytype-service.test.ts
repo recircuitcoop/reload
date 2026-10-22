@@ -1,7 +1,12 @@
 // The Anytype core service (plan 0018 §4.1; WI-0018-18): key, health gate, the MCP child's
 // lifecycle, its heartbeat and staleness restart, backoff and breaker, and pairing.
 import { describe, expect, it } from "vitest";
-import { AnytypeService, serveAnytypeCall } from "../../src/application/anytype-service";
+import {
+  ANYTYPE_START_WAIT_MS,
+  ANYTYPE_WAIT_STEP_MS,
+  AnytypeService,
+  serveAnytypeCall,
+} from "../../src/application/anytype-service";
 import { SessionError, ToolSurfaceMismatchError } from "../../src/domain/anytype/errors";
 import { DEFAULT_BACKOFF } from "../../src/domain/supervision/backoff";
 import { MCP_STABILITY } from "../../src/domain/supervision/staleness";
@@ -116,12 +121,43 @@ describe("bringing the MCP child up", () => {
     expect(ctx.subject.status().detail).toContain("did not answer at http://127.0.0.1:31009");
     expect(ctx.launcher.children).toEqual([]);
     expect(ctx.subject.session()).toBeNull();
-    // However far the clock moves, nothing asks again: waiting changes nothing.
+    // At start Anytype gets its bounded while to come up, asked once a second; no notice yet.
+    await ctx.advance(ANYTYPE_START_WAIT_MS, ANYTYPE_WAIT_STEP_MS);
+    const asked = ctx.api.probes.length;
+    expect(asked).toBe(ANYTYPE_START_WAIT_MS / ANYTYPE_WAIT_STEP_MS + 1);
+    expect(ctx.notifier.notices.map((n) => n.kind)).toEqual(["anytype-unreachable"]);
+    // After it, however far the clock moves, nothing asks again: waiting changes nothing.
     ctx.api.up = true;
     await ctx.advance(600_000, 10_000);
-    expect(ctx.api.probes).toHaveLength(1);
+    expect(ctx.api.probes).toHaveLength(asked);
     expect(ctx.subject.status().state).toBe("unreachable");
     expect(ctx.launcher.children).toEqual([]);
+  });
+
+  it("an Anytype Reload has just launched is waited for while its API comes up, without the window", async () => {
+    const ctx = service();
+    ctx.api.up = false;
+    ctx.subject.start();
+    await ctx.advance(ANYTYPE_START_WAIT_MS + 1_000, ANYTYPE_WAIT_STEP_MS);
+    expect(ctx.subject.status().state).toBe("unreachable");
+    // Reload launches Anytype (the shell's ask): its API answers 20 s later, and Reload connects.
+    expect(await serveAnytypeCall(ctx.subject, "anytype.check", { waitMs: 600_000 })).toMatchObject(
+      {
+        ok: true,
+      },
+    );
+    await ctx.advance(19_000, ANYTYPE_WAIT_STEP_MS);
+    expect(ctx.subject.status().state).toBe("unreachable");
+    ctx.api.up = true;
+    await ctx.advance(1_000, ANYTYPE_WAIT_STEP_MS);
+    expect(ctx.subject.status().state).toBe("ready");
+    expect(ctx.notifier.cleared).toContain("anytype-unreachable Anytype");
+    // An ask while the first start still waits acts too ("starting" or "unreachable").
+    const early = service();
+    early.api.up = false;
+    early.subject.checkAgain(5_000);
+    await early.advance(0);
+    expect(early.api.probes).toHaveLength(1);
   });
 
   it("tells the person once, logs once per state, and asks again only when asked to", async () => {

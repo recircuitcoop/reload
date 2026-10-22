@@ -5,6 +5,7 @@
 
 import type { IpcMain } from "electron";
 import type { AnytypeAppState } from "../application/anytype-app";
+import { ANYTYPE_START_WAIT_MS } from "../application/anytype-service";
 import type { Supervisor } from "../application/supervisor";
 import type { CallOp } from "../domain/channel/messages";
 import { IPC } from "./ipc";
@@ -24,11 +25,23 @@ export function wireServiceCalls(
   };
   ipc.handle(IPC.anytypeStatus, () => callServices("anytype.status", null));
   ipc.handle(IPC.anytypeCheck, () => callServices("anytype.check", null));
-  // Reload saw the Anytype desktop app start (or found it running): Anytype is asked again.
+  // Reload saw the Anytype desktop app start (or found it running): Anytype is asked again,
+  // given a bounded while for its API to come up. A services process not up yet is asked as
+  // soon as it is: the ask waits for it, never lost.
   void anytypeApp.then((state) => {
-    if (state === "started" || state === "adopted") {
-      void services.call("anytype.check", null);
+    if (state !== "started" && state !== "adopted") {
+      return;
     }
+    let asked = false;
+    const ask = (): void => {
+      if (asked || services.status().state !== "running") {
+        return;
+      }
+      asked = true;
+      void services.call("anytype.check", { waitMs: ANYTYPE_START_WAIT_MS });
+    };
+    services.onStatus(ask);
+    ask();
   });
   ipc.handle(IPC.anytypePairStart, () => callServices("anytype.pair.start", null));
   ipc.handle(IPC.anytypePairComplete, (_event, code: unknown) =>

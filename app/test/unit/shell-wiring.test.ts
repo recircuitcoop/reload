@@ -181,13 +181,16 @@ describe("wireQuit, wireServiceCalls, wireDesktop and the e2e hooks", () => {
             : { ok: true, value: op },
         );
       },
+      status: () => ({ state: "running" }),
+      onStatus: () => undefined,
     } as unknown as Supervisor;
     let kept: string | null = null;
     wireServiceCalls({ handle }, services, () => kept, Promise.resolve("started"));
     expect(await call(IPC.anytypeStatus)).toBe("anytype.status");
     expect(await call(IPC.anytypeCheck)).toBe("anytype.check");
-    // Reload saw the Anytype desktop app start: Anytype was asked again, unprompted.
-    expect(asked).toContainEqual(["anytype.check", null]);
+    // Reload saw the Anytype desktop app start: Anytype was asked again, unprompted, with a
+    // bounded while for its API to come up.
+    expect(asked).toContainEqual(["anytype.check", { waitMs: 60_000 }]);
     expect(await call(IPC.anytypePairStart)).toBe("anytype.pair.start");
     await expect(call(IPC.anytypePairComplete, "1234")).rejects.toThrow("wrong code");
     expect(await call(IPC.mcpEndpoint)).toBe("mcp.endpoint");
@@ -199,6 +202,43 @@ describe("wireQuit, wireServiceCalls, wireDesktop and the e2e hooks", () => {
     kept = "the-token-at-the-press";
     expect(call(IPC.mcpToken)).toBe("the-token-at-the-press");
     expect(asked.map((entry) => (entry as unknown[])[0])).not.toContain("mcp.token");
+  });
+
+  it("an Anytype Reload launched is asked about once the services process runs, not before", async () => {
+    const { handle } = ipc();
+    const asked: unknown[] = [];
+    let state = "starting";
+    const listeners: (() => void)[] = [];
+    const services = {
+      call: (op: string, args: unknown) => {
+        asked.push([op, args]);
+        return Promise.resolve({ ok: true, value: null });
+      },
+      status: () => ({ state }),
+      onStatus: (listener: () => void) => listeners.push(listener),
+    } as unknown as Supervisor;
+    wireServiceCalls({ handle }, services, () => null, Promise.resolve("started"));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(asked).toEqual([]);
+    state = "running";
+    for (const listener of listeners) listener();
+    for (const listener of listeners) listener();
+    expect(asked).toEqual([["anytype.check", { waitMs: 60_000 }]]);
+    // An Anytype that is missing, or failed to start, is not waited for.
+    const none: unknown[] = [];
+    wireServiceCalls(
+      { handle },
+      {
+        call: (op: string) => none.push(op),
+        status: () => ({ state: "running" }),
+        onStatus: () => undefined,
+      } as unknown as Supervisor,
+      () => null,
+      Promise.resolve("missing"),
+    );
+    await Promise.resolve();
+    expect(none).toEqual([]);
   });
 
   it("wireDesktop builds the one board, and with no login item the switch refuses", () => {

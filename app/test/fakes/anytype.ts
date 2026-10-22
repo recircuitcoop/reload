@@ -282,8 +282,8 @@ export class FakeAnytypeServer {
 
   constructor(readonly key: string) {}
 
-  /** Listen on a free loopback port; the base URL comes back. */
-  async start(): Promise<string> {
+  /** Listen on a free loopback port, or on `port`; the base URL comes back. */
+  async start(port = 0): Promise<string> {
     const server = http.createServer((request, response) => {
       let text = "";
       request.on("data", (chunk: Buffer) => (text += chunk.toString("utf8")));
@@ -292,7 +292,7 @@ export class FakeAnytypeServer {
       });
     });
     this.#server = server;
-    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve));
     return `http://127.0.0.1:${String((server.address() as AddressInfo).port)}`;
   }
 

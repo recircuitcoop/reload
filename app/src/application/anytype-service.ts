@@ -45,6 +45,10 @@ import { Pairing } from "./pair-anytype";
 
 /** What the service's notices are about. */
 const MCP_CHILD = "Anytype MCP child";
+/** How long a just-launched Anytype's API is waited for, and how often it is asked meanwhile. */
+export const ANYTYPE_START_WAIT_MS = 60_000;
+export const ANYTYPE_WAIT_STEP_MS = 1_000;
+
 /** What the unreachable notice is about. */
 const ANYTYPE = "Anytype";
 
@@ -102,9 +106,13 @@ export async function serveAnytypeCall(
       case "anytype.pair.complete":
         await service.completePairing(args);
         return { ok: true, value: service.status() };
-      case "anytype.check":
-        service.checkAgain();
+      case "anytype.check": {
+        const waitMs = (args as { waitMs?: unknown } | null)?.waitMs;
+        service.checkAgain(
+          typeof waitMs === "number" && waitMs > 0 ? Math.min(waitMs, ANYTYPE_START_WAIT_MS) : 0,
+        );
         return { ok: true, value: service.status() };
+      }
       default:
         return { ok: false, error: `the Reload services process does not serve ${op}` };
     }
@@ -145,6 +153,10 @@ export class AnytypeService {
   #child: McpChild | null = null;
   #tools: readonly McpTool[] = [];
   #crashesInARow = 0;
+  /** Until when Anytype, just launched, is still asked while its API comes up (clock time). */
+  #waitUntil = 0;
+  /** The person was told Anytype did not answer; told again only after it answered once. */
+  #told = false;
   #retry: Cancel | null = null;
   #stopping = false;
   #attempt = 0;
@@ -191,6 +203,9 @@ export class AnytypeService {
 
   /** Bring the service up. Returns at once: nothing here waits for Anytype. */
   start(): void {
+    // At start Anytype is often only just launched (by Reload, or at login): its API is given
+    // a bounded while to come up before Reload says it did not answer.
+    this.#waitUntil = this.#deps.clock.now() + ANYTYPE_START_WAIT_MS;
     void this.#bringUp();
   }
 
@@ -209,11 +224,22 @@ export class AnytypeService {
    * Ask an Anytype that did not answer again, once: the person acted (Check again, coming back
    * to the window), or Reload saw the Anytype desktop app start. Any other state is left alone.
    */
-  checkAgain(): void {
-    if (this.#state === "unreachable" && !this.#stopping) {
-      this.#deps.logger.info("asking Anytype again");
-      void this.#bringUp();
+  checkAgain(waitMs = 0): void {
+    if ((this.#state !== "unreachable" && this.#state !== "starting") || this.#child !== null) {
+      return;
     }
+    if (this.#stopping) {
+      return;
+    }
+    this.#deps.logger.info(
+      waitMs > 0
+        ? `asking Anytype again, for up to ${String(waitMs / 1000)} s while it comes up`
+        : "asking Anytype again",
+    );
+    this.#waitUntil = this.#deps.clock.now() + waitMs;
+    this.#retry?.();
+    this.#retry = null;
+    void this.#bringUp();
   }
 
   /** "Pair with Anytype": Anytype shows a four-digit code. */
@@ -323,9 +349,16 @@ export class AnytypeService {
       return;
     }
     if (!reachable) {
-      // A failed start, not a crash: no timer and no attempt spent. Said once per state.
+      // A failed start, not a crash: no attempt spent. While Anytype was just launched it is
+      // given its bounded while (start, checkAgain); after that, no timer. Said once per state.
       const detail = `Anytype's local API did not answer at ${apiBaseUrl}; start the Anytype desktop app`;
-      if (this.#state !== "unreachable") {
+      if (this.#deps.clock.now() < this.#waitUntil) {
+        this.#setState("unreachable", detail);
+        this.#retry = this.#deps.clock.after(ANYTYPE_WAIT_STEP_MS, () => void this.#bringUp());
+        return;
+      }
+      if (!this.#told) {
+        this.#told = true;
         this.#notice(
           "anytype-unreachable",
           "Anytype did not answer. Open the Anytype desktop app, then come back to Reload",
@@ -335,6 +368,7 @@ export class AnytypeService {
       this.#setState("unreachable", detail);
       return;
     }
+    this.#told = false;
     this.#deps.notifier.clear("anytype-unreachable", ANYTYPE);
     this.#launch(key);
   }
