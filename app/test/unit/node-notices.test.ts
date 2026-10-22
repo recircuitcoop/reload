@@ -17,6 +17,7 @@ describe("a node instance's notices", () => {
     expect(notifier.cleared).toEqual([
       "node-stopped raw",
       "node-not-restarted raw",
+      "node-not-started raw",
       "node-stuck raw",
       "node-unhealthy raw",
     ]);
@@ -38,6 +39,24 @@ describe("a node instance's notices", () => {
         detail: "Its process stopped after 5 exits in 120 s",
       },
     ]);
+  });
+
+  it("words a process that could not start apart from one that exited", () => {
+    expect(
+      stoppedFor("raw", LOOP, {
+        restartable: true,
+        how: "failed to start",
+        stuck: false,
+        failure: "spawn x ENOENT",
+      }),
+    ).toEqual({
+      text: "could not start: spawn x ENOENT",
+      notice: {
+        kind: "node-not-started",
+        subject: "raw",
+        detail: "Its command could not be started (spawn x ENOENT)",
+      },
+    });
   });
 
   it("words a type never restarted by how it ended: an exit, or no progress", () => {

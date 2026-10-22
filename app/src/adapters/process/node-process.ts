@@ -275,7 +275,7 @@ class ChildNodeProcess implements NodeProcess {
     });
   }
 
-  #onExit(child: ChildProcess, how: string): void {
+  #onExit(child: ChildProcess, how: string, failure?: string): void {
     if (child !== this.#child) {
       return;
     }
@@ -298,16 +298,23 @@ class ChildNodeProcess implements NodeProcess {
         );
       }
     }
-    // A type that must never run twice (spec 2.4.2) is stopped at its first unexpected exit.
+    // A failed start spends no attempt and is not retried (helper/restart.py); a type that must
+    // never run twice (spec 2.4.2) stops at its first exit; a stuck one comes back at once.
     const restartable = this.#spec.restartable !== false;
-    const again = restartable && this.#guard.restartable && this.#breaker.recordCrash();
-    this.#deps.crashes?.nodeCrashed(!again);
+    const again =
+      failure === undefined &&
+      restartable &&
+      this.#guard.restartable &&
+      this.#breaker.recordCrash();
+    if (failure === undefined) this.#deps.crashes?.nodeCrashed(!again);
     if (!again) {
-      const exit = { restartable, how, stuck };
-      this.#stop(stoppedFor(this.#subject, this.#guard.stopText(this.#deps.settings.crashLoop), exit));
+      const { crashLoop } = this.#deps.settings;
+      const overLimits = this.#guard.restartable ? null : this.#guard.stopText(crashLoop);
+      this.#stop(
+        stoppedFor(this.#subject, crashLoop, { restartable, how, stuck, failure, overLimits }),
+      );
       return;
     }
-    // A stuck process was stopped at the end of its restart backoff: it comes back at once.
     this.#after(stuck ? 0 : this.#deps.settings.respawnDelayMs, () => {
       this.#spawn();
     });

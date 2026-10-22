@@ -37,23 +37,32 @@ export interface ExitWatch {
   /** Its process group: whatever the process started goes with it. */
   readonly tree: Pick<ProcessTree, "kill">;
   readonly log: (message: string) => void;
-  /** Called once, with how it ended: `code N`, `signal S` or "failed to start". */
-  readonly exited: (how: string) => void;
+  /**
+   * Called once, with how it ended: `code N`, `signal S` or "failed to start"; for a process
+   * that never started, also why (the spawn error), so it is not taken for a crash.
+   */
+  readonly exited: (how: string, failure?: string) => void;
 }
 
 /** Handle the exit once its pipes have closed, or after the grace period if they do not. */
 export function watchExit(child: ChildProcess, watch: ExitWatch): void {
   let how: string | null = null;
+  let failure: string | undefined;
   let handled = false;
   const handle = (): void => {
     if (!handled) {
       handled = true;
-      watch.exited(how ?? "failed to start");
+      if (how === null) {
+        watch.exited("failed to start", failure ?? "it did not start");
+      } else {
+        watch.exited(how);
+      }
     }
   };
   child.on("error", (error) => {
     watch.log(`spawn failed: ${error.message}`);
     if (child.pid === undefined) {
+      failure = error.message;
       handle();
     }
   });

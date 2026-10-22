@@ -518,13 +518,46 @@ describe("an unexpected exit of a node process", () => {
     expect(node.node.pid).not.toBeNull();
   });
 
-  it("reports a command that cannot be spawned, and retries it like any exit", async () => {
+  it("a command that cannot start is told once, not retried, and spends no attempt", async () => {
     const clock = new FakeClock();
     const node = raw({ clock, argv: ["/nonexistent/reload-node"] });
+    const [, queued] = send(node.node, { do: "echo", value: 1 });
     await waitFor("the failure", () => node.logger.has(/spawn failed: .*ENOENT/));
-    await waitFor("the exit", () => node.logger.has(/exited unexpectedly \(failed to start\)/));
-    clock.advance(1_000);
-    expect(node.logger.lines.filter((line) => /spawned pid/.test(line.text))).toHaveLength(2);
+    await waitFor("the stop", () => node.notifier.notices.length === 1);
+    expect(node.notifier.notices[0]).toMatchObject({ kind: "node-not-started", subject: "raw" });
+    expect(node.notifier.notices[0]?.detail).toMatch(
+      /^Its command could not be started \(.*ENOENT/,
+    );
+    expect(compose(node.notifier.notices[0] ?? { kind: "node-stuck", subject: "" }).title).toBe(
+      "The node raw could not start",
+    );
+    // Nothing is counted as a crash, and nothing is tried again, however far the clock moves.
+    expect(node.crashes).toEqual([]);
+    clock.advance(600_000);
+    expect(node.logger.lines.filter((line) => /spawned pid/.test(line.text))).toHaveLength(1);
+    expect(queued.finished).toBe(true);
+    const [, refused] = send(node.node, { do: "echo" });
+    expect(refused.ends[0]?.message).toBe("the node process is stopped");
+    expect(node.notifier.notices).toHaveLength(1);
+  });
+
+  it("a failed start and a crash are answered differently: the instance that runs keeps its whole budget", async () => {
+    // Redeployed once the command exists (the person fixed the setup): the same instance id,
+    // whose four crashes are each restarted, and the fifth is the limit, as for any instance.
+    const clock = new FakeClock();
+    const failed = raw({ clock, argv: ["/nonexistent/reload-node"] });
+    await waitFor("the stop", () => failed.notifier.notices.length === 1);
+    const fixed = raw({ clock, id: failed.spec.identity.id, config: { exit_at_start: 3 } });
+    for (let exit = 1; exit <= 5; exit += 1) {
+      await waitFor(`exit ${String(exit)}`, () => fixed.node.pid === null);
+      if (exit < 5) {
+        clock.advance(1_000);
+        expect(fixed.node.pid).not.toBeNull();
+      }
+    }
+    await waitFor("the limit", () => fixed.notifier.notices.length === 1);
+    expect(fixed.crashes).toEqual([false, false, false, false, true]);
+    expect(fixed.notifier.notices[0]?.kind).toBe("node-stopped");
   });
 });
 
@@ -560,9 +593,22 @@ describe("a node process whose type declares a heartbeat (spec 2.4.2)", () => {
   }
 
   /** When, on the real clock, the log first matched `pattern`. */
-  async function loggedAt(node: RawNode, pattern: RegExp, timeoutMs: number): Promise<number> {
-    await waitFor(String(pattern), () => node.logger.has(pattern), timeoutMs);
-    return Date.now();
+  /** When the line was logged: after `before`, the last poll that missed it, and by `by`. */
+  async function loggedAt(
+    node: RawNode,
+    pattern: RegExp,
+    timeoutMs: number,
+  ): Promise<{ readonly before: number; readonly by: number }> {
+    let before = Date.now();
+    const logged = (): boolean => {
+      if (node.logger.has(pattern)) {
+        return true;
+      }
+      before = Date.now();
+      return false;
+    };
+    await waitFor(String(pattern), logged, timeoutMs);
+    return { before, by: Date.now() };
   }
 
   it(
@@ -592,14 +638,14 @@ describe("a node process whose type declares a heartbeat (spec 2.4.2)", () => {
       const first = node.node.pid as number;
       const [, wedged] = send(node.node, { do: "wedge" });
       const wedgedAt = Date.now();
-      const stuckAt = await loggedAt(
+      const stuck = await loggedAt(
         node,
         /stuck: no progress for \d+ s; restarting it in 250 ms/,
         8_000,
       );
       // Judged at the window, three intervals, within one interval of it.
-      expect(stuckAt - wedgedAt).toBeGreaterThanOrEqual(3_000);
-      expect(stuckAt - wedgedAt).toBeLessThan(3_000 + 1_000 + 1_000);
+      expect(stuck.by - wedgedAt).toBeGreaterThanOrEqual(3_000);
+      expect(stuck.before - wedgedAt).toBeLessThan(3_000 + 1_000 + 1_000);
       // Its pings were answered all along: it is the frozen marker that says stuck.
       expect(node.logger.has(/did not answer a ping/)).toBe(false);
       // Nothing is signalled at the verdict: the process is still there until its backoff ends.
@@ -621,7 +667,7 @@ describe("a node process whose type declares a heartbeat (spec 2.4.2)", () => {
         () => node.node.pid !== null && node.node.pid !== first,
         3_000,
       );
-      expect(Date.now() - stuckAt).toBeGreaterThanOrEqual(250);
+      expect(Date.now() - stuck.before).toBeGreaterThanOrEqual(250);
       expect(alive(first)).toBe(false);
       expect(wedged.ends[0]?.message).toMatch(/node process exited \(signal SIGKILL\)/);
       expect(node.crashes).toEqual([false]);
@@ -747,12 +793,18 @@ describe("closing a node process", () => {
     const node = raw();
     // Its own notices; refused ports have theirs, withdrawn the same way (refused-ports.ts).
     const mine = (of: RawNode) => of.notifier.cleared.filter((kind) => kind.startsWith("node-"));
-    const said = ["node-stopped", "node-not-restarted", "node-stuck", "node-unhealthy"];
+    const said = [
+      "node-stopped",
+      "node-not-restarted",
+      "node-not-started",
+      "node-stuck",
+      "node-unhealthy",
+    ];
     // Created (a deploy or a redeploy, with or without a heartbeat now): all withdrawn.
     expect(mine(node)).toEqual(said.map((kind) => `${kind} raw`));
     await ready(node);
     await node.node.close("redeploy");
-    expect(mine(node)).toHaveLength(4);
+    expect(mine(node)).toHaveLength(said.length);
     const removed = raw();
     await ready(removed);
     await removed.node.close("removed");

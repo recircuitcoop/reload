@@ -28,6 +28,8 @@ export type NoticeKind =
   | "limits-unreadable"
   /** A node whose type says never to restart it stopped, and is not started again (spec 2.4.2). */
   | "node-not-restarted"
+  /** A node's process could not be started at all: not retried, and no attempt spent. */
+  | "node-not-started"
   /** A node's process stopped answering its heartbeat and was stopped (spec 2.4.2). */
   | "node-stuck"
   /** A node's own health check says it is not working (spec 4.2 `pong`). */
@@ -87,6 +89,7 @@ export const NOTICE_KINDS: readonly NoticeKind[] = [
   "anytype-over-limit",
   "limits-unreadable",
   "node-not-restarted",
+  "node-not-started",
   "node-stuck",
   "node-unhealthy",
   "anytype-unreachable",
@@ -231,6 +234,11 @@ function composeWords(notice: Notice): Message {
           detail,
           "Its type asks never to restart it. Redeploy the flow to start it again.",
         ),
+      };
+    case "node-not-started":
+      return {
+        title: `The node ${subject} could not start`,
+        body: sentences(detail, "Redeploy the flow to try again."),
       };
     case "node-stuck":
       return { title: `The node ${subject} stopped making progress`, body: sentences(detail) };
