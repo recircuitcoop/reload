@@ -83,7 +83,25 @@ describe("restarting only the runtime", () => {
 
   it("resolves null at once when the runtime is not running to restart", async () => {
     const { clock, supervisor, logger } = supervised(obedient);
-    expect(await runtimeRestarter(supervisor, clock, logger)("x")).toBeNull();
+    let ran = 0;
+    expect(await runtimeRestarter(supervisor, clock, logger)("x", () => (ran += 1))).toBeNull();
+    // Nothing runs to wait for: the work while stopped is done at once.
+    expect(ran).toBe(1);
+  });
+
+  it("hands the work while stopped to the restart, which runs it between the generations", async () => {
+    const { clock, supervisor, logger, launcher } = supervised(obedient);
+    supervisor.start();
+    clock.advance(1);
+    const forks: number[] = [];
+    const took = runtimeRestarter(
+      supervisor,
+      clock,
+      logger,
+    )("x", () => forks.push(launcher.children.length));
+    clock.advance(10);
+    expect(await took).not.toBeNull();
+    expect(forks).toEqual([1]);
   });
 
   it("resolves null, and says so, when the runtime does not come back", async () => {

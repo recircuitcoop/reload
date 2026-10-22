@@ -57,3 +57,27 @@ export class SecretRegistry {
     return this.toString();
   }
 }
+
+/**
+ * `value` with every string in it, keys included, passed through `redact`: a message bound for
+ * another process, redacted whole. Only plain objects and arrays are walked; bytes, numbers and
+ * anything else pass as they are.
+ */
+export function redactStrings(value: unknown, redact: (text: string) => string): unknown {
+  if (typeof value === "string") {
+    return redact(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item: unknown) => redactStrings(item, redact));
+  }
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    Object.getPrototypeOf(value) === Object.prototype
+  ) {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, item]) => [redact(key), redactStrings(item, redact)]),
+    );
+  }
+  return value;
+}

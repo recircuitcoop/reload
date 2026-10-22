@@ -1,8 +1,15 @@
 // A child's side of the channel (spec 10.2) and its ppid watchdog (spec 6.6).
 import { describe, expect, it } from "vitest";
 import { watchParent, WATCHDOG_INTERVAL_MS } from "../../src/application/parent-watchdog";
-import { EXIT_FLUSH_MS, serveShell } from "../../src/application/serve-shell";
+import { registering } from "../../src/application/secrets";
+import {
+  EXIT_FLUSH_MS,
+  redactingShellLink,
+  serveShell,
+  shellNotifier,
+} from "../../src/application/serve-shell";
 import type { ChildMessage } from "../../src/domain/channel/messages";
+import { REDACTED, SecretRegistry } from "../../src/domain/redaction/registry";
 import type { ProcessHost, ShellLink } from "../../src/ports/shell-link";
 import { RecordingLogger } from "../fakes/children";
 import { FakeClock } from "../fakes/clock";
@@ -243,5 +250,86 @@ describe("watchParent", () => {
     host.ppid = 1;
     clock.advance(10 * WATCHDOG_INTERVAL_MS);
     expect(host.exits).toEqual([]);
+  });
+});
+
+describe("redactingShellLink: what the services process tells the shell", () => {
+  it("no credential reaches the shell in what the services process came up without", async () => {
+    // The services process's own wiring: the key and the token registered as they are read,
+    // and every frame to the shell written through the redacting link.
+    const KEY = "fake-anytype-key-0123456789abcdef";
+    const TOKEN = "fake-proxy-token-ZYXWVUTSRQPONMLK";
+    const registry = new SecretRegistry();
+    const held = new Map<string, string>([
+      ["anytype-api-key", KEY],
+      ["mcp-proxy-token", TOKEN],
+    ]);
+    const secrets = registering(
+      { read: (name) => held.get(name) ?? null, write: () => undefined },
+      registry,
+    );
+    const wire = new FakeLink();
+    const link = redactingShellLink(wire, (text) => registry.redact(text));
+    const key = secrets.read("anytype-api-key") ?? "";
+    const token = secrets.read("mcp-proxy-token") ?? "";
+
+    // A failing component's own message, unedited, built out of its configuration: the shape
+    // that takes a secret with it, in a notice, a reply, a nested result and a failed start.
+    serveShell({
+      child: "services",
+      link,
+      host: new FakeHost(),
+      clock: new FakeClock(),
+      logger: new RecordingLogger(),
+      onInit: () => {
+        throw new Error(`the MCP child refused --api-key ${key}`);
+      },
+      onCall: (op) =>
+        op === "mcp.endpoint"
+          ? Promise.resolve({ ok: true, value: { problems: [`Bearer ${token} was refused`] } })
+          : Promise.reject(new Error(`${op} failed with key ${key}`)),
+    });
+    shellNotifier(link).raise({
+      kind: "endpoint-degraded",
+      subject: "mcp-endpoint",
+      detail: `127.0.0.1:31010 is taken; token ${token}`,
+    });
+    wire.receive({ v: 1, t: "call", rid: "1", op: "mcp.endpoint", args: null });
+    wire.receive({ v: 1, t: "call", rid: "2", op: "anytype.status", args: null });
+    wire.receive({ v: 1, t: "init", config: CONFIG });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(wire.sent.length).toBeGreaterThan(3);
+    const frames = JSON.stringify(wire.sent);
+    expect(frames).not.toContain(KEY);
+    expect(frames).not.toContain(TOKEN);
+    // The reasons themselves still arrive, with the secret marked as removed.
+    expect(frames).toContain(`the MCP child refused --api-key ${REDACTED}`);
+    expect(frames).toContain(`Bearer ${REDACTED} was refused`);
+  });
+
+  it("walks plain objects and arrays only; bytes and numbers pass as they are, and so do peers", () => {
+    const wire = new FakeLink();
+    const link = redactingShellLink(wire, (text) => text.replaceAll("s3cret", REDACTED));
+    const bytes = new Uint8Array([1, 2, 3]);
+    link.post({
+      v: 1,
+      t: "reply",
+      rid: "r",
+      result: { ok: true, value: { s3cret: ["a s3cret", 7, bytes, null] } },
+    });
+    expect(wire.sent).toEqual([
+      {
+        v: 1,
+        t: "reply",
+        rid: "r",
+        result: { ok: true, value: { [REDACTED]: [`a ${REDACTED}`, 7, bytes, null] } },
+      },
+    ]);
+    const heard: unknown[] = [];
+    link.onMessage((raw) => heard.push(raw));
+    link.onPeer(() => undefined);
+    wire.receive("in");
+    expect(heard).toEqual(["in"]);
   });
 });

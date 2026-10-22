@@ -83,6 +83,7 @@ export class Supervisor {
   /** Crashes since the child was last ready: the backoff's n. */
   #crashesInARow = 0;
   #nextRestart: RestartInfo | null = null;
+  #whileStopped: (() => void) | null = null;
   #cancelBackoff: Cancel | null = null;
   #cancelKill: Cancel | null = null;
   #started = false;
@@ -143,10 +144,15 @@ export class Supervisor {
    * A planned restart (spec 10.4): stop the running child, then fork the next generation with
    * `info`. It never counts as a crash. False when the child is not running.
    */
-  restart(reason: Exclude<StopReason, "quit">, info?: RestartInfo): boolean {
+  restart(
+    reason: Exclude<StopReason, "quit">,
+    info?: RestartInfo,
+    whileStopped?: () => void,
+  ): boolean {
     if (this.#state !== "running" || this.#handle === null) {
       return false;
     }
+    this.#whileStopped = whileStopped ?? null;
     this.#deps.logger.info(`restarting the ${this.#deps.child} (${reason})`);
     this.#tellStopping();
     this.#nextRestart = info ?? {
@@ -357,10 +363,24 @@ export class Supervisor {
     if (this.#state === "restarting-planned") {
       this.#deps.logger.info(`the ${this.#deps.child} exited for a planned restart`);
       this.#state = "restarting";
+      this.#runWhileStopped();
       this.#fork();
       return;
     }
     this.#onCrash(code, forGood);
+  }
+
+  /** What a planned restart asked to do between the old child's exit and the next fork. */
+  #runWhileStopped(): void {
+    const work = this.#whileStopped;
+    this.#whileStopped = null;
+    try {
+      work?.();
+    } catch (error) {
+      this.#deps.logger.error(
+        `the ${this.#deps.child} restart's work while stopped failed: ${String(error)}`,
+      );
+    }
   }
 
   #onCrash(code: number, forGood: string | null): void {

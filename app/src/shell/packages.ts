@@ -88,7 +88,7 @@ export function runtimeRestarter(
       waiter(status);
     }
   });
-  return (reason) =>
+  return (reason, whileStopped) =>
     new Promise((resolve) => {
       const before = runtime.status().generation;
       const started = clock.now();
@@ -113,8 +113,9 @@ export function runtimeRestarter(
         done(null);
       });
       logger.info(`restarting only the runtime: ${reason}`);
-      if (!runtime.restart("types")) {
+      if (!runtime.restart("types", undefined, whileStopped)) {
         // Not running: it reads the packages when it next starts.
+        whileStopped?.();
         done(null);
       }
     });

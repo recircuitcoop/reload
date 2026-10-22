@@ -95,9 +95,10 @@ export interface PackagesState {
 /**
  * The runtime restarted for new types, as the shell's supervisor does it: resolves with how
  * long it took, stop to running, or null when the runtime was not running to restart (it reads
- * the packages at its next start).
+ * the packages at its next start). `whileStopped` runs once the old runtime and its node
+ * processes are gone and before the new one starts, or at once when none was running.
  */
-export type RestartRuntime = (reason: string) => Promise<number | null>;
+export type RestartRuntime = (reason: string, whileStopped?: () => void) => Promise<number | null>;
 
 export interface PackageInstallerPorts extends CatalogueReads {
   readonly environment: PackageEnvironmentPorts;

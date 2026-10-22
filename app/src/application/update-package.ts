@@ -47,10 +47,11 @@ import {
 } from "./install-package";
 import { PackageCatalogues, type CatalogueReads } from "./package-catalogues";
 import {
-  buildPackageEnvironment,
   inspectPackage,
+  stagePackageEnvironment,
   type PackageEnvironmentPorts,
   type PackageOrigin,
+  type StagedPackage,
 } from "./package-environment";
 
 /** How long every instance of an updated package's types has to send `ready`. */
@@ -340,15 +341,32 @@ export class PackageUpdates {
         );
       }
     };
+    let staged: StagedPackage;
     try {
-      // Built in staging and swapped in; the old version is kept to be swapped back.
-      await buildPackageEnvironment(origin, environment, admit, from);
+      staged = await stagePackageEnvironment(origin, environment, admit, from);
     } catch (error) {
       // Nothing was stopped, and the old version still runs.
       return this.#failed("Not updated", reasonOf(error));
     }
-    const built = environment.roots.installed(name)?.version ?? version;
-    const took = await this.#ports.restartRuntime(`${name} was updated to ${built}`);
+    // Swapped in once the old instances have stopped, so they close on their own files.
+    const built = staged.record.version;
+    const swap: { done: boolean; refused: string | null } = { done: false, refused: null };
+    const swapIn = (): void => {
+      if (swap.done) {
+        return;
+      }
+      swap.done = true;
+      try {
+        staged.swap();
+      } catch (error) {
+        swap.refused = reasonOf(error);
+      }
+    };
+    const took = await this.#ports.restartRuntime(`${name} was updated to ${built}`, swapIn);
+    swapIn(); // a runtime that was not running, or never stopped, had nothing to wait for
+    if (swap.refused !== null) {
+      return this.#failed("Not updated", swap.refused);
+    }
     const problem =
       took === null
         ? "the runtime did not come back running, so its instances could not be confirmed"

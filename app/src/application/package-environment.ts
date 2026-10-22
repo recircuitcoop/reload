@@ -87,6 +87,12 @@ export const PHASE_PERCENT: Readonly<Record<InstallPhase, number>> = {
   swapping: 90,
 };
 
+/** A package whose environment is built in staging, and the swap that makes it live. */
+export interface StagedPackage {
+  readonly record: InstalledRecord;
+  readonly swap: () => BuiltPackage;
+}
+
 /** A package whose environment is built and live. */
 export interface BuiltPackage {
   readonly record: InstalledRecord;
@@ -199,7 +205,7 @@ async function judgeAndBuild(
   admit: Admit,
   from: InstalledOrigin | undefined,
   repairing: InstalledRecord | undefined,
-): Promise<BuiltPackage> {
+): Promise<StagedPackage> {
   const { files, manifest, declaration } = await readVerified(origin, ports);
   ports.phase?.("verifying", declaration.package);
   admit(declaration);
@@ -246,14 +252,21 @@ async function judgeAndBuild(
       : updateFacts(repairing)),
   };
   ports.roots.writeRecord(staged, record);
-  ports.phase?.("swapping", declaration.package);
-  if (repairing !== undefined) {
-    // A repair: the same version, in its place; what the last update kept is left as it is.
-    return { record, live: ports.roots.replaceLive(declaration.package), previous: null };
-  }
-  const swapped = ports.roots.swapIn(declaration.package);
-  ports.contentHashes.record(declaration.package, declaration.version, hash);
-  return { record, live: swapped.live, previous: swapped.previous };
+  const swap = (): BuiltPackage => {
+    ports.phase?.("swapping", declaration.package);
+    if (repairing !== undefined) {
+      // A repair: the same version, in its place; what the last update kept is left as it is.
+      return { record, live: ports.roots.replaceLive(declaration.package), previous: null };
+    }
+    const swapped = ports.roots.swapIn(declaration.package);
+    ports.contentHashes.record(declaration.package, declaration.version, hash);
+    ports.logger.info(
+      `package ${record.package} ${record.version} is installed in its own ` +
+        `${record.environment} environment (content ${record.contentHash})`,
+    );
+    return { record, live: swapped.live, previous: swapped.previous };
+  };
+  return { record, swap };
 }
 
 /** A repair is the very package it repairs: its name, its version and its content. */
@@ -299,20 +312,42 @@ export async function buildPackageEnvironment(
   repairing?: InstalledRecord,
 ): Promise<BuiltPackage> {
   try {
-    const built = await judgeAndBuild(origin, ports, admit, from, repairing);
-    ports.logger.info(
-      `package ${built.record.package} ${built.record.version} is installed in its own ` +
-        `${built.record.environment} environment (content ${built.record.contentHash})`,
-    );
-    return built;
+    return (await judgeAndBuild(origin, ports, admit, from, repairing)).swap();
   } catch (error) {
-    const refusal =
-      error instanceof PackageRefusal
-        ? error
-        : new PackageRefusal("environment", (error as Error).message);
-    ports.logger.warn(
-      `package ${describe(origin)} was refused (${refusal.reason}): ${refusal.message}`,
-    );
-    throw refusal;
+    throw refusalOf(origin, ports, error);
   }
+}
+
+/**
+ * Verify a package and build its environment in staging, leaving the live package as it is
+ * until `swap` (test_plugin_update_apply.py: the plugin is still on its old version when the
+ * stop arrives). Rejects as buildPackageEnvironment does; `swap` throws what the swap refused.
+ */
+export async function stagePackageEnvironment(
+  origin: PackageOrigin,
+  ports: PackageEnvironmentPorts,
+  admit: Admit,
+  from: InstalledOrigin,
+): Promise<StagedPackage> {
+  try {
+    return await judgeAndBuild(origin, ports, admit, from, undefined);
+  } catch (error) {
+    throw refusalOf(origin, ports, error);
+  }
+}
+
+/** A refusal naming its step, logged once. */
+function refusalOf(
+  origin: PackageOrigin,
+  ports: PackageEnvironmentPorts,
+  error: unknown,
+): PackageRefusal {
+  const refusal =
+    error instanceof PackageRefusal
+      ? error
+      : new PackageRefusal("environment", (error as Error).message);
+  ports.logger.warn(
+    `package ${describe(origin)} was refused (${refusal.reason}): ${refusal.message}`,
+  );
+  return refusal;
 }

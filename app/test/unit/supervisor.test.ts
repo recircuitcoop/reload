@@ -150,6 +150,31 @@ describe("a planned restart", () => {
     ]);
   });
 
+  it("runs its work while stopped after the old child exited and before the next fork", () => {
+    // The old package version's processes close on their own files (plan 0032 group 40).
+    const { supervisor, launcher, clock, logger } = supervised(obedient);
+    supervisor.start();
+    clock.advance(1);
+    const seen: { oldExited: boolean | undefined; forks: number }[] = [];
+    supervisor.restart("types", undefined, () => {
+      seen.push({ oldExited: launcher.children[0]?.exited, forks: launcher.children.length });
+    });
+    clock.advance(2);
+    expect(seen).toEqual([{ oldExited: true, forks: 1 }]);
+    expect(launcher.children).toHaveLength(2);
+    // Run once: the next restart, asked without any, runs none.
+    supervisor.restart("types");
+    clock.advance(2);
+    expect(seen).toHaveLength(1);
+    // Work that throws is logged, and the restart carries on.
+    supervisor.restart("types", undefined, () => {
+      throw new Error("swap refused");
+    });
+    clock.advance(2);
+    expect(supervisor.status()).toMatchObject({ state: "running", generation: 4 });
+    expect(logger.lines.join("\n")).toContain("work while stopped failed: Error: swap refused");
+  });
+
   it("makes up restart info when none is given", () => {
     const { supervisor, launcher, clock } = supervised(obedient);
     supervisor.start();

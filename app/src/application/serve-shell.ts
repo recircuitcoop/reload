@@ -9,10 +9,12 @@
 import {
   parseShellMessage,
   type CallOp,
+  type ChildMessage,
   type InitConfig,
   type OpResult,
   type StopReason,
 } from "../domain/channel/messages";
+import { redactStrings } from "../domain/redaction/registry";
 import type { ChildName } from "../domain/supervision/child-state";
 import type { Clock } from "../ports/clock";
 import type { Logger } from "../ports/logger";
@@ -168,6 +170,27 @@ export function shellNodeCrashes(link: ShellLink): NodeCrashSink {
   return {
     nodeCrashed: (stopped) => {
       link.post({ v: 1, t: "node-crash", stopped });
+    },
+  };
+}
+
+/**
+ * `link`, with every string of every message it posts redacted (test_mcp_host_integration.py: no
+ * credential reaches the helper in what the host came up without). A reason is a failing
+ * component's own message, carried unedited, and the components that fail in the services
+ * process hold the Anytype key and the MCP proxy token: the shell is told reasons, never them.
+ * It reads the token itself for Copy token, so no message of this channel needs one.
+ */
+export function redactingShellLink(link: ShellLink, redact: (text: string) => string): ShellLink {
+  return {
+    post: (message) => {
+      link.post(redactStrings(message, redact) as ChildMessage);
+    },
+    onMessage: (listener) => {
+      link.onMessage(listener);
+    },
+    onPeer: (listener) => {
+      link.onPeer(listener);
     },
   };
 }

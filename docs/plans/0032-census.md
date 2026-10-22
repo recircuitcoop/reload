@@ -51,7 +51,7 @@ Owner: "finish ALL plans completely." (docs/plans/0031-the-features-the-old-app-
 | 37 | Saving one setting restarts every node in every flow | 2 | M | none |
 | 38 | Show what the runtime refused, and open the right place from a notice | 2 | S | none |
 | 39 | 'See what would be sent' shows the exact body that will be posted | 1 | S | none |
-| 40 | [SAFETY] Unproven: no secret in a shown reason; an old package version sees only its own files while closing | 2 | S | none |
+| 40 | [SAFETY] Unproven: no secret in a shown reason; an old package version sees only its own files while closing | 2 | S | done: ported (port/0032-small-safety) |
 | - | covered by port/0031-watchdog | 7 | - | covered |
 | - | covered by port/0031-supervision | 21 | - | covered |
 | - | covered by port/0031-cli-log | 7 | - | covered |

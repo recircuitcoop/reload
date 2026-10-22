@@ -35,7 +35,7 @@ import { McpEndpoint, serveEndpointCall, stopServing } from "../application/mcp-
 import { watchParent } from "../application/parent-watchdog";
 import { answerPeerCalls, KeyPublisher } from "../application/peer-link";
 import { readOrCreate, registering } from "../application/secrets";
-import { serveShell, shellNotifier } from "../application/serve-shell";
+import { redactingShellLink, serveShell, shellNotifier } from "../application/serve-shell";
 import { mcpChildLines, printCanary, sourceLog } from "../application/source-log";
 import { DEFAULT_API_BASE_URL } from "../domain/anytype/pins";
 import type { InitConfig, SecretPaths } from "../domain/channel/messages";
@@ -58,7 +58,8 @@ printCanary(logger, process.env["RELOAD_LOG_CANARY"]);
 // Said once, so the e2e harness can check every process runs in its scratch home.
 logger.info(`this process's HOME is ${process.env["HOME"] ?? "(unset)"}`);
 const host = processHostOver(process);
-const link = shellLinkOver(process.parentPort);
+// Every notice, reply and reason told to the shell is redacted with the same secrets.
+const link = redactingShellLink(shellLinkOver(process.parentPort), (text) => registry.redact(text));
 
 /**
  * The e2e gate's substitutes, as one JSON object in RELOAD_TEST_ANYTYPE; unset in every

@@ -63,6 +63,8 @@ let readiness: (packages: readonly string[]) => Promise<Readiness>;
 let told: Message[];
 let settings: JsonSettingsStore;
 let clock: FakeClock;
+/** What the old runtime's node processes do as their stop arrives. */
+let stopping: () => void;
 
 beforeEach(() => {
   base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-update-")));
@@ -79,6 +81,7 @@ beforeEach(() => {
   told = [];
   settings = new JsonSettingsStore(path.join(base, "shell-settings.json"));
   clock = new FakeClock();
+  stopping = () => undefined;
 });
 
 afterEach(() => {
@@ -111,9 +114,16 @@ const packageFiles = (name: string, version: string, body = "// v\n"): Files => 
 });
 
 /** Publish `name` at `version` in the official catalogue, signed. */
-function publish(name: string, version: string, options: { declares?: string } = {}): void {
+function publish(
+  name: string,
+  version: string,
+  options: { declares?: string; body?: string } = {},
+): void {
   const url = archiveUrl(name, version);
-  served.set(url, signedArchive(packageFiles(name, options.declares ?? version), signer));
+  served.set(
+    url,
+    signedArchive(packageFiles(name, options.declares ?? version, options.body), signer),
+  );
   entries = [
     ...entries.filter((entry) => entry.packageId !== name),
     {
@@ -193,8 +203,12 @@ function setUp(overrides: Partial<PackageUpdatesPorts> = {}) {
     sha256: sha256Hex,
     target: { platform: process.platform, arch: process.arch },
   };
-  const restartRuntime = (reason: string) => {
+  // As the supervisor does it: the old runtime stops (its node processes asked to close), the
+  // work while stopped runs, then the next one starts.
+  const restartRuntime = (reason: string, whileStopped?: () => void) => {
     restarts.push(reason);
+    stopping();
+    whileStopped?.();
     return Promise.resolve(restartTook);
   };
   const one = new OneAtATime();
@@ -423,6 +437,27 @@ describe("the version check", () => {
 });
 
 describe("applying an update", () => {
+  it("the package is still on its old version when the stop arrives", async () => {
+    const { updates } = await installed("pinger", "0.1.0");
+    publish("pinger", "0.2.0", { body: "// the new version\n" });
+    await updates.check();
+    // What an old node process closing reads from its own folder, by the path it was started with.
+    const live = path.join(roots.live, "pinger");
+    const seen: { version: string | undefined; code: string }[] = [];
+    stopping = () => {
+      seen.push({
+        version: roots.installed("pinger")?.version,
+        code: fs.readFileSync(path.join(live, "package", "node.js"), "utf8"),
+      });
+    };
+    expect(await updates.apply("pinger", "person")).toMatchObject({ ok: true });
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.version).toBe("0.1.0");
+    expect(seen[0]?.code).not.toContain("the new version");
+    // Swapped in before the next runtime started.
+    expect(roots.installed("pinger")?.version).toBe("0.2.0");
+  });
+
   it("builds the new version, restarts only the runtime, waits for ready, and keeps the old one", async () => {
     const { installer, updates } = await installed("pinger", "0.1.0");
     publish("pinger", "0.2.0");
