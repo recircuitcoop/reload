@@ -8,7 +8,6 @@ import * as path from "node:path";
 import type { BrowserWindow } from "electron";
 import { afterAll, describe, expect, it } from "vitest";
 import type { Supervisor } from "../../src/application/supervisor";
-import type { BrowseRequest } from "../../src/domain/forms/browse";
 import type { ChildName, ChildStatus } from "../../src/domain/supervision/child-state";
 import { wireChildCalls } from "../../src/shell/child-calls";
 import { IPC } from "../../src/shell/ipc";
@@ -57,7 +56,7 @@ function appWindow() {
   const options: unknown[] = [];
   const logger = new RecordingLogger();
   const opened: string[] = [];
-  const browsed: BrowseRequest[] = [];
+  const browsed: unknown[] = [];
   const window = new AppWindow({
     createWindow: (given) => {
       options.push(given);
@@ -70,7 +69,7 @@ function appWindow() {
     hidden: true,
     logger,
     openExternal: (url) => opened.push(url),
-    browse: (request) => browsed.push(request),
+    browse: (request, parent) => browsed.push([request, parent]),
   });
   return { window, made, options, logger, opened, browsed };
 }
@@ -122,11 +121,16 @@ describe("the app window", () => {
     window.open();
     const handler = made[0]?.openHandler;
     if (handler === undefined) throw new Error("no window open handler");
-    expect(handler({ url: "reload-browse:folder?n=2" })).toEqual({ action: "deny" });
-    expect(handler({ url: "reload-browse:file?n=0" })).toEqual({ action: "deny" });
+    expect(handler({ url: "reload-browse:folder?node=n1&field=root" })).toEqual({
+      action: "deny",
+    });
+    expect(handler({ url: "reload-browse:file?node=n2&field=a.0.b" })).toEqual({
+      action: "deny",
+    });
+    // Each over the window it came from.
     expect(browsed).toEqual([
-      { kind: "folder", field: 2 },
-      { kind: "file", field: 0 },
+      [{ kind: "folder", node: "n1", field: "root" }, made[0]],
+      [{ kind: "file", node: "n2", field: "a.0.b" }, made[0]],
     ]);
     expect(opened).toEqual([]);
   });

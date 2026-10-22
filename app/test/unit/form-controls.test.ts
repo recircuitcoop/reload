@@ -167,9 +167,8 @@ describe("a list through the form", () => {
 
   it("a list whose elements break their constraint is refused, and the list before stays", () => {
     const validator = new AjvSchemaValidator();
-    const kept = keptOnSave(schema, { sizes: [3] }, { sizes: ["2", "0"] }, (value) =>
-      validator.check(schema, value),
-    );
+    const check = (value: Readonly<Record<string, unknown>>) => validator.check(schema, value);
+    const kept = keptOnSave(schema, { sizes: [3] }, { sizes: ["2", "0"] }, check, new Map());
     expect(kept.refused.map((problem) => problem.path)).toEqual(["/sizes/1"]);
     expect(kept.values).toEqual({ sizes: [3] });
   });

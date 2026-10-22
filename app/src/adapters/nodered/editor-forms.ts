@@ -11,7 +11,7 @@
 //
 // Saving keeps what passes and nothing that fails (domain/forms/kept-on-save.ts): a refused
 // field keeps its value from before, a refused row the row that was at its place, and the
-// editor says what was not kept; opening the form again shows what was typed beside why.
+// editor says what was not kept, with what was typed, and again as the form next opens.
 //
 // A string property whose options come from Anytype is a select filled as the form opens
 // (editor-options.ts, with the DOM helpers both files draw with).
@@ -31,8 +31,9 @@
 import { Ajv2020, type ValidateFunction } from "ajv/dist/2020.js";
 
 import { browseUrl } from "../../domain/forms/browse";
-import { coerceObject } from "../../domain/forms/coerce";
+import { coerceObject, missingSecrets } from "../../domain/forms/coerce";
 import { keptOnSave, notKeptSentence } from "../../domain/forms/kept-on-save";
+import { originsOf, seedOrigins } from "../../domain/forms/row-origins";
 import { RELOAD_ANNOTATION } from "../../domain/forms/reload-keyword";
 import {
   ADVANCED_LABEL,
@@ -53,6 +54,8 @@ type Values = Record<string, unknown>;
 interface Registered {
   /** The config schema without its secrets: what the node's own properties must satisfy. */
   readonly schema: JsonSchema;
+  /** The whole config schema, secrets included. */
+  readonly full: JsonSchema;
   readonly fields: readonly Field[];
   readonly validate: ValidateFunction;
 }
@@ -74,7 +77,7 @@ function define(type: string, schema: JsonSchema): void {
   const plain = withoutSecrets(schema);
   // Drawn from the whole schema, so a secret in a group has its place; judged without them.
   const fields = formModel(schema).fields;
-  types.set(type, { schema: plain, fields, validate: ajv.compile(plain) });
+  types.set(type, { schema: plain, full: schema, fields, validate: ajv.compile(plain) });
 }
 
 /** The node's own values for its declared, non-secret properties, as Node-RED keeps them. */
@@ -105,14 +108,29 @@ function problems(validate: ValidateFunction): { path: string; message: string }
  */
 function validate(type: string, node: Values, key: string): true | string {
   const entry = registered(type);
-  if (entry.validate(valuesOf(entry, node))) {
-    return true;
+  const values = valuesOf(entry, node);
+  const mine = entry.validate(values)
+    ? []
+    : problems(entry.validate).filter(
+        ({ path }) => path === `/${key}` || path.startsWith(`/${key}/`),
+      );
+  // A required secret in this group, unset, as the runtime refuses it; only once Node-RED has
+  // said which of the node's secrets are set.
+  const held = node["credentials"];
+  if (isRecord(held)) {
+    const set = new Set(
+      Object.keys(held)
+        .filter((name) => name.startsWith("has_") && held[name] === true)
+        .map((name) => name.slice("has_".length)),
+    );
+    for (const name of missingSecrets(entry.full, values, set)) {
+      if (name.startsWith(`${key}.`)) {
+        mine.push({ path: `/${name.replaceAll(".", "/")}`, message: "is required" });
+      }
+    }
   }
-  const mine = problems(entry.validate).filter(
-    ({ path }) => path === `/${key}` || path.startsWith(`/${key}/`),
-  );
   // In the person's words, by the property's title: never its key.
-  return mine.length === 0 ? true : describedProblems(entry.schema, mine);
+  return mine.length === 0 ? true : describedProblems(entry.full, mine);
 }
 
 // ── drawing ──────────────────────────────────────────────────────────────────────────────
@@ -134,9 +152,6 @@ function textOf(value: unknown): string {
   }
   return typeof value === "string" ? value : JSON.stringify(value);
 }
-
-/** The inputs a Browse… may fill, by number, for the form open now. */
-let browsing: HTMLInputElement[] = [];
 
 /** One control of `field`, holding `value`: anything but a group or a table. */
 function control(field: Field, path: string, value: unknown): HTMLElement {
@@ -193,9 +208,8 @@ function control(field: Field, path: string, value: unknown): HTMLElement {
       input.value = textOf(value);
       const browse = element("button", { type: "button", "data-testid": `reload-browse-${path}` });
       browse.textContent = BROWSE_LABEL;
-      const number = browsing.push(input) - 1;
       browse.addEventListener("click", () => {
-        window.open(browseUrl(field.pathKind ?? "file", number));
+        window.open(browseUrl(field.pathKind ?? "file", editingId(), path));
       });
       holder.append(input, browse);
       return holder;
@@ -347,6 +361,10 @@ function table(field: Field, path: string, rows: readonly Values[]): HTMLElement
         "data-reload-row": rowPath,
         "data-testid": `reload-row-${rowPath}`,
       });
+      const origin = originOf.get(row);
+      if (origin !== undefined) {
+        line.setAttribute("data-reload-origin", String(origin));
+      }
       draw(line, columns, row, rowPath);
       const button = (action: string, text: string, change: () => Values[]): void => {
         const pressed = element(
@@ -430,11 +448,25 @@ function read(container: Element, fields: readonly Field[]): Values {
   return values;
 }
 
+/** The rows drawn under `holder`, each remembering the row it was drawn from, if any. */
 function readRows(holder: Element, columns: readonly Field[]): Values[] {
   return [...holder.children]
     .filter((child) => child.hasAttribute("data-reload-row"))
-    .map((line) => read(line, columns));
+    .map((line) => {
+      const row = read(line, columns);
+      const origin = line.getAttribute("data-reload-origin");
+      if (origin !== null) {
+        originOf.set(row, Number(origin));
+      }
+      return row;
+    });
 }
+
+/**
+ * Which stored row each drawn row was drawn from (kept-on-save.ts matches rows by it, never by
+ * their place): set for the node's own rows as its form opens, carried by every move.
+ */
+const originOf = new WeakMap<object, number>();
 
 function readList(holder: Element, item: Field): unknown[] {
   return [...holder.children]
@@ -454,22 +486,30 @@ function containerOf(type: string): HTMLElement {
 /** The node whose form is open: its credentials say which secrets are set. */
 let editing: Values | null = null;
 
-/** What a save did not keep, by node id: shown with its reasons as that node's form opens. */
-const refusedOf = new Map<string, { values: Values; sentence: string }>();
+/** The id of the node whose form is open; "" with none. */
+function editingId(): string {
+  const id = editing?.["id"];
+  return typeof id === "string" ? id : "";
+}
 
-/** oneditprepare: draw the form with the node's values, or with what it last refused. */
+/** What a save did not keep, by node id: said again as that node's form next opens. */
+const refusedOf = new Map<string, string>();
+
+/** oneditprepare: draw the form with the node's values, and what its last save refused. */
 function prepare(type: string, node: Values): void {
   const container = containerOf(type);
   container.replaceChildren();
   editing = node;
-  browsing = [];
   const refused = refusedOf.get(String(node["id"]));
   refusedOf.delete(String(node["id"]));
+  // What was not kept, with what was typed and why, above the values the node holds.
   if (refused !== undefined) {
     const said = { class: "form-tips reload-refused", "data-testid": "reload-refused" };
-    container.append(element("div", said, refused.sentence));
+    container.append(element("div", said, refused));
   }
-  draw(container, registered(type).fields, { ...node, ...refused?.values }, "");
+  const { fields } = registered(type);
+  seedOrigins(fields, node, originOf);
+  draw(container, fields, node, "");
 }
 
 /**
@@ -482,15 +522,15 @@ function save(type: string, node: Values): boolean {
   const container = containerOf(type);
   const submitted = read(container, entry.fields);
   const previous = ownOf(entry, node);
-  const kept = keptOnSave(entry.schema, previous, submitted, (value) =>
-    entry.validate(value) ? [] : problems(entry.validate),
-  );
+  const check = (value: Values) => (entry.validate(value) ? [] : problems(entry.validate));
+  const origins = originsOf(entry.fields, submitted, originOf);
+  const kept = keptOnSave(entry.schema, previous, submitted, check, origins);
   for (const [key, value] of Object.entries(kept.values)) {
     node[key] = value;
   }
   if (kept.refused.length > 0) {
-    const sentence = notKeptSentence(describedProblems(entry.schema, kept.refused));
-    refusedOf.set(String(node["id"]), { values: submitted, sentence });
+    const sentence = notKeptSentence(entry.schema, kept.refused);
+    refusedOf.set(String(node["id"]), sentence);
     window.RED?.notify(sentence, "warning");
   }
   return saveSecrets(container, node);
@@ -514,10 +554,14 @@ function saveSecrets(container: Element, node: Values): boolean {
   return changed;
 }
 
-/** A path chosen with Browse… (shell/editor-browse.ts), into the field it was asked for. */
-function browsed(field: number, path: string): void {
-  const input = browsing[field];
-  if (input !== undefined && input.isConnected) {
+/**
+ * A path chosen with Browse… (shell/editor-browse.ts), into the field of the node's form that
+ * asked; dropped when that form is no longer the one open.
+ */
+function browsed(node: string, field: string, path: string): void {
+  const form = document.querySelector(".reload-form");
+  const input = form?.querySelector(`input[data-reload-field="${CSS.escape(field)}"]`);
+  if (editingId() === node && input instanceof HTMLInputElement) {
     input.value = path;
     input.dispatchEvent(new Event("change", { bubbles: true }));
   }

@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 import { AjvSchemaValidator } from "../../src/adapters/schema/ajv-validator";
 import { coerceObject } from "../../src/domain/forms/coerce";
 import { describedProblems } from "../../src/domain/forms/form-model";
-import { keptOnSave, notKeptSentence } from "../../src/domain/forms/kept-on-save";
+import { keptOnSave, notKeptSentence, type RowOrigins } from "../../src/domain/forms/kept-on-save";
 import type { JsonSchema } from "../../src/domain/packages/declaration";
 
 const validator = new AjvSchemaValidator();
@@ -59,13 +59,46 @@ const SETTINGS: JsonSchema = {
   properties: { interval: INTERVAL, quality: QUALITY },
 };
 
+/**
+ * The origins of a form whose rows nobody moved: each submitted row drawn from the stored row
+ * at its place, when there is one, at every depth; a row past them added.
+ */
+function inPlace(schema: JsonSchema, previous: unknown, submitted: unknown, at = ""): RowOrigins {
+  const origins = new Map<string, readonly (number | null)[]>();
+  const record = (value: unknown) =>
+    typeof value === "object" && value !== null && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  for (const [key, property] of Object.entries(record(schema["properties"]))) {
+    const given = record(submitted)[key];
+    const before = record(previous)[key];
+    const items = record(record(property)["items"]);
+    if (Array.isArray(given) && items["type"] === "object") {
+      const stored = Array.isArray(before) ? before : [];
+      origins.set(
+        `${at}/${key}`,
+        given.map((_, index) => (index < stored.length ? index : null)),
+      );
+      given.forEach((row, index) => {
+        const nested = inPlace(items, stored[index], row, `${at}/${key}/${String(index)}`);
+        for (const [path, rows] of nested) {
+          origins.set(path, rows);
+        }
+      });
+    }
+  }
+  return origins;
+}
+
 /** Save `submitted` over `previous`, judged as the editor judges it. */
 function save(
   schema: JsonSchema,
   previous: Record<string, unknown>,
   submitted: Record<string, unknown>,
+  origins: RowOrigins = inPlace(schema, previous, submitted),
 ) {
-  return keptOnSave(schema, previous, submitted, (value) => validator.check(schema, value));
+  const check = (value: Readonly<Record<string, unknown>>) => validator.check(schema, value);
+  return keptOnSave(schema, previous, submitted, check, origins);
 }
 
 /** The rows a kept table holds. */
@@ -80,9 +113,10 @@ describe("a save, field by field", () => {
     );
     expect(kept.values).toEqual({ interval: "45", quality: "low" });
     expect(kept.refused.map((problem) => problem.path)).toEqual(["/quality"]);
-    // What the person is told names the field by its title, and what is wrong with it.
-    expect(notKeptSentence(describedProblems(SETTINGS, kept.refused))).toBe(
-      `Not saved: Quality: must be one of "low", "high". The value each had before is kept.`,
+    // What the person is told names the field by its title, what is wrong, and what was typed.
+    expect(notKeptSentence(SETTINGS, kept.refused)).toBe(
+      'Not saved: Quality: must be one of "low", "high", not "medium". ' +
+        "The value each had before is kept.",
     );
   });
 
@@ -94,10 +128,13 @@ describe("a save, field by field", () => {
     expect(save(SETTINGS, {}, { quality: "medium" }).values).toEqual({});
   });
 
-  it("a value for a property the schema does not declare is never taken from a save", () => {
+  it("a value for a property the schema does not declare is refused, and never taken", () => {
     const before = { interval: 20 };
     const kept = save(SETTINGS, before, { interval: "30", unknown: "refused" });
     expect(kept.values).toEqual({ interval: "30" });
+    expect(kept.refused).toEqual([
+      { path: "/unknown", message: "is not a declared property", value: "refused" },
+    ]);
     expect(save(SETTINGS, { ...before, unknown: "kept" }, { unknown: "typed" }).values).toEqual({
       ...before,
       unknown: "kept",
@@ -185,9 +222,10 @@ describe("a save of a table, row by row", () => {
     };
     const kept = save(schema, before, submitted);
     expect(rows(kept.values["volumes"]).map((row) => row["label"])).toEqual(["one", "two"]);
-    // The editor shows `submitted` again as the form opens, beside this.
-    expect(describedProblems(schema, kept.refused)).toBe(
-      "Volumes, row 2, Gain: must be 1 or more.",
+    // What was typed is said beside why, as the save ends and again as the form opens.
+    expect(notKeptSentence(schema, kept.refused)).toBe(
+      'Not saved: Volumes, row 2, Gain: must be 1 or more, not "0". ' +
+        "The value each had before is kept.",
     );
   });
 
@@ -209,6 +247,123 @@ describe("a save of a table, row by row", () => {
     // Kept as typed; the runtime's coercion gives the cell its default.
     expect(coerceObject(schema, kept.values)).toEqual({
       volumes: [{ label: "Zoom H6", globs: ["WAV/**/*.WAV"] }],
+    });
+  });
+});
+
+describe("a save of rows the person moved, removed or added", () => {
+  const gain = { type: "integer", title: "Gain", minimum: 1 };
+  const schema = volumes({ gain });
+  const before = {
+    volumes: [
+      { label: "one", gain: 1 },
+      { label: "two", gain: 2 },
+      { label: "three", gain: 3 },
+    ],
+  };
+  const labels = (kept: { values: Record<string, unknown> }) =>
+    rows(kept.values["volumes"]).map((row) => [row["label"], row["gain"]]);
+
+  it("a swapped row that fails keeps its own row before, at its new place", () => {
+    // "two" moved up, then given a bad gain: it keeps "two" as it was, and "one" is not doubled.
+    const submitted = {
+      volumes: [
+        { label: "two", gain: "0" },
+        { label: "one", gain: "1" },
+        { label: "three", gain: "3" },
+      ],
+    };
+    const origins = new Map([["/volumes", [1, 0, 2]]]);
+    expect(labels(save(schema, before, submitted, origins))).toEqual([
+      ["two", 2],
+      ["one", "1"],
+      ["three", "3"],
+    ]);
+  });
+
+  it("a row removed stays removed when another row fails", () => {
+    const submitted = {
+      volumes: [
+        { label: "one", gain: "1" },
+        { label: "three", gain: "0" },
+      ],
+    };
+    const origins = new Map([["/volumes", [0, 2]]]);
+    expect(labels(save(schema, before, submitted, origins))).toEqual([
+      ["one", "1"],
+      ["three", 3],
+    ]);
+  });
+
+  it("a row added in front, failing, is left out, and the rows after it keep their own", () => {
+    const submitted = {
+      volumes: [
+        { label: "new", gain: "0" },
+        { label: "one", gain: "1" },
+        { label: "two", gain: "-2" },
+        { label: "three", gain: "3" },
+      ],
+    };
+    const origins = new Map([["/volumes", [null, 0, 1, 2]]]);
+    expect(labels(save(schema, before, submitted, origins))).toEqual([
+      ["one", "1"],
+      ["two", 2],
+      ["three", "3"],
+    ]);
+  });
+
+  it("a table whose rows cannot be matched is kept whole when any row fails", () => {
+    const submitted = {
+      volumes: [
+        { label: "two", gain: "0" },
+        { label: "one", gain: "1" },
+      ],
+    };
+    const kept = save(schema, before, submitted, new Map());
+    expect(kept.values).toEqual(before);
+    expect(kept.refused.map((problem) => problem.path)).toEqual(["/volumes/0/gain"]);
+    // With no failure, it is taken as it came.
+    const clean = { volumes: [{ label: "two", gain: "2" }] };
+    expect(save(schema, before, clean, new Map()).values).toEqual(clean);
+  });
+});
+
+describe("values nobody declares, at every depth", () => {
+  it("a cell no column draws survives a save of its row, and of its row moved", () => {
+    const schema = volumes();
+    const before = {
+      volumes: [
+        { label: "one", old_cell: "kept" },
+        { label: "two", old_cell: "also kept" },
+      ],
+    };
+    const edited = save(schema, before, { volumes: [{ label: "ONE" }, { label: "two" }] });
+    expect(edited.values).toEqual({
+      volumes: [
+        { label: "ONE", old_cell: "kept" },
+        { label: "two", old_cell: "also kept" },
+      ],
+    });
+    const moved = save(
+      schema,
+      before,
+      { volumes: [{ label: "two" }, { label: "one" }] },
+      new Map([["/volumes", [1, 0]]]),
+    );
+    expect(rows(moved.values["volumes"]).map((row) => row["old_cell"])).toEqual([
+      "also kept",
+      "kept",
+    ]);
+  });
+
+  it("a value inside a group survives a clean save of the group", () => {
+    const schema: JsonSchema = {
+      type: "object",
+      properties: { retry: { type: "object", properties: { attempts: INTERVAL } } },
+    };
+    const before = { retry: { attempts: 2, jitter: 0.5 } };
+    expect(save(schema, before, { retry: { attempts: "3" } }).values).toEqual({
+      retry: { attempts: "3", jitter: 0.5 },
     });
   });
 });

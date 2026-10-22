@@ -90,6 +90,7 @@
                   "minLength": 1,
                   "reload": { "path": "folder" }
                 },
+                "note": { "type": "string", "title": "Note", "reload": { "advanced": true } },
                 "globs": {
                   "type": "array",
                   "title": "Globs",

@@ -273,15 +273,19 @@ A type MAY set its own limits in `reload.limits`:
 
    `title` gives the label, `description` a tip, and `default` the default value. A save keeps
    what passes and nothing that fails: a property the schema refuses keeps its value from before,
-   and a table's refused row the row that was at its place (or none), at every depth; the editor
-   says what was not kept. A value for a property the type no longer declares is kept by a
-   deploy, and comes back when the property is declared again; it never reaches the node.
+   and a table's refused row the row it was drawn from (wherever it now stands), or none for a
+   row added in that save, at every depth; a value for a property nobody declares is refused.
+   The editor says what was not kept, with what was typed. Values the schema does not declare are
+   kept at every depth: by a save, in a group and in a row; by a deploy, at the top, coming back
+   when the property is declared again; and by Setup's Continue, which keeps the groups, tables
+   and lists it does not draw. Such a value never reaches the node.
 2. Secret properties MUST become Node-RED credentials, stored encrypted in `flows_cred.json` with
    the runtime's credential secret. They MUST NOT appear in `flows.json`. A secret inside a nested
    object is a credential named by its path (`"account.token"`), drawn in its group and delivered
-   under that name in `start.credentials`. A secret inside an array's items, or a list of
-   secrets, cannot be a credential and is refused at the declaration, naming its path. A secret
-   never set takes its `default`, when it declares one.
+   under that name in `start.credentials`; a required one unset makes the step not set up, on
+   the canvas, in Setup and at start. A secret inside an array's items, or a list of secrets,
+   cannot be a credential and is refused at the declaration, naming its path, and so is a
+   property name holding a dot, which would share a credential's name.
 3. Before the start frame, the runtime MUST coerce the form values to the schema types (Node-RED
    returns strings; proven).
    **[UNPROVEN]** Full validation with a real JSON Schema 2020-12 validator (for example ajv); the

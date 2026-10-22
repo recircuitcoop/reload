@@ -17,7 +17,7 @@ export interface AppWindowDeps {
   /** Hand an anytype:// link to the desktop app (Run history's Open in Anytype). */
   readonly openExternal: (url: string) => void;
   /** A path field's Browse… in the canvas form (domain/forms/browse.ts). */
-  readonly browse: (request: BrowseRequest) => void;
+  readonly browse: (request: BrowseRequest, parent: BrowserWindow) => void;
 }
 
 export class AppWindow {
@@ -54,7 +54,7 @@ export class AppWindow {
     window.webContents.setWindowOpenHandler(({ url }) => {
       const browse = parseBrowse(url);
       if (browse !== null) {
-        this.#deps.browse(browse);
+        this.#deps.browse(browse, window);
         return { action: "deny" };
       }
       if (!isAnytypeLink(url)) {

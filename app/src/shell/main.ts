@@ -200,7 +200,7 @@ const appWindow = new AppWindow({
   hidden: hiddenWindows,
   logger,
   openExternal: (url) => void shell.openExternal(url),
-  browse: (request) => void browseFor(request, { dialog, editor }),
+  browse: (request, parent) => void browseFor(request, { dialog, editor, parent }),
 });
 const push = new PushEvents(appWindow.toPage);
 const { bringForward } = appWindow;

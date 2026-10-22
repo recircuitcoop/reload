@@ -110,7 +110,7 @@ interface EditorNode {
 }
 interface EditorRed {
   view: { importNodes(nodes: unknown[]): void };
-  nodes: { node(id: string): EditorNode };
+  nodes: { node(id: string): EditorNode; remove(id: string): unknown };
   editor: { validateNode(node: EditorNode): void; edit(node: EditorNode): void };
 }
 
@@ -275,18 +275,39 @@ test("the form in the real editor: every control, required marked, rows added, r
           y: 100,
           label: "",
           volumes: [
-            { name: "a", path: "/a", globs: ["*.wav"] },
+            // A folded column's cell, and a cell no column draws: neither is lost by a save.
+            { name: "a", path: "/a", globs: ["*.wav"], note: "folded", old_cell: "kept" },
             { name: "b", path: "/b" },
           ],
           sizes: ["2"],
         },
+        // A group holding a required secret Node-RED says is not set: flagged on the canvas.
+        {
+          id: "f2",
+          type,
+          x: 200,
+          y: 200,
+          label: "L",
+          volumes: [{ name: "a", path: "/a" }],
+          account: { user: "me" },
+          credentials: { has_token: true },
+        },
       ]);
       const node = RED.nodes.node("f1");
       RED.editor.validateNode(node);
-      return { valid: node.valid, errors: node.validationErrors };
+      const grouped = RED.nodes.node("f2");
+      RED.editor.validateNode(grouped);
+      // Off the canvas again, so the deploy below carries only the node under test.
+      RED.nodes.remove("f2");
+      return {
+        valid: node.valid,
+        errors: node.validationErrors,
+        grouped: grouped.validationErrors,
+      };
     }, PROBE);
     expect(judged.valid).toBe(false);
     expect(judged.errors).toEqual(["Label: must not be empty."]);
+    expect(judged.grouped).toEqual(["Password: fill this in."]);
 
     await editor.evaluate(() => {
       const RED = (window as unknown as { RED: EditorRed }).RED;
@@ -377,8 +398,23 @@ test("the form in the real editor: every control, required marked, rows added, r
       label: "Filled",
       count: "5",
       volumes: [
-        { name: "b", path: "/b", size_gb: "", readonly: false, globs: ["WAV/**/*.WAV"] },
-        { name: "a", path: "/a", size_gb: "", readonly: false, globs: ["*.wav", "*.flac"] },
+        {
+          name: "b",
+          path: "/b",
+          size_gb: "",
+          readonly: false,
+          note: "",
+          globs: ["WAV/**/*.WAV"],
+        },
+        {
+          name: "a",
+          path: "/a",
+          size_gb: "",
+          readonly: false,
+          note: "folded",
+          globs: ["*.wav", "*.flac"],
+          old_cell: "kept",
+        },
       ],
       formats: ["wav"],
       sizes: ["2", "4.5"],
@@ -401,18 +437,20 @@ test("the form in the real editor: every control, required marked, rows added, r
     await table.getByTestId("reload-action-add").dispatchEvent("click");
     await frame.locator("#node-dialog-ok").dispatchEvent("click");
     await expect(frame.locator(".red-ui-notification").last()).toContainText(
-      "Not saved: Count: must be 1 or more. Volumes, row 3, Name: must not be empty.",
+      'Not saved: Count: must be 1 or more, not "0". Volumes, row 3, Name: must not be empty.',
     );
     expect(await read()).toEqual({ ...saved, label: "Kept" });
-    // Opened again, once the tray has closed, the form shows what was typed beside why it
-    // was not kept.
+    // Opened again, once the tray has closed, the form says what was typed and why it was not
+    // kept, above the values the node holds.
     await expect(form).toHaveCount(0);
     await editor.evaluate(() => {
       const RED = (window as unknown as { RED: EditorRed }).RED;
       RED.editor.edit(RED.nodes.node("f1"));
     });
-    await expect(form.getByTestId("reload-refused")).toContainText("Count: must be 1 or more.");
-    await expect(field("count")).toHaveValue("0");
+    await expect(form.getByTestId("reload-refused")).toContainText(
+      'Count: must be 1 or more, not "0".',
+    );
+    await expect(field("count")).toHaveValue("5");
     await frame.locator("#node-dialog-cancel").dispatchEvent("click");
     expect(await read()).toEqual({ ...saved, label: "Kept" });
 

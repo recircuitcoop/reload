@@ -2,23 +2,38 @@
 //
 // A save never puts a value its schema refuses over a good one. Each field is judged on its
 // own: a field that passes is recorded, a field that fails keeps the value it had (none, when it
-// had none). A table is judged row by row, by position: a row that fails keeps the row that was
-// at its place before, kept whole, or is left out when there was none; a failure inside a
-// nested table refuses only the nested row, the same way, all the way down. So one bad entry
-// never stops the node, and never costs a good row. What was refused is said, by field, so the
-// person can be shown what they typed and why it was not kept.
+// had none). A table is judged row by row, each row matched to the row it was drawn from (the
+// form says which, as `RowOrigins`), never by its place: a row that fails keeps that row whole,
+// wherever it now stands, or is left out when it was added in this save; a failure inside a
+// nested table refuses only the nested row, the same way, all the way down. A table whose rows
+// the form cannot match keeps the table it had when any row fails. So one bad entry never
+// stops the node, never costs a good row, and never brings back a row the person removed.
+//
+// Values the schema does not declare are kept at every depth: in a group, and in a row matched
+// to the row it came from. A submitted value for a property nobody declares is refused, never
+// recorded. What was refused is said, by field and with what was typed, so the person can see
+// it and why it was not kept.
 //
 // Pure: no I/O, no DOM, no library; the schema is judged by the `check` handed in.
 
 import type { JsonSchema } from "../packages/declaration";
 import { coerceObject } from "./coerce";
-import { propertiesOf, rowSchemaOf } from "./form-model";
+import { describedProblems, propertiesOf, rowSchemaOf } from "./form-model";
 
 /** One refusal: the JSON Pointer of the value, and what is wrong with it. */
 export interface Problem {
   readonly path: string;
   readonly message: string;
+  /** What was typed there, when anything was. */
+  readonly value?: unknown;
 }
+
+/**
+ * Where each submitted row of a table was drawn from: its index in that table before the save,
+ * or null for a row added in it. Keyed by the table's JSON Pointer in the submission
+ * ("/volumes", "/volumes/0/takes").
+ */
+export type RowOrigins = ReadonlyMap<string, readonly (number | null)[]>;
 
 type Values = Readonly<Record<string, unknown>>;
 
@@ -39,18 +54,33 @@ function under(problems: readonly Problem[], path: string): Problem[] {
 
 /**
  * The values to keep when `submitted` is saved over `previous`. `check` judges the whole
- * object, coerced as the runtime will coerce it. A key the schema does not declare is never
- * taken from the submission: what was there stays.
+ * object, coerced as the runtime will coerce it; `origins` matches each table's rows.
  */
 export function keptOnSave(
   schema: JsonSchema,
   previous: Values,
   submitted: Values,
   check: (value: Values) => readonly Problem[],
+  origins: RowOrigins,
 ): Kept {
   const problems = check(coerceObject(schema, submitted));
-  const { value, refused } = keptObject(schema, previous, submitted, problems, "");
-  return { values: value, refused };
+  const { value, refused } = keptObject(schema, previous, submitted, problems, "", origins);
+  return {
+    values: value,
+    refused: refused.map((problem) => {
+      const typed = valueAt(submitted, problem.path);
+      return typed === undefined ? problem : { ...problem, value: typed };
+    }),
+  };
+}
+
+/** The value at a JSON Pointer of keys and indexes; undefined past it. */
+function valueAt(value: unknown, path: string): unknown {
+  let at = value;
+  for (const segment of path.split("/").slice(1)) {
+    at = Array.isArray(at) ? at[Number(segment)] : isRecord(at) ? at[segment] : undefined;
+  }
+  return at;
 }
 
 interface Judged {
@@ -65,15 +95,22 @@ function keptObject(
   submitted: Values,
   problems: readonly Problem[],
   at: string,
+  origins: RowOrigins,
 ): { value: Record<string, unknown>; refused: Problem[] } {
+  // Everything it had stays unless a declared field replaces it: undeclared values included.
   const value = new Map(Object.entries(previous));
   const refused: Problem[] = [];
-  for (const [key, property] of propertiesOf(schema)) {
+  const declared = new Map(propertiesOf(schema));
+  for (const key of Object.keys(submitted).filter((each) => !declared.has(each))) {
+    refused.push({ path: `${at}/${key}`, message: "is not a declared property" });
+  }
+  for (const [key, property] of declared) {
     if (!(key in submitted)) {
       continue;
     }
     const path = `${at}/${key}`;
-    const kept = keptField(property, previous[key], submitted[key], under(problems, path), path);
+    const mine = under(problems, path);
+    const kept = keptField(property, previous[key], submitted[key], mine, path, origins);
     if (kept.value === undefined) {
       value.delete(key);
     } else {
@@ -90,40 +127,50 @@ function keptField(
   given: unknown,
   problems: readonly Problem[],
   path: string,
+  origins: RowOrigins,
 ): Judged {
-  if (problems.length === 0) {
-    return { value: given, refused: [] };
-  }
   const whole = problems.some((problem) => problem.path === path);
-  if (!whole && property["type"] === "object" && isRecord(given)) {
-    return keptObject(property, isRecord(previous) ? previous : {}, given, problems, path);
+  if (whole) {
+    return { value: previous, refused: problems };
+  }
+  if (property["type"] === "object" && isRecord(given)) {
+    const before = isRecord(previous) ? previous : {};
+    return keptObject(property, before, given, problems, path, origins);
   }
   const rows = rowSchemaOf(property);
-  if (!whole && rows !== null && Array.isArray(given)) {
-    return keptRows(rows, Array.isArray(previous) ? previous : [], given, problems, path);
+  if (rows !== null && Array.isArray(given)) {
+    const before = Array.isArray(previous) ? previous : [];
+    return keptRows(rows, before, given, problems, path, origins);
   }
-  return { value: previous, refused: problems };
+  return problems.length === 0
+    ? { value: given, refused: [] }
+    : { value: previous, refused: problems };
 }
 
-/** A table, row by row: each failing row replaced by the one at its place before, if any. */
+/** A table, row by row: each row judged against the row it was drawn from. */
 function keptRows(
   rows: JsonSchema,
   previous: readonly unknown[],
   given: readonly unknown[],
   problems: readonly Problem[],
   path: string,
+  origins: RowOrigins,
 ): Judged {
+  const from = origins.get(path);
+  if (from === undefined) {
+    // Rows nobody can match: the table is taken whole, or kept whole when any row fails.
+    return problems.length === 0
+      ? { value: given, refused: [] }
+      : { value: previous, refused: problems };
+  }
   const tables = propertiesOf(rows).filter(([, column]) => rowSchemaOf(column) !== null);
   const value: unknown[] = [];
   const refused: Problem[] = [];
   given.forEach((row, index) => {
     const rowPath = `${path}/${String(index)}`;
     const mine = under(problems, rowPath);
-    const before = previous[index];
-    if (mine.length === 0) {
-      value.push(row);
-      return;
-    }
+    const origin = from[index] ?? null;
+    const before = origin === null ? undefined : previous[origin];
     // Problems inside a nested table's rows are that table's to judge; any other refuses the row.
     const nested = (problem: Problem) =>
       isRecord(row) &&
@@ -137,23 +184,30 @@ function keptRows(
       refused.push(...mine);
       return;
     }
-    const kept: Record<string, unknown> = { ...row };
-    const old = isRecord(before) ? before : {};
-    for (const [key, column] of tables) {
-      const cell = `${rowPath}/${key}`;
-      const judged = keptField(column, old[key], row[key], under(mine, cell), cell);
-      kept[key] = judged.value ?? [];
-      refused.push(...judged.refused);
+    const kept = keptObject(rows, isRecord(before) ? before : {}, row, mine, rowPath, origins);
+    for (const [key] of tables) {
+      // A nested table every row of which was refused, in a row that had none, is empty.
+      if (Array.isArray(row[key]) && kept.value[key] === undefined) {
+        kept.value[key] = [];
+      }
     }
-    value.push(kept);
+    value.push(kept.value);
+    refused.push(...kept.refused);
   });
   return { value, refused };
 }
 
 /**
- * What the editor says after a save that kept something back: what was refused, in the
- * person's words (describedProblems), and that the value before stayed.
+ * What the editor says after a save that kept something back: each refusal in the person's
+ * words (describedProblems), with what was typed, and that the value before stayed.
  */
-export function notKeptSentence(described: string): string {
-  return `Not saved: ${described} The value each had before is kept.`;
+export function notKeptSentence(schema: JsonSchema, refused: readonly Problem[]): string {
+  const said = refused.map((problem) => {
+    const described = describedProblems(schema, [problem]);
+    const { value } = problem;
+    return value === undefined || value === ""
+      ? described
+      : `${described.slice(0, -1)}, not ${JSON.stringify(value)}.`;
+  });
+  return `Not saved: ${said.join(" ")} The value each had before is kept.`;
 }
