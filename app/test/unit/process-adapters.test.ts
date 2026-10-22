@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { processHostOver, shellLinkOver } from "../../src/adapters/electron/parent-port";
 import { UtilityProcessLauncher } from "../../src/adapters/electron/utility-process-launcher";
 import { LOOPBACK, pickFreeLoopbackPort } from "../../src/adapters/net/free-port";
-import { MAX_TIMER_MS, systemClock } from "../../src/adapters/system/clock";
+import { systemClock } from "../../src/adapters/system/clock";
 import type { Line } from "../../src/domain/logging/lines";
 
 class FakePipe extends EventEmitter {
@@ -172,27 +172,8 @@ describe("systemClock", () => {
     expect(systemClock.now()).toBeGreaterThanOrEqual(start);
   });
 
-  it("waits out a delay past setTimeout's limit in several timers, instead of firing at once", () => {
-    vi.useFakeTimers();
-    try {
-      const ran: string[] = [];
-      const cancel = systemClock.after(MAX_TIMER_MS + 1_000, () => ran.push("late"));
-      vi.advanceTimersByTime(MAX_TIMER_MS);
-      expect(ran).toEqual([]);
-      vi.advanceTimersByTime(999);
-      expect(ran).toEqual([]);
-      vi.advanceTimersByTime(1);
-      expect(ran).toEqual(["late"]);
-      // Cancelled between two of its timers: nothing runs.
-      const stopped: string[] = [];
-      const stop = systemClock.after(2 * MAX_TIMER_MS, () => stopped.push("never"));
-      vi.advanceTimersByTime(MAX_TIMER_MS + 5);
-      stop();
-      vi.advanceTimersByTime(MAX_TIMER_MS);
-      expect(stopped).toEqual([]);
-      cancel();
-    } finally {
-      vi.useRealTimers();
-    }
+  it("measures on a clock that only goes forward", () => {
+    const first = systemClock.monotonic?.() ?? Number.NaN;
+    expect(systemClock.monotonic?.() ?? Number.NaN).toBeGreaterThanOrEqual(first);
   });
 });

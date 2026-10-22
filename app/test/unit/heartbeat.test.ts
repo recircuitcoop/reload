@@ -93,4 +93,69 @@ describe("Heartbeat with a progress marker", () => {
     heartbeat.stop();
     expect(clock.pending).toBe(0);
   });
+
+  it("measures silence on the monotonic clock: setting the wall clock back never pauses it", async () => {
+    const fake = new FakeClock();
+    let wall = 1_000_000;
+    const clock = {
+      now: () => (wall -= 5_000), // every reading an hour's worth further back, as it were
+      monotonic: () => fake.now(),
+      after: (ms: number, callback: () => void) => fake.after(ms, callback),
+    };
+    const stale: number[] = [];
+    const heartbeat = new Heartbeat({
+      who: "the node process",
+      clock,
+      logger: new RecordingLogger(),
+      profile: PROFILE,
+      onStale: (silentFor) => stale.push(silentFor),
+    });
+    heartbeat.start({ ping: () => Promise.resolve(7) });
+    for (let moved = 0; moved < 10_000; moved += 100) {
+      fake.advance(100);
+      await flush();
+    }
+    expect(stale).toHaveLength(1);
+    expect(stale[0]).toBeGreaterThan(3_000);
+    expect(stale[0]).toBeLessThanOrEqual(4_000);
+  });
+
+  it("a gap of more than two intervals is a wake, whatever the window: never read as silence", async () => {
+    const fake = new FakeClock();
+    let slept = 0;
+    const clock = {
+      now: () => fake.now(),
+      monotonic: () => fake.now() + slept,
+      after: (ms: number, callback: () => void) => fake.after(ms, callback),
+    };
+    const logger = new RecordingLogger();
+    const stale: number[] = [];
+    const heartbeat = new Heartbeat({
+      who: "the node process",
+      clock,
+      logger,
+      // A long window: ten intervals. The machine sleeps for six of them, a frozen marker all along.
+      profile: { heartbeatIntervalMs: 1_000, staleAfterMs: 10_000 },
+      onStale: (silentFor) => stale.push(silentFor),
+    });
+    heartbeat.start({ ping: () => Promise.resolve(7) });
+    for (let moved = 0; moved < 5_000; moved += 100) {
+      fake.advance(100);
+      await flush();
+    }
+    slept += 6_000;
+    for (let moved = 0; moved < 2_000; moved += 100) {
+      fake.advance(100);
+      await flush();
+    }
+    // Eleven seconds by the monotonic clock, past the window; but the gap was sleep, not silence.
+    expect(stale).toEqual([]);
+    expect(logger.lines.some((line) => line.includes("the machine may have slept"))).toBe(true);
+    // Awake again, the window starts over, and a frozen marker is still judged in time.
+    for (let moved = 0; moved < 12_000; moved += 100) {
+      fake.advance(100);
+      await flush();
+    }
+    expect(stale).toHaveLength(1);
+  });
 });

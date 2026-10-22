@@ -51,6 +51,8 @@ export class Heartbeat implements HeartbeatWatch {
   #marker: number | null = null;
   /** When, on this clock, the marker last moved: what silence is measured from. */
   #silentSince = 0;
+  /** When the last judgement was made: a longer gap than two intervals is a wake. */
+  #judgedAt = 0;
 
   constructor(deps: HeartbeatDeps) {
     this.#deps = deps;
@@ -79,8 +81,9 @@ export class Heartbeat implements HeartbeatWatch {
     this.#beats = 0;
     this.#lastBeatAt = null;
     this.#marker = null;
-    const now = this.#deps.clock.now();
+    const now = this.#now();
     this.#silentSince = now;
+    this.#judgedAt = now;
     this.#judge.observe(null, now, true);
     this.#schedule(0);
   }
@@ -93,8 +96,16 @@ export class Heartbeat implements HeartbeatWatch {
     this.#waiting = false;
   }
 
+  /**
+   * The clock silence is measured on: monotonic, so setting the wall clock back never pauses a
+   * judgement, and forward never fabricates one.
+   */
+  #now(): number {
+    return this.#deps.clock.monotonic?.() ?? this.#deps.clock.now();
+  }
+
   #schedule(delay: number): void {
-    const dueAt = this.#deps.clock.now() + delay;
+    const dueAt = this.#now() + delay;
     this.#cancel = this.#deps.clock.after(delay, () => {
       this.#pass(dueAt);
     });
@@ -145,7 +156,7 @@ export class Heartbeat implements HeartbeatWatch {
    * answers with a frozen marker is wedged. A child that sends none is judged by its answers.
    */
   #beat(answer: unknown): void {
-    const now = this.#deps.clock.now();
+    const now = this.#now();
     this.#beats += 1;
     this.#lastBeatAt = now;
     const marker = typeof answer === "number" && Number.isFinite(answer) ? answer : now;
@@ -156,10 +167,13 @@ export class Heartbeat implements HeartbeatWatch {
   }
 
   #judgeNow(dueAt: number): void {
-    const now = this.#deps.clock.now();
-    // A ping settles within one interval of being sent (its own bound), and it is sent when
-    // its pass is due. Anything later than that means the clock jumped: a slow pass.
-    const onTime = now - dueAt <= 2 * this.#interval;
+    const now = this.#now();
+    // A ping settles within one interval of being sent (its own bound), it is sent when its
+    // pass is due, and passes come one interval apart. A pass later than that, or a gap since
+    // the last judgement of more than two intervals, whatever the window, means the machine
+    // slept or the process was held: a slow pass, never silence.
+    const onTime = now - dueAt <= 2 * this.#interval && now - this.#judgedAt <= 2 * this.#interval;
+    this.#judgedAt = now;
     const verdict = this.#judge.observe(this.#marker, now, onTime);
     if (verdict === "deferred" && !onTime) {
       this.#deps.logger.warn(

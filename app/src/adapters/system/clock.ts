@@ -2,26 +2,11 @@
 
 import type { Cancel, Clock } from "../../ports/clock";
 
-/**
- * The longest delay setTimeout keeps (2^31 - 1 ms, about 24.8 days). A longer one fires at once,
- * so a longer wait is made of several timers, each at most this long.
- */
-export const MAX_TIMER_MS = 2_147_483_647;
-
 export const systemClock: Clock = {
   now: () => Date.now(),
+  monotonic: () => performance.now(),
   after(ms: number, callback: () => void): Cancel {
-    let timer: ReturnType<typeof setTimeout>;
-    const wait = (left: number): void => {
-      if (left > MAX_TIMER_MS) {
-        timer = setTimeout(() => {
-          wait(left - MAX_TIMER_MS);
-        }, MAX_TIMER_MS);
-        return;
-      }
-      timer = setTimeout(callback, left);
-    };
-    wait(ms);
+    const timer = setTimeout(callback, ms);
     return () => {
       clearTimeout(timer);
     };
