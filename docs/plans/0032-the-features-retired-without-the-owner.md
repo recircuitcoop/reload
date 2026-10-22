@@ -37,13 +37,10 @@ being ported by plan 0031's branches, and 3 come under an owner decision.
 - **Group 22, registering a catalogue source from the app:** owner, 2026-10-15, "OK, official
   catalogue only" (`0022-the-redesigned-application.md:696`). The rows get `owner_ack` quoting it.
 
-## Needs the owner's answer
-
-- **Group 5, install and update from a git repository or a package index.** The old app allowed
-  it, by the owner's decision D15 ("any source a plugin declares, including git URLs",
-  `0003-innytypes-helper.md:1888`). Reload accepts only signed catalogue archives and local
-  folders. Porting it means running unsigned code from a source the person names, which changes
-  the package trust model of plan 0018. Until the owner answers, the group stays `undecided`.
+- **Group 5, install and update from a git repository or a package index:** retired. Asked on
+  2026-10-22 whether Reload should install plugins from git and package indexes again (the old
+  app's D15), with the impact stated (running unsigned code from an address the person types),
+  the owner answered "Retire it". The 10 rows get `owner_ack` quoting that answer.
 
 ## Order of work
 
@@ -63,8 +60,7 @@ every ledger row against its old test, the other checks behaviour under failure.
    required values caught), 29 (a broken package shown, not hidden), 2, 1 (the controls), 4, 37
    (saving one setting restarts every node), 38.
 3. **Wave 3, supervision and process control:** groups 9, 10, 11, 12, 13, 14, 15, 23, 24.
-4. **Wave 4, packages and updates:** groups 6, 7, 8, 16, 17, 18, 19, 21, 39, and 5 if the owner
-   says Port.
+4. **Wave 4, packages and updates:** groups 6, 7, 8, 16, 17, 18, 19, 21, 39.
 5. Group 25 (per-OS proofs) joins WI-0031-10 and plan 0025.
 
 Each ported row moves to `ported` with the id of the test that proves the old behaviour. Each
