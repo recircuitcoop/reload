@@ -242,6 +242,27 @@ describe("parseDeclaration", () => {
     expect(refused(typed({ limits: 5 }))).toEqual(["types/0/reload/limits: must be object"]);
   });
 
+  it("a type's reload object must be an object, and an empty one promises no heartbeat (spec 2.4.2)", () => {
+    const typed = (reload: unknown) => declaration({ types: [nodeType({ reload })] });
+    expect(refused(typed(["heartbeat", 10]))).toEqual(["types/0/reload: must be object"]);
+    expect(refused(typed({ heartbeat: [10] }))).toEqual([
+      "types/0/reload/heartbeat: must be object",
+    ]);
+    const empty = parse(typed({}));
+    const type = empty.ok ? empty.declaration.types[0] : undefined;
+    expect(type && stabilityOf(type)).toBeNull();
+    // Restarted as usual: a type says restartable false to be left stopped, never by omission.
+    expect(type?.reload?.restartable).toBeUndefined();
+  });
+
+  it("refuses a heartbeat interval that is not a number, naming the field (spec 2.4.2)", () => {
+    for (const interval_s of ["10", null, true]) {
+      expect(
+        refused(declaration({ types: [nodeType({ reload: { heartbeat: { interval_s } } })] })),
+      ).toEqual(["types/0/reload/heartbeat/interval_s: must be number"]);
+    }
+  });
+
   it("refuses a protocol that is not the integer 2", () => {
     expect(refused(declaration({ protocol: "2" }))).toEqual([
       'protocol: "2" is not implemented by this runtime, which implements protocol 2',
