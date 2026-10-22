@@ -20,6 +20,18 @@ import fs from "node:fs";
 
 export const RUN_STATE_FILENAME = "run-state.json";
 
+/** Text for the terminal: no control character (C0, DEL, C1) but the newline and the tab. */
+export function plainText(text: string): string {
+  let plain = "";
+  for (const char of text) {
+    const code = char.codePointAt(0) ?? 0;
+    if (code === 9 || code === 10 || (code >= 0x20 && (code < 0x7f || code > 0x9f))) {
+      plain += char;
+    }
+  }
+  return plain;
+}
+
 /** One process the shell is answerable for. */
 export interface RunRecord {
   readonly id: string;
@@ -77,19 +89,37 @@ export function identityCommand(
   return ["/bin/ps", ["-o", "lstart=,args=", "-p", String(pid)], PS_ENV];
 }
 
-/** The line read, null when no process has the pid, or why the table could not be read. */
-function identityFrom(error: Error | null, stdout: string): string | null {
-  const line = stdout.trim();
-  if (error === null) {
-    return line === "" ? null : line;
+/** Whether a process has the pid: kill(pid, 0) fails with ESRCH only when none has it. */
+export function pidExists(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    // EPERM: it exists, and belongs to somebody else.
+    return (error as NodeJS.ErrnoException).code !== "ESRCH";
   }
-  // ps exits 1, printing nothing, when no process has the pid; anything else is not an answer.
-  const status =
-    (error as { status?: unknown; code?: unknown }).status ?? (error as { code?: unknown }).code;
-  if (status === 1 && line === "") {
+}
+
+/**
+ * The line the process table gave for `pid`; null when no process has the pid; else throws
+ * UncheckedIdentity. "Gone" is never read from `ps`'s exit code, which is 1 for an error too
+ * (macOS): only from no line, and the kernel saying no process has the pid.
+ */
+export function identityFrom(
+  pid: number,
+  error: Error | null,
+  stdout: string,
+  exists: (pid: number) => boolean = pidExists,
+): string | null {
+  const line = stdout.trim();
+  if (error === null && line !== "") {
+    return line;
+  }
+  if (line === "" && !exists(pid)) {
     return null;
   }
-  throw new UncheckedIdentity(`the process table could not be read: ${String(error)}`);
+  const why = error === null ? "it printed nothing for a process that exists" : String(error);
+  throw new UncheckedIdentity(`the process table could not be read: ${why}`);
 }
 
 /** The identity of `pid` now, or null when nothing has that pid; throws UncheckedIdentity. */
@@ -100,17 +130,18 @@ export function identityOf(pid: number, platform: NodeJS.Platform): string | nul
     stdout = execFileSync(command, args, { encoding: "utf8", timeout: 10_000, env });
   } catch (error) {
     const { stdout: printed } = error as { stdout?: unknown };
-    return identityFrom(error as Error, typeof printed === "string" ? printed : "");
+    return identityFrom(pid, error as Error, typeof printed === "string" ? printed : "");
   }
-  return identityFrom(null, stdout);
+  return identityFrom(pid, null, stdout);
 }
 
-function identityOfLater(pid: number, platform: NodeJS.Platform): Promise<string | null> {
+/** identityOf without blocking: for the running instance. */
+export function identityOfLater(pid: number, platform: NodeJS.Platform): Promise<string | null> {
   const [command, args, env] = identityCommand(pid, platform);
   return new Promise((resolve, reject) => {
     execFile(command, args, { encoding: "utf8", timeout: 10_000, env }, (error, stdout) => {
       try {
-        resolve(identityFrom(error, stdout));
+        resolve(identityFrom(pid, error, stdout));
       } catch (unchecked) {
         reject(unchecked instanceof Error ? unchecked : new UncheckedIdentity(String(unchecked)));
       }
@@ -175,26 +206,38 @@ export function readRunState(file: string): readonly RunRecord[] | string | null
   for (const [index, entry] of document.entries()) {
     const wrong = wrongField(entry);
     if (wrong !== null) {
-      return `The run-state file could not be read: record ${String(index + 1)} has no valid ${wrong}.`;
+      return `The run-state file could not be read: record ${String(index + 1)} ${wrong}.`;
     }
   }
   return document as RunRecord[];
 }
 
-/** The first field of a record that is missing or wrong; null when it is a record. */
-function wrongField(value: unknown): "record" | "id" | "pid" | "identity" | null {
+const FIELDS = new Set(["id", "pid", "identity"]);
+
+/**
+ * What is wrong with a record, by field, as the old reader said it (the reader has to know which
+ * one to go and fix): a field missing or of the wrong type, or one no record has. Null when it
+ * is a record.
+ */
+function wrongField(value: unknown): string | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return "record";
+    return "is not a record";
+  }
+  const unknown = Object.keys(value).find((name) => !FIELDS.has(name));
+  if (unknown !== undefined) {
+    // Printed to the terminal: a name, never a control sequence (forceQuit strips them too).
+    return /^[A-Za-z_][\w-]{0,63}$/.test(unknown)
+      ? `has an unknown field, ${unknown}`
+      : "has an unknown field";
   }
   const { id, pid, identity } = value as Record<string, unknown>;
-  // Printed to the terminal: a name, never a control sequence.
   if (typeof id !== "string" || !/^[a-z][a-z0-9-]{0,63}$/.test(id)) {
-    return "id";
+    return "has no valid id";
   }
   if (!isPid(pid)) {
-    return "pid";
+    return "has no valid pid";
   }
-  return typeof identity === "string" && identity !== "" ? null : "identity";
+  return typeof identity === "string" && identity !== "" ? null : "has no valid identity";
 }
 
 /** Whether a record still names its process: true, false, or why that could not be checked. */
@@ -227,9 +270,12 @@ type Outcome = "terminated" | "killed" | "forgotten" | "already stopped" | "stil
  * Either way the record is kept, and Reload is not said to be off.
  */
 export function forceQuit(deps: ForceDeps): number {
+  const print = (text: string) => {
+    deps.print(plainText(text));
+  };
   const records = readRunState(deps.file);
   if (records === null || typeof records === "string") {
-    deps.print(`${records ?? "Reload is not running."}\n`);
+    print(`${records ?? "Reload is not running."}\n`);
     return 1;
   }
   const lines: string[] = [];
@@ -257,7 +303,7 @@ export function forceQuit(deps: ForceDeps): number {
     fs.rmSync(deps.file, { force: true });
     lines.push("Reload is off.");
   }
-  deps.print(lines.join("\n") + "\n");
+  print(lines.join("\n") + "\n");
   return unchecked.length === 0 ? 0 : 1;
 }
 

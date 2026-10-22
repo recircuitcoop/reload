@@ -14,6 +14,7 @@ import {
   DEFAULT_POLITE_MS,
   forceQuit,
   identityCommand,
+  identityFrom,
   identityOf,
   RUN_STATE_FILENAME,
   UncheckedIdentity,
@@ -182,7 +183,8 @@ describe("reload --quit --force", () => {
         '[{"id":"\\u001b]0;owned\\u0007","pid":10,"identity":"t0 Reload"}]',
         "record 1 has no valid id",
       ],
-      ["[null]", "record 1 has no valid record"],
+      ["[null]", "record 1 is not a record"],
+      ['[{"id":"shell","pid":10,"identity":"t0","\\u001b[2J":1}]', "record 1 has an unknown field"],
     ];
     for (const [text] of malformed) {
       fs.writeFileSync(file, text);
@@ -191,6 +193,72 @@ describe("reload --quit --force", () => {
     expect(signals).toEqual([]);
     expect(printed).toEqual(
       malformed.map(([, why]) => `The run-state file could not be read: ${why}.\n`),
+    );
+  });
+
+  /** What `--quit --force` says of a run-state file holding just this record. */
+  const refusal = (record: string) => {
+    fs.writeFileSync(file, `[${record}]`);
+    const { run, signals, printed } = table({ 1: { identity: "t0 Reload" } });
+    expect(run()).toBe(1);
+    expect(signals).toEqual([]);
+    return printed.join("");
+  };
+
+  it("refuses a record whose pid is not a number, by naming the pid", () => {
+    expect(refusal('{"id":"alpha","pid":"4242","identity":"t0 Reload"}')).toBe(
+      "The run-state file could not be read: record 1 has no valid pid.\n",
+    );
+  });
+
+  it("refuses a record with a start time of its own, by naming the field", () => {
+    expect(refusal('{"id":"alpha","pid":1,"identity":"t0 Reload","started_at":"noon"}')).toBe(
+      "The run-state file could not be read: record 1 has an unknown field, started_at.\n",
+    );
+  });
+
+  it("refuses a record with a parent pid, by naming the field", () => {
+    expect(
+      refusal(
+        '{"id":"alpha","pid":1,"identity":"t0 Reload","executable":"/bin/sh","parent_pid":true}',
+      ),
+    ).toBe("The run-state file could not be read: record 1 has an unknown field, executable.\n");
+    expect(refusal('{"id":"alpha","pid":1,"identity":"t0 Reload","parent_pid":true}')).toBe(
+      "The run-state file could not be read: record 1 has an unknown field, parent_pid.\n",
+    );
+  });
+
+  it("refuses a record missing a field, by naming the field", () => {
+    expect(refusal('{"id":"alpha","pid":1}')).toBe(
+      "The run-state file could not be read: record 1 has no valid identity.\n",
+    );
+  });
+
+  it("reads a process as gone only from no line and the kernel knowing no such pid", () => {
+    const failed = Object.assign(new Error("Command failed: /bin/ps"), { status: 1 });
+    // macOS ps exits 1 for an error too: with the process there, that is not "gone".
+    expect(() => identityFrom(42, failed, "", () => true)).toThrow(UncheckedIdentity);
+    expect(() => identityFrom(42, null, "", () => true)).toThrow(UncheckedIdentity);
+    expect(identityFrom(42, failed, "", () => false)).toBeNull();
+    expect(identityFrom(42, null, "  t0 Reload \n", () => true)).toBe("t0 Reload");
+    expect(() => identityFrom(42, failed, "t0 Reload", () => true)).toThrow(UncheckedIdentity);
+  });
+
+  it("prints no control character, whatever a reason carried", () => {
+    write([{ id: "runtime", pid: 11, identity: "t1 Reload runtime" }]);
+    const printed: string[] = [];
+    forceQuit({
+      file,
+      identity: () => {
+        throw new UncheckedIdentity("the process table could not be read: \u001b]0;owned\u0007");
+      },
+      signal: () => undefined,
+      now: () => 0,
+      sleep: () => undefined,
+      print: (text) => printed.push(text),
+    });
+    expect(printed.join("")).toBe(
+      "runtime (process 11) could not be checked: the process table could not be read: ]0;owned.\n",
     );
   });
 
