@@ -165,18 +165,12 @@ export class UpdateCheck {
     }
 
     notifier.clear("core-update-refused", NOTICE_SUBJECT);
+    const available: UpdateOutcome = {
+      ok: true,
+      message: `Checked: Reload ${parsed.version} is available.`,
+    };
     try {
       await this.#ports.selfUpdater.checkForUpdates(parsed);
-      this.#staged = true;
-      this.#emit({ kind: "progress", percent: 100 });
-      this.#emit({ kind: "downloaded" });
-      // "Ready, installs when you quit" only once it is (test_helper_notification.py: a staged
-      // release is announced once staging completes), never before nor after a failed staging.
-      notifier.raise({
-        kind: "core-update-available",
-        subject: NOTICE_SUBJECT,
-        version: parsed.version,
-      });
     } catch (error) {
       notifier.clear("core-update-available", NOTICE_SUBJECT);
       if (error instanceof ReleaseMismatchError) {
@@ -187,8 +181,27 @@ export class UpdateCheck {
       // The verified feed is good; only the platform updater's own network call failed. Not
       // a refusal (nothing was tampered with), so no notice, but nothing is staged either.
       logger.warn(`update: the platform updater could not be reached: ${reasonOf(error)}`);
+      return available;
     }
-    return { ok: true, message: `Checked: Reload ${parsed.version} is available.` };
+    // Staged: nothing after this point is a failure to reach the platform updater.
+    this.#staged = true;
+    this.#emit({ kind: "progress", percent: 100 });
+    this.#emit({ kind: "downloaded" });
+    // "Ready, installs when you quit" only once it is (test_helper_notification.py: a staged
+    // release is announced once staging completes), never before nor after a failed staging.
+    try {
+      notifier.raise({
+        kind: "core-update-available",
+        subject: NOTICE_SUBJECT,
+        version: parsed.version,
+      });
+    } catch (error) {
+      // Logged, so the daily schedule keeps going; the update still installs at quit.
+      logger.warn(
+        `update: Reload ${parsed.version} is staged, but could not be told: ${reasonOf(error)}`,
+      );
+    }
+    return available;
   }
 
   /**

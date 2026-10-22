@@ -196,6 +196,32 @@ describe("the self-update check over real HTTPS", () => {
     expect(selfUpdater.installed).toBe(1);
   });
 
+  it("a notice that cannot be raised after staging is not told as a failure to reach the updater", async () => {
+    const signer = new Signer();
+    const artifact = encode("bytes");
+    const fileName = "a.zip";
+    const yaml = metadataYaml("1.2.3", fileName, artifact);
+    published.set("/latest-mac.yml", encode(yaml));
+    published.set("/latest-mac.yml.minisig", encode(signer.sign(encode(yaml))));
+    published.set(`/${fileName}`, artifact);
+    const notifier = new RecordingNotifier();
+    notifier.raise = () => {
+      throw new Error("the notice board is full");
+    };
+    const { check, events, selfUpdater, logger } = checker({
+      publicKey: signer.publicKeyText,
+      notifier,
+    });
+    expect(await check.check()).toMatchObject({ ok: true });
+    expect(events).toEqual(["check", "found 1.2.3", "progress", "downloaded"]);
+    expect(logger.lines.join("\n")).toContain(
+      "staged, but could not be told: the notice board is full",
+    );
+    // Staged all the same: it installs at quit.
+    check.installAtQuit();
+    expect(selfUpdater.installed).toBe(1);
+  });
+
   it("a tampered yml is refused, with a notice, and never reaches the platform updater", async () => {
     const signer = new Signer();
     const impostor = new Signer();
