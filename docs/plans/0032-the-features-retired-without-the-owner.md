@@ -63,6 +63,10 @@ every ledger row against its old test, the other checks behaviour under failure.
 4. **Wave 4, packages and updates:** groups 6, 7, 8, 16, 17, 18, 19, 21, 39.
 5. Group 25 (per-OS proofs) joins WI-0031-10 and plan 0025.
 
+Each group's work item is `WI-0032-NN`, where NN is the group's number in the census
+(`WI-0032-09` is group 9). `WI-0032-41` is the plugin-settings work: a plugin writes its own
+settings.
+
 Each ported row moves to `ported` with the id of the test that proves the old behaviour. Each
 row an audit called `internal` or `equivalent` gets its new evidence in `reason`, and keeps no
 `owner_ack`.
