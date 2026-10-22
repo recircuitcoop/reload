@@ -143,11 +143,20 @@ export function useAnytype(api: AppApi) {
       return;
     }
     let live = true;
-    void api.anytypeSpaces(checked > 0).then((answer) => {
-      if (live) setSpaces(answer);
-    });
+    let again: ReturnType<typeof setTimeout> | undefined;
+    // The runtime asks the services process for the spaces, so Anytype can be ready while the
+    // runtime is still starting or restarting: a refused answer is asked again, not kept.
+    const ask = () => {
+      void api.anytypeSpaces(checked > 0).then((answer) => {
+        if (!live) return;
+        setSpaces(answer);
+        if (!answer.ok) again = setTimeout(ask, ANYTYPE_POLL_MS);
+      });
+    };
+    ask();
     return () => {
       live = false;
+      clearTimeout(again);
     };
   }, [api, ready, checked]);
   const checkAgain = useCallback(() => {
