@@ -19,6 +19,7 @@ import {
   type DeclaredDocument,
   type DeclaredPackageStore,
 } from "./declared-package-store";
+import { heldFrom, type HeldSources } from "../../domain/telemetry/sources";
 
 /** A package as the runtime starts it: where its files are, and its own `{python}`. */
 export interface StoredPackage extends DeclaredDocument {
@@ -30,6 +31,8 @@ export interface StoredPackage extends DeclaredDocument {
   readonly signed: boolean;
   /** For an installed package whose record says: where it was installed from. */
   readonly origin?: "catalogue" | "file";
+  /** Its source files and line counts, as its record kept them at install (plan 0029). */
+  readonly held?: HeldSources;
 }
 
 export class InstalledPackageStore implements PackageStore {
@@ -85,6 +88,7 @@ export class InstalledPackageStore implements PackageStore {
         installed: true,
         signed: record.signed,
         ...(record.origin === undefined ? {} : { origin: record.origin.kind }),
+        ...(record.sources === undefined ? {} : { held: heldFrom(record.sources) }),
         ...(record.python === undefined
           ? {}
           : { python: path.join(folder.root, ...record.python.split("/")) }),

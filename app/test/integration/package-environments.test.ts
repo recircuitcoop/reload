@@ -510,6 +510,30 @@ describe("node: pre-bundled JavaScript, and nothing ever runs npm", () => {
     expect(fs.readdirSync(path.join(built.live, "environment"))).toEqual([]);
   });
 
+  it("records the source files its signed files.json listed, with their line counts", async () => {
+    const built = await buildPackageEnvironment(
+      archiveOf(
+        nodePackage(["{node}", "{package}/dist/node.cjs"], {
+          "dist/node.cjs": "a\nb\nc\n",
+          "dist/node.cjs.map": JSON.stringify({
+            version: 3,
+            sources: ["../src/main.ts", "../../../elsewhere/secret.ts"],
+          }),
+          "src/helper.py": "x = 1\ny = 2",
+          "README.md": "# not a source\n",
+        }),
+      ),
+      noRuntimes(),
+    );
+    // Read now, from the verified files: never from the live folder a node may write into.
+    expect(built.record.sources).toEqual({
+      "node.js": 1,
+      "dist/node.cjs": 3,
+      "src/helper.py": 2,
+      "src/main.ts": 0,
+    });
+  });
+
   it("refuses a package that needs an install step", async () => {
     const npm = await refusal(archiveOf(nodePackage(["npm", "start"])), noRuntimes());
     expect(npm.reason).toBe("environment");

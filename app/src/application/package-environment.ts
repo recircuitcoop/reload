@@ -34,6 +34,7 @@ import {
 import { parseDeclaration, type Declaration } from "../domain/packages/declaration";
 import { OLD_DECLARATION_FILE, oldDeclarationProblem } from "../domain/packages/old-names";
 import { planEnvironment, type Target } from "../domain/packages/environment";
+import { heldSources } from "../domain/telemetry/sources";
 import type { ContentHashes } from "../ports/content-hashes";
 import type { BuiltEnvironment, EnvironmentBuilder } from "../ports/environment-builder";
 import type { Logger } from "../ports/logger";
@@ -243,6 +244,9 @@ async function judgeAndBuild(
     environment: plan.kind,
     signed: isSigned(origin),
     ...(from === undefined ? {} : { origin: from }),
+    // The source files its signed files.json listed, read now, never from the live folder: the
+    // only `file` and `line` a failed step's event may name (plan 0029).
+    sources: heldSources(packageFiles),
     // Relative to the package's folder, which moves when it is swapped in.
     ...(built.python === undefined ? {} : { python: `environment/${built.python}` }),
     ...(repairing === undefined

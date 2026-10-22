@@ -3,10 +3,7 @@
 // launch marker that tells an unclean stop, the first-run steps told once, the provider events,
 // the page's question and switch over IPC, and the children's facts reaching the shell over the
 // channel.
-import fs from "node:fs";
-import * as os from "node:os";
-import * as path from "node:path";
-import { afterAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import packageJson from "../../package.json";
 import { CrashReports } from "../../src/application/crash-reports";
 import { shellNodeCrashes, shellSignals } from "../../src/application/serve-shell";
@@ -16,6 +13,7 @@ import type { ChildSignal, Versions } from "../../src/domain/telemetry/reports";
 import { IPC } from "../../src/shell/ipc";
 import {
   reportedPackages,
+  endpointEnv,
   telemetryEndpoints,
   wireTelemetry,
   type ListedPackage,
@@ -70,19 +68,6 @@ class ListenedSupervisor {
   }
 }
 
-/** probekit's folder: what it holds is the only `file` its steps may name. */
-const PROBEKIT = fs.mkdtempSync(path.join(os.tmpdir(), "reload-probekit-"));
-fs.mkdirSync(path.join(PROBEKIT, "src"));
-fs.writeFileSync(path.join(PROBEKIT, "src", "probe.py"), "");
-fs.mkdirSync(path.join(PROBEKIT, "dist"));
-fs.writeFileSync(
-  path.join(PROBEKIT, "dist", "probe.cjs.map"),
-  JSON.stringify({ version: 3, sources: ["../src/mapped.ts", "../../../outside.ts"] }),
-);
-afterAll(() => {
-  fs.rmSync(PROBEKIT, { recursive: true, force: true });
-});
-
 /** One package_present for each listed package, at start. */
 const PRESENT = ["package_present", "package_present", "package_present", "package_present"];
 
@@ -93,7 +78,8 @@ const PACKAGES: ListedPackage[] = [
     document: { version: "0.3.0", types: [{ id: "probe" }] },
     installed: true,
     signed: true,
-    folder: PROBEKIT,
+    // What its verified files held at install: a source, and one only its source map names.
+    held: { "src/probe.py": 40, "src/mapped.ts": 0 },
   },
   { name: "my-private-thing", document: { version: "0.0.1" }, installed: true, signed: false },
   { name: "odd", document: null, installed: true, signed: true },
@@ -141,7 +127,8 @@ function wired(
     hashIdentifier: () => "f".repeat(64),
     clock,
     logger: new RecordingLogger(),
-    built: packageJson.reload,
+    // The build's own catalogue: the one provider whose host is ever sent.
+    built: { ...packageJson.reload, catalogueUrl: "https://catalogue.recircu.it/v1/index.json" },
     env,
     appVersion: "1.0.0",
     registry: { redact: (text) => text },
@@ -316,6 +303,11 @@ describe("the shell's telemetry", () => {
       umamiWebsiteId: "site",
     });
     expect(reportedPackages([])).toEqual({ named: [], unsigned: 0 });
+    // An installed build never reads them: it sends where it was built to.
+    expect(telemetryEndpoints(endpointEnv(true, TEST_ENV), built)).toEqual(
+      telemetryEndpoints({}, built),
+    );
+    expect(endpointEnv(false, TEST_ENV)).toBe(TEST_ENV);
   });
 
   it("with the build's endpoints, nothing is posted before consent and one batch of usage events after", async () => {
@@ -489,30 +481,71 @@ describe("the launch's own signals (plan 0029)", () => {
     ]);
   });
 
-  it("a step's file is sent only when the signed package holds it, or its source map names it", () => {
+  it("a step's file and line are sent only as the signed package's verified files hold them", () => {
     const world = wired("on");
     const step = { nodeKind: "node" as const, nodeId: "probe", durationMs: 1, ok: false };
-    for (const file of [
-      "src/probe.py",
-      "src/mapped.ts",
-      "src/hunter2.py",
-      "src/zqxjkvbwplmnrtyhgfdsaqw/kvbwplmnrtyhgfdsaqwerty.py",
-      "outside.ts",
-    ]) {
+    const where: [string, number][] = [
+      ["src/probe.py", 7],
+      ["src/probe.py", 9_999_999],
+      ["src/mapped.ts", 3],
+      // A file the package wrote at run time, named after the person's own words: no verified
+      // file holds it, so it never leaves, whatever its form.
+      ["scripts/alice_divorce_settlement.py", 1],
+      ["src/hunter2.py", 1],
+      ["outside.ts", 1],
+    ];
+    for (const [file, line] of where) {
       world.runtime.tell({
         kind: "step",
         package: "probekit",
         step,
-        failure: { errorType: "Error", file, line: 1 },
+        failure: { errorType: "Error", file, line },
       });
     }
-    expect(payloads(world, "package_error").map((payload) => payload["file"])).toEqual([
-      "src/probe.py",
-      "src/mapped.ts",
-      "[withheld]",
-      "[withheld]",
-      "[withheld]",
+    expect(
+      payloads(world, "package_error").map((payload) => [payload["file"], payload["line"]]),
+    ).toEqual([
+      ["src/probe.py", 7],
+      ["src/probe.py", "[withheld]"],
+      ["src/mapped.ts", "[withheld]"],
+      ["[withheld]", "[withheld]"],
+      ["[withheld]", "[withheld]"],
+      ["[withheld]", "[withheld]"],
     ]);
+  });
+
+  it("a provider is remembered only once its event was queued, so a yes later still tells it", () => {
+    const marks = new MemoryMarks();
+    const official = {
+      name: "official",
+      url: "https://catalogue.recircu.it/v1/index.json",
+      official: true,
+      publicKey: null,
+      offered: 1,
+    };
+    const first = wired("unset", TEST_ENV, marks);
+    first.telemetry.providers([official]);
+    expect(marks.memory?.providers).toEqual({});
+    first.call(IPC.setTelemetry, true);
+    first.telemetry.providers([official]);
+    expect(payloads(first, "provider_registered")).toEqual([
+      expect.objectContaining({ provider_host: "catalogue.recircu.it", official: true }),
+    ]);
+    expect(marks.memory?.providers).toEqual({
+      official: { host: "catalogue.recircu.it", official: true },
+    });
+    // Gone while reports are off: remembered until its removal is told.
+    first.call(IPC.setTelemetry, false);
+    first.telemetry.providers([]);
+    expect(marks.memory?.providers).toEqual({
+      official: { host: "catalogue.recircu.it", official: true },
+    });
+    first.call(IPC.setTelemetry, true);
+    first.telemetry.providers([]);
+    expect(payloads(first, "provider_removed")).toEqual([
+      expect.objectContaining({ provider_host: "catalogue.recircu.it" }),
+    ]);
+    expect(marks.memory?.providers).toEqual({});
   });
 
   it("a child's facts become package_used, package_error, mcp_call, flow_deployed and package_deployed", () => {
@@ -605,13 +638,20 @@ describe("the launch's own signals (plan 0029)", () => {
         file: "src/probe.py",
         line: 7,
       }),
-      expect.objectContaining({ package: "unsigned", error_type: "Error", file: null, line: 3 }),
+      // An unsigned package holds no verified file: neither its file nor its line is sent.
+      expect.objectContaining({
+        package: "unsigned",
+        error_type: "Error",
+        file: null,
+        line: "[withheld]",
+      }),
       expect.objectContaining({
         package: "probekit",
         node_kind: "source",
         error_type: "OSError",
         file: "src/mapped.ts",
-        line: 9,
+        // Named only by a source map: its line count is unknown, so its line is not sent.
+        line: "[withheld]",
       }),
       expect.objectContaining({
         package: "anytype",

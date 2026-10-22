@@ -392,7 +392,11 @@ const LINE_FIELDS: Readonly<Record<string, readonly string[]>> = {
     "packages_offered",
   ],
   "privacy.sent.installs": [
-    ...STEP_FIELDS,
+    "package",
+    "version",
+    "source",
+    "signed",
+    "environment",
     "provider_host",
     "node_types",
     "from_version",
@@ -451,6 +455,7 @@ const LINE_WORDS: Readonly<Record<string, readonly string[]>> = {
   "privacy.sent.setup": ["Reload started", "Anytype paired", "a first flow deployed"],
   "privacy.sent.catalogues": [
     "its server's name only if it is Reload's own",
+    "a local one is only file",
     "only custom",
     "Reload's own",
     "fingerprint of its signing key",
@@ -477,6 +482,22 @@ describe("the privacy notice lists every field of every signal (plan 0029)", () 
     expect(Object.keys(SIGNAL_LINES).sort()).toEqual([...SIGNALS].sort());
     for (const key of new Set(Object.values(SIGNAL_LINES))) {
       expect(listed, key).toContain(key);
+    }
+  });
+
+  it("every field a line says is one a builder of that line makes: the notice claims nothing more", () => {
+    const built = [...everySignal("x"), ...everySignal("x", false)];
+    for (const [line, fields] of Object.entries(LINE_FIELDS)) {
+      const made = new Set(
+        built
+          .filter((signal) => SIGNAL_LINES[signal.name] === line)
+          .flatMap((signal) => Object.keys(signal.fields)),
+      );
+      for (const field of fields) {
+        expect(made.has(field), `${line} names ${field}, which none of its events carries`).toBe(
+          true,
+        );
+      }
     }
   });
 
@@ -555,8 +576,10 @@ describe("the privacy notice beside the reports question (D25)", () => {
     ]);
     expect(named.map((entry) => entry.id)).toEqual(["anytype", "probekit"]);
     expect(unsigned).toBe(1);
-    expect(STRINGS["privacy.sent.packages"]).toContain("how many unsigned packages");
-    expect(STRINGS["privacy.sent.packages"]).toContain("never their names");
+    expect(STRINGS["privacy.sent.launches"]).toContain("how many of them are unsigned");
+    expect(STRINGS["privacy.sent.launches"]).toContain("an unsigned one only as unsigned");
+    // No event carries the package list any more: the notice no longer says each one does.
+    expect(STRINGS["privacy.sent.where"]).toContain("Each one carries the first three");
     const start = appStart({
       startupMs: 900,
       packages: named.length,

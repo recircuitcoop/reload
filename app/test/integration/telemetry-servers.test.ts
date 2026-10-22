@@ -16,12 +16,12 @@ import { machineIdHash } from "../../src/adapters/telemetry/machine-id";
 import { TelemetryPipeline } from "../../src/application/telemetry";
 import { SecretRegistry } from "../../src/domain/redaction/registry";
 import { crashPayload, type Versions } from "../../src/domain/telemetry/reports";
-import { conformReport } from "../../src/domain/telemetry/vocabulary";
+import { checkAtSend } from "../../src/domain/telemetry/send-check";
 import { startPayload } from "../fakes/signals";
 import { outgoingFor, type Endpoints } from "../../src/domain/telemetry/transports";
 import { RecordingLogger } from "../fakes/children";
 import { FakeClock } from "../fakes/clock";
-import { MemorySetting, queued } from "../fakes/telemetry";
+import { MemorySetting, queued, TEST_VOUCH } from "../fakes/telemetry";
 
 const TLS = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "fixtures", "tls");
 const CERT = fs.readFileSync(path.join(TLS, "localhost-cert.pem"), "utf8");
@@ -141,6 +141,7 @@ function world(
     },
     hashIdentifier: machineIdHash,
     endpoints: overrides.endpoints ?? endpoints(),
+    vouch: TEST_VOUCH,
     release: "2.0.0",
     clock: new FakeClock(),
     now: () => Date.UTC(2026, 8, 26, 9),
@@ -196,7 +197,10 @@ describe("telemetry against local fake GlitchTip and Umami servers", () => {
     );
     // Byte for byte what the transport renders from the queued report, every field held to its
     // rule again at send: the type a careless caller gave is withheld.
-    const sendable = { ...queued(report), payload: conformReport(queued(report).payload) ?? {} };
+    const sendable = {
+      ...queued(report),
+      payload: checkAtSend(queued(report).payload, "error", TEST_VOUCH) ?? {},
+    };
     expect(got?.body).toBe(outgoingFor(sendable, endpoints(), "2.0.0").body);
     expect(got?.body).not.toContain("ServicesCrashed near");
     const event = JSON.parse(got?.body.split("\n")[2] ?? "") as {

@@ -157,11 +157,15 @@ describe("what a field may hold (plan 0029)", () => {
         "provider_host"
       ],
     ).toBe("catalogue.recircu.it");
-    expect(providerRemoved({ host: "a.example", official: false }).fields).toEqual({
+    expect(providerRemoved({ host: "a.example", official: false }, "c.example").fields).toEqual({
       provider_host: "custom",
       official: false,
     });
-    expect(providerRemoved({ host: "c.example", official: true }).fields).toEqual({
+    // The memory on disk says official, but only the build's own host is ever sent.
+    expect(
+      providerRemoved({ host: "alice-smith.example", official: true }, "c.example").fields,
+    ).toMatchObject({ provider_host: "custom" });
+    expect(providerRemoved({ host: "c.example", official: true }, "c.example").fields).toEqual({
       provider_host: "c.example",
       official: true,
     });
@@ -302,9 +306,8 @@ describe("a deploy's exact counts", () => {
     for (const event of events) {
       expect(Object.values(event.fields).some(Array.isArray), event.name).toBe(false);
     }
-    expect(flowDeployed([], [])).toEqual([
-      { name: "flow_deployed", fields: { flows: 0, total_nodes: 0, nodes: null, config_nodes: 0 } },
-    ]);
+    // A deploy of no flows tells nothing.
+    expect(flowDeployed([], [])).toEqual([]);
   });
 
   it("every flow's count reaches the queue exactly, past the redaction's list bound", () => {
@@ -569,16 +572,18 @@ describe("Umami's batch request and the pipeline's batches", () => {
       payload: { data: Record<string, unknown> };
     }[];
     expect(sent).toHaveLength(2);
-    expect(sent[1]?.payload.data).toMatchObject({
+    const data = sent[1]?.payload.data ?? {};
+    expect(data).toMatchObject({
       error_type: WITHHELD,
       version: WITHHELD,
-      client: WITHHELD,
-      error_code: WITHHELD,
-      note: WITHHELD,
-      list: WITHHELD,
+      // No package the store vouches for: no file of it, so no line either.
+      line: WITHHELD,
       ok: true,
-      line: 3,
     });
+    // Keys that are not package_error's own never leave, whatever they hold.
+    for (const key of ["client", "error_code", "note", "list"]) {
+      expect(Object.keys(data)).not.toContain(key);
+    }
     expect(world.logger.lines.join("\n")).toContain("made under other rules is dropped unsent");
   });
 

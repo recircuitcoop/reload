@@ -218,7 +218,6 @@ const usage = (pipeline: TelemetryPipeline, planted: string): UsageSignals =>
     packages: () => [
       { name: planted, document: { version: planted }, installed: true, signed: true },
     ],
-    holds: () => false,
   });
 
 /** Every builder in reports.ts. A new signal adds its row in test/fakes/signals.ts. */
@@ -430,11 +429,10 @@ describe.each(HOOKS)("the credential gate, through the hook: $name", ({ facts })
           document: { version: "0.3.0", types: [{ id: "probe" }] },
           installed: true,
           signed: true,
-          folder: "/nowhere/probekit",
+          // Its verified files: no planted path is one of them, so every one is withheld.
+          held: { "src/probe.py": 40 },
         },
       ],
-      // The package holds no file a node could name: every planted path is withheld.
-      holds: () => false,
     });
     const told = await facts(planted);
     expect(told.length).toBeGreaterThan(0);

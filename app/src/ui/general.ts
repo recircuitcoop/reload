@@ -217,7 +217,6 @@ export const PRIVACY_NOTICE: readonly NoticePart[] = [
     listed: [
       "privacy.sent.machineId",
       "privacy.sent.versions",
-      "privacy.sent.packages",
       "privacy.sent.stamp",
       // The signals (plan 0029): one line each, every field it carries.
       "privacy.sent.launches",

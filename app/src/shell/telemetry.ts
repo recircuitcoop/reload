@@ -33,9 +33,12 @@ import {
   type StopReason,
   type Versions,
 } from "../domain/telemetry/reports";
+import { hostOnly } from "../domain/telemetry/redact";
+import { heldFrom, SHIPPED_SOURCES, type HeldSources } from "../domain/telemetry/sources";
 import type { Endpoints } from "../domain/telemetry/transports";
 import type { TelemetryMarks, TelemetryMemory } from "../ports/telemetry";
 import type { TelemetryReport, TelemetryStatus } from "../ui/contract";
+import type { Logger } from "../ports/logger";
 import { IPC } from "./ipc";
 
 /** A package as the package store lists it, as far as an event looks at it. */
@@ -46,9 +49,15 @@ export interface TelemetryWiring extends Pick<
   "setting" | "queue" | "poster" | "machineIdentifier" | "hashIdentifier" | "clock" | "logger"
 > {
   readonly ipc: Pick<IpcMain, "handle">;
-  /** The build's endpoints, as released (package.json's "reload"). */
-  readonly built: Endpoints;
-  /** Where development and the e2e gate point the endpoints elsewhere. */
+  /**
+   * The build's endpoints, as released (package.json's "reload"), and its own catalogue's
+   * address: the one provider whose host is ever sent.
+   */
+  readonly built: Endpoints & { readonly catalogueUrl: string };
+  /**
+   * Where development and the e2e gate point the endpoints elsewhere; empty in an installed
+   * build, which always sends where it was built to.
+   */
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly appVersion: string;
   /** The one log's registry: every credential it holds is removed from every payload. */
@@ -72,8 +81,9 @@ export interface TelemetryWiring extends Pick<
 
 /**
  * The build's endpoints: what it was released with (plan 0022 D23: Umami Cloud for usage, no
- * GlitchTip DSN, so crash reports go nowhere), unless the environment points one elsewhere. An
- * empty one reports nowhere; the switch still decides whether anything is sent at all.
+ * GlitchTip DSN, so crash reports go nowhere), unless the environment points one elsewhere, which
+ * only development and the e2e gate may: an installed build always sends where it was built to.
+ * An empty one reports nowhere; the switch still decides whether anything is sent at all.
  */
 export function telemetryEndpoints(
   env: Readonly<Record<string, string | undefined>>,
@@ -84,6 +94,18 @@ export function telemetryEndpoints(
     umamiUrl: env["RELOAD_UMAMI_URL"] ?? built.umamiUrl,
     umamiWebsiteId: env["RELOAD_UMAMI_WEBSITE_ID"] ?? built.umamiWebsiteId,
   };
+}
+
+/**
+ * The environment the endpoints may be pointed elsewhere by: development's and the e2e gate's, as
+ * every other test override; an installed build's is never read, and it sends where it was built
+ * to.
+ */
+export function endpointEnv(
+  packaged: boolean,
+  env: Readonly<Record<string, string | undefined>>,
+): Readonly<Record<string, string | undefined>> {
+  return packaged ? {} : env;
 }
 
 /**
@@ -130,57 +152,34 @@ export function releaseOf(release: string): string {
   return found === null ? "unknown" : `${found[1] ?? ""}.${found[2] ?? ""}.${found[3] ?? "0"}`;
 }
 
-/** What one package folder holds, as package-relative paths, read once a launch per folder. */
-const held = new Map<string, ReadonlySet<string>>();
-
 /**
- * Whether `file` is one of the package's own: a file in its folder, or a source its source maps
- * name (a bundle's `src/…`). A step's `file` is sent only then (plan 0029): the path is the
- * package's, never something a node made up.
+ * The store's packages, a shipped one with the source files and line counts the build listed for
+ * it (`<appDir>/dist/shipped-sources.json`, read once): an installed one's come from its own
+ * record. When the file cannot be read, no shipped package's step names a file.
  */
-export function packageHolds(folder: string, file: string): boolean {
-  let files = held.get(folder);
-  if (files === undefined) {
-    files = filesOf(folder);
-    held.set(folder, files);
-  }
-  return files.has(file);
-}
-
-function filesOf(folder: string): ReadonlySet<string> {
-  const files = new Set<string>();
-  let entries: fs.Dirent[];
+export function withShippedSources(
+  documents: () => readonly ListedPackage[],
+  appDir: string,
+  logger: Pick<Logger, "warn">,
+): () => readonly ListedPackage[] {
+  let shipped: Readonly<Record<string, HeldSources>> = {};
   try {
-    entries = fs.readdirSync(folder, { recursive: true, withFileTypes: true });
-  } catch {
-    return files;
-  }
-  for (const entry of entries) {
-    if (!entry.isFile() || entry.parentPath.split(path.sep).includes("node_modules")) {
-      continue;
+    const file = path.join(appDir, "dist", SHIPPED_SOURCES);
+    const document = JSON.parse(fs.readFileSync(file, "utf8")) as unknown;
+    if (typeof document === "object" && document !== null && !Array.isArray(document)) {
+      shipped = Object.fromEntries(
+        Object.entries(document).map(([name, sources]) => [name, heldFrom(sources)]),
+      );
     }
-    const absolute = path.join(entry.parentPath, entry.name);
-    files.add(path.relative(folder, absolute).split(path.sep).join("/"));
-    if (entry.name.endsWith(".map")) {
-      for (const source of mapSources(absolute)) {
-        const relative = path.relative(folder, path.resolve(entry.parentPath, source));
-        if (!relative.startsWith("..") && !path.isAbsolute(relative)) {
-          files.add(relative.split(path.sep).join("/"));
-        }
-      }
-    }
+  } catch (error) {
+    logger.warn(`the shipped packages' sources could not be read: ${String(error)}`);
   }
-  return files;
-}
-
-/** The `sources` a source map names; none when it cannot be read. */
-function mapSources(file: string): string[] {
-  try {
-    const sources = (JSON.parse(fs.readFileSync(file, "utf8")) as { sources?: unknown }).sources;
-    return Array.isArray(sources) ? sources.filter((item) => typeof item === "string") : [];
-  } catch {
-    return [];
-  }
+  return () =>
+    documents().map((listed) =>
+      listed.installed || listed.held !== undefined
+        ? listed
+        : { ...listed, held: shipped[listed.name] ?? {} },
+    );
 }
 
 /** A public key's fingerprint as provider_registered names it: 12 hex digits of its sha256. */
@@ -189,12 +188,34 @@ export const fingerprintOf = (publicKey: string | null): string | null =>
 
 /**
  * Build the pipeline, answer the page's telemetry calls, count crashes, tell every signal, and
- * start the sender.
+ * start the sender. Telemetry never breaks the app: every entry point the supervisors, startup or
+ * quit call is guarded, and what fails in it is logged and left there.
  */
 export function wireTelemetry(deps: TelemetryWiring): ShellTelemetry {
-  const { ipc, registry, marks } = deps;
+  const { ipc, registry, marks, logger } = deps;
   const uptimeMs = deps.uptimeMs ?? (() => process.uptime() * 1000);
-  const pipeline = new TelemetryPipeline({
+  /** Run `act`; a failure is logged as telemetry's, and goes no further. */
+  const guarded = (what: string, act: () => void): void => {
+    try {
+      act();
+    } catch (error) {
+      logger.warn(`telemetry could not ${what}: ${String(error)}`);
+    }
+  };
+  const officialHost = deps.built.catalogueUrl === "" ? null : hostOnly(deps.built.catalogueUrl);
+  const { packages } = deps;
+  const versions: Versions = {
+    appVersion: deps.appVersion,
+    os: process.platform,
+    osVersion: releaseOf(os.release()),
+    arch: process.arch,
+  };
+  const signals: UsageSignals = new UsageSignals({
+    record: (name, payload): unknown => pipeline.recordUsage(name, payload),
+    versions,
+    packages,
+  });
+  const pipeline: TelemetryPipeline = new TelemetryPipeline({
     ...deps,
     endpoints: telemetryEndpoints(deps.env, deps.built),
     release: deps.appVersion,
@@ -202,26 +223,22 @@ export function wireTelemetry(deps: TelemetryWiring): ShellTelemetry {
     newId: () => randomUUID().replaceAll("-", ""),
     credentials: (text) => registry.redact(text),
     secrets: deps.sink,
+    vouch: signals.vouch(officialHost),
   });
-  const versions: Versions = {
-    appVersion: deps.appVersion,
-    os: process.platform,
-    osVersion: releaseOf(os.release()),
-    arch: process.arch,
-  };
   const crashes = new CrashReports({
     record: (payload) => pipeline.recordCrash(payload),
     versions,
   });
-  const signals = new UsageSignals({
-    record: (name, payload) => pipeline.recordUsage(name, payload),
-    versions,
-    packages: deps.packages,
-    holds: packageHolds,
-  });
 
   // ── what this launch remembers: the first-run steps told, the providers seen ──────────
-  const memory = marks.readMemory();
+  const memory = ((): TelemetryMemory | null => {
+    try {
+      return marks.readMemory();
+    } catch (error) {
+      logger.warn(`telemetry could not read what the last launch remembered: ${String(error)}`);
+      return null;
+    }
+  })();
   const firstLaunch = memory?.reached.includes("launched") !== true;
   let remembered: TelemetryMemory = memory ?? { reached: [], told: [], providers: {} };
   const remember = (next: TelemetryMemory): void => {
@@ -241,18 +258,22 @@ export function wireTelemetry(deps: TelemetryWiring): ShellTelemetry {
     }
   };
   const reached = (step: SetupStepReached): void => {
-    if (!remembered.reached.includes(step)) {
-      remember({ ...remembered, reached: [...remembered.reached, step] });
-    }
-    tellSteps();
+    guarded(`tell the setup step ${step}`, () => {
+      if (!remembered.reached.includes(step)) {
+        remember({ ...remembered, reached: [...remembered.reached, step] });
+      }
+      tellSteps();
+    });
   };
 
   // ── app_start once the children are up; app_unclean_stop for a launch that left its marker ─
-  const last = marks.readRunning();
-  if (last !== null) {
-    signals.record(appUncleanStop(last));
-  }
-  marks.writeRunning(deps.appVersion);
+  guarded("read the last launch's marker", () => {
+    const last = marks.readRunning();
+    if (last !== null) {
+      signals.record(appUncleanStop(last));
+    }
+    marks.writeRunning(deps.appVersion);
+  });
   const states = new Map<ChildName, ChildStatus["state"]>();
   let startupMs: number | null = null;
   let startTold = false;
@@ -260,7 +281,7 @@ export function wireTelemetry(deps: TelemetryWiring): ShellTelemetry {
     if (startupMs === null || startTold) {
       return;
     }
-    const listed = deps.packages();
+    const listed = packages();
     const { unsigned } = reportedPackages(listed);
     startTold = signals.record(
       appStart({ startupMs, packages: listed.length, unsignedPackages: unsigned, firstLaunch }),
@@ -272,26 +293,31 @@ export function wireTelemetry(deps: TelemetryWiring): ShellTelemetry {
 
   for (const [child, supervisor] of deps.supervisors) {
     supervisor.onStatus((status) => {
-      crashes.childStatus(status);
-      states.set(child, status.state);
-      // A new runtime generation may load other packages (an install restarts it).
-      signals.forgetPackages();
-      held.clear();
-      const up = [...deps.supervisors.keys()].every((name) => states.get(name) === "running");
-      if (up && startupMs === null) {
-        startupMs = uptimeMs();
-        reportStart();
-      }
+      guarded(`count the ${child}'s status`, () => {
+        crashes.childStatus(status);
+        states.set(child, status.state);
+        // A new runtime generation may load other packages (an install restarts it).
+        signals.forgetPackages();
+        const up = [...deps.supervisors.keys()].every((name) => states.get(name) === "running");
+        if (up && startupMs === null) {
+          startupMs = uptimeMs();
+          reportStart();
+        }
+      });
     });
     supervisor.onSignal((signal) => {
-      signals.child(signal);
-      if (signal.kind === "deployed" && signal.nodesPerFlow.some((count) => count > 0)) {
-        reached("first_flow_deployed");
-      }
+      guarded(`tell what the ${child} observed`, () => {
+        signals.child(signal);
+        if (signal.kind === "deployed" && signal.nodesPerFlow.some((count) => count > 0)) {
+          reached("first_flow_deployed");
+        }
+      });
     });
   }
   deps.supervisors.get("runtime")?.onNodeCrash((stopped) => {
-    crashes.nodeCrashed(stopped);
+    guarded("count a node's crash", () => {
+      crashes.nodeCrashed(stopped);
+    });
   });
 
   const status = (): TelemetryStatus => pipeline.state();
@@ -301,8 +327,10 @@ export function wireTelemetry(deps: TelemetryWiring): ShellTelemetry {
       pipeline.answer(on);
       // A yes is what lets this launch's start, and the steps reached so far, be told.
       if (on) {
-        reportStart();
-        tellSteps();
+        guarded("tell this launch's start", () => {
+          reportStart();
+          tellSteps();
+        });
       }
     }
     return status();
@@ -312,39 +340,52 @@ export function wireTelemetry(deps: TelemetryWiring): ShellTelemetry {
   );
 
   reached("launched");
-  pipeline.start();
+  guarded("start the sender", () => {
+    pipeline.start();
+  });
   return {
     pipeline,
     signal: (signal) => {
-      signals.record(signal);
+      guarded(`tell ${signal.name}`, () => {
+        signals.record(signal);
+      });
     },
     stopping: (reason) => {
-      signals.record(appStop(uptimeMs() / 1000, reason));
-      marks.clearRunning();
+      guarded("tell app_stop", () => {
+        signals.record(appStop(uptimeMs() / 1000, reason));
+      });
+      guarded("clear the launch marker", () => {
+        marks.clearRunning();
+      });
     },
     reached,
     providers: (seen) => {
-      const before = remembered.providers;
-      for (const provider of seen) {
-        if (before[provider.name] === undefined) {
+      guarded("tell the providers a listing saw", () => {
+        // A provider is remembered only once its event is queued: with reports off, or a queue
+        // that cannot be written, it is told at the next listing after all.
+        const now = { ...remembered.providers };
+        for (const provider of seen) {
+          if (now[provider.name] !== undefined) {
+            continue;
+          }
           const fingerprint = fingerprintOf(provider.publicKey);
-          signals.record(providerRegistered(provider, fingerprint, provider.offered));
+          if (signals.record(providerRegistered(provider, fingerprint, provider.offered))) {
+            now[provider.name] = {
+              host: providerHost(provider.url, provider.official),
+              official: provider.official,
+            };
+          }
         }
-      }
-      for (const [name, provider] of Object.entries(before)) {
-        if (!seen.some((candidate) => candidate.name === name)) {
-          signals.record(providerRemoved(provider));
+        for (const [name, provider] of Object.entries(remembered.providers)) {
+          const gone = !seen.some((candidate) => candidate.name === name);
+          if (gone && signals.record(providerRemoved(provider, officialHost))) {
+            Reflect.deleteProperty(now, name);
+          }
         }
-      }
-      const now = Object.fromEntries(
-        seen.map(({ name, url, official }) => [
-          name,
-          { host: providerHost(url, official), official },
-        ]),
-      );
-      if (JSON.stringify(now) !== JSON.stringify(before)) {
-        remember({ ...remembered, providers: now });
-      }
+        if (JSON.stringify(now) !== JSON.stringify(remembered.providers)) {
+          remember({ ...remembered, providers: now });
+        }
+      });
     },
   };
 }

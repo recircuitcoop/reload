@@ -4,17 +4,17 @@
 // an AI app's name, a version's tag and an error code are each matched against a list or a form
 // that leaves no room for a credential, and anything else is `other` or "[withheld]".
 //
-// The builders in reports.ts apply these when an event is made; `conformReport` applies them
-// again to every queued report just before it is sent, so a report queued under older rules, or
-// changed on disk, never leaves as it was written.
+// The builders in reports.ts apply these when an event is made; send-check.ts applies them again
+// to every queued report just before it is sent, so a report queued under older rules, or changed
+// on disk, never leaves as it was written.
 
-import { WITHHELD, type Json, type JsonObject } from "./redact";
+import { WITHHELD } from "./redact";
 
 /**
  * The rules every queued report is stamped with. A report whose stamp is not this one was made
  * under other rules and is dropped unsent. Raise it whenever a field's rule changes.
  */
-export const RULES_VERSION = 3;
+export const RULES_VERSION = 4;
 
 /** What a value outside a closed vocabulary becomes: the event is sent, the value is not. */
 export const OTHER = "other";
@@ -202,35 +202,38 @@ export function errorTypeOf(type: unknown): string | null {
  * The AI apps named in `mcp_call`, by the `clientInfo.name` each is known to send (matched whole,
  * case aside). The event carries the label on the right, never the name the app sent.
  */
-const MCP_CLIENTS: Readonly<Record<string, string>> = {
-  "claude-ai": "claude",
-  "claude-desktop": "claude",
-  "claude-code": "claude-code",
-  "cursor-vscode": "cursor",
-  cursor: "cursor",
-  "visual studio code": "vscode",
-  "visual studio code - insiders": "vscode",
-  vscode: "vscode",
-  "windsurf-client": "windsurf",
-  windsurf: "windsurf",
-  zed: "zed",
-  cline: "cline",
-  "continue-client": "continue",
-  continue: "continue",
-  goose: "goose",
-  "openai-mcp": "chatgpt",
-  chatgpt: "chatgpt",
-  "mcp-inspector": "mcp-inspector",
-  "inspector-client": "mcp-inspector",
-};
-const CLIENT_LABELS: ReadonlySet<string> = new Set(Object.values(MCP_CLIENTS));
+const MCP_CLIENTS: ReadonlyMap<string, string> = new Map(
+  Object.entries({
+    "claude-ai": "claude",
+    "claude-desktop": "claude",
+    "claude-code": "claude-code",
+    "cursor-vscode": "cursor",
+    cursor: "cursor",
+    "visual studio code": "vscode",
+    "visual studio code - insiders": "vscode",
+    vscode: "vscode",
+    "windsurf-client": "windsurf",
+    windsurf: "windsurf",
+    zed: "zed",
+    cline: "cline",
+    "continue-client": "continue",
+    continue: "continue",
+    goose: "goose",
+    "openai-mcp": "chatgpt",
+    chatgpt: "chatgpt",
+    "mcp-inspector": "mcp-inspector",
+    "inspector-client": "mcp-inspector",
+  }),
+);
+export const CLIENT_LABELS: ReadonlySet<string> = new Set(MCP_CLIENTS.values());
 
 /** An MCP client's label: a known app's, `other`, or null when it gave no name. */
 export function clientOf(name: unknown): string | null {
   if (name === null || name === undefined) {
     return null;
   }
-  return typeof name === "string" ? (MCP_CLIENTS[name.trim().toLowerCase()] ?? OTHER) : OTHER;
+  // A Map, never an object: `constructor` or `__proto__` is no client's name.
+  return typeof name === "string" ? (MCP_CLIENTS.get(name.trim().toLowerCase()) ?? OTHER) : OTHER;
 }
 
 /** A JSON-RPC error code in the reserved range, or an HTTP-like status; null for none. */
@@ -245,101 +248,23 @@ export function errorCodeOf(code: unknown): number | string | null {
     : WITHHELD;
 }
 
-// ── at send: every field again ───────────────────────────────────────────────────────────
-
-const oneOf =
-  (...values: readonly string[]) =>
-  (value: string): boolean =>
-    values.includes(value);
-const matches = (shape: RegExp) => (value: string) => shape.test(value);
-const either =
-  (...checks: readonly ((value: string) => boolean)[]) =>
-  (value: string): boolean =>
-    checks.some((check) => check(value));
-
-const PACKAGE_NAME = either(matches(IDENTIFIER), oneOf("unsigned", "node-red"));
-
-/** The rule of each field's text: what a string in it may be. Any other text is withheld. */
-const TEXT_RULES: Readonly<Record<string, (value: string) => boolean>> = {
-  event: matches(/^[a-z][a-z_]{2,40}$/),
-  kind: oneOf("usage", "error"),
-  // The pipeline's own stamps: a keyed hash and a random id, never anybody's input.
-  machine_id: matches(/^[\w-]{1,64}$/),
-  report_id: matches(/^[\w-]{1,64}$/),
-  at: matches(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/),
-  app_version: matches(VERSION),
-  os: either((value) => OS_NAMES.has(value), oneOf(OTHER)),
-  os_version: matches(VERSION),
-  arch: either((value) => ARCHES.has(value), oneOf(OTHER)),
-  last_version: matches(VERSION),
-  version: matches(VERSION),
-  from_version: matches(VERSION),
-  to_version: matches(VERSION),
-  package: PACKAGE_NAME,
-  source: oneOf("shipped", "catalogue", "file"),
-  environment: oneOf("uv-python", "node", "executable"),
-  node_kind: oneOf("source", "node", "view"),
-  node_id: either(matches(IDENTIFIER), oneOf("unsigned")),
-  error_type: either((value) => ERROR_TYPES.has(value), oneOf(OTHER)),
-  file: matches(SOURCE_FILE),
-  method: oneOf("tools/call", "resources/read"),
-  tool: matches(IDENTIFIER),
-  client: either((value) => CLIENT_LABELS.has(value), oneOf(OTHER)),
-  step: oneOf("launched", "anytype_paired", "first_flow_deployed"),
-  provider_host: either(matches(HOST), oneOf("custom", "file")),
-  signer_fingerprint: matches(/^[0-9a-f]{1,12}$/),
-  // app_stop's reason, or an install's refusal code.
-  reason: either(oneOf("quit", "update"), (value) => INSTALL_REFUSALS.has(value), oneOf(OTHER)),
-  channel: either((value) => CHANNELS.has(value), oneOf(OTHER)),
-  exception_type: oneOf("RuntimeCrashed", "ServicesCrashed", "NodeProcessCrashed"),
-  crashed: oneOf("runtime", "services", "node"),
-};
-
-/** Fields that hold a number, and how each is bounded beyond being finite. */
-const NUMBER_RULES: Readonly<Record<string, (value: number) => boolean>> = {
-  error_code: (value) => typeof errorCodeOf(value) === "number",
-};
-
-/** Fields that hold an object: only the crash counts, numbers all. */
-const OBJECT_FIELDS: readonly string[] = ["crashes"];
-
-/** One field's value again, by its name's rule: what does not fit is WITHHELD. */
-function conformField(name: string, value: Json): Json {
-  if (value === null || typeof value === "boolean") {
-    return value;
-  }
-  if (typeof value === "number") {
-    const rule = NUMBER_RULES[name];
-    return Number.isFinite(value) && (rule === undefined || rule(value)) ? value : WITHHELD;
-  }
-  if (typeof value === "string") {
-    const rule = TEXT_RULES[name];
-    return value === WITHHELD || (rule !== undefined && rule(value)) ? value : WITHHELD;
-  }
-  if (!Array.isArray(value) && OBJECT_FIELDS.includes(name)) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [
-        key,
-        typeof item === "number" && Number.isFinite(item) ? item : WITHHELD,
-      ]),
-    );
-  }
-  // A list or an object no event carries: never sent as it was queued.
-  return WITHHELD;
+/** Which version runs, on what. Every report carries it. */
+export interface Versions {
+  readonly appVersion: string;
+  readonly os: string;
+  readonly osVersion: string;
+  readonly arch: string;
 }
 
 /**
- * A queued report's payload as it may leave: null when it was stamped under other rules (it is
- * dropped), else every field held to its rule again.
+ * The version fields every report carries; each signal's own fields go beside them. The app
+ * reads them from itself and the OS, and they are still held to their shapes.
  */
-export function conformReport(payload: JsonObject): JsonObject | null {
-  if (payload["rules"] !== RULES_VERSION) {
-    return null;
-  }
-  return Object.fromEntries(
-    Object.entries(payload).map(([name, value]) => [
-      name,
-      name === "rules" ? value : conformField(name, value),
-    ]),
-  );
+export function versionFields(versions: Versions): Record<string, string | null> {
+  return {
+    app_version: shaped(versions.appVersion, VERSION),
+    os: known(versions.os, OS_NAMES),
+    os_version: shaped(versions.osVersion, VERSION),
+    arch: known(versions.arch, ARCHES),
+  };
 }

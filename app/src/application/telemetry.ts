@@ -44,7 +44,8 @@ import {
   type Endpoints,
   type Outgoing,
 } from "../domain/telemetry/transports";
-import { conformReport, RULES_VERSION } from "../domain/telemetry/vocabulary";
+import { checkAtSend, OWN_IDENTIFIERS, type Vouch } from "../domain/telemetry/send-check";
+import { RULES_VERSION } from "../domain/telemetry/vocabulary";
 import type { Cancel, Clock } from "../ports/clock";
 import type { Logger, SecretSink } from "../ports/logger";
 import type {
@@ -73,6 +74,8 @@ export interface TelemetryDeps {
   readonly now: () => number;
   /** A fresh report id: 32 hex digits (a Sentry event id). */
   readonly newId: () => string;
+  /** What the package store and the build vouch for, asked again of every report at send. */
+  readonly vouch: Vouch;
   /** The one SecretRegistry's redact: every registered credential out of every string. */
   readonly credentials: CredentialRedactor;
   /** Where the raw machine identifier is registered, so no log line can ever show it. */
@@ -98,12 +101,6 @@ export interface FlushResult {
 
 const reasonOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
-
-/**
- * The identifiers the pipeline stamps itself: hex by construction, never anybody's input, so the
- * scrub would only mistake them for keys.
- */
-const OWN_IDENTIFIERS: readonly string[] = ["machine_id", "report_id"];
 
 /** A kind of report, in the log's words: an `error` report is about a crash. */
 const named = (kind: ReportKind): string => (kind === "error" ? "crash report" : "usage report");
@@ -132,6 +129,8 @@ export class TelemetryPipeline {
   #again = false;
   #running = false;
   #halted = false;
+  /** The off or unset answer the queue was last emptied for; null while it is on. */
+  #purgedFor: TelemetryAnswer | null = null;
 
   constructor(deps: TelemetryDeps) {
     this.#deps = deps;
@@ -172,8 +171,7 @@ export class TelemetryPipeline {
     } catch (error) {
       return { answer: "unset", problem: reasonOf(error), queued: 0, askAgain: false };
     }
-    const queued = this.#allows() ? this.#deps.queue.count() : 0;
-    return { answer, problem: null, queued, askAgain };
+    return { answer, problem: null, queued: this.#queued(), askAgain };
   }
 
   /**
@@ -184,6 +182,8 @@ export class TelemetryPipeline {
   answer(on: boolean): void {
     this.#deps.setting.writeTelemetry(on);
     this.#deps.logger.info(`telemetry is turned ${on ? "on" : "off"}`);
+    // An answer is a change: an off after it empties the queue again.
+    this.#purgedFor = null;
     if (on) {
       this.#wake();
     } else {
@@ -193,7 +193,22 @@ export class TelemetryPipeline {
 
   /** The queued reports, gated like everything else: after off, the queue IS empty. */
   pending(): readonly QueuedReport[] {
-    return this.#allows() ? this.#deps.queue.pending() : [];
+    try {
+      return this.#allows() ? this.#deps.queue.pending() : [];
+    } catch (error) {
+      this.#deps.logger.warn(`the telemetry queue could not be read: ${reasonOf(error)}`);
+      return [];
+    }
+  }
+
+  /** How many reports wait; none when the switch is not on or the queue cannot be read. */
+  #queued(): number {
+    try {
+      return this.#allows() ? this.#deps.queue.count() : 0;
+    } catch (error) {
+      this.#deps.logger.warn(`the telemetry queue could not be read: ${reasonOf(error)}`);
+      return 0;
+    }
   }
 
   // ── the sender ─────────────────────────────────────────────────────────────────────────
@@ -217,7 +232,7 @@ export class TelemetryPipeline {
       // under other rules is dropped, never sent as it was queued.
       const current: QueuedReport[] = [];
       for (const report of head) {
-        const payload = conformReport(report.payload);
+        const payload = checkAtSend(report.payload, report.kind, this.#deps.vouch);
         if (payload === null) {
           this.#deps.queue.remove(report);
           this.#deps.logger.info(
@@ -336,11 +351,26 @@ export class TelemetryPipeline {
       return false;
     }
     if (answer === "on") {
+      this.#purgedFor = null;
       return true;
     }
-    const dropped = this.#deps.queue.purge();
-    if (dropped > 0) {
-      this.#deps.logger.info(`telemetry is ${answer}: dropped ${String(dropped)} queued report(s)`);
+    // Purged once each time the answer becomes off or unset (and at the first look after start),
+    // never on every report while it stays so: a signal with reports off reads no folder.
+    if (this.#purgedFor === answer) {
+      return false;
+    }
+    try {
+      const dropped = this.#deps.queue.purge();
+      this.#purgedFor = answer;
+      if (dropped > 0) {
+        this.#deps.logger.info(
+          `telemetry is ${answer}: dropped ${String(dropped)} queued report(s)`,
+        );
+      }
+    } catch (error) {
+      // Telemetry never breaks the app: what could not be purged is tried again at the next look,
+      // and nothing is sent meanwhile.
+      this.#deps.logger.warn(`the telemetry queue could not be emptied: ${reasonOf(error)}`);
     }
     return false;
   }

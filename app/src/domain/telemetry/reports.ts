@@ -7,9 +7,9 @@
 // which process crashed and how often each has. Adding a field here is the moment somebody has to
 // ask whether it may be sent.
 
-import { hostOnly, type JsonObject } from "./redact";
+import { hostOnly, WITHHELD, type JsonObject } from "./redact";
+import type { HeldSources } from "./sources";
 import {
-  ARCHES,
   CHANNELS,
   clientOf,
   errorCodeOf,
@@ -18,7 +18,6 @@ import {
   IDENTIFIER,
   INSTALL_REFUSALS,
   known,
-  OS_NAMES,
   shaped,
   stepFile,
   VERSION,
@@ -80,76 +79,15 @@ export function checkIdentifier(raw: string): string {
 
 // ── what is sent ─────────────────────────────────────────────────────────────────────────
 
-/** Which version runs, on what. Every report carries it. */
-export interface Versions {
-  readonly appVersion: string;
-  readonly os: string;
-  readonly osVersion: string;
-  readonly arch: string;
-}
-
 /** One installed package as usage reports it: which package, which version. */
 export interface ReportedPackage {
   readonly id: string;
   readonly version: string;
 }
 
-/**
- * The version fields every report carries; each signal's own fields go beside them. The app
- * reads them from itself and the OS, and they are still held to their shapes.
- */
-export function versionFields(versions: Versions): Record<string, string | null> {
-  return {
-    app_version: shaped(versions.appVersion, VERSION),
-    os: known(versions.os, OS_NAMES),
-    os_version: shaped(versions.osVersion, VERSION),
-    arch: known(versions.arch, ARCHES),
-  };
-}
-
-/** The processes whose crashes are counted: the two supervised children and a node's process. */
-export type CrashedProcess = "runtime" | "services" | "node";
-
-/** How often each has crashed since the app started. */
-export interface CrashCounts {
-  readonly runtime: number;
-  readonly services: number;
-  readonly node: number;
-  /** Node instances the crash-loop limit stopped. */
-  readonly nodeStopped: number;
-}
-
-/** The exception type a crash is grouped under on the error server. */
-export const CRASH_TYPES: Readonly<Record<CrashedProcess, string>> = {
-  runtime: "RuntimeCrashed",
-  services: "ServicesCrashed",
-  node: "NodeProcessCrashed",
-};
-
-/**
- * One crash report's body, before redaction: which process crashed, whether the crash-loop limit
- * stopped it, and the counts. Never what the process was working on: no node's name, no input, no
- * message, no log line (plan 0003: an error report never carries the exception's message).
- */
-export function crashPayload(
-  crashed: CrashedProcess,
-  stoppedForGood: boolean,
-  counts: CrashCounts,
-  versions: Versions,
-): Record<string, unknown> {
-  return {
-    ...versionFields(versions),
-    exception_type: CRASH_TYPES[crashed],
-    crashed,
-    stopped_for_good: stoppedForGood,
-    crashes: {
-      runtime: counts.runtime,
-      services: counts.services,
-      node: counts.node,
-      node_stopped: counts.nodeStopped,
-    },
-  };
-}
+// The version fields and the crash reports, each in their own file.
+export { versionFields, type Versions } from "./vocabulary";
+export { crashPayload, CRASH_TYPES, type CrashCounts, type CrashedProcess } from "./crashes";
 
 // ── the signals (plan 0029) ──────────────────────────────────────────────────────────────
 //
@@ -234,6 +172,8 @@ export interface PackageFacts {
   readonly environment: PackageEnvironmentKind | null;
   /** The type ids its declaration lists: a step's `node_id` is sent only when it is one. */
   readonly nodeTypes?: readonly string[];
+  /** Its source files and line counts, as its verified files gave them (domain/telemetry/sources). */
+  readonly held?: HeldSources;
 }
 
 /** The package fields of an event: an unsigned package is `unsigned`, with no version. */
@@ -348,9 +288,31 @@ export function packageError(facts: PackageFacts, step: StepFacts, failure: Step
     fields: {
       ...stepFields(facts, { ...step, ok: false }),
       error_type: errorTypeOf(failure.errorType),
-      file: facts.signed ? stepFile(failure.file) : null,
-      line: lineOf(failure.line),
+      ...whereIn(facts, failure),
     },
+  };
+}
+
+/**
+ * A failure's `file` and `line`, only as the signed package's verified files hold them: a file it
+ * does not hold, or a line past that file's last, is withheld, whatever its form. An unsigned
+ * package's file is its author's path: neither is sent.
+ */
+function whereIn(facts: PackageFacts, failure: StepFailure): Record<string, unknown> {
+  const line = lineOf(failure.line);
+  if (!facts.signed) {
+    return { file: null, line: line === null ? null : WITHHELD };
+  }
+  const file = stepFile(failure.file);
+  const lines = file !== null && Object.hasOwn(facts.held ?? {}, file) ? facts.held?.[file] : null;
+  return {
+    file: file === null ? null : lines === null || lines === undefined ? WITHHELD : file,
+    line:
+      line === null
+        ? null
+        : lines !== null && lines !== undefined && line <= lines
+          ? line
+          : WITHHELD,
   };
 }
 
@@ -403,7 +365,7 @@ export interface PackageCount {
  * buckets). One `flow_deployed` per flow, its own node count (subflow instances' insides
  * included) beside the deploy's totals and its config nodes, and one `package_deployed` per
  * package: Umami cuts an array to 500 characters, so no count is ever sent as a list. A deploy of
- * no flows is one `flow_deployed` whose `nodes` is null.
+ * no flows tells nothing.
  */
 export function flowDeployed(
   nodesPerFlow: readonly number[],
@@ -412,9 +374,9 @@ export function flowDeployed(
 ): Signal[] {
   const flows = nodesPerFlow.length;
   const total = nodesPerFlow.reduce((sum, count) => sum + count, 0);
-  const each: readonly (number | null)[] = flows === 0 ? [null] : nodesPerFlow;
+  // A deploy of no flows tells nothing: there is no flow to count.
   return [
-    ...each.map((nodes): Signal => ({
+    ...nodesPerFlow.map((nodes): Signal => ({
       name: "flow_deployed",
       fields: { flows, total_nodes: total, nodes, config_nodes: configNodes },
     })),
@@ -478,15 +440,17 @@ export function providerRegistered(
 }
 
 /** `provider_removed`: a provider is removed; the telemetry memory kept only its host as sent. */
-export function providerRemoved(provider: {
-  readonly host: string | null;
-  readonly official: boolean;
-}): Signal {
+export function providerRemoved(
+  provider: { readonly host: string | null; readonly official: boolean },
+  officialHost: string | null,
+): Signal {
+  const { host } = provider;
   return {
     name: "provider_removed",
     fields: {
+      // The memory is a file on disk: its host is sent only when it is the build's catalogue's.
       provider_host:
-        provider.official || provider.host === "file" ? shaped(provider.host, HOST) : "custom",
+        host === null || host === "file" ? host : host === officialHost ? host : "custom",
       official: provider.official,
     },
   };

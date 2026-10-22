@@ -45,7 +45,13 @@ export class FsTelemetryMarks implements TelemetryMarks {
   }
 
   clearRunning(): void {
-    fs.rmSync(this.#running, { force: true });
+    // Called on the way out: a marker that cannot be removed (EPERM, EBUSY) is logged, and the
+    // quit goes on. The next launch then tells an unclean stop, the worst outcome there is.
+    try {
+      fs.rmSync(this.#running, { force: true });
+    } catch (error) {
+      this.#logger.warn(`${RUNNING_FILENAME} could not be removed: ${String(error)}`);
+    }
   }
 
   readMemory(): TelemetryMemory | null {

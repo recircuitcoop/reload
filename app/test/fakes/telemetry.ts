@@ -6,6 +6,7 @@ import type { TelemetryDeps } from "../../src/application/telemetry";
 import { SecretRegistry } from "../../src/domain/redaction/registry";
 import type { JsonObject } from "../../src/domain/telemetry/redact";
 import type { QueuedReport, ReportKind, TelemetryAnswer } from "../../src/domain/telemetry/reports";
+import type { Vouch } from "../../src/domain/telemetry/send-check";
 import type { Endpoints, Outgoing } from "../../src/domain/telemetry/transports";
 import type {
   PostResult,
@@ -122,6 +123,18 @@ export interface TelemetryWorld {
   readonly identifierCalls: () => number;
 }
 
+/**
+ * What the tests' package store and build vouch for at send: a few known packages, one declared
+ * type, two held files, and the official catalogue's host. Anything else falls back.
+ */
+export const TEST_VOUCH: Vouch = {
+  package: (name) => ["probekit", "anytype", "reload_anytype", "sdkts"].includes(name),
+  nodeType: (pkg, id) => pkg === "probekit" && id === "probe",
+  lines: (pkg, file) =>
+    pkg !== "probekit" ? null : file === "src/probe.py" ? 40 : file === "src/node.py" ? 40 : null,
+  host: (host) => host === "catalogue.recircu.it",
+};
+
 /** A pipeline's whole world, with a switch answered `answer`. */
 export function telemetryWorld(
   answer: TelemetryAnswer = "on",
@@ -145,6 +158,7 @@ export function telemetryWorld(
     },
     hashIdentifier: (raw) => `hash-of-${String(raw.length)}-chars`,
     endpoints: ENDPOINTS,
+    vouch: TEST_VOUCH,
     release: "9.9.9",
     clock,
     now: () => Date.UTC(2026, 8, 26, 12),

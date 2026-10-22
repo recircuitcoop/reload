@@ -105,7 +105,7 @@ import { quitQuestion, wireQuit } from "./quit-question";
 import { forkSpecFor, LOG_CANARY_VARIABLE } from "./child-environment";
 import { wireRuntimeCalls } from "./runtime-calls";
 import { wireServiceCalls } from "./service-calls";
-import { wireTelemetry, type ShellTelemetry } from "./telemetry";
+import { endpointEnv, withShippedSources, wireTelemetry, type ShellTelemetry } from "./telemetry";
 import { releaseUrls, updateSource, wireUpdate } from "./update";
 import { wireViews } from "./views";
 import { previewOn, wirePreview } from "./view-preview";
@@ -561,12 +561,12 @@ async function start(): Promise<DesktopWired["notices"] | null> {
       testMachineId ?? machineId.osMachineIdentifier(machineId.systemSeams(process.platform)),
     hashIdentifier: machineId.machineIdHash,
     built: packageJson.reload,
-    env: process.env,
+    env: endpointEnv(app.isPackaged, process.env),
     appVersion: app.getVersion(),
     registry: secretRegistry,
     sink: oneLog,
     supervisors,
-    packages: () => packageStore.documents(),
+    packages: withShippedSources(() => packageStore.documents(), APP_DIR, logger),
     clock: systemClock,
     logger,
   });

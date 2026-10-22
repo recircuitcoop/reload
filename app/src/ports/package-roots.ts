@@ -24,6 +24,11 @@ export interface InstalledRecord {
    */
   readonly signed: boolean;
   /**
+   * Its source files and their line counts, from the files its files.json listed (plan 0029):
+   * the only file a failed step's event may name. Absent from a record written before.
+   */
+  readonly sources?: Readonly<Record<string, number>>;
+  /**
    * Where it was installed from, which is where the update check asks (WI-0018-17). Absent from
    * a record written before the check existed, whose package is then not checked.
    */

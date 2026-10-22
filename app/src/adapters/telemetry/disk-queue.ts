@@ -138,20 +138,33 @@ export class DiskReportQueue implements ReportQueue {
       } catch {
         // It can never be sent; left in place it would head the queue for good.
         this.#logger.warn(`dropping an unreadable telemetry report: ${path.basename(file)}`);
-        fs.rmSync(file, { force: true });
+        this.#drop(file);
         continue;
       }
       if (typeof document !== "object" || document === null || Array.isArray(document)) {
         this.#logger.warn(
           `dropping a telemetry report that is not an object: ${path.basename(file)}`,
         );
-        fs.rmSync(file, { force: true });
+        this.#drop(file);
         continue;
       }
       reports.push({ sequence, kind, payload: document as JsonObject });
       readable.push({ sequence, kind, file, size });
     }
     return reports;
+  }
+
+  /**
+   * Delete what stands at a report's name and can never be sent: a broken file, or a folder made
+   * under that name, which would otherwise head the queue for good. A delete that fails is logged;
+   * the entry has already left the index.
+   */
+  #drop(file: string): void {
+    try {
+      fs.rmSync(file, { recursive: true, force: true });
+    } catch (error) {
+      this.#logger.warn(`${path.basename(file)} could not be deleted: ${String(error)}`);
+    }
   }
 
   remove(report: QueuedReport): void {

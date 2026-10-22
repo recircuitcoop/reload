@@ -82,7 +82,8 @@ export function everySignal(text: string, signed = true): Signal[] {
     ...flowDeployed([2, 1], [{ package: signed ? "probekit" : "unsigned", nodes: 3 }], 1),
     setupStep("anytype_paired"),
     providerRegistered(provider, text, 4),
-    providerRemoved({ host: text, official: false }),
+    // The memory on disk says official: only the build's own catalogue's host is ever sent.
+    providerRemoved({ host: text, official: true }, "catalogue.recircu.it"),
     packageInstalled(facts, { kind: "catalogue", url: text, official: false }, 2),
     packageUpdated(facts, { kind: "file" }, 2, text),
     packageRemoved(facts),
