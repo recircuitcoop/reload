@@ -47,7 +47,7 @@ Owner: "finish ALL plans completely." (docs/plans/0031-the-features-the-old-app-
 | 33 | [SAFETY] Node processes left behind after a runtime crash | 2 | M | none |
 | 34 | [SAFETY] A kill sent to a process id after the process has exited | 1 | S | none |
 | 35 | [SAFETY] The login item stays registered when macOS asks for approval | 1 | S | done: ported (port/0032-small-safety) |
-| 36 | Update offers and notices that are not true | 3 | S | done: ported (port/0032-small-safety) |
+| 36 | Update offers and notices that are not true | 3 | S | 2 ported (port/0032-small-safety); 1 waits for the owner |
 | 37 | Saving one setting restarts every node in every flow | 2 | M | none |
 | 38 | Show what the runtime refused, and open the right place from a notice | 2 | S | none |
 | 39 | 'See what would be sent' shows the exact body that will be posted | 1 | S | none |
@@ -733,6 +733,18 @@ Corrections to the brief:
 - **Old app / now:** An archive with a different version from its catalogue entry, or an entry naming a newer version with no archive, was not offered; the 'ready, installs when you quit' notice came only after staging. Now such an entry is offered and fails at Apply, and the notice appears before staging and stays when staging fails.
 - **Size:** S. Lives in: `application/update-check.ts:166-171`, `domain/packages/catalogue` checks.
 - **Owner decision:** none
+- **Ported (port/0032-small-safety):** the "ready, installs when you quit" notice now comes only once
+  staging has completed. The update check reads the catalogue alone: an entry naming a newer
+  version but no archive is not offered, and Apply installs exactly the version it offered,
+  refusing a signed archive that declares any other. The check downloads nothing, so it costs
+  no more network than reading the catalogue, and tells the catalogue's host nothing about what
+  is installed.
+- **Waits for the owner (the 'manifest disagrees with its tag' row):** the old app read only a
+  small manifest at the tag. Reload has no such file per version, so not offering an archive
+  that disagrees with its entry would mean downloading every newer archive (up to 256 MB each)
+  on every check and every refresh of the Packages page, and telling the host which packages
+  are installed. Not built. Proposed instead: such an archive is offered once, refused at Apply
+  with its reason (as now), and then held back so it is not offered again.
 - **Rows (3):**
 
 - `tests/test_plugin_version_check.py::test_a_git_manifest_that_disagrees_with_its_tag_is_not_offered`

@@ -24,7 +24,6 @@ import { PackageRefusal } from "../domain/packages/archive";
 import type { Declaration } from "../domain/packages/declaration";
 import {
   actionFor,
-  compareVersions,
   judgeFolder,
   modeFor,
   type PackagePolicy,
@@ -217,7 +216,7 @@ export class PackageUpdates {
       };
     }
     if (origin.kind === "catalogue") {
-      return this.#catalogues.judge(record, origin, this.#ports.environment);
+      return this.#catalogues.judge(record, origin);
     }
     try {
       const now = await inspectPackage(fileOrigin(origin.path), this.#ports.environment);
@@ -335,10 +334,10 @@ export class PackageUpdates {
       if (declaration.package !== name) {
         throw new PackageRefusal("declaration", `it declares ${declaration.package}, not ${name}`);
       }
-      if ((compareVersions(declaration.version, record.version) ?? 0) <= 0) {
+      if (declaration.version !== version) {
         throw new PackageRefusal(
           "declaration",
-          `it declares version ${declaration.version}, which is not newer than ${record.version}`,
+          `it declares version ${declaration.version}, not the ${version} offered`,
         );
       }
     };
