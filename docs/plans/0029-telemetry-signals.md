@@ -93,16 +93,17 @@ The Umami event name is the signal's name.
 
 | Event | When | Fields |
 |---|---|---|
-| `app_start` | Every launch, after the children are up | `startup_ms`, `packages` (id, version, as `usage` today), `unsigned_packages`, `first_launch` |
+| `app_start` | Every launch, after the children are up | `startup_ms`, `packages` (how many are installed), `unsigned_packages`, `first_launch` |
+| `package_present` | Every launch, one per installed package | `package`, `version`, `source`, `signed`, `environment` |
 | `app_stop` | Every quit, queued before the children stop | `uptime_s`, `reason` (`quit`, `update`) |
 | `app_unclean_stop` | At start, when the last launch left no `app_stop` | `last_version` |
 | `package_used` | Every time a node of a package runs one step, and every run a source starts | `package`, `version`, `source` (`shipped`, `catalogue`, `file`), `signed`, `environment` (`uv-python`, `node`, `executable`), `node_kind`, `node_id` (the declared id, not the instance), `duration_ms`, `ok` |
-| `package_error` | Every time such a step fails, and every error a source sends outside any step | the `package_used` fields, plus `error_type` (the class's name or a code), `file`, `line`; never the message |
-| `mcp_call` | Every `tools/call` and `resources/read` on the loopback endpoint (not `initialize`, `ping` or the lists) | `package` (`reload_anytype`), `version`, `method`, `tool` (only names from the validated set; null for a read), `client` (the `clientInfo.name` from `initialize`, held to its shape, never cut), `duration_ms`, `ok`, `error_code` |
-| `flow_deployed` | Every deploy, one per flow | `flows` (in the deploy), `total_nodes` (exact), `nodes` (this flow's, exact) |
+| `package_error` | Every time such a step fails, and every error a source sends outside any step | the `package_used` fields, plus `error_type` (a standard JS or Python error's name or a Node system code, else `other`), `file` (only one the signed package holds), `line`; never the message |
+| `mcp_call` | Every `tools/call` and `resources/read` on the loopback endpoint (not `initialize`, `ping` or the lists) | `package` (`reload_anytype`), `version`, `method`, `tool` (only names from the validated set; null for a read), `client` (a known AI app's label for its own session's `clientInfo.name`, else `other`), `duration_ms`, `ok`, `error_code` (JSON-RPC's reserved range or 100–599) |
+| `flow_deployed` | Every deploy, one per flow | `flows` (in the deploy), `total_nodes` (exact), `nodes` (this flow's, exact, the nodes inside its subflow instances included), `config_nodes` (the deploy's) |
 | `package_deployed` | Every deploy, one per package | `package`, `nodes` (exact) |
 | `setup_step` | Each first-run step reached | `step` (`launched`, `anytype_paired`, `first_flow_deployed`) |
-| `provider_registered` | A package provider (catalogue) is added | `provider_host` (hostname only), `official` (the shipped catalogue or not), `key_fingerprint` (the public signing key's fingerprint), `packages_offered` |
+| `provider_registered` | A package provider (catalogue) is added | `provider_host` (the official catalogue's hostname; `custom` for any other), `official` (the shipped catalogue or not), `key_fingerprint` (the public signing key's fingerprint), `packages_offered` |
 | `provider_removed` | A provider is removed | `provider_host`, `official` |
 | `package_installed` | Every install | `package`, `version`, `source` (`catalogue`, `file`), `provider_host`, `signed`, `environment`, `node_types` (count) |
 | `package_updated` | Every update | the `package_installed` fields, plus `from_version` |
@@ -255,11 +256,41 @@ Where the build differs from the text above, and why:
   `file://` URLs; the Python SDK treats a frame on another Windows drive as outside the package.
 - **`StopReason` `restart` and `usagePayload` are gone**: nothing sent or called them.
 
+### As built, after the second credential review (2026-10-22)
+
+- **"error" is the error's type, never its message.** The owner's "time, error, file, line" is
+  sent as `error_type`, a name from a closed list: a message is free text, and free text cannot
+  be proved credential-free.
+- **Strict shapes were not enough**: whoever writes a value picks it, so a key fits a class name,
+  a version's pre-release tag, a client name or a host. Every such field is now a closed
+  vocabulary or vouched for by where it came from (`domain/telemetry/vocabulary.ts`):
+  `error_type` is a standard JS or Python error or a Node system code, else `other`; a version is
+  `MAJOR.MINOR.PATCH` with at most `-alpha.N`, `-beta.N` or `-rc.N`; `client` is a known AI app's
+  label (Claude, Claude Code, Cursor, VS Code, Windsurf, Zed, Cline, Continue, Goose, ChatGPT, the
+  MCP Inspector), else `other`; `os`, `arch` and `channel` are Node's and Reload's own values;
+  `package`, `node_id` are named only from a signed declaration (anything else is `unsigned`);
+  `file` only when the signed package's folder holds it or its source maps name it; a provider's
+  host only for the official catalogue (any other is `custom`); `error_code` only JSON-RPC's
+  reserved range or 100–599; an install's `reason` only a known refusal code. The OS release is
+  read off its leading numbers (`6.8.0-45-generic` is `6.8.0`).
+- **Every queued report is stamped with the rules** (`rules`, RULES_VERSION) and held to them
+  again at send: one stamped under other rules is dropped unsent, and any field outside its rule
+  leaves as `[withheld]`.
+- **Exact node counts.** `flow_deployed`'s `nodes` counts every node on the tab, and each subflow
+  instance with the nodes inside it as deployed (a subflow inside itself is counted once); config
+  nodes, those with no `wires`, are `config_nodes`. Groups, tabs and subflow definitions are not
+  nodes.
+- **Installed packages are one `package_present` each**, beside `app_start`'s count: Umami keeps
+  500 characters of a list.
+- **`mcp_call.client` is per MCP session**: each `initialize` opens one (`Mcp-Session-Id`), and a
+  call names the client of its own session; the 64 newest are kept.
+- **`anytype_paired` is reached only by a pairing the services process completed**: a wrong
+  code is refused there, and nothing is reached.
+
 ## Risks
 
-- **An identifier-shaped secret is still sent as the identifier it claims to be**: a signed
-  package whose name, version or error class is a short secret word would send it. Identifiers
-  come from signed manifests, code and the validated tool set, never from a person's typing.
+- **A signed package's own name and declared type ids are still sent as declared**, and a tool
+  name as the validated set lists it: their provenance vouches for them, their form does not.
 - **Some harmless values are withheld** (an error class of 25 letters, a client name with a dot).
   Accepted: a withheld value costs a diagnosis, a sent credential costs the person.
 - **`at` versus Umami's time.** Umami counts an event when it arrives. Events sent after a time
