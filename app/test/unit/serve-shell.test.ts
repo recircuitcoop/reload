@@ -1,4 +1,6 @@
 // A child's side of the channel (spec 10.2) and its ppid watchdog (spec 6.6).
+import fs from "node:fs";
+import * as path from "node:path";
 import { describe, expect, it } from "vitest";
 import { watchParent, WATCHDOG_INTERVAL_MS } from "../../src/application/parent-watchdog";
 import { registering } from "../../src/application/secrets";
@@ -306,6 +308,28 @@ describe("redactingShellLink: what the services process tells the shell", () => 
     // The reasons themselves still arrive, with the secret marked as removed.
     expect(frames).toContain(`the MCP child refused --api-key ${REDACTED}`);
     expect(frames).toContain(`Bearer ${REDACTED} was refused`);
+  });
+
+  it("is the only way the services process reaches the shell (services/main.ts)", () => {
+    // services/main.ts imports Electron's parentPort at load, so its wiring is read, not run
+    // (as process-command.test.ts reads it). The one link to the shell is the redacting one,
+    // over the same registry its log redacts with, and nothing posts around it. What the
+    // services process logs is proven redacted at its source by mcp-child.test.ts ("redacts the
+    // Anytype key and the MCP proxy token the child prints, registered as main.ts registers
+    // them") and again in the shell by one-log.test.ts ("redacts a child's record again in the
+    // shell, whatever the child did").
+    const root = fs.readFileSync(
+      path.join(__dirname, "..", "..", "src", "services", "main.ts"),
+      "utf8",
+    );
+    expect(root).toContain(
+      "const link = redactingShellLink(shellLinkOver(process.parentPort), (text) => registry.redact(text));",
+    );
+    expect(root.match(/shellLinkOver\(/g)).toHaveLength(1);
+    expect(root.match(/process\.parentPort/g)).toHaveLength(1);
+    expect(root).toContain(
+      "sourceLog({ name, pid, write: syncWriter(1), now: () => Date.now(), registry })",
+    );
   });
 
   it("walks plain objects and arrays only; bytes and numbers pass as they are, and so do peers", () => {
