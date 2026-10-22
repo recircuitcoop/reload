@@ -235,9 +235,17 @@ export class FsPackageRoots implements PackageRoots {
       throw new Error(`${name} is not installed, so its record cannot be amended`);
     }
     const file = path.join(this.#in(this.live, name), RECORD_FILENAME);
+    // Written beside it, then renamed over it: a full disk leaves the old record whole.
+    const written = `${file}.tmp`;
     this.#unsealedLive(name, () => {
       chmodOne(file, false);
-      fs.writeFileSync(file, JSON.stringify({ ...record, ...fields }, null, 2) + "\n");
+      try {
+        fs.writeFileSync(written, JSON.stringify({ ...record, ...fields }, null, 2) + "\n");
+        fs.renameSync(written, file);
+      } catch (error) {
+        fs.rmSync(written, { force: true });
+        throw error;
+      }
     });
   }
 

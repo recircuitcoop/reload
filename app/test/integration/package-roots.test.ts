@@ -86,6 +86,25 @@ describe("FsPackageRoots", () => {
     expect(fs.existsSync(path.join(base, "staging", "monty"))).toBe(false);
   });
 
+  it("an amendment that cannot be written leaves the record whole, and no scrap beside it", () => {
+    stageComplete("1");
+    roots.swapIn("monty");
+    const live = path.join(base, "packages", "monty");
+    // A write that fails part way, as a full disk would: the new text never replaces the old.
+    unsealTree(live);
+    fs.mkdirSync(path.join(live, "installed.json.tmp"));
+    fs.writeFileSync(path.join(live, "installed.json.tmp", "x"), "");
+    expect(() => {
+      roots.amend("monty", { left: { version: "2", at: 1 } });
+    }).toThrow();
+    expect(roots.installed("monty")).toEqual(record("1"));
+    unsealTree(live);
+    fs.rmSync(path.join(live, "installed.json.tmp"), { recursive: true });
+    roots.amend("monty", { left: { version: "2", at: 1 } });
+    expect(roots.installed("monty")?.left).toEqual({ version: "2", at: 1 });
+    expect(fs.readdirSync(live).sort()).toEqual(["environment", "installed.json", "package"]);
+  });
+
   it("a second swap keeps the package it replaced, not the one before it", () => {
     for (const version of ["1", "2", "3"]) {
       stageComplete(version);

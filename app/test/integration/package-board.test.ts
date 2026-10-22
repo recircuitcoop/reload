@@ -494,6 +494,24 @@ describe("update and Go back (D5)", () => {
     expect(roots.installed("monty")?.version).toBe("0.1.0");
   });
 
+  it("Go back that cannot record the version it left is still back, and says so", async () => {
+    const folder = writeFolder("monty", "0.1.0");
+    const { board } = setUp();
+    await board.start();
+    await board.installFolder(folder);
+    writeFolder("monty", "0.2.0");
+    await board.checkFolder("monty");
+    expect(await board.update("monty")).toEqual({ ok: true });
+    // The kept 0.1.0 becomes live; its record's amendment cannot be written.
+    const kept = path.join(roots.previous, "monty");
+    unsealTree(kept);
+    fs.mkdirSync(path.join(kept, "installed.json.tmp"));
+    fs.writeFileSync(path.join(kept, "installed.json.tmp", "x"), "");
+    expect(await board.goBack("monty")).toEqual({ ok: true });
+    expect(roots.installed("monty")?.version).toBe("0.1.0");
+    expect(logger.lines.join("\n")).toContain("monty went back; 0.2.0 is not offered again");
+  });
+
   it("after seven days Go back is refused, and the next start prunes what was kept", async () => {
     const folder = writeFolder("monty", "0.1.0");
     const { board } = setUp();

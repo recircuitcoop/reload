@@ -489,14 +489,19 @@ export class PackageBoard {
       return refused({ reason: "rollback-expired" });
     }
     return this.#oneAtATime(`${name} going back`, async () => {
-      // Swapped back once the instances of the version it leaves have stopped.
       const { took, refused: notBack } = await restartAround(
         restartRuntime,
         `${name} went back to ${offer.previous}`,
         () => {
           roots.rollBack(name);
-          // The version it left is offered again, and never blocked; it outlives a restart.
-          roots.amend(name, { left: { version: offer.version, at: this.#ports.now() } });
+          // The version it left is offered again, never blocked; unwritten, only that is lost.
+          try {
+            roots.amend(name, { left: { version: offer.version, at: this.#ports.now() } });
+          } catch (error) {
+            logger.warn(
+              `packages: ${name} went back; ${offer.version} is not offered again: ${String(error)}`,
+            );
+          }
         },
       );
       if (notBack !== null) {
