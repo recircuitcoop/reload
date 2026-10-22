@@ -175,6 +175,9 @@ class Node:
         # this process's monotonic clock in ms, and the inputs still being worked on.
         self._progress_at = time.monotonic() * 1000
         self._working: set[str] = set()
+        # The health check in flight, if any (spec 4.2): never more than one.
+        self._health_lock = threading.Lock()
+        self._health_running = False
 
         # From here on, nothing but this class's own send() reaches the real stdout (C3): a
         # library's print()/logging, and even an uncaught exception's traceback (which the
@@ -349,27 +352,37 @@ class Node:
         threading.Thread(target=work, daemon=True).start()
 
     def _ask_health(self, on_health: Callable[[], bool]) -> bool:
-        """The node's own answer, on a thread of its own and bounded by HEALTH_TIMEOUT_S; a
-        check that raises, or takes longer, has answered too: not healthy."""
+        """The node's own answer, bounded by HEALTH_TIMEOUT_S; a check that raises, or takes
+        longer, has answered too: not healthy. Only ``True`` itself is healthy. One check at a
+        time: while one still runs, even past its bound, the answer is not healthy and no other
+        is started, so a check that hangs costs one thread, never one per ping."""
+        with self._health_lock:
+            if self._health_running:
+                return False
+            self._health_running = True
         answers: list[bool] = []
+        answered = threading.Event()
 
         def ask() -> None:
             try:
-                answers.append(bool(on_health()))
+                answers.append(on_health() is True)
             except Exception as caught:  # noqa: BLE001 - reported, and answered as not healthy
                 self.log(f"the health check raised: {caught}", "error")
                 answers.append(False)
+            finally:
+                with self._health_lock:
+                    self._health_running = False
+                answered.set()
 
-        worker = threading.Thread(target=ask, daemon=True)
-        worker.start()
-        worker.join(HEALTH_TIMEOUT_S)
-        if not answers:
+        threading.Thread(target=ask, daemon=True).start()
+        if not answered.wait(HEALTH_TIMEOUT_S):
             self.log(f"the health check took longer than {HEALTH_TIMEOUT_S} s", "warn")
             return False
         return answers[0]
 
     def _pong(self, ping_id: str, on_health: Callable[[], bool] | None) -> None:
-        """One ``pong``: its id, the progress marker, and the health check's answer."""
+        """One ``pong``: its id, the health check's answer for this very ping, and the progress
+        marker."""
         pong: dict[str, Any] = {"t": "pong", "id": ping_id}
         if on_health is not None:
             pong["healthy"] = self._ask_health(on_health)
@@ -392,10 +405,11 @@ class Node:
         thread, so ``run()`` returning (close, or EOF) lets the process exit at once without
         waiting on work still in flight -- matching the close deadline (spec 4.4: 5 s).
 
-        ``on_health`` is the node's own health check (spec 2.4.2): asked at each ``ping``, on
-        the loop that reads frames, so it must answer quickly. Its answer goes back as the
-        ``pong``'s ``healthy``; one that raises is not healthy. Without it, a ``pong`` carries
-        no answer.
+        ``on_health`` is the node's own health check (spec 2.4.2): asked at each ``ping`` on a
+        thread of its own, never on the loop that reads frames, and bounded by HEALTH_TIMEOUT_S.
+        Its answer goes back as that ping's ``pong``'s ``healthy``: only ``True`` is healthy; one
+        that raises, or takes longer, is not. One check runs at a time; a ping that comes while
+        one still runs is answered not healthy. Without it, a ``pong`` carries no answer.
         """
         self.ready()
         for raw in sys.stdin:
@@ -442,8 +456,8 @@ class Node:
                     self._dispatch(on_fire, (data,), input_id=None)
             elif t == "ping":
                 # Answered whatever the handlers are doing (spec 2.4.2, 4.1): at once without a
-                # health check; with one, on a thread of its own, so a slow check never holds
-                # this loop from reading the next frame.
+                # health check; with one, on a thread of its own bounded by HEALTH_TIMEOUT_S, so
+                # a slow check never holds this loop from reading the next frame.
                 ping_id = frame.get("id")
                 if isinstance(ping_id, str) and on_health is None:
                     self._pong(ping_id, None)

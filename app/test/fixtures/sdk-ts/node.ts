@@ -140,6 +140,7 @@ async function runKitchen(): Promise<void> {
       emit("out", data); // no input id: a new run (C12, spec 4.1 fire)
     },
     health: () => {
+      log("the health check was asked", "debug");
       if (health === "raise") {
         throw new Error("the index is on fire");
       }

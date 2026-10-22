@@ -63,8 +63,27 @@ export interface Handlers {
 /** The longest a health check may take before its pong answers `healthy: false` (spec 4.2). */
 export const HEALTH_TIMEOUT_MS = 500;
 
-/** The node's own answer, bounded by HEALTH_TIMEOUT_MS; a check that throws: not healthy. */
+/** The health check still running, if any: one at a time, however long it takes. */
+let healthRunning = false;
+
+/**
+ * The node's own answer, bounded by HEALTH_TIMEOUT_MS: only `true` itself is healthy; one that
+ * throws, or takes longer, is not. One check at a time: while one still runs, even past its
+ * bound, the answer is not healthy and no other is started, so a check that never settles is
+ * one pending promise, never one per ping.
+ */
 async function askHealth(handlers: Handlers): Promise<boolean> {
+  if (healthRunning) {
+    return false;
+  }
+  healthRunning = true;
+  const check = Promise.resolve()
+    .then(() => handlers.health?.())
+    .finally(() => {
+      healthRunning = false;
+    });
+  // A check that fails after its bound has nobody left to tell; never an unhandled rejection.
+  check.catch(() => undefined);
   let timer: ReturnType<typeof setTimeout> | undefined;
   const late = new Promise<"late">((resolve) => {
     timer = setTimeout(() => {
@@ -72,7 +91,7 @@ async function askHealth(handlers: Handlers): Promise<boolean> {
     }, HEALTH_TIMEOUT_MS);
   });
   try {
-    const answer = await Promise.race([Promise.resolve().then(() => handlers.health?.()), late]);
+    const answer = await Promise.race([check, late]);
     if (answer === "late") {
       log(`the health check took longer than ${String(HEALTH_TIMEOUT_MS)} ms`, "warn");
       return false;
@@ -442,7 +461,10 @@ export async function run(handlers: Handlers): Promise<void> {
     if (frame["t"] === "input" && typeof frame["id"] === "string" && isRecord(frame["event"])) {
       const id = frame["id"];
       const event = frame["event"] as unknown as InputEvent;
-      startWork(id);
+      // Work only for a handler that is there to do it: as the Python SDK.
+      if (handlers.input !== undefined) {
+        startWork(id);
+      }
       Promise.resolve()
         .then(() => handlers.input?.(id, event))
         .catch((caught: unknown) => {
@@ -453,7 +475,9 @@ export async function run(handlers: Handlers): Promise<void> {
     } else if (frame["t"] === "action" && typeof frame["in"] === "string") {
       const id = frame["in"];
       const values = isRecord(frame["values"]) ? frame["values"] : {};
-      startWork(id);
+      if (handlers.action !== undefined) {
+        startWork(id);
+      }
       Promise.resolve()
         .then(() => handlers.action?.(id, values))
         .catch((caught: unknown) => {

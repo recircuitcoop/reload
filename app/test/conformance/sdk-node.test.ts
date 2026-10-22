@@ -272,7 +272,7 @@ describe.each(SDK_LANGUAGES)("conformance: the %s SDK's kitchen reference node",
     node.start();
     await node.ready();
     const answers: unknown[] = [];
-    for (const [index, value] of [false, "raise", "hang", true].entries()) {
+    for (const [index, value] of [false, "raise", true, "hang"].entries()) {
       const id = `health-${String(index)}`;
       node.send({ t: "input", id, event: { type: "t.v1", data: { do: "health", value } } });
       await waitFor(`health ${String(index)}`, () => node.terminal(id).length === 1);
@@ -285,9 +285,28 @@ describe.each(SDK_LANGUAGES)("conformance: the %s SDK's kitchen reference node",
     expect(answers.map((f) => (f as { healthy?: boolean }).healthy)).toEqual([
       false,
       false,
-      false,
       true,
+      false,
     ]);
+    // While the hung check still runs, a ping is answered not healthy at once, and no second
+    // check is started: one at a time, never one per ping.
+    const asked = (): number =>
+      node.frames.filter((f) => f.t === "log" && f.msg === "the health check was asked").length;
+    node.send({
+      t: "input",
+      id: "hang-again",
+      event: { type: "t.v1", data: { do: "health", value: "hang" } },
+    });
+    await waitFor("hang again", () => node.terminal("hang-again").length === 1);
+    node.send({ t: "ping", id: "slow-1" });
+    await waitFor("slow-1", () => node.frames.some((f) => f.t === "pong" && f.id === "slow-1"));
+    const before = asked();
+    node.send({ t: "ping", id: "slow-2" });
+    await waitFor("slow-2", () => node.frames.some((f) => f.t === "pong" && f.id === "slow-2"));
+    expect(asked()).toBe(before);
+    expect(node.frames.find((f) => f.t === "pong" && f.id === "slow-2")).toMatchObject({
+      healthy: false,
+    });
     // A check that fails is said, and one that hangs is cut off without holding the frame loop.
     const logs = node.frames.flatMap((f) => (f.t === "log" ? [f.level ?? ""] : []));
     expect(logs).toEqual(expect.arrayContaining(["error", "warn"]));
@@ -304,6 +323,8 @@ describe.each(SDK_LANGUAGES)("conformance: the %s SDK's kitchen reference node",
       const pong = node.frames.find((f) => f.t === "pong" && f.id === id);
       return pong?.t === "pong" ? (pong.progress ?? Number.NaN) : Number.NaN;
     };
+    // An action this node has no handler for is no work in progress: the marker still moves.
+    node.send({ t: "action", in: "nobody-waits", values: {} });
     const idle = await marker("idle-1");
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(await marker("idle-2")).toBeGreaterThan(idle);

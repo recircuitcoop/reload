@@ -129,6 +129,7 @@ def run_kitchen() -> None:
         node.emit("out", data)  # no input id: a new run (C12, spec 4.1 fire)
 
     def on_health() -> bool:
+        node.log("the health check was asked", "debug")
         if health["value"] == "raise":
             raise RuntimeError("the index is on fire")
         if health["value"] == "hang":

@@ -501,13 +501,13 @@ Every frame is a JSON object with a string field `t`.
 | `t` | Fields | When | The node MUST |
 |---|---|---|---|
 | `start` | `protocol` (2), `node: {id, type, name}`, `config` (object), `credentials` (object of strings), `data_dir` (string) | Exactly once, as the FIRST line. | Read it before any other frame. It MAY write to `data_dir`, a private folder per instance that persists across restarts. It MUST NOT log `credentials`. |
-| `input` | `id`, `event: {type, data, run}` | For each event arriving at the instance. It may be a re-send (7.3). | Eventually answer with exactly one `done` or `error` for `id` (awaiting views: after an `action`). It MAY emit outputs for `id` before that. It MUST treat a re-sent `id` as the same work, which SHOULD be idempotent. |
+| `input` | `id`, `event: {type, data, run}` | For each event arriving at the instance. It may be a re-send (7.3). | Eventually answer with exactly one `done` or `error` for `id` (awaiting views: after an `action`). It MAY emit outputs for `id` before that. It MUST treat a re-sent `id` as the same work, which SHOULD be idempotent. With `reload.heartbeat` declared (2.4.2), a step longer than the stale window MUST send `status` or `progress` within each window, or it is judged stuck. |
 | `cancel` | `in` | The person cancelled that input (proven: Jobs page). | Stop the work as soon as practical, and answer `error {in, message}`. A queued input is cancelled before it starts ("cancelled before it started"). An unknown `in` is ignored. |
 | `action` | `in`, `values` (object) | Action views only: the person submitted, or dismissed. | Submitted: emit on an output with `in`, then `done`. Dismissed (`values.__dismiss__ === true`): `error {in, "dismissed by the person"}`. |
 | `trigger` | `action` (port id), `snapshot: {id, state}`, `values` | Snapshot views only: an action was pressed. | Emit on the port named `action` WITHOUT `in` (a new run), carrying the snapshot state and `values`. |
 | `fire` | `data` (object, already validated) | Created event sources: the person fired the event from the app. | Emit on its one port without `in`. |
 | `close` | — | On redeploy, removal, quit or runtime restart. | Stop its work, send `closed`, and exit with code 0. Deadline: 5 s (6.3). |
-| `ping` | `id` | Only to a type that declares `reload.heartbeat` (2.4.2), once per interval after `ready`. | Answer `pong` with the same `id`, from the loop that reads its frames, while it is working too. A node whose type declares no heartbeat MAY ignore it. |
+| `ping` | `id` | Only to a type that declares `reload.heartbeat` (2.4.2), once per interval after `ready`. | Answer `pong` with the same `id`, whatever its handlers are doing, never held by them. A health check, when the node has one, runs on its own thread (or, in JavaScript, its own promise) bounded by 0.5 s, never on the loop that reads frames; one check at a time, and a ping that comes while one still runs is answered `healthy: false`. A node whose type declares no heartbeat MAY ignore it. |
 
 ### 4.2 Node → runtime
 
@@ -581,7 +581,7 @@ Every frame is a JSON object with a string field `t`.
 | Deadline | Value | Status |
 |---|---|---|
 | `close` → `closed` and exit | 5 s, then SIGKILL | proven |
-| Work on an input | NONE; an input may take hours (proven: 644 s with progress, then cancelled) | proven |
+| Work on an input | NONE; an input may take hours (proven: 644 s with progress, then cancelled). A type that declares `reload.heartbeat` (2.4.2) must send `status` or `progress` at least once per stale window during a long step, or it is judged stuck | proven |
 | An action view waiting | NONE; it survives restarts | proven |
 | `start` → `ready` | 30 s | **[UNPROVEN]** |
 | A runtime `stop` for quit | 10 s, then the shell kills the runtime | proven as code, not exercised |

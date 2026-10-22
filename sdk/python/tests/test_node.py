@@ -12,6 +12,7 @@ import json
 import threading
 import time
 from collections.abc import Callable
+from typing import cast
 
 import pytest
 
@@ -524,40 +525,40 @@ def test_the_progress_marker_moves_while_idle_and_freezes_while_a_handler_is_wed
 def test_a_health_check_answers_in_the_pong_and_one_that_raises_or_hangs_is_not_healthy(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Each pong carries the answer to its own ping: only True is healthy."""
     out, _ = patch_io(monkeypatch)
     monkeypatch.setattr("reload_node.HEALTH_TIMEOUT_S", 0.05)
-    hang = threading.Event()
-    answers: list[object] = [True, False, RuntimeError("the index is on fire"), "hang"]
+    node = start_node(monkeypatch)
+    release = threading.Event()
 
-    def check() -> bool:
-        answer = answers.pop(0)
-        if isinstance(answer, Exception):
-            raise answer
-        if answer == "hang":
-            hang.wait(5)
-            return True
-        return bool(answer)
+    def raises() -> bool:
+        raise RuntimeError("the index is on fire")
 
-    node = start_node(
-        monkeypatch,
-        {"t": "ping", "id": "p1"},
-        {"t": "ping", "id": "p2"},
-        {"t": "ping", "id": "p3"},
-        {"t": "ping", "id": "p4"},
-        {"t": "input", "id": "after", "event": {"type": "t.v1", "data": 1}},
-    )
-    node.run(on_input=lambda i, e: node.done(i), on_health=check)
-    # The frame loop was never held: the input after a hanging check was read and done.
-    wait_until(lambda: len(pongs(out)) == 4)
-    hang.set()
-    frames = frames_of(out)
-    assert {"t": "done", "in": "after"} in frames
+    def hangs() -> bool:
+        release.wait(5)
+        return True
+
+    def truthy() -> bool:
+        return cast(bool, 1)  # truthy, yet not True: not healthy
+
+    checks: list[tuple[str, Callable[[], bool]]] = [
+        ("well", lambda: True),
+        ("ill", lambda: False),
+        ("truthy", truthy),
+        ("raises", raises),
+        ("hangs", hangs),
+    ]
+    for ping_id, check in checks:
+        node._pong(ping_id, check)
+    release.set()
     assert {str(f["id"]): f["healthy"] for f in pongs(out)} == {
-        "p1": True,
-        "p2": False,
-        "p3": False,
-        "p4": False,
+        "well": True,
+        "ill": False,
+        "truthy": False,
+        "raises": False,
+        "hangs": False,
     }
+    frames = frames_of(out)
     assert {
         "t": "log",
         "level": "error",
@@ -568,6 +569,41 @@ def test_a_health_check_answers_in_the_pong_and_one_that_raises_or_hangs_is_not_
         "level": "warn",
         "msg": "the health check took longer than 0.05 s",
     } in frames
+
+
+def test_one_health_check_at_a_time_and_the_frame_loop_is_never_held(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A hung check costs one thread: pings while it runs are answered not healthy at once."""
+    out, _ = patch_io(monkeypatch)
+    monkeypatch.setattr("reload_node.HEALTH_TIMEOUT_S", 0.05)
+    release = threading.Event()
+    started: list[int] = []
+
+    def hangs() -> bool:
+        started.append(threading.active_count())
+        release.wait(5)
+        return True
+
+    node = start_node(
+        monkeypatch,
+        {"t": "ping", "id": "p1"},
+        {"t": "ping", "id": "p2"},
+        {"t": "ping", "id": "p3"},
+        {"t": "input", "id": "after", "event": {"type": "t.v1", "data": 1}},
+    )
+    node.run(on_input=lambda i, e: node.done(i), on_health=hangs)
+    wait_until(lambda: len(pongs(out)) == 3)
+    # The input after the pings was read and done while the check still hung.
+    assert {"t": "done", "in": "after"} in frames_of(out)
+    assert len(started) == 1
+    assert sorted(str(f["id"]) for f in pongs(out)) == ["p1", "p2", "p3"]
+    assert all(f["healthy"] is False for f in pongs(out))
+    release.set()
+    # Once the hung check ends, the next ping asks again.
+    wait_until(lambda: not node._health_running)
+    node._pong("p4", lambda: True)
+    assert pongs(out)[-1]["healthy"] is True
 
 
 def test_run_calls_on_close_and_sends_closed_on_an_explicit_close(
