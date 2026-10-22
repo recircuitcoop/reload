@@ -287,6 +287,42 @@ Where the build differs from the text above, and why:
 - **`anytype_paired` is reached only by a pairing the services process completed**: a wrong
   code is refused there, and nothing is reached.
 
+### As built, after the third review (2026-10-22)
+
+- **Telemetry never breaks the app.** Every entry point the supervisors, the startup and the quit
+  call is guarded: a queue folder that cannot be renamed, a marker that cannot be removed, a
+  memory that cannot be read, each is logged and left there, never thrown. A folder made under a
+  report's name is removed, so the queue drains past it.
+- **Reports off read no folder on every signal**: the queue is emptied once, at the first look
+  after start and each time the answer becomes off or unset.
+- **The send-time check holds what it claims** (`domain/telemetry/send-check.ts`): only the
+  event's own fields leave (any other key is dropped, `crashes` keeps its four counts), each
+  number is a whole number in a stated range, each flag a boolean, and the field-name rule and the
+  scrub run again. `package`, `node_id`, `file`, `line` and `provider_host` are asked again of the
+  package store and the build's catalogue, and fall back to `unsigned`, "[withheld]" or `custom`.
+- **`file` and `line` are vouched for by the verified files, never by the live folder.** At
+  install, the source files the signed `files.json` listed are recorded with their line counts
+  (`installed.json`'s `sources`), with the sources their source maps name (line count unknown);
+  for the shipped packages the build writes the same list to `dist/shipped-sources.json`. A file
+  is sent only when it is on that list, its line only when the list knows the file's line count
+  and the line is within it.
+- **A provider's host is sent only when it is the build's own catalogue's** (package.json
+  `reload.catalogueUrl`), whatever the memory on disk says; any other is `custom`, a local one
+  `file`. A provider is remembered only once its event was queued, so a first launch that said
+  no, then yes, still tells it.
+- **The endpoints' overrides** (`RELOAD_UMAMI_URL`, `RELOAD_UMAMI_WEBSITE_ID`,
+  `RELOAD_GLITCHTIP_DSN`) are read only outside an installed build, like every other test
+  override.
+- **A deploy of no flows tells nothing.**
+- **A subflow instance counts as one `node-red` node, beside the nodes inside it.** Node-RED
+  deploys the instance as a node of its own (type `subflow:<id>`, on its flow, with its own
+  wires and status), and no package declares that type, so it is Node-RED's, as a link or a
+  junction is; the nodes inside it are counted as the package each belongs to.
+- **A report can be counted twice.** A quit while a request is in flight leaves its reports in
+  the queue, and the next launch sends them again. Each carries its `report_id`, so the owner can
+  drop the duplicates in an export; Umami itself does not deduplicate by it. Accepted: a count
+  slightly high is no leak.
+
 ## Risks
 
 - **A signed package's own name and declared type ids are still sent as declared**, and a tool
