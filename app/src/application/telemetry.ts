@@ -44,6 +44,7 @@ import {
   type Endpoints,
   type Outgoing,
 } from "../domain/telemetry/transports";
+import { conformReport, RULES_VERSION } from "../domain/telemetry/vocabulary";
 import type { Cancel, Clock } from "../ports/clock";
 import type { Logger, SecretSink } from "../ports/logger";
 import type {
@@ -208,9 +209,27 @@ export class TelemetryPipeline {
       if (this.#halted || !this.#allows()) {
         return { sent, retryInMs: null };
       }
-      const group = nextGroup([...this.#deps.queue.head(MAX_BATCH)]);
-      if (group.length === 0) {
+      const head = this.#deps.queue.head(MAX_BATCH);
+      if (head.length === 0) {
         return { sent, retryInMs: null };
+      }
+      // Every field held to its rule again, just before it leaves (plan 0029): a report made
+      // under other rules is dropped, never sent as it was queued.
+      const current: QueuedReport[] = [];
+      for (const report of head) {
+        const payload = conformReport(report.payload);
+        if (payload === null) {
+          this.#deps.queue.remove(report);
+          this.#deps.logger.info(
+            `a ${named(report.kind)} made under other rules is dropped unsent`,
+          );
+        } else {
+          current.push({ ...report, payload });
+        }
+      }
+      const group = nextGroup(current);
+      if (group.length === 0) {
+        continue;
       }
       const kind = (group[0] as QueuedReport).kind;
       let outgoing: Outgoing;
@@ -342,6 +361,7 @@ export class TelemetryPipeline {
         machine_id: this.#identity(),
         report_id: this.#deps.newId(),
         at: new Date(this.#deps.now()).toISOString(),
+        rules: RULES_VERSION,
       };
       // No credentials, ever (plan 0029): a field named like one refuses the whole report, and
       // every string is scrubbed after the one redaction, for every report any builder makes.

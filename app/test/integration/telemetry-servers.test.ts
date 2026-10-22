@@ -16,6 +16,7 @@ import { machineIdHash } from "../../src/adapters/telemetry/machine-id";
 import { TelemetryPipeline } from "../../src/application/telemetry";
 import { SecretRegistry } from "../../src/domain/redaction/registry";
 import { crashPayload, type Versions } from "../../src/domain/telemetry/reports";
+import { conformReport } from "../../src/domain/telemetry/vocabulary";
 import { startPayload } from "../fakes/signals";
 import { outgoingFor, type Endpoints } from "../../src/domain/telemetry/transports";
 import { RecordingLogger } from "../fakes/children";
@@ -193,8 +194,11 @@ describe("telemetry against local fake GlitchTip and Umami servers", () => {
     expect(got?.headers["x-sentry-auth"]).toBe(
       "Sentry sentry_version=7, sentry_client=reload/2.0.0, sentry_key=glitchkey",
     );
-    // Byte for byte what the transport renders from the queued report.
-    expect(got?.body).toBe(outgoingFor(queued(report), endpoints(), "2.0.0").body);
+    // Byte for byte what the transport renders from the queued report, every field held to its
+    // rule again at send: the type a careless caller gave is withheld.
+    const sendable = { ...queued(report), payload: conformReport(queued(report).payload) ?? {} };
+    expect(got?.body).toBe(outgoingFor(sendable, endpoints(), "2.0.0").body);
+    expect(got?.body).not.toContain("ServicesCrashed near");
     const event = JSON.parse(got?.body.split("\n")[2] ?? "") as {
       exception: { values: { type: string; value: string }[] };
       tags: Record<string, string>;

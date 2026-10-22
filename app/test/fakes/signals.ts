@@ -10,6 +10,7 @@ import {
   packageError,
   packageInstalled,
   packageInstallFailed,
+  packagePresent,
   packageRemoved,
   packageUpdated,
   packageUsed,
@@ -29,24 +30,35 @@ export function startPayload(
   versions: Versions,
   packages: readonly ReportedPackage[],
 ): Record<string, unknown> {
-  const start = appStart({ startupMs: 900, packages, unsignedPackages: 0, firstLaunch: false });
+  const start = appStart({
+    startupMs: 900,
+    packages: packages.length,
+    unsignedPackages: 0,
+    firstLaunch: false,
+  });
   return { ...versionFields(versions), ...start.fields };
 }
 
 /** Every signal, built with `text` in every string input; `signed` decides the package rule. */
 export function everySignal(text: string, signed = true): Signal[] {
   const facts: PackageFacts = {
-    package: text,
+    // A signed package's name is its signed declaration's (the store vouches for it); `text`
+    // goes in as the name of an unsigned one, which is never sent.
+    package: signed ? "probekit" : text,
     version: text,
     source: "catalogue",
     signed,
     environment: "uv-python",
+    // Declares no type: a step's `node_id` (the text) is not one of its own.
+    nodeTypes: [],
   };
   const step = { nodeKind: "node" as const, nodeId: text, durationMs: 5, ok: true };
-  const failure = { errorType: text, file: text, line: 3 };
+  // A file is sent only when the package holds it (usage-signals.ts): one it holds stands here.
+  const failure = { errorType: text, file: "src/node.py", line: 3 };
   const call = {
     method: "tools/call" as const,
-    tool: text,
+    // Only a tool the validated set holds reaches here (mcp-dispatch.ts).
+    tool: "API-get-object",
     client: text,
     durationMs: 9,
     ok: false,
@@ -56,7 +68,7 @@ export function everySignal(text: string, signed = true): Signal[] {
   return [
     appStart({
       startupMs: 1200,
-      packages: [{ id: text, version: text }],
+      packages: 2,
       unsignedPackages: 1,
       firstLaunch: true,
     }),
@@ -65,14 +77,16 @@ export function everySignal(text: string, signed = true): Signal[] {
     packageUsed(facts, step),
     packageError(facts, step, failure),
     mcpCall(text, call),
-    ...flowDeployed([2, 1], [{ package: text, nodes: 3 }], 1),
+    packagePresent(facts),
+    // A deploy's package names come through UsageSignals, which names only signed ones.
+    ...flowDeployed([2, 1], [{ package: signed ? "probekit" : "unsigned", nodes: 3 }], 1),
     setupStep("anytype_paired"),
     providerRegistered(provider, text, 4),
     providerRemoved({ host: text, official: false }),
-    packageInstalled(facts, { kind: "catalogue", url: text }, 2),
+    packageInstalled(facts, { kind: "catalogue", url: text, official: false }, 2),
     packageUpdated(facts, { kind: "file" }, 2, text),
     packageRemoved(facts),
-    packageInstallFailed({ kind: "catalogue", url: text }, text),
+    packageInstallFailed({ kind: "catalogue", url: text, official: false }, text),
     updateSignal("update_offered", text, text, text),
     updateSignal("update_applied", text, text, text),
   ];

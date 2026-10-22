@@ -15,22 +15,29 @@ import { redactPayload } from "../../src/domain/telemetry/redact";
 import { WITHHELD } from "../../src/domain/telemetry/redact";
 import {
   appUncleanStop,
-  CLIENT,
-  ERROR_TYPE,
   flowDeployed,
   lineOf,
   mcpCall,
   packageInstallFailed,
+  packagePresent,
   packageUpdated,
+  packageUsed,
   providerRegistered,
   providerRemoved,
-  shaped,
-  stepFile,
   updateSignal,
   versionFields,
   VOUCHED_FIELDS,
   type QueuedReport,
 } from "../../src/domain/telemetry/reports";
+import {
+  clientOf,
+  errorCodeOf,
+  errorTypeOf,
+  OTHER,
+  RULES_VERSION,
+  stepFile,
+} from "../../src/domain/telemetry/vocabulary";
+import { releaseOf } from "../../src/shell/telemetry";
 import { MAX_BATCH, outgoingFor } from "../../src/domain/telemetry/transports";
 import { RecordingLogger } from "../fakes/children";
 import { ENDPOINTS, settle, telemetryWorld } from "../fakes/telemetry";
@@ -60,78 +67,116 @@ describe("what a field may hold (plan 0029)", () => {
     }
   });
 
-  it("an error type is a class name, a line a whole number, a client a plain name", () => {
-    expect(shaped("ZeroDivisionError", ERROR_TYPE)).toBe("ZeroDivisionError");
-    expect(shaped("ECONNREFUSED", ERROR_TYPE)).toBe("ECONNREFUSED");
-    for (const bad of ["anytype.ApiError", "not a class", "x".repeat(65), 3]) {
-      expect(shaped(bad, ERROR_TYPE), String(bad)).toBe(WITHHELD);
+  it("an error type is a standard one or `other`; a client a known app or `other`", () => {
+    for (const known of ["ZeroDivisionError", "TypeError", "ECONNREFUSED", "KeyError"]) {
+      expect(errorTypeOf(known)).toBe(known);
     }
-    expect(shaped(undefined, ERROR_TYPE)).toBeNull();
+    // A package's own class is its author's word: never sent, whatever its form.
+    for (const own of [
+      "InputProblem",
+      "sk_live_abc123",
+      "Ab3dEf6hIj9kLm2$nOp5qRs8tUv1wXy$Z0aB2cD4eF6gH8i$J1kL3mN5oP7q",
+      "AbCdEfGhIjKlMnOpQrStUvW",
+      "Pin12345678",
+      3,
+    ]) {
+      expect(errorTypeOf(own), String(own)).toBe(OTHER);
+    }
+    expect(errorTypeOf(undefined)).toBeNull();
     expect(lineOf(12)).toBe(12);
     for (const bad of [0, -1, 1.5, "3", 10_000_001]) {
       expect(lineOf(bad)).toBeNull();
     }
-    expect(shaped("Claude Desktop", CLIENT)).toBe("Claude Desktop");
-    // Never cut to fit: a cut can halve a credential.
-    for (const bad of ["c".repeat(65), "bob:hunter2", "cursor ×4 sk-Ab12Cd34Ef56Gh78Ij90Kl", " "]) {
-      expect(shaped(bad, CLIENT), bad).toBe(WITHHELD);
+    expect(clientOf("claude-ai")).toBe("claude");
+    expect(clientOf(" Visual Studio Code ")).toBe("vscode");
+    expect(clientOf("cursor-vscode")).toBe("cursor");
+    for (const other of ["bob hunter2", "Ab3dEf6hIj9kLm2 nOp5qRs8tUv1wXy", "cursor ×4 sk-Ab12"]) {
+      expect(clientOf(other), other).toBe(OTHER);
     }
+    expect(clientOf(null)).toBeNull();
   });
 
-  it("every name and version a package or the app gives is held to its shape", () => {
+  it("an error code is JSON-RPC's reserved range or an HTTP-like status, else withheld", () => {
+    for (const code of [-32700, -32602, -32000, -32768, 404, 100, 599]) {
+      expect(errorCodeOf(code)).toBe(code);
+    }
+    for (const code of [4111111111111111, -31999, 600, 99, 1.5, 0]) {
+      expect(errorCodeOf(code), String(code)).toBe(WITHHELD);
+    }
+    expect(errorCodeOf(null)).toBeNull();
+  });
+
+  it("every version is MAJOR.MINOR.PATCH with at most an alpha, beta or rc number", () => {
     expect(
-      versionFields({
-        appVersion: "0.4.0",
-        os: "linux",
-        osVersion: "6.8.0-45-generic",
-        arch: "x64",
-      }),
-    ).toEqual({
-      app_version: "0.4.0",
-      os: "linux",
-      os_version: "6.8.0-45-generic",
-      arch: "x64",
-    });
+      versionFields({ appVersion: "0.4.0", os: "linux", osVersion: "6.8.0", arch: "x64" }),
+    ).toEqual({ app_version: "0.4.0", os: "linux", os_version: "6.8.0", arch: "x64" });
     expect(
       versionFields({ appVersion: "pass=x", os: "a b", osVersion: "bob:hunter2", arch: "" }),
-    ).toEqual({
-      app_version: WITHHELD,
-      os: WITHHELD,
-      os_version: WITHHELD,
-      arch: WITHHELD,
-    });
-    expect(appUncleanStop("1.0.0\nsecret").fields["last_version"]).toBe(WITHHELD);
+    ).toEqual({ app_version: WITHHELD, os: OTHER, os_version: WITHHELD, arch: OTHER });
+    for (const bad of [
+      "1.0.0-Ab3d.Ef6h.Ij9k.Lm2n.Op5q.Rs8t",
+      "1.0.0+Ab3dEf6hIj9kLm2.nOp5qRs8tUv1wXy",
+      "1.0.0-beta.x",
+      "12345678.0.0",
+      "1.0",
+      "unknown",
+    ]) {
+      expect(appUncleanStop(bad).fields["last_version"], bad).toBe(WITHHELD);
+    }
     expect(updateSignal("update_offered", "1.0.0", "2.0.0-beta.1", "beta").fields).toEqual({
       from_version: "1.0.0",
       to_version: "2.0.0-beta.1",
       channel: "beta",
     });
+    // The OS's own release, read off its leading numbers.
+    expect(releaseOf("6.8.0-45-generic")).toBe("6.8.0");
+    expect(releaseOf("25.3.0")).toBe("25.3.0");
+    expect(releaseOf("10.0")).toBe("10.0.0");
+    expect(releaseOf("weird")).toBe("unknown");
   });
 
-  it("a provider is its host, a file source is `file`, a fingerprint is short hex or null", () => {
-    const facts = (url: string) => ({ url, official: false });
+  it("a provider's host is sent only for Reload's own catalogue: any other is `custom`", () => {
+    const facts = (url: string, official = false) => ({ url, official });
     expect(providerRegistered(facts("file:///Users/x/c.json"), null, 0).fields).toMatchObject({
       provider_host: "file",
       signer_fingerprint: null,
     });
     expect(providerRegistered(facts("not a url"), "NOT-HEX", 1).fields).toMatchObject({
-      provider_host: null,
+      provider_host: "custom",
       signer_fingerprint: null,
     });
-    expect(providerRegistered(facts("https://[::1]/c.json"), null, 0).fields).toMatchObject({
-      provider_host: WITHHELD,
-    });
+    expect(
+      providerRegistered(
+        facts("https://a1b2c3d4e5f6g7h.i8j9k0l1m2n3o4p.q5r6s7t8u9v0w1x.example.com/c.json"),
+        null,
+        0,
+      ).fields["provider_host"],
+    ).toBe("custom");
+    expect(
+      providerRegistered(facts("https://catalogue.recircu.it/v1/index.json", true), null, 0).fields[
+        "provider_host"
+      ],
+    ).toBe("catalogue.recircu.it");
     expect(providerRemoved({ host: "a.example", official: false }).fields).toEqual({
-      provider_host: "a.example",
+      provider_host: "custom",
       official: false,
+    });
+    expect(providerRemoved({ host: "c.example", official: true }).fields).toEqual({
+      provider_host: "c.example",
+      official: true,
     });
   });
 
   it("a refusal is its code, never its words; a tool name is lowercased", () => {
-    const where = { kind: "catalogue" as const, url: null };
+    const where = { kind: "catalogue" as const, url: null, official: false };
     expect(packageInstallFailed(where, "download-failed").fields["reason"]).toBe("download-failed");
     expect(packageInstallFailed(where, "the server said no").fields["reason"]).toBe("other");
     expect(packageInstallFailed(where, "x").fields["provider_host"]).toBeNull();
+    expect(
+      packageInstallFailed({ ...where, url: "https://mine.example/c.json" }, "x").fields[
+        "provider_host"
+      ],
+    ).toBe("custom");
     const call = {
       method: "tools/call" as const,
       tool: "API-get-collection-views",
@@ -148,6 +193,34 @@ describe("what a field may hold (plan 0029)", () => {
     expect(
       mcpCall("1.0.0", { ...call, method: "resources/read", tool: null }).fields,
     ).toMatchObject({ method: "resources/read", tool: null, package: "reload_anytype" });
+  });
+
+  it("a step's node_id is named only when the signed package declares that type", () => {
+    const facts = {
+      package: "probekit",
+      version: "0.3.0",
+      source: "catalogue" as const,
+      signed: true,
+      environment: null,
+      nodeTypes: ["probe"],
+    };
+    const step = (nodeId: string) => ({
+      nodeKind: "node" as const,
+      nodeId,
+      durationMs: 1,
+      ok: true,
+    });
+    expect(packageUsed(facts, step("probe")).fields["node_id"]).toBe("probe");
+    for (const made of ["zqxjkvbwplmn-rtyhgfdsaqwe-rtyuiopasdfgh", "AbCdEfGhIjKlMnOpQrStUvW"]) {
+      expect(packageUsed(facts, step(made)).fields["node_id"], made).toBe("unsigned");
+    }
+    expect(packagePresent(facts).fields).toEqual({
+      package: "probekit",
+      version: "0.3.0",
+      source: "catalogue",
+      signed: true,
+      environment: null,
+    });
   });
 
   it("an unsigned package's update names no version it came from", () => {
@@ -181,6 +254,7 @@ describe("what a field may hold (plan 0029)", () => {
       source: "file",
       signed: true,
       environment: "uv-python",
+      nodeTypes: [],
     });
     expect(factsOf({ name: "q", document: null, installed: false, signed: false })).toEqual({
       package: "q",
@@ -188,6 +262,7 @@ describe("what a field may hold (plan 0029)", () => {
       source: "shipped",
       signed: true,
       environment: null,
+      nodeTypes: [],
     });
     expect(
       factsOf({
@@ -197,6 +272,15 @@ describe("what a field may hold (plan 0029)", () => {
         signed: false,
       }),
     ).toMatchObject({ source: "catalogue", environment: null, signed: false });
+    // The type ids its declaration lists: the only node_ids a step of it may name.
+    expect(
+      factsOf({
+        name: "s",
+        document: { version: "1.0.0", types: [{ id: "probe" }, { id: 7 }, null] },
+        installed: false,
+        signed: false,
+      }).nodeTypes,
+    ).toEqual(["probe"]);
   });
 });
 
@@ -353,8 +437,18 @@ describe("the providers a listing sees", () => {
     expect(catalogues.installOrigin({ kind: "catalogue", source: "mine", id: "p" })).toEqual({
       kind: "catalogue",
       url: "https://mine.example/c.json",
+      official: false,
     });
-    expect(catalogues.installOrigin(undefined)).toEqual({ kind: "catalogue", url: null });
+    expect(catalogues.installOrigin({ kind: "catalogue", source: "official", id: "p" })).toEqual({
+      kind: "catalogue",
+      url: "https://catalogue.example/index.json",
+      official: true,
+    });
+    expect(catalogues.installOrigin(undefined)).toEqual({
+      kind: "catalogue",
+      url: null,
+      official: false,
+    });
   });
 });
 
@@ -447,6 +541,45 @@ describe("Umami's batch request and the pipeline's batches", () => {
     expect((await pipeline.flush()).sent).toBe(0);
     expect(world.queue.reports).toHaveLength(2);
     await settle();
+  });
+
+  it("every report is stamped with the rules; one under other rules is dropped, and each field is held to its rule again at send", async () => {
+    const world = telemetryWorld("on");
+    const pipeline = new TelemetryPipeline(world.deps);
+    pipeline.recordUsage("package_used", { package: "probekit", version: "1.0.0" });
+    expect(world.queue.reports[0]?.payload["rules"]).toBe(RULES_VERSION);
+    // A report queued by an older build (no stamp, or another), and one changed on disk.
+    world.queue.enqueue("usage", { event: "app_start", startup_ms: 1 });
+    world.queue.enqueue("usage", { event: "app_start", rules: RULES_VERSION - 1 });
+    world.queue.enqueue("usage", {
+      event: "package_error",
+      rules: RULES_VERSION,
+      error_type: "sk_live_abc123",
+      version: "1.0.0-Ab3d.Ef6h.Ij9k",
+      client: "bob hunter2",
+      error_code: 4111111111111111,
+      note: "free text nobody asked for",
+      list: ["a"],
+      ok: true,
+      line: 3,
+    });
+    expect(await pipeline.flush()).toEqual({ sent: 2, retryInMs: null });
+    expect(world.queue.reports).toEqual([]);
+    const sent = JSON.parse(world.poster.sent[0]?.body ?? "[]") as {
+      payload: { data: Record<string, unknown> };
+    }[];
+    expect(sent).toHaveLength(2);
+    expect(sent[1]?.payload.data).toMatchObject({
+      error_type: WITHHELD,
+      version: WITHHELD,
+      client: WITHHELD,
+      error_code: WITHHELD,
+      note: WITHHELD,
+      list: WITHHELD,
+      ok: true,
+      line: 3,
+    });
+    expect(world.logger.lines.join("\n")).toContain("made under other rules is dropped unsent");
   });
 
   it("a name that is not a signal is never queued", () => {

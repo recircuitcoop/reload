@@ -7,7 +7,22 @@
 // which process crashed and how often each has. Adding a field here is the moment somebody has to
 // ask whether it may be sent.
 
-import { hostOnly, WITHHELD, type JsonObject } from "./redact";
+import { hostOnly, type JsonObject } from "./redact";
+import {
+  ARCHES,
+  CHANNELS,
+  clientOf,
+  errorCodeOf,
+  errorTypeOf,
+  HOST,
+  IDENTIFIER,
+  INSTALL_REFUSALS,
+  known,
+  OS_NAMES,
+  shaped,
+  stepFile,
+  VERSION,
+} from "./vocabulary";
 
 /** The two kinds of report, which go to two different servers (D21, D22). */
 export type ReportKind = "usage" | "error";
@@ -86,9 +101,9 @@ export interface ReportedPackage {
 export function versionFields(versions: Versions): Record<string, string | null> {
   return {
     app_version: shaped(versions.appVersion, VERSION),
-    os: shaped(versions.os, IDENTIFIER),
+    os: known(versions.os, OS_NAMES),
     os_version: shaped(versions.osVersion, VERSION),
-    arch: shaped(versions.arch, IDENTIFIER),
+    arch: known(versions.arch, ARCHES),
   };
 }
 
@@ -159,6 +174,7 @@ export const SIGNALS = [
   "mcp_call",
   "flow_deployed",
   "package_deployed",
+  "package_present",
   "setup_step",
   "provider_registered",
   "provider_removed",
@@ -216,6 +232,8 @@ export interface PackageFacts {
   readonly signed: boolean;
   /** Null for a shipped package that declares none. */
   readonly environment: PackageEnvironmentKind | null;
+  /** The type ids its declaration lists: a step's `node_id` is sent only when it is one. */
+  readonly nodeTypes?: readonly string[];
 }
 
 /** The package fields of an event: an unsigned package is `unsigned`, with no version. */
@@ -232,49 +250,6 @@ function packageFields(facts: PackageFacts): Record<string, unknown> {
 /** A whole, non-negative count of milliseconds or seconds; 0 for anything else. */
 function whole(value: number): number {
   return Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
-}
-
-/** No 25 letters and digits in a row, no 9 digits in a row: a key's or a card's, never a name's. */
-const NO_KEY_RUN = String.raw`(?![\s\S]*[A-Za-z0-9]{25})(?![\s\S]*\d{9})`;
-
-/** A package's name, a type id, a tool name, an update channel: a plain identifier, no dots. */
-export const IDENTIFIER = new RegExp(String.raw`^${NO_KEY_RUN}[A-Za-z0-9][\w-]{0,99}$`);
-/** A version (`1.2.3`, `0.4.0-beta.1`), or `unknown` when a package declares none. */
-export const VERSION = new RegExp(
-  String.raw`^${NO_KEY_RUN}(?:unknown|\d{1,9}(?:\.\d{1,9}){0,3}(?:[-+][0-9A-Za-z.-]{1,40})?)$`,
-);
-/** A hostname as `hostOnly` gives it, or `file` for a local source. */
-export const HOST = new RegExp(String.raw`^${NO_KEY_RUN}[a-z0-9][a-z0-9.-]{0,252}$`);
-/**
- * A source file relative to its package's folder, in the SDKs' form (`src/node.py`): folders of
- * word characters, one file name of word characters and a known source extension. No dot but the
- * extension's, so no dotted, key-like segment passes; no `..`, no absolute path, no space.
- */
-export const SOURCE_FILE = new RegExp(
-  String.raw`^${NO_KEY_RUN}(?:\w{1,100}\/){0,15}\w{1,100}\.(?:py|pyw|ts|tsx|mts|cts|js|jsx|mjs|cjs)$`,
-);
-export const MAX_FILE_LENGTH = 200;
-/** An exception's class name (`ZeroDivisionError`) or an error code (`ECONNREFUSED`). */
-export const ERROR_TYPE = new RegExp(String.raw`^${NO_KEY_RUN}[A-Za-z_$][\w$]{0,63}$`);
-/** The name an MCP client gives itself (`Claude Desktop`, `cursor-vscode`): words, no dots. */
-export const CLIENT = new RegExp(String.raw`^${NO_KEY_RUN}[A-Za-z0-9][A-Za-z0-9 _-]{0,63}$`);
-
-/**
- * `value` when it is a string of `shape`, null when there is none, and WITHHELD for anything else:
- * a value outside its shape is never cut down to one, because a cut can halve a credential.
- */
-export function shaped(value: unknown, shape: RegExp): string | null {
-  if (value === null || value === undefined) {
-    return null;
-  }
-  return typeof value === "string" && shape.test(value) ? value : WITHHELD;
-}
-
-/** A step's `file`: a plain source path inside its package, WITHHELD for anything else. */
-export function stepFile(file: unknown): string | null {
-  return typeof file === "string" && file.length > MAX_FILE_LENGTH
-    ? WITHHELD
-    : shaped(file, SOURCE_FILE);
 }
 
 /** A source line: a whole number from 1; null for anything else. */
@@ -303,10 +278,13 @@ export interface StepFailure {
   readonly line: number | null;
 }
 
-/** `app_start`: every launch, after the children are up. */
+/**
+ * `app_start`: every launch, after the children are up, with how many packages are installed;
+ * each one is its own `package_present` beside it, never a list Umami would cut.
+ */
 export function appStart(facts: {
   readonly startupMs: number;
-  readonly packages: readonly ReportedPackage[];
+  readonly packages: number;
   readonly unsignedPackages: number;
   readonly firstLaunch: boolean;
 }): Signal {
@@ -314,14 +292,16 @@ export function appStart(facts: {
     name: "app_start",
     fields: {
       startup_ms: whole(facts.startupMs),
-      packages: facts.packages.map((entry) => ({
-        id: shaped(entry.id, IDENTIFIER),
-        version: shaped(entry.version, VERSION),
-      })),
+      packages: facts.packages,
       unsigned_packages: facts.unsignedPackages,
       first_launch: facts.firstLaunch,
     },
   };
+}
+
+/** `package_present`: at every launch, one per installed package. */
+export function packagePresent(facts: PackageFacts): Signal {
+  return { name: "package_present", fields: packageFields(facts) };
 }
 
 export type StopReason = "quit" | "update";
@@ -341,7 +321,12 @@ function stepFields(facts: PackageFacts, step: StepFacts): Record<string, unknow
     ...packageFields(facts),
     node_kind: step.nodeKind,
     // A type id is its author's words too: an unsigned package's is not named either.
-    node_id: facts.signed ? shaped(step.nodeId, IDENTIFIER) : null,
+    // Only a type the signed package declares is named: anything else is `unsigned`.
+    node_id: facts.signed
+      ? facts.nodeTypes?.includes(step.nodeId) === true
+        ? shaped(step.nodeId, IDENTIFIER)
+        : UNSIGNED
+      : null,
     duration_ms: whole(step.durationMs),
     ok: step.ok,
   };
@@ -362,7 +347,7 @@ export function packageError(facts: PackageFacts, step: StepFacts, failure: Step
     name: "package_error",
     fields: {
       ...stepFields(facts, { ...step, ok: false }),
-      error_type: shaped(failure.errorType, ERROR_TYPE),
+      error_type: errorTypeOf(failure.errorType),
       file: facts.signed ? stepFile(failure.file) : null,
       line: lineOf(failure.line),
     },
@@ -399,10 +384,10 @@ export function mcpCall(version: string | null, call: McpCallFacts): Signal {
       // Lowercased: a long capitalised name (`API-get-collection-views`) would read as a key to
       // the scrub, which every string passes, this one too.
       tool: shaped(call.tool?.toLowerCase(), IDENTIFIER),
-      client: shaped(call.client?.trim(), CLIENT),
+      client: clientOf(call.client),
       duration_ms: whole(call.durationMs),
       ok: call.ok,
-      error_code: call.errorCode,
+      error_code: errorCodeOf(call.errorCode),
     },
   };
 }
@@ -457,14 +442,18 @@ export interface ProviderFacts {
 }
 
 /**
- * A URL's host, or `file` for a local source (rule 3); null when there is none, WITHHELD when
- * the host is not a plain hostname.
+ * A provider's host as sent (rule 3): the official catalogue's host, `file` for a local source,
+ * and `custom` for every other: a host somebody registered is theirs to name, so it is not sent.
+ * Null when there is no address.
  */
-export function providerHost(url: string | null): string | null {
+export function providerHost(url: string | null, official: boolean): string | null {
   if (url === null) {
     return null;
   }
-  return url.toLowerCase().startsWith("file:") ? "file" : shaped(hostOnly(url), HOST);
+  if (url.toLowerCase().startsWith("file:")) {
+    return "file";
+  }
+  return official ? shaped(hostOnly(url), HOST) : "custom";
 }
 
 /** `provider_registered`: a package provider (catalogue) is added. */
@@ -476,7 +465,7 @@ export function providerRegistered(
   return {
     name: "provider_registered",
     fields: {
-      provider_host: providerHost(provider.url),
+      provider_host: providerHost(provider.url, provider.official),
       official: provider.official,
       // The public signing key's fingerprint, hex: never the key, nor anything secret.
       signer_fingerprint:
@@ -488,20 +477,25 @@ export function providerRegistered(
   };
 }
 
-/** `provider_removed`: a provider is removed; the telemetry memory kept only its host. */
+/** `provider_removed`: a provider is removed; the telemetry memory kept only its host as sent. */
 export function providerRemoved(provider: {
   readonly host: string | null;
   readonly official: boolean;
 }): Signal {
   return {
     name: "provider_removed",
-    fields: { provider_host: shaped(provider.host, HOST), official: provider.official },
+    fields: {
+      provider_host:
+        provider.official || provider.host === "file" ? shaped(provider.host, HOST) : "custom",
+      official: provider.official,
+    },
   };
 }
 
 /** Where an install came from: a catalogue's address, or a file on this machine (never named). */
 export type InstallOrigin =
-  { readonly kind: "catalogue"; readonly url: string | null } | { readonly kind: "file" };
+  | { readonly kind: "catalogue"; readonly url: string | null; readonly official: boolean }
+  | { readonly kind: "file" };
 
 function installFields(
   facts: PackageFacts,
@@ -510,7 +504,7 @@ function installFields(
 ): Record<string, unknown> {
   return {
     ...packageFields(facts),
-    provider_host: origin.kind === "file" ? "file" : providerHost(origin.url),
+    provider_host: origin.kind === "file" ? "file" : providerHost(origin.url, origin.official),
     node_types: nodeTypes,
   };
 }
@@ -552,10 +546,8 @@ export function packageInstallFailed(origin: InstallOrigin, reason: string): Sig
     name: "package_install_failed",
     fields: {
       source: origin.kind,
-      provider_host: origin.kind === "file" ? "file" : providerHost(origin.url),
-      reason: new RegExp(String.raw`^${NO_KEY_RUN}[a-z][a-z0-9-]{0,39}$`).test(reason)
-        ? reason
-        : "other",
+      provider_host: origin.kind === "file" ? "file" : providerHost(origin.url, origin.official),
+      reason: known(reason, INSTALL_REFUSALS),
     },
   };
 }
@@ -572,7 +564,7 @@ export function updateSignal(
     fields: {
       from_version: shaped(fromVersion, VERSION),
       to_version: shaped(toVersion, VERSION),
-      channel: shaped(channel, IDENTIFIER),
+      channel: known(channel, CHANNELS),
     },
   };
 }

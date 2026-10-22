@@ -328,8 +328,12 @@ test("telemetry asks first, sends nothing before a yes, sends only redacted repo
     await expect(setupStep(window)).toHaveAttribute("data-step", "connect-anytype");
     // The yes: this launch's start and its first step (plan 0029), and nothing from launch 1.
     await expect
-      .poll(() => usageNames(received).sort(), { timeout: 15_000 })
-      .toEqual(["app_start", "setup_step"]);
+      .poll(() => [...new Set(usageNames(received))].sort(), { timeout: 15_000 })
+      .toEqual(["app_start", "package_present", "setup_step"]);
+    // Each installed package on its own, as many as app_start counts: never a list.
+    await expect
+      .poll(() => usageNames(received).filter((name) => name === "package_present").length)
+      .toBe(usageEvents(received).find((event) => event.name === "app_start")?.data["packages"]);
     expect(received.every((request) => request.url.startsWith("/umami/api/"))).toBe(true);
     await crashRuntime(window);
     await expect
@@ -392,7 +396,8 @@ test("telemetry asks first, sends nothing before a yes, sends only redacted repo
       environment: "node",
       node_kind: "node",
       node_id: "read-object",
-      error_type: "InputProblem",
+      // The package's own class: only a standard error's name is ever sent.
+      error_type: "other",
       file: "src/operations.ts",
       line: PAYLOAD_THROWN_LINE,
     });
@@ -560,8 +565,12 @@ test("the full privacy notice is beside the question in Setup's Reports step and
     );
     await expect(section.getByTestId("privacy-notice")).toHaveCount(0);
     await expect
-      .poll(() => usageNames(received).sort(), { timeout: 15_000 })
-      .toEqual(["app_start", "setup_step"]);
+      .poll(() => [...new Set(usageNames(received))].sort(), { timeout: 15_000 })
+      .toEqual(["app_start", "package_present", "setup_step"]);
+    // Each installed package on its own, as many as app_start counts: never a list.
+    await expect
+      .poll(() => usageNames(received).filter((name) => name === "package_present").length)
+      .toBe(usageEvents(received).find((event) => event.name === "app_start")?.data["packages"]);
     expect(received.every((request) => request.url.startsWith("/umami/api/"))).toBe(true);
     await quit(app);
   } finally {

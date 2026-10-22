@@ -279,7 +279,11 @@ export class PackageInstaller {
   ): Promise<PackageOutcome> {
     return this.#one.run(`The install of ${id}`, async () => {
       const name = packageNameOf(id);
-      const where: InstallOrigin = { kind: "catalogue", url: this.#catalogues.urlOf(source) };
+      const where: InstallOrigin = {
+        kind: "catalogue",
+        url: this.#catalogues.urlOf(source),
+        official: source === OFFICIAL_SOURCE_NAME,
+      };
       const early = this.#refusedName(name);
       if (early !== null) {
         return this.#refused(id, early, where, nameRefusal(early));

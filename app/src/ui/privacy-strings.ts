@@ -20,21 +20,21 @@ export const PRIVACY_STRINGS = {
     "the name and version of each package that ships with Reload or is signed, and how many unsigned packages are installed, never their names", // decided
   "privacy.sent.stamp": "when the report was made, and a random number that tells it apart", // decided
   "privacy.sent.launches":
-    "when Reload starts and quits: how long it took to start, how long it ran, why it quit, whether it is its first start, and the version that last ran when it ended without quitting", // plan 0029
+    "when Reload starts and quits: how long it took to start, how many packages are installed and how many of them are unsigned, then each installed package on its own (the package, its version, where it came from, whether it is signed, what it runs on), how long Reload ran, why it quit, whether it is its first start, and the version that last ran when it ended without quitting", // plan 0029
   "privacy.sent.steps":
-    "every time a step of a package runs: the package, its version, where it came from, whether it is signed, what it runs on, the kind and type of the step but never its name, how long it took and whether it worked. A package nobody signed is only called unsigned", // plan 0029
+    "every time a step of a package runs, or a package's source starts a run: the package, its version, where it came from, whether it is signed, what it runs on, the kind and type of the step but never its name, how long it took and whether it worked. A package nobody signed is only called unsigned", // plan 0029
   "privacy.sent.errors":
-    "every time such a step, or a package's source, fails: the same, the kind of error (its class's name or code), and the file and line in the package where it happened. Never the error's message", // plan 0029
+    "every time such a step, or a package's source, fails: the same, the kind of error when it is a standard one (any other is only other), and the file and line in the package where it happened, only when the file is the signed package's own. Never the error's message", // plan 0029
   "privacy.sent.aiApps":
-    "every time an AI app uses Reload's Anytype tools or reads a file through them: the Anytype package and its version, whether it called a tool or read a file, which tool, the name the AI app gives itself, how long it took, whether it worked and the error's code, never what it asked, which file, or what it was answered", // plan 0029
+    "every time an AI app uses Reload's Anytype tools or reads a file through them: the Anytype package and its version, whether it called a tool or read a file, which tool, which known AI app it is (any other is only other), how long it took, whether it worked and the error's code, never what it asked, which file, or what it was answered", // plan 0029
   "privacy.sent.flows":
     "every time flows are deployed: how many flows and steps in all, how many steps each flow has with the steps inside its subflows, how many configuration nodes there are, and how many steps of each package", // plan 0029
   "privacy.sent.setup":
     "which first steps you reached: Reload started, Anytype paired, a first flow deployed", // plan 0029
   "privacy.sent.catalogues":
-    "when a package catalogue is added or removed: only its server's name, whether it is Reload's own, a short fingerprint of its signing key and how many packages it offers", // plan 0029
+    "when a package catalogue is added or removed: its server's name only if it is Reload's own (any other is only custom), whether it is Reload's own, a short fingerprint of its signing key and how many packages it offers", // plan 0029
   "privacy.sent.installs":
-    "when a package is installed, updated, removed or refused: the package, its versions, its catalogue's server name or only that it came from a file, whether it is signed, what it runs on, how many step types it brings, and the reason's code, never its words", // plan 0029
+    "when a package is installed, updated, removed or refused: the package, its versions, Reload's own catalogue's server name, or only that it came from another catalogue or a file, whether it is signed, what it runs on, how many step types it brings, and the reason's code, never its words", // plan 0029
   "privacy.sent.updates":
     "when a newer Reload is offered or installed: the versions and the update channel", // plan 0029
   "privacy.sent.address":

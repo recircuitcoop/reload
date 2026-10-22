@@ -336,6 +336,7 @@ const SIGNAL_LINES: Readonly<Record<SignalName, PlainKey>> = {
   mcp_call: "privacy.sent.aiApps",
   flow_deployed: "privacy.sent.flows",
   package_deployed: "privacy.sent.flows",
+  package_present: "privacy.sent.launches",
   setup_step: "privacy.sent.setup",
   provider_registered: "privacy.sent.catalogues",
   provider_removed: "privacy.sent.catalogues",
@@ -351,6 +352,11 @@ const LINE_FIELDS: Readonly<Record<string, readonly string[]>> = {
   "privacy.sent.launches": [
     "startup_ms",
     "packages",
+    "package",
+    "version",
+    "source",
+    "signed",
+    "environment",
     "unsigned_packages",
     "first_launch",
     "uptime_s",
@@ -398,12 +404,15 @@ const LINE_FIELDS: Readonly<Record<string, readonly string[]>> = {
 const LINE_WORDS: Readonly<Record<string, readonly string[]>> = {
   "privacy.sent.launches": [
     "how long it took to start",
-    "how long it ran",
+    "how many packages are installed",
+    "each installed package on its own",
+    "how long Reload ran",
     "why it quit",
     "first start",
     "the version that last ran",
   ],
   "privacy.sent.steps": [
+    "a package's source starts a run",
     "the package",
     "its version",
     "where it came from",
@@ -418,15 +427,16 @@ const LINE_WORDS: Readonly<Record<string, readonly string[]>> = {
   "privacy.sent.errors": [
     "a package's source",
     "the same",
-    "the kind of error",
+    "the kind of error when it is a standard one",
     "the file and line",
+    "the signed package's own",
     "Never the error's message",
   ],
   "privacy.sent.aiApps": [
     "the Anytype package and its version",
     "whether it called a tool or read a file",
     "which tool",
-    "the name the AI app gives itself",
+    "which known AI app it is",
     "how long it took",
     "whether it worked",
     "the error's code",
@@ -440,7 +450,8 @@ const LINE_WORDS: Readonly<Record<string, readonly string[]>> = {
   ],
   "privacy.sent.setup": ["Reload started", "Anytype paired", "a first flow deployed"],
   "privacy.sent.catalogues": [
-    "only its server's name",
+    "its server's name only if it is Reload's own",
+    "only custom",
     "Reload's own",
     "fingerprint of its signing key",
     "how many packages it offers",
@@ -448,8 +459,8 @@ const LINE_WORDS: Readonly<Record<string, readonly string[]>> = {
   "privacy.sent.installs": [
     "installed, updated, removed or refused",
     "its versions",
-    "server name",
-    "from a file",
+    "Reload's own catalogue's server name",
+    "another catalogue or a file",
     "signed",
     "what it runs on",
     "how many step types",
@@ -548,7 +559,7 @@ describe("the privacy notice beside the reports question (D25)", () => {
     expect(STRINGS["privacy.sent.packages"]).toContain("never their names");
     const start = appStart({
       startupMs: 900,
-      packages: named,
+      packages: named.length,
       unsignedPackages: 0,
       firstLaunch: false,
     });

@@ -79,6 +79,35 @@ const HALF_KEY = ANYTYPE_KEY.slice(0, ANYTYPE_KEY.length / 2 + 1);
 const MCP_CLIENT = "cursor ×4 sk-Ab12Cd34Ef56Gh78Ij90Kl";
 const MCP_CLIENT_PARTS = ["×4", "sk-Ab12Cd34Ef56Gh78Ij90Kl", "Ab12Cd34"];
 
+// What a second verifier got past the strict shapes (round 3): chosen by whoever writes the
+// value, each one a valid-looking class name, version, type id, client, file or host.
+const SHAPED_SECRETS = [
+  "sk_live_abc123",
+  "Ab3dEf6hIj9kLm2$nOp5qRs8tUv1wXy$Z0aB2cD4eF6gH8i$J1kL3mN5oP7q",
+  "zqxjkvbwplmnrtyh_gfdsaqwertyuiop_asdfghjklzxcvbnm_qwertyuiopasdf",
+  "AbCdEfGhIjKlMnOpQrStUvW",
+  "Ab3dEf6hIj9kLm2",
+  "Pin12345678",
+  "src/hunter2.py",
+  "src/zqxjkvbwplmnrtyhgfdsaqw/kvbwplmnrtyhgfdsaqwerty.py",
+  "zqxjkvbwplmn-rtyhgfdsaqwe-rtyuiopasdfgh",
+  "1.0.0-Ab3d.Ef6h.Ij9k.Lm2n.Op5q.Rs8t",
+  "Ab3dEf6hIj9kLm2 nOp5qRs8tUv1wXy Z0aB2cD4eF6gH8i",
+  "bob hunter2",
+  "https://a1b2c3d4e5f6g7h.i8j9k0l1m2n3o4p.q5r6s7t8u9v0w1x.example.com/c.json",
+];
+// The bytes of each that must never leave.
+const SHAPED_PARTS = [
+  "sk_live_abc123",
+  "Ab3dEf6hIj9kLm2",
+  "zqxjkvbwplmn",
+  "AbCdEfGhIjKlMnOpQrStUvW",
+  "Pin12345678",
+  "kvbwplmnrtyhgfdsaqwerty",
+  "Ab3d.Ef6h",
+  "a1b2c3d4e5f6g7h",
+];
+
 const UNREGISTERED = [
   URL_USER,
   URL_PASSWORD,
@@ -98,6 +127,7 @@ const UNREGISTERED = [
   CYRILLIC_VALUE,
   HALF_KEY,
   ...MCP_CLIENT_PARTS,
+  ...SHAPED_PARTS,
 ];
 const EVERY_FAKE = [...REGISTERED, ...UNREGISTERED];
 
@@ -128,6 +158,7 @@ const HOSTILE: readonly string[] = [
   `${"x".repeat(2000 - HALF_KEY.length)}${ANYTYPE_KEY}`,
   `src/${DOTTED_KEY}/node.py`,
   MCP_CLIENT,
+  ...SHAPED_SECRETS,
 ];
 
 /**
@@ -187,6 +218,7 @@ const usage = (pipeline: TelemetryPipeline, planted: string): UsageSignals =>
     packages: () => [
       { name: planted, document: { version: planted }, installed: true, signed: true },
     ],
+    holds: () => false,
   });
 
 /** Every builder in reports.ts. A new signal adds its row in test/fakes/signals.ts. */
@@ -314,6 +346,20 @@ const HOOKS: readonly {
       ]),
   },
   {
+    name: "a step and a deploy naming packages and types nobody signed",
+    facts: (planted) =>
+      Promise.resolve([
+        stepSignal({ ...IDENTITY, package: planted, typeId: planted }, 1, true, undefined),
+        stepSignal({ ...IDENTITY, typeId: planted }, 1, true, undefined),
+        {
+          kind: "deployed",
+          nodesPerFlow: [1],
+          perPackage: [{ package: planted, nodes: 1 }],
+          configNodes: 0,
+        },
+      ]),
+  },
+  {
     name: "a step whose facts crossed the channel with extra fields a package added",
     facts: (planted) =>
       Promise.resolve(
@@ -379,8 +425,16 @@ describe.each(HOOKS)("the credential gate, through the hook: $name", ({ facts })
       record: (event, payload) => pipeline.recordUsage(event, payload),
       versions: { appVersion: "1.0.0", os: "darwin", osVersion: "25.3.0", arch: "arm64" },
       packages: () => [
-        { name: "probekit", document: { version: "0.3.0" }, installed: true, signed: true },
+        {
+          name: "probekit",
+          document: { version: "0.3.0", types: [{ id: "probe" }] },
+          installed: true,
+          signed: true,
+          folder: "/nowhere/probekit",
+        },
       ],
+      // The package holds no file a node could name: every planted path is withheld.
+      holds: () => false,
     });
     const told = await facts(planted);
     expect(told.length).toBeGreaterThan(0);
@@ -426,14 +480,8 @@ describe("the credential gate: a provider's URL and an install's file (rules 3 a
     );
     signals.record(only(fileInstall === undefined ? [] : [fileInstall]));
     const hosts = world.queue.reports.map((report) => report.payload["provider_host"]);
-    expect(hosts).toEqual([
-      "provider.example",
-      // provider_removed takes the host the memory kept: a whole URL there is not a host.
-      WITHHELD,
-      "provider.example",
-      "provider.example",
-      "file",
-    ]);
+    // Only Reload's own catalogue's host is ever sent: a registered one is `custom`.
+    expect(hosts).toEqual(["custom", "custom", "custom", "custom", "file"]);
     const bytes = JSON.stringify(world.queue.reports);
     for (const leak of [
       URL_USER,
@@ -448,6 +496,33 @@ describe("the credential gate: a provider's URL and an install's file (rules 3 a
     ]) {
       expect(bytes).not.toContain(leak);
     }
+  });
+});
+
+describe("the credential gate: numbers a child chose (rule 5)", () => {
+  it("an error code outside JSON-RPC's reserved range and HTTP's never leaves", async () => {
+    const world = telemetryWorld("on");
+    const pipeline = new TelemetryPipeline(world.deps);
+    const signals = usage(pipeline, "0.4.0");
+    for (const errorCode of [4111111111111111, 123456789, -32001]) {
+      signals.child({
+        kind: "mcp-call",
+        call: {
+          method: "tools/call",
+          tool: null,
+          client: null,
+          durationMs: 1,
+          ok: false,
+          errorCode,
+        },
+      });
+    }
+    await pipeline.flush();
+    const sent = JSON.stringify(world.poster.sent);
+    expect(sent).not.toContain("4111111111111111");
+    expect(sent).not.toContain("123456789");
+    expect(world.queue.reports).toEqual([]);
+    expect(sent).toContain("-32001");
   });
 });
 

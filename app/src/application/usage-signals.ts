@@ -13,6 +13,7 @@
 import {
   flowDeployed,
   mcpCall,
+  packagePresent,
   MCP_PACKAGE,
   packageError,
   packageUsed,
@@ -26,6 +27,7 @@ import {
   type SignalName,
   type Versions,
 } from "../domain/telemetry/reports";
+import { WITHHELD } from "../domain/telemetry/redact";
 import { CORE_NODES } from "./flows";
 
 /** A package as the package store lists it, as far as an event looks at it. */
@@ -38,6 +40,8 @@ export interface KnownPackage {
   readonly signed: boolean;
   /** For an installed package: where it was installed from. */
   readonly origin?: "catalogue" | "file";
+  /** Where it lives on this machine; a step's `file` is sent only when the folder holds it. */
+  readonly folder?: string;
 }
 
 export interface UsageSignalsDeps {
@@ -45,6 +49,8 @@ export interface UsageSignalsDeps {
   readonly record: (name: SignalName, payload: Readonly<Record<string, unknown>>) => unknown;
   readonly versions: Versions;
   readonly packages: () => readonly KnownPackage[];
+  /** Whether package folder `folder` holds `file` (package-relative), or its source maps name it. */
+  readonly holds: (folder: string, file: string) => boolean;
 }
 
 const ENVIRONMENTS: readonly PackageEnvironmentKind[] = ["uv-python", "node", "executable"];
@@ -54,8 +60,10 @@ export function factsOf(known: KnownPackage): PackageFacts {
   const document = known.document as {
     readonly version?: unknown;
     readonly environment?: { readonly kind?: unknown };
+    readonly types?: unknown;
   } | null;
   const kind = document?.environment?.kind;
+  const types = Array.isArray(document?.types) ? (document.types as unknown[]) : [];
   return {
     package: known.name,
     version: typeof document?.version === "string" ? document.version : "unknown",
@@ -63,6 +71,9 @@ export function factsOf(known: KnownPackage): PackageFacts {
     // A shipped package is the app's own.
     signed: !known.installed || known.signed,
     environment: ENVIRONMENTS.find((candidate) => candidate === kind) ?? null,
+    nodeTypes: types
+      .map((type) => (type as { readonly id?: unknown } | null)?.id)
+      .filter((id): id is string => typeof id === "string"),
   };
 }
 
@@ -79,6 +90,7 @@ export class UsageSignals {
   readonly #deps: UsageSignalsDeps;
   /** The store's packages, read once until they may have changed (an install restarts the runtime). */
   #known: ReadonlyMap<string, PackageFacts> | null = null;
+  #folders: ReadonlyMap<string, string> = new Map();
 
   constructor(deps: UsageSignalsDeps) {
     this.#deps = deps;
@@ -93,6 +105,13 @@ export class UsageSignals {
     return this.#deps.record(signal.name, payload) !== null;
   }
 
+  /** At start: one `package_present` for each installed package. */
+  present(): void {
+    for (const known of this.#deps.packages()) {
+      this.record(packagePresent(factsOf(known)));
+    }
+  }
+
   /** The packages may have changed: read the store again at the next event. */
   forgetPackages(): void {
     this.#known = null;
@@ -101,7 +120,11 @@ export class UsageSignals {
   /** The facts of package `name`, or null when the store does not list it. */
   facts(name: string): PackageFacts | null {
     if (this.#known === null) {
-      this.#known = new Map(this.#deps.packages().map((known) => [known.name, factsOf(known)]));
+      const listed = this.#deps.packages();
+      this.#known = new Map(listed.map((known) => [known.name, factsOf(known)]));
+      this.#folders = new Map(
+        listed.flatMap((known) => (known.folder === undefined ? [] : [[known.name, known.folder]])),
+      );
     }
     return this.#known.get(name) ?? null;
   }
@@ -118,7 +141,14 @@ export class UsageSignals {
         }
         if (!signal.step.ok) {
           const failure = signal.failure ?? { errorType: null, file: null, line: null };
-          this.record(packageError(facts, signal.step, failure));
+          const file = failure.file;
+          // A file is the package's own, or it is not sent (plan 0029): never a path a node chose.
+          const folder = this.#folders.get(signal.package);
+          const owned =
+            file === null || (folder !== undefined && this.#deps.holds(folder, file))
+              ? file
+              : WITHHELD;
+          this.record(packageError(facts, signal.step, { ...failure, file: owned }));
         }
         return;
       }

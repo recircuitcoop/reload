@@ -7,7 +7,9 @@
 // question is unanswered this reports nothing, queues nothing and reads no machine identifier.
 
 import { createHash, randomUUID } from "node:crypto";
+import fs from "node:fs";
 import * as os from "node:os";
+import * as path from "node:path";
 import type { IpcMain } from "electron";
 import { CrashReports } from "../application/crash-reports";
 import type { Supervisor } from "../application/supervisor";
@@ -119,6 +121,68 @@ export interface ShellTelemetry {
   providers(seen: readonly SeenProvider[]): void;
 }
 
+/**
+ * The OS release as `MAJOR.MINOR.PATCH`, read off its leading numbers (`6.8.0-45-generic` is
+ * `6.8.0`); `unknown`, which is withheld, when it starts with none.
+ */
+export function releaseOf(release: string): string {
+  const found = /^(\d{1,4})\.(\d{1,4})(?:\.(\d{1,4}))?/.exec(release);
+  return found === null ? "unknown" : `${found[1] ?? ""}.${found[2] ?? ""}.${found[3] ?? "0"}`;
+}
+
+/** What one package folder holds, as package-relative paths, read once a launch per folder. */
+const held = new Map<string, ReadonlySet<string>>();
+
+/**
+ * Whether `file` is one of the package's own: a file in its folder, or a source its source maps
+ * name (a bundle's `src/…`). A step's `file` is sent only then (plan 0029): the path is the
+ * package's, never something a node made up.
+ */
+export function packageHolds(folder: string, file: string): boolean {
+  let files = held.get(folder);
+  if (files === undefined) {
+    files = filesOf(folder);
+    held.set(folder, files);
+  }
+  return files.has(file);
+}
+
+function filesOf(folder: string): ReadonlySet<string> {
+  const files = new Set<string>();
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(folder, { recursive: true, withFileTypes: true });
+  } catch {
+    return files;
+  }
+  for (const entry of entries) {
+    if (!entry.isFile() || entry.parentPath.split(path.sep).includes("node_modules")) {
+      continue;
+    }
+    const absolute = path.join(entry.parentPath, entry.name);
+    files.add(path.relative(folder, absolute).split(path.sep).join("/"));
+    if (entry.name.endsWith(".map")) {
+      for (const source of mapSources(absolute)) {
+        const relative = path.relative(folder, path.resolve(entry.parentPath, source));
+        if (!relative.startsWith("..") && !path.isAbsolute(relative)) {
+          files.add(relative.split(path.sep).join("/"));
+        }
+      }
+    }
+  }
+  return files;
+}
+
+/** The `sources` a source map names; none when it cannot be read. */
+function mapSources(file: string): string[] {
+  try {
+    const sources = (JSON.parse(fs.readFileSync(file, "utf8")) as { sources?: unknown }).sources;
+    return Array.isArray(sources) ? sources.filter((item) => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
 /** A public key's fingerprint as provider_registered names it: 12 hex digits of its sha256. */
 export const fingerprintOf = (publicKey: string | null): string | null =>
   publicKey === null ? null : createHash("sha256").update(publicKey).digest("hex").slice(0, 12);
@@ -142,7 +206,7 @@ export function wireTelemetry(deps: TelemetryWiring): ShellTelemetry {
   const versions: Versions = {
     appVersion: deps.appVersion,
     os: process.platform,
-    osVersion: os.release(),
+    osVersion: releaseOf(os.release()),
     arch: process.arch,
   };
   const crashes = new CrashReports({
@@ -153,6 +217,7 @@ export function wireTelemetry(deps: TelemetryWiring): ShellTelemetry {
     record: (name, payload) => pipeline.recordUsage(name, payload),
     versions,
     packages: deps.packages,
+    holds: packageHolds,
   });
 
   // ── what this launch remembers: the first-run steps told, the providers seen ──────────
@@ -195,10 +260,14 @@ export function wireTelemetry(deps: TelemetryWiring): ShellTelemetry {
     if (startupMs === null || startTold) {
       return;
     }
-    const { named, unsigned } = reportedPackages(deps.packages());
+    const listed = deps.packages();
+    const { unsigned } = reportedPackages(listed);
     startTold = signals.record(
-      appStart({ startupMs, packages: named, unsignedPackages: unsigned, firstLaunch }),
+      appStart({ startupMs, packages: listed.length, unsignedPackages: unsigned, firstLaunch }),
     );
+    if (startTold) {
+      signals.present();
+    }
   };
 
   for (const [child, supervisor] of deps.supervisors) {
@@ -207,6 +276,7 @@ export function wireTelemetry(deps: TelemetryWiring): ShellTelemetry {
       states.set(child, status.state);
       // A new runtime generation may load other packages (an install restarts it).
       signals.forgetPackages();
+      held.clear();
       const up = [...deps.supervisors.keys()].every((name) => states.get(name) === "running");
       if (up && startupMs === null) {
         startupMs = uptimeMs();
@@ -267,7 +337,10 @@ export function wireTelemetry(deps: TelemetryWiring): ShellTelemetry {
         }
       }
       const now = Object.fromEntries(
-        seen.map(({ name, url, official }) => [name, { host: providerHost(url), official }]),
+        seen.map(({ name, url, official }) => [
+          name,
+          { host: providerHost(url, official), official },
+        ]),
       );
       if (JSON.stringify(now) !== JSON.stringify(before)) {
         remember({ ...remembered, providers: now });

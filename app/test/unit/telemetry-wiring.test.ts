@@ -3,7 +3,10 @@
 // launch marker that tells an unclean stop, the first-run steps told once, the provider events,
 // the page's question and switch over IPC, and the children's facts reaching the shell over the
 // channel.
-import { describe, expect, it } from "vitest";
+import fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { afterAll, describe, expect, it } from "vitest";
 import packageJson from "../../package.json";
 import { CrashReports } from "../../src/application/crash-reports";
 import { shellNodeCrashes, shellSignals } from "../../src/application/serve-shell";
@@ -67,12 +70,40 @@ class ListenedSupervisor {
   }
 }
 
+/** probekit's folder: what it holds is the only `file` its steps may name. */
+const PROBEKIT = fs.mkdtempSync(path.join(os.tmpdir(), "reload-probekit-"));
+fs.mkdirSync(path.join(PROBEKIT, "src"));
+fs.writeFileSync(path.join(PROBEKIT, "src", "probe.py"), "");
+fs.mkdirSync(path.join(PROBEKIT, "dist"));
+fs.writeFileSync(
+  path.join(PROBEKIT, "dist", "probe.cjs.map"),
+  JSON.stringify({ version: 3, sources: ["../src/mapped.ts", "../../../outside.ts"] }),
+);
+afterAll(() => {
+  fs.rmSync(PROBEKIT, { recursive: true, force: true });
+});
+
+/** One package_present for each listed package, at start. */
+const PRESENT = ["package_present", "package_present", "package_present", "package_present"];
+
 const PACKAGES: ListedPackage[] = [
   { name: "anytype", document: { version: "1.2.0" }, installed: false, signed: false },
-  { name: "probekit", document: { version: "0.3.0" }, installed: true, signed: true },
+  {
+    name: "probekit",
+    document: { version: "0.3.0", types: [{ id: "probe" }] },
+    installed: true,
+    signed: true,
+    folder: PROBEKIT,
+  },
   { name: "my-private-thing", document: { version: "0.0.1" }, installed: true, signed: false },
   { name: "odd", document: null, installed: true, signed: true },
 ];
+
+/** The queued payloads of usage event `event`, in order. */
+const payloads = (world: ReturnType<typeof wired>, event: string) =>
+  world.queue.reports
+    .map((report) => report.payload)
+    .filter((payload) => payload["event"] === event);
 
 /** Test servers, so that no test here reports to the endpoints a release is built with. */
 const TEST_ENV = {
@@ -191,18 +222,21 @@ describe("the shell's telemetry", () => {
     world.up();
     expect(world.queue.reports).toEqual([]);
     world.call(IPC.setTelemetry, true);
-    expect(world.events()).toEqual(["app_start", "setup_step"]);
+    expect(world.events()).toEqual(["app_start", ...PRESENT, "setup_step"]);
     expect(world.queue.reports[0]?.payload).toMatchObject({
       event: "app_start",
       startup_ms: 4_500,
       first_launch: true,
-      packages: [
-        { id: "anytype", version: "1.2.0" },
-        { id: "probekit", version: "0.3.0" },
-        { id: "odd", version: "unknown" },
-      ],
+      packages: 4,
       unsigned_packages: 1,
     });
+    // Each installed package on its own, never a list Umami would cut.
+    expect(payloads(world, "package_present")).toEqual([
+      expect.objectContaining({ package: "anytype", version: "1.2.0", source: "shipped" }),
+      expect.objectContaining({ package: "probekit", version: "0.3.0", signed: true }),
+      expect.objectContaining({ package: "unsigned", version: null, signed: false }),
+      expect.objectContaining({ package: "odd", version: "[withheld]" }),
+    ]);
     expect(JSON.stringify(world.queue.reports)).not.toContain("my-private-thing");
   });
 
@@ -214,8 +248,8 @@ describe("the shell's telemetry", () => {
     world.services.publish(status("services", "running"));
     world.up();
     world.call(IPC.setTelemetry, true);
-    expect(world.events()).toEqual(["setup_step", "app_start"]);
-    expect(world.call(IPC.telemetry).queued).toBe(2);
+    expect(world.events()).toEqual(["setup_step", "app_start", ...PRESENT]);
+    expect(world.call(IPC.telemetry).queued).toBe(2 + PACKAGES.length);
   });
 
   it("crash reports cover the runtime, the services process and node processes, with counts", () => {
@@ -303,12 +337,15 @@ describe("the shell's telemetry", () => {
       type: string;
       payload: { website: string; name: string };
     }[];
-    expect(body.map((event) => event.type)).toEqual(["event", "event"]);
-    expect(body.map((event) => event.payload.website)).toEqual([
-      "edce25fe-ad86-4241-b0e1-87f456cc3dfa",
-      "edce25fe-ad86-4241-b0e1-87f456cc3dfa",
+    expect(body.map((event) => event.type)).toEqual(body.map(() => "event"));
+    expect(new Set(body.map((event) => event.payload.website))).toEqual(
+      new Set(["edce25fe-ad86-4241-b0e1-87f456cc3dfa"]),
+    );
+    expect(body.map((event) => event.payload.name)).toEqual([
+      "app_start",
+      ...PRESENT,
+      "setup_step",
     ]);
-    expect(body.map((event) => event.payload.name)).toEqual(["app_start", "setup_step"]);
     // The runtime crashing again is queued, but there is no GlitchTip to send it to.
     world.runtime.publish(status("runtime", "down"));
     world.clock.advance(60_000);
@@ -318,11 +355,6 @@ describe("the shell's telemetry", () => {
 });
 
 describe("the launch's own signals (plan 0029)", () => {
-  const payloads = (world: ReturnType<typeof wired>, event: string) =>
-    world.queue.reports
-      .map((report) => report.payload)
-      .filter((payload) => payload["event"] === event);
-
   it("a killed launch leaves its marker, and the next launch tells app_unclean_stop", () => {
     const marks = new MemoryMarks();
     const first = wired("on", TEST_ENV, marks);
@@ -417,8 +449,9 @@ describe("the launch's own signals (plan 0029)", () => {
         signer_fingerprint: expect.stringMatching(/^[0-9a-f]{12}$/) as unknown,
         packages_offered: 4,
       }),
+      // A registered catalogue's host is somebody's own: only `custom` is sent.
       expect.objectContaining({
-        provider_host: "packages.example",
+        provider_host: "custom",
         official: false,
         signer_fingerprint: null,
         packages_offered: 2,
@@ -426,7 +459,7 @@ describe("the launch's own signals (plan 0029)", () => {
     ]);
     world.telemetry.providers([official]);
     expect(payloads(world, "provider_removed")).toEqual([
-      expect.objectContaining({ provider_host: "packages.example", official: false }),
+      expect.objectContaining({ provider_host: "custom", official: false }),
     ]);
     const sent = JSON.stringify(world.queue.reports);
     for (const leak of ["fakeuser", "fakepass", "fakeQueryTok", "RWfake", "/c?", "index.json"]) {
@@ -438,7 +471,8 @@ describe("the launch's own signals (plan 0029)", () => {
     });
     world.telemetry.providers([official, mine]);
     const remembered = JSON.stringify(marks.memory);
-    expect(remembered).toContain("packages.example");
+    expect(remembered).toContain("custom");
+    expect(remembered).not.toContain("packages.example");
     for (const leak of ["fakeuser", "fakepass", "fakeQueryTok", "https:", "/c"]) {
       expect(remembered).not.toContain(leak);
     }
@@ -452,6 +486,32 @@ describe("the launch's own signals (plan 0029)", () => {
     });
     expect(payloads(world, "update_offered")).toEqual([
       expect.objectContaining({ to_version: "1.1.0", app_version: "1.0.0", os: process.platform }),
+    ]);
+  });
+
+  it("a step's file is sent only when the signed package holds it, or its source map names it", () => {
+    const world = wired("on");
+    const step = { nodeKind: "node" as const, nodeId: "probe", durationMs: 1, ok: false };
+    for (const file of [
+      "src/probe.py",
+      "src/mapped.ts",
+      "src/hunter2.py",
+      "src/zqxjkvbwplmnrtyhgfdsaqw/kvbwplmnrtyhgfdsaqwerty.py",
+      "outside.ts",
+    ]) {
+      world.runtime.tell({
+        kind: "step",
+        package: "probekit",
+        step,
+        failure: { errorType: "Error", file, line: 1 },
+      });
+    }
+    expect(payloads(world, "package_error").map((payload) => payload["file"])).toEqual([
+      "src/probe.py",
+      "src/mapped.ts",
+      "[withheld]",
+      "[withheld]",
+      "[withheld]",
     ]);
   });
 
@@ -482,7 +542,7 @@ describe("the launch's own signals (plan 0029)", () => {
       kind: "source-error",
       package: "probekit",
       step: { ...step, nodeKind: "source", durationMs: 0, ok: false },
-      failure: { errorType: "OSError", file: "src/watch.py", line: 9 },
+      failure: { errorType: "OSError", file: "src/mapped.ts", line: 9 },
     });
     world.runtime.tell({
       kind: "step",
@@ -550,7 +610,7 @@ describe("the launch's own signals (plan 0029)", () => {
         package: "probekit",
         node_kind: "source",
         error_type: "OSError",
-        file: "src/watch.py",
+        file: "src/mapped.ts",
         line: 9,
       }),
       expect.objectContaining({
@@ -569,14 +629,15 @@ describe("the launch's own signals (plan 0029)", () => {
         version: null,
         method: "tools/call",
         tool: "api-list-spaces",
-        client: "claude-ai",
+        // The label of a known AI app, never the name it sent.
+        client: "claude",
         ok: true,
         error_code: null,
       }),
       expect.objectContaining({
         method: "resources/read",
         tool: null,
-        client: "[withheld]",
+        client: "other",
         ok: true,
       }),
     ]);

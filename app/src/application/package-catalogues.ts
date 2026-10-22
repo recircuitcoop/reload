@@ -248,7 +248,11 @@ export class PackageCatalogues {
   installOrigin(from: InstalledOrigin | undefined): InstallOrigin {
     return from?.kind === "file"
       ? { kind: "file" }
-      : { kind: "catalogue", url: from === undefined ? null : this.urlOf(from.source) };
+      : {
+          kind: "catalogue",
+          url: from === undefined ? null : this.urlOf(from.source),
+          official: from?.source === OFFICIAL_SOURCE_NAME,
+        };
   }
 
   /** The address of the catalogue called `name`; null when there is none, or it is unknown. */
