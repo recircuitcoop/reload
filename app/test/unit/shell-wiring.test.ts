@@ -169,6 +169,31 @@ describe("wireQuit, wireServiceCalls, wireDesktop and the e2e hooks", () => {
     expect(answers).toEqual(["deploy"]);
   });
 
+  it("only a pairing the services process completed reaches anytype_paired", async () => {
+    const { handle, call } = ipc();
+    let answer: { ok: true; value: string } | { ok: false; error: string } = {
+      ok: false,
+      error: "Anytype rejected the pairing code. Start pairing again and use the new code.",
+    };
+    const services = { call: () => Promise.resolve(answer) } as unknown as Supervisor;
+    let paired = 0;
+    // Anytype's launch is still undecided: only the pairing is asked here.
+    const undecided = new Promise<never>(() => undefined);
+    wireServiceCalls(
+      { handle },
+      services,
+      () => null,
+      undecided,
+      () => (paired += 1),
+    );
+    await expect(call(IPC.anytypePairComplete, "0000")).rejects.toThrow("rejected the pairing");
+    await expect(call(IPC.anytypePairComplete, "nonsense")).rejects.toThrow();
+    expect(paired).toBe(0);
+    answer = { ok: true, value: "connected" };
+    expect(await call(IPC.anytypePairComplete, "1234")).toBe("connected");
+    expect(paired).toBe(1);
+  });
+
   it("the Anytype and endpoint calls go to the services process, and a refusal is thrown", async () => {
     const { handle, call } = ipc();
     const asked: unknown[] = [];
@@ -185,7 +210,14 @@ describe("wireQuit, wireServiceCalls, wireDesktop and the e2e hooks", () => {
       onStatus: () => undefined,
     } as unknown as Supervisor;
     let kept: string | null = null;
-    wireServiceCalls({ handle }, services, () => kept, Promise.resolve("started"));
+    let paired = 0;
+    wireServiceCalls(
+      { handle },
+      services,
+      () => kept,
+      Promise.resolve("started"),
+      () => (paired += 1),
+    );
     expect(await call(IPC.anytypeStatus)).toBe("anytype.status");
     expect(await call(IPC.anytypeCheck)).toBe("anytype.check");
     // Reload saw the Anytype desktop app start: Anytype was asked again, unprompted, with a
@@ -193,6 +225,8 @@ describe("wireQuit, wireServiceCalls, wireDesktop and the e2e hooks", () => {
     expect(asked).toContainEqual(["anytype.check", { waitMs: 60_000 }]);
     expect(await call(IPC.anytypePairStart)).toBe("anytype.pair.start");
     await expect(call(IPC.anytypePairComplete, "1234")).rejects.toThrow("wrong code");
+    // A wrong code is no pairing: anytype_paired is not reached (plan 0029).
+    expect(paired).toBe(0);
     expect(await call(IPC.mcpEndpoint)).toBe("mcp.endpoint");
     expect(await call(IPC.mcpEndpointMove, "127.0.0.1", 31011)).toBe("mcp.endpoint.move");
     expect(asked).toContainEqual(["mcp.endpoint.move", { host: "127.0.0.1", port: 31011 }]);
