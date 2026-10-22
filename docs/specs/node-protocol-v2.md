@@ -1401,12 +1401,28 @@ export declare function progress(
   inputId: string, done: number, total: number, etaS?: number, text?: string, // 2.1
 ): void;
 export declare function error(inputId: string | undefined, message: string): void;
+// Fail `inputId` with what was thrown: an `error` frame with its message and `thrownAt(caught)`.
+// The SDK does this itself for a handler that throws; a node that catches an error calls it too.
+export declare function fail(inputId: string, caught: unknown): void;
+// Where `caught` was thrown, as the `error` frame's optional fields (4.2): `error_type` its
+// class's name, `file` the innermost stack frame inside the package's folder (`root`, the working
+// directory, never a frame in node_modules or outside it), relative to it, and that frame's
+// `line`; with no such frame, only `error_type`; nothing for what is not an Error. A path may hold
+// spaces, and a `file://` URL is decoded. Nothing is cut: the app withholds what does not fit.
+export declare function thrownAt(
+  caught: unknown, root?: string,
+): { error_type?: string; file?: string; line?: number };
 export declare function status(text: string, fill?: "red" | "green" | "yellow" | "blue" | "grey", shape?: "ring" | "dot"): void;
 export declare function log(msg: string, level?: "debug" | "info" | "warn" | "error"): void;
 export declare function present(inputId: string, content: { title?: string; text?: string; fields?: Record<string, unknown>; form?: object }): void;
 export declare function snapshot(content: object, state: unknown, inputId?: string): void;
 export declare function run(handlers: Handlers): Promise<void>; // resolves after close/EOF
 ```
+
+The Python SDK (`reload-node`) does the same for a handler that raises: its error frame carries
+`error_type` (the exception class's name), and the `file` and `line` of the traceback's innermost
+frame inside the package's folder (never `site-packages`; a frame on another Windows drive counts
+as outside it).
 
 Implementation notes for the JS SDK:
 - use `readline` on `process.stdin` for frames, and `process.stdout.write(JSON.stringify(f) + "\n")`
