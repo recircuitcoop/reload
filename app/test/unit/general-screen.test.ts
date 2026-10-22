@@ -377,7 +377,7 @@ const LINE_FIELDS: Readonly<Record<string, readonly string[]>> = {
     "ok",
     "error_code",
   ],
-  "privacy.sent.flows": ["flows", "total_nodes", "nodes", "package"],
+  "privacy.sent.flows": ["flows", "total_nodes", "nodes", "config_nodes", "package"],
   "privacy.sent.setup": ["step"],
   "privacy.sent.catalogues": [
     "provider_host",
@@ -434,7 +434,8 @@ const LINE_WORDS: Readonly<Record<string, readonly string[]>> = {
   ],
   "privacy.sent.flows": [
     "how many flows and steps in all",
-    "how many steps each flow has",
+    "how many steps each flow has with the steps inside its subflows",
+    "how many configuration nodes",
     "how many steps of each package",
   ],
   "privacy.sent.setup": ["Reload started", "Anytype paired", "a first flow deployed"],

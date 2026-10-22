@@ -189,12 +189,17 @@ export interface Signal {
 export const NOTICE_VERSION = 2;
 
 /**
- * Fields whose NAMES the one redaction would blank (`file`, `env`, `host`), and whose values the
- * builders make from a closed form: a path relative to its package (`stepFile`), one of three
- * environment kinds, a hostname (`hostOnly`). Their text still passes the credential removal,
- * the path reduction and the scrub.
+ * Fields whose NAMES the one redaction would blank (`file`, `env`, `host`, `config`), and whose
+ * values the builders make from a closed form: a path the package holds, one of three environment
+ * kinds, a hostname, a count. Their text still passes the credential removal, the path reduction
+ * and the scrub.
  */
-export const VOUCHED_FIELDS: readonly string[] = ["file", "environment", "provider_host"];
+export const VOUCHED_FIELDS: readonly string[] = [
+  "file",
+  "environment",
+  "provider_host",
+  "config_nodes",
+];
 
 /** What an unsigned package is called in every event: its own name is its author's free text. */
 export const UNSIGNED = "unsigned";
@@ -410,13 +415,15 @@ export interface PackageCount {
 
 /**
  * `flow_deployed` and `package_deployed`: every deploy, with exact counts (the owner makes the
- * buckets). One `flow_deployed` per flow, its own node count beside the deploy's totals, and one
- * `package_deployed` per package: Umami cuts an array to 500 characters, so no count is ever sent
- * as a list. A deploy of no flows is one `flow_deployed` whose `nodes` is null.
+ * buckets). One `flow_deployed` per flow, its own node count (subflow instances' insides
+ * included) beside the deploy's totals and its config nodes, and one `package_deployed` per
+ * package: Umami cuts an array to 500 characters, so no count is ever sent as a list. A deploy of
+ * no flows is one `flow_deployed` whose `nodes` is null.
  */
 export function flowDeployed(
   nodesPerFlow: readonly number[],
   perPackage: readonly PackageCount[],
+  configNodes = 0,
 ): Signal[] {
   const flows = nodesPerFlow.length;
   const total = nodesPerFlow.reduce((sum, count) => sum + count, 0);
@@ -424,7 +431,7 @@ export function flowDeployed(
   return [
     ...each.map((nodes): Signal => ({
       name: "flow_deployed",
-      fields: { flows, total_nodes: total, nodes },
+      fields: { flows, total_nodes: total, nodes, config_nodes: configNodes },
     })),
     ...perPackage.map((entry): Signal => ({
       name: "package_deployed",
@@ -588,6 +595,8 @@ export type ChildSignal =
       readonly kind: "deployed";
       readonly nodesPerFlow: readonly number[];
       readonly perPackage: readonly PackageCount[];
+      /** Config nodes, which sit on no flow: counted on their own. */
+      readonly configNodes: number;
     };
 
 // ── retention ────────────────────────────────────────────────────────────────────────────

@@ -125,11 +125,13 @@ export class UsageSignals {
       case "mcp-call":
         this.record(mcpCall(this.facts(MCP_PACKAGE)?.version ?? null, signal.call));
         return;
-      case "deployed":
-        for (const event of flowDeployed(signal.nodesPerFlow, this.#named(signal.perPackage))) {
+      case "deployed": {
+        const named = this.#named(signal.perPackage);
+        for (const event of flowDeployed(signal.nodesPerFlow, named, signal.configNodes)) {
           this.record(event);
         }
         return;
+      }
     }
   }
 

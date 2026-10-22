@@ -446,7 +446,9 @@ export function parseChildSignal(value: unknown): ChildSignal | null {
     case "deployed": {
       const flows = value["nodesPerFlow"];
       const counts = value["perPackage"];
+      const configNodes = value["configNodes"];
       if (
+        !isCount(configNodes) ||
         !Array.isArray(flows) ||
         !flows.every(isCount) ||
         !Array.isArray(counts) ||
@@ -464,6 +466,7 @@ export function parseChildSignal(value: unknown): ChildSignal | null {
           package: entry["package"] as string,
           nodes: entry["nodes"] as number,
         })),
+        configNodes,
       };
     }
     default:

@@ -159,30 +159,51 @@ export const CORE_NODES = "node-red";
 
 /**
  * A deploy's exact counts, for the usage signals (plan 0029): every node on each flow (a tab),
- * in the flows' order, and how many of them each package's types make; Node-RED's own nodes
- * count as `node-red`. Counted off the deployed flows, never off what a write asked for.
+ * in the flows' order, each subflow instance counted with the nodes inside it as deployed; how
+ * many of them each package's types make, Node-RED's own nodes as `node-red`; and the config
+ * nodes, which belong to no flow. Counted off the deployed flows, never off what a write asked
+ * for.
  */
 export function deployCounts(
   deployed: readonly unknown[],
   packageOf: (type: string) => string | undefined,
 ): ChildSignal {
-  const nodes = deployed.filter(isRecord);
-  const tabs = nodes.filter((node) => node["type"] === "tab").map((tab) => tab["id"]);
+  const nodes = deployed.filter(isRecord).filter((node) => typeof node["type"] === "string");
+  const typeOf = (node: Record<string, unknown>): string => node["type"] as string;
+  // A config node is wired to nothing: it has no `wires`, wherever it is scoped.
+  const isConfig = (node: Record<string, unknown>): boolean =>
+    !CONTAINERS.includes(typeOf(node)) && !Array.isArray(node["wires"]);
+  const isNode = (node: Record<string, unknown>): boolean =>
+    !CONTAINERS.includes(typeOf(node)) && !isConfig(node);
+  const tabs = nodes.filter((node) => typeOf(node) === "tab").map((tab) => tab["id"]);
   const perPackage = new Map<string, number>();
-  const nodesPerFlow = tabs.map((tab) => {
-    const onTab = nodes.filter((node) => node["z"] === tab && typeof node["type"] === "string");
-    for (const node of onTab) {
-      const name = packageOf(node["type"] as string) ?? CORE_NODES;
+  /** The nodes in `scope` (a tab or a subflow), each subflow instance's own nodes included. */
+  const count = (scope: unknown, within: ReadonlySet<unknown>): number => {
+    let total = 0;
+    for (const node of nodes.filter((each) => each["z"] === scope && isNode(each))) {
+      const type = typeOf(node);
+      const name = packageOf(type) ?? CORE_NODES;
       perPackage.set(name, (perPackage.get(name) ?? 0) + 1);
+      total += 1;
+      const subflow = type.startsWith("subflow:") ? type.slice("subflow:".length) : null;
+      // A subflow placed inside itself, however deep, is counted once: a cycle is not deployed.
+      if (subflow !== null && !within.has(subflow)) {
+        total += count(subflow, new Set([...within, subflow]));
+      }
     }
-    return onTab.length;
-  });
+    return total;
+  };
+  const nodesPerFlow = tabs.map((tab) => count(tab, new Set()));
   return {
     kind: "deployed",
     nodesPerFlow,
-    perPackage: [...perPackage].map(([name, count]) => ({ package: name, nodes: count })),
+    perPackage: [...perPackage].map(([name, nodes]) => ({ package: name, nodes })),
+    configNodes: nodes.filter(isConfig).length,
   };
 }
+
+/** What holds nodes, and is not one itself. */
+const CONTAINERS: readonly string[] = ["tab", "subflow", "group"];
 
 /** What a write deploys, for the guard; and the write itself. */
 interface Prepared<T> {

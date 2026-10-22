@@ -207,19 +207,19 @@ describe("a deploy's exact counts", () => {
       package: `p${String(n)}`,
       nodes: n,
     }));
-    const events = flowDeployed(perFlow, perPackage);
+    const events = flowDeployed(perFlow, perPackage, 3);
     const flows = events.filter((event) => event.name === "flow_deployed");
     const packages = events.filter((event) => event.name === "package_deployed");
     const total = perFlow.reduce((sum, count) => sum + count, 0);
     expect(flows.map((event) => event.fields)).toEqual(
-      perFlow.map((nodes) => ({ flows: 150, total_nodes: total, nodes })),
+      perFlow.map((nodes) => ({ flows: 150, total_nodes: total, nodes, config_nodes: 3 })),
     );
     expect(packages.map((event) => event.fields)).toEqual(perPackage);
     for (const event of events) {
       expect(Object.values(event.fields).some(Array.isArray), event.name).toBe(false);
     }
     expect(flowDeployed([], [])).toEqual([
-      { name: "flow_deployed", fields: { flows: 0, total_nodes: 0, nodes: null } },
+      { name: "flow_deployed", fields: { flows: 0, total_nodes: 0, nodes: null, config_nodes: 0 } },
     ]);
   });
 
@@ -233,32 +233,48 @@ describe("a deploy's exact counts", () => {
     expect(world.queue.reports.map((report) => report.payload["nodes"])).toEqual(perFlow);
   });
 
-  it("counts every node on each flow, in order, by package, Node-RED's own as node-red", () => {
+  it("counts every node: each flow's, the nodes inside its subflow instances, and config nodes", () => {
     const packageOf = (type: string) =>
       type.startsWith("reload-probekit-") ? "probekit" : undefined;
     const flows = [
       { id: "t1", type: "tab" },
       { id: "t2", type: "tab" },
-      { id: "a", type: "reload-probekit-probe", z: "t1" },
-      { id: "b", type: "inject", z: "t1" },
-      { id: "c", type: "reload-probekit-probe", z: "t2" },
+      { id: "a", type: "reload-probekit-probe", z: "t1", wires: [[]] },
+      { id: "b", type: "inject", z: "t1", wires: [["a"]] },
+      { id: "c", type: "reload-probekit-probe", z: "t2", wires: [] },
+      // A subflow of two nodes, one of them an instance of a subflow of one: 1 + 2 + 1 each.
+      { id: "s1", type: "subflow" },
+      { id: "s1a", type: "function", z: "s1", wires: [[]] },
+      { id: "s1b", type: "subflow:s2", z: "s1", wires: [[]] },
+      { id: "s2", type: "subflow" },
+      { id: "s2a", type: "reload-probekit-probe", z: "s2", wires: [[]] },
+      { id: "i1", type: "subflow:s1", z: "t2", wires: [[]] },
+      { id: "i2", type: "subflow:s1", z: "t2", wires: [[]] },
+      // A subflow that holds itself is counted once, never forever.
+      { id: "loop", type: "subflow" },
+      { id: "loopi", type: "subflow:loop", z: "loop", wires: [[]] },
+      { id: "i3", type: "subflow:loop", z: "t1", wires: [[]] },
+      // Config nodes: global, and scoped to a flow; a group is neither.
       { id: "cfg", type: "some-config" },
-      { id: "sub", type: "debug", z: "elsewhere" },
+      { id: "cfg2", type: "mqtt-broker", z: "t1" },
+      { id: "g", type: "group", z: "t1" },
       { id: "untyped", z: "t1" },
       "not a node",
     ];
     expect(deployCounts(flows, packageOf)).toEqual({
       kind: "deployed",
-      nodesPerFlow: [2, 1],
+      nodesPerFlow: [2 + 2, 1 + 4 + 4],
       perPackage: [
-        { package: "probekit", nodes: 2 },
-        { package: CORE_NODES, nodes: 1 },
+        { package: "probekit", nodes: 2 + 2 },
+        { package: CORE_NODES, nodes: 2 + 1 + 6 },
       ],
+      configNodes: 2,
     });
     expect(deployCounts([], packageOf)).toEqual({
       kind: "deployed",
       nodesPerFlow: [],
       perPackage: [],
+      configNodes: 0,
     });
   });
 });

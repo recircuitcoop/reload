@@ -65,7 +65,7 @@ export function everySignal(text: string, signed = true): Signal[] {
     packageUsed(facts, step),
     packageError(facts, step, failure),
     mcpCall(text, call),
-    ...flowDeployed([2, 1], [{ package: text, nodes: 3 }]),
+    ...flowDeployed([2, 1], [{ package: text, nodes: 3 }], 1),
     setupStep("anytype_paired"),
     providerRegistered(provider, text, 4),
     providerRemoved({ host: text, official: false }),

@@ -373,13 +373,14 @@ describe("the launch's own signals (plan 0029)", () => {
       "anytype_paired",
     ]);
     world.telemetry.reached("anytype_paired");
-    world.runtime.tell({ kind: "deployed", nodesPerFlow: [0], perPackage: [] });
+    world.runtime.tell({ kind: "deployed", nodesPerFlow: [0], perPackage: [], configNodes: 0 });
     world.runtime.tell({
       kind: "deployed",
       nodesPerFlow: [2, 1],
       perPackage: [{ package: "probekit", nodes: 3 }],
+      configNodes: 0,
     });
-    world.runtime.tell({ kind: "deployed", nodesPerFlow: [4], perPackage: [] });
+    world.runtime.tell({ kind: "deployed", nodesPerFlow: [4], perPackage: [], configNodes: 0 });
     expect(payloads(world, "setup_step").map((payload) => payload["step"])).toEqual([
       "launched",
       "anytype_paired",
@@ -520,6 +521,7 @@ describe("the launch's own signals (plan 0029)", () => {
         { package: "gone-meanwhile", nodes: 1 },
         { package: "node-red", nodes: 1 },
       ],
+      configNodes: 2,
     });
     expect(payloads(world, "package_used")).toEqual([
       expect.objectContaining({
@@ -660,7 +662,12 @@ describe("a child's facts reach the shell over the channel (plan 0029)", () => {
         step: { nodeKind: "source", nodeId: "t", durationMs: 0, ok: false },
         failure: { errorType: "E", file: null, line: null },
       },
-      { kind: "deployed", nodesPerFlow: [1, 0], perPackage: [{ package: "p", nodes: 1 }] },
+      {
+        kind: "deployed",
+        nodesPerFlow: [1, 0],
+        perPackage: [{ package: "p", nodes: 1 }],
+        configNodes: 2,
+      },
     ];
     for (const signal of valid) {
       expect(parseChildSignal(signal)).toEqual(signal);

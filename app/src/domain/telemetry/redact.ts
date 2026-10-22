@@ -166,9 +166,11 @@ export function redactPayload(
   const scrub = { credentials, secrets: named };
   const redacted = redactMapping(payload, scrub, 0);
   for (const field of vouched) {
-    // Only a string or null: a vouched field never carries a structure past the key-name rule.
+    // Only a string, a number or null: a vouched field never carries a structure past the
+    // key-name rule.
     const value = payload[field];
-    if (Object.hasOwn(redacted, field) && (typeof value === "string" || value === null)) {
+    const flat = typeof value === "string" || typeof value === "number" || value === null;
+    if (Object.hasOwn(redacted, field) && flat) {
       redacted[field] = redactValue(value, scrub, 1);
     }
   }
