@@ -6,7 +6,7 @@
 
 import { health, type FlowHealth } from "../domain/flows/health";
 import { wireOrder, type TabNode } from "../domain/flows/tab";
-import { configOf } from "../domain/forms/coerce";
+import { configOf, missingSecrets } from "../domain/forms/coerce";
 import { secretKeys, withoutSecrets } from "../domain/forms/form-model";
 import type { LoadedType } from "../domain/packages/declaration";
 import type { Run, RunState } from "../domain/runs/run";
@@ -167,13 +167,13 @@ export async function isSetUp(
   if (deps.validator.check(withoutSecrets(type.config), config).length > 0) {
     return false;
   }
-  // `config` never holds a secret: Node-RED keeps them apart, as credentials.
-  const required = requiredSecrets(type);
-  if (required.length === 0) {
+  // `config` never holds a secret: Node-RED keeps them apart, as credentials. A required one is
+  // missing at any depth, as the runtime refuses it (registration.ts).
+  if (secretKeys(type.config).length === 0) {
     return true;
   }
   const set = await deps.engine.secretsSet(node);
-  return required.every((key) => set.has(key));
+  return missingSecrets(type.config, config, set).length === 0;
 }
 
 /** A generated type, as flow administration reads it. */
@@ -193,10 +193,4 @@ export function flowNodeTypeOf(loaded: LoadedType): FlowNodeType {
 export function stepName(node: TabNode, type: FlowNodeType): string {
   const name = node["name"];
   return typeof name === "string" && name.trim() !== "" ? name : type.label;
-}
-
-/** The secrets the type's schema requires. */
-export function requiredSecrets(type: FlowNodeType): string[] {
-  const required = Array.isArray(type.config["required"]) ? type.config["required"] : [];
-  return secretKeys(type.config).filter((key) => required.includes(key));
 }

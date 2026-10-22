@@ -9,7 +9,7 @@
 // Pure: no I/O, no library.
 
 import type { JsonSchema } from "../packages/declaration";
-import { propertiesOf, secretsOf, withoutSecrets } from "./form-model";
+import { isSecret, propertiesOf, secretsOf, withoutSecrets } from "./form-model";
 
 const INTEGER = /^[+-]?\d+$/;
 const NUMBER = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;
@@ -125,13 +125,12 @@ export function configOf(schema: JsonSchema, node: Fields): Record<string, unkno
 /**
  * An instance's `credentials` (spec 2.5.2, 4.1): the declared secrets Node-RED holds for it,
  * each a non-empty string, by its credential's name ("token", or "account.token" for one in a
- * nested object). A secret never set takes its declared default, and is absent without one.
+ * nested object). A secret never set is absent.
  */
 export function credentialsOf(schema: JsonSchema, held: Fields): Record<string, string> {
   const credentials: Record<string, string> = {};
-  for (const [name, property] of secretsOf(schema)) {
-    const given = held[name];
-    const value = typeof given === "string" && given !== "" ? given : property["default"];
+  for (const [name] of secretsOf(schema)) {
+    const value = held[name];
     if (typeof value === "string" && value !== "") {
       credentials[name] = value;
     }
@@ -161,4 +160,30 @@ export function withCredentials(
     at[path.at(-1) as string] = value;
   }
   return whole;
+}
+
+/**
+ * The required secrets not set, by their credential's name, at every depth: a secret its
+ * object's `required` names, in an object the config holds (the top always; a group when the
+ * config holds it, or when one of its secrets is set, since that puts it there), and not in
+ * `set`. The same refusals the type's own schema makes of `withCredentials` (registration.ts).
+ */
+export function missingSecrets(
+  schema: JsonSchema,
+  config: Fields,
+  set: ReadonlySet<string>,
+  prefix = "",
+): string[] {
+  const required = new Set(Array.isArray(schema["required"]) ? schema["required"] : []);
+  return propertiesOf(schema).flatMap(([key, property]) => {
+    const name = prefix === "" ? key : `${prefix}.${key}`;
+    if (isSecret(property)) {
+      return required.has(key) && !set.has(name) ? [name] : [];
+    }
+    const group = config[key];
+    const present = isRecord(group) || [...set].some((each) => each.startsWith(`${name}.`));
+    return property["type"] === "object" && present
+      ? missingSecrets(property, isRecord(group) ? group : {}, set, name)
+      : [];
+  });
 }

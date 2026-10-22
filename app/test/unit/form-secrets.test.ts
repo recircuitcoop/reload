@@ -11,7 +11,12 @@ import {
   editorHtml,
 } from "../../src/adapters/nodered/generator";
 import { AjvSchemaValidator } from "../../src/adapters/schema/ajv-validator";
-import { configOf, credentialsOf, withCredentials } from "../../src/domain/forms/coerce";
+import {
+  configOf,
+  credentialsOf,
+  missingSecrets,
+  withCredentials,
+} from "../../src/domain/forms/coerce";
 import { formModel, secretKeys, withoutSecrets } from "../../src/domain/forms/form-model";
 import {
   parseDeclaration,
@@ -131,12 +136,38 @@ describe("a secret in a group", () => {
   });
 });
 
+describe("a required secret not set", () => {
+  it("is missing at any depth where its object is held, as the runtime refuses it", () => {
+    expect(missingSecrets(CONFIG, {}, new Set())).toEqual(["token"]);
+    expect(missingSecrets(CONFIG, { account: { user: "me" } }, new Set(["token"]))).toEqual([
+      "account.password",
+    ]);
+    expect(
+      missingSecrets(CONFIG, { account: { user: "me" } }, new Set(["token", "account.password"])),
+    ).toEqual([]);
+    // A group the config does not hold asks for nothing, unless one of its secrets puts it there.
+    const two: JsonSchema = {
+      properties: {
+        account: {
+          type: "object",
+          required: ["a", "b"],
+          properties: {
+            a: { type: "string", writeOnly: true },
+            b: { type: "string", writeOnly: true },
+          },
+        },
+      },
+    };
+    expect(missingSecrets(two, {}, new Set())).toEqual([]);
+    expect(missingSecrets(two, {}, new Set(["account.a"]))).toEqual(["account.b"]);
+  });
+});
+
 describe("a secret's default", () => {
-  it("is kept, and delivered while no secret is set", () => {
+  it("is kept, as declared, and is never a credential by itself", () => {
     expect(formModel(CONFIG).fields[0]?.default).toBe("hunter2");
-    expect(credentialsOf(CONFIG, {})).toEqual({ token: "hunter2" });
-    expect(credentialsOf(CONFIG, { token: "" })).toEqual({ token: "hunter2" });
-    expect(credentialsOf(CONFIG, { token: "mine" })).toEqual({ token: "mine" });
+    // Only a secret Node-RED holds is handed over: a declared default is no secret anyone set.
+    expect(credentialsOf(CONFIG, {})).toEqual({});
   });
 });
 
@@ -156,6 +187,24 @@ describe("a secret that cannot be a credential", () => {
     const config = { properties: { volumes: RECORDER_ROW({ takes }) } };
     expect(problemsOf(config)).toHaveLength(1);
     expect(problemsOf(config)[0]).toContain('"volumes.takes.token"');
+  });
+
+  it("a property name holding a dot is refused, at any depth, as it would share a credential", () => {
+    const dotted = {
+      properties: {
+        "acc.token": { type: "string", writeOnly: true },
+        acc: { type: "object", properties: { "x.y": { type: "string" } } },
+        rows: RECORDER_ROW({ "c.d": { type: "string" } }),
+      },
+    };
+    const problems = problemsOf(dotted);
+    expect(problems).toHaveLength(3);
+    expect(problems[0]).toBe(
+      'types/0/config: "acc.token" holds a dot, which a property name may not: ' +
+        "a secret is named by its path through the groups",
+    );
+    expect(problems[1]).toContain('"acc.x.y"');
+    expect(problems[2]).toContain('"rows.c.d"');
   });
 
   it("a list of secrets is refused, as it would be kept in the plain flows", () => {

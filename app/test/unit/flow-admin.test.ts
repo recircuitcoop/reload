@@ -77,6 +77,30 @@ const TYPES: Record<string, FlowNodeType> = {
       properties: { token: { type: "string", writeOnly: true }, label: { type: "string" } },
     },
   },
+  "reload-pkg-grouped": {
+    package: "pkg",
+    kind: "node",
+    label: "Record",
+    config: {
+      type: "object",
+      properties: {
+        label: { type: "string" },
+        account: {
+          type: "object",
+          required: ["password"],
+          properties: {
+            user: { type: "string" },
+            password: { type: "string", writeOnly: true },
+          },
+        },
+        volumes: {
+          type: "array",
+          items: { type: "object", properties: { name: { type: "string" } } },
+        },
+        tags: { type: "array", items: { type: "string" } },
+      },
+    },
+  },
   "reload-pkg-ask": {
     package: "pkg",
     kind: "view",
@@ -396,6 +420,22 @@ describe("flow.list", () => {
     const [flow] = await list(h);
     expect(flow?.health).toEqual({ kind: "steps-not-set-up", count: 2 });
     expect(flow?.steps.filter((step) => !step.setUp).map((step) => step.id)).toEqual(["t", "f"]);
+  });
+
+  it("counts a step whose group lacks a required secret as not set up, as the runtime refuses it", async () => {
+    const tab = structuredClone(RECORDINGS);
+    const step = (id: string, credentials?: Record<string, string>): TabNode => ({
+      id,
+      type: "reload-pkg-grouped",
+      z: "rec",
+      account: { user: "me" },
+      ...(credentials === undefined ? {} : { credentials }),
+      wires: [],
+    });
+    const nodes = [...tab.nodes, step("g1"), step("g2", { "account.password": "pw" })];
+    const [flow] = await list(harness({ tabs: [{ ...tab, nodes }] }));
+    const unset = flow?.steps.filter((each) => !each.setUp).map((each) => each.id);
+    expect(unset).toEqual(["g1"]);
   });
 
   it("is failing since the trailing streak of failures began, and a flow with no source is never Ready", async () => {
@@ -822,13 +862,79 @@ describe("flow.node.form and flow.node.configure", () => {
       await h.write("flow.node.configure", {
         flowId: "rec",
         nodeId: "f",
-        values: { space: "sp2", undeclared: 1 },
+        values: { space: "sp2" },
       }),
     ).toEqual({ ok: true, value: { flowId: "rec", nodeId: "f" } });
     const node = h.engine.tabsById.get("rec")?.nodes.find((each) => each.id === "f");
     expect(node).toMatchObject({ space: "sp2", wires: [["v"]] });
-    expect(node).not.toHaveProperty("undeclared");
     expect(h.engine.calls).toEqual(["updateFlow rec"]);
+  });
+
+  it("refuses a value for a property nobody declares, naming it, and writes nothing", async () => {
+    const h = harness();
+    const answer = await h.write("flow.node.configure", {
+      flowId: "rec",
+      nodeId: "f",
+      values: { space: "sp2", undeclared: 1 },
+    });
+    expect(answer).toMatchObject({
+      value: {
+        refused: {
+          reason: "invalid",
+          problems: [{ path: "/undeclared", message: "is not a declared property" }],
+        },
+      },
+    });
+    expect(h.engine.calls).toEqual([]);
+  });
+
+  /** A harness whose flow also holds a step with a group, a table and a list. */
+  function grouped(account: Record<string, unknown> | undefined) {
+    const h = harness();
+    (h.engine.tabsById.get("rec")?.nodes as TabNode[] | undefined)?.push({
+      id: "g",
+      type: "reload-pkg-grouped",
+      z: "rec",
+      label: "before",
+      ...(account === undefined ? {} : { account }),
+      volumes: [{ name: "media", old_cell: "kept" }],
+      tags: ["a", "b"],
+      wires: [],
+    });
+    return h;
+  }
+
+  it("keeps the group, table and list that Setup does not draw when Continue is pressed", async () => {
+    const h = grouped(undefined);
+    const answer = await h.write("flow.node.configure", {
+      flowId: "rec",
+      nodeId: "g",
+      values: { label: "after" },
+    });
+    expect(answer).toEqual({ ok: true, value: { flowId: "rec", nodeId: "g" } });
+    const node = h.engine.tabsById.get("rec")?.nodes.find((each) => each.id === "g");
+    expect(node).toMatchObject({
+      label: "after",
+      volumes: [{ name: "media", old_cell: "kept" }],
+      tags: ["a", "b"],
+    });
+  });
+
+  it("refuses a required secret in a group never set, and takes it once given", async () => {
+    const h = grouped({ user: "me" });
+    expect(
+      await h.write("flow.node.configure", { flowId: "rec", nodeId: "g", values: {} }),
+    ).toMatchObject({
+      value: { refused: { problems: [{ path: "/account/password", message: "is required" }] } },
+    });
+    expect(
+      await h.write("flow.node.configure", {
+        flowId: "rec",
+        nodeId: "g",
+        values: { "account.password": "pw" },
+      }),
+    ).toEqual({ ok: true, value: { flowId: "rec", nodeId: "g" } });
+    expect(h.engine.secrets.get("g")).toEqual({ "account.password": "pw" });
   });
 
   it("refuses invalid values with the step's name and each problem, and writes nothing", async () => {

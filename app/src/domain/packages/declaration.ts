@@ -177,12 +177,41 @@ function rowSecrets(schema: Readonly<Record<string, unknown>>, path = "", inRow 
   });
 }
 
+/**
+ * The config's property names that hold a dot, by their path ("account.a.b"): a secret's
+ * credential is named by its path through the groups ("account.token"), so a dotted name would
+ * share one credential with a group's property and be judged in the wrong place.
+ */
+function dottedNames(schema: Readonly<Record<string, unknown>>, path = ""): string[] {
+  const properties = schema["properties"];
+  const own = isRecord(properties) ? Object.entries(properties) : [];
+  return own.flatMap(([key, property]) => {
+    const name = path === "" ? key : `${path}.${key}`;
+    const here = key.includes(".") ? [name] : [];
+    if (!isRecord(property)) {
+      return here;
+    }
+    const items = property["items"];
+    return [
+      ...here,
+      ...dottedNames(property, name),
+      ...(isRecord(items) ? dottedNames(items, name) : []),
+    ];
+  });
+}
+
 /** The rules a JSON Schema cannot state: uniqueness, reserved ports, event owners. */
 function beyondTheSchema(declaration: Declaration): string[] {
   const problems: string[] = [];
   const typeIds = new Set<string>();
   declaration.types.forEach((type, index) => {
     const at = `types/${String(index)}`;
+    for (const dotted of dottedNames(type.config)) {
+      problems.push(
+        `${at}/config: ${JSON.stringify(dotted)} holds a dot, which a property name may not: ` +
+          "a secret is named by its path through the groups",
+      );
+    }
     for (const secret of rowSecrets(type.config)) {
       problems.push(
         `${at}/config: ${JSON.stringify(secret)} is a secret inside a table's rows or a list, ` +

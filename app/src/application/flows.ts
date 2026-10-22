@@ -15,9 +15,14 @@
 
 import type { CallOp, OpResult } from "../domain/channel/messages";
 import { remapIds, withoutCredentials, type TabNode } from "../domain/flows/tab";
-import { configOf } from "../domain/forms/coerce";
-import { describedProblems, secretKeys, withoutSecrets } from "../domain/forms/form-model";
-import type { FieldProblem } from "../domain/packages/declaration";
+import { configOf, missingSecrets } from "../domain/forms/coerce";
+import {
+  describedProblems,
+  propertiesOf,
+  secretKeys,
+  withoutSecrets,
+} from "../domain/forms/form-model";
+import type { FieldProblem, JsonSchema } from "../domain/packages/declaration";
 import type { ChildSignal } from "../domain/telemetry/reports";
 import type { Clock } from "../ports/clock";
 import type {
@@ -32,7 +37,7 @@ import type { RequestGuard } from "../ports/request-guard";
 import type { RunStore } from "../ports/run-store";
 import type { SchemaValidator } from "../ports/schema-validator";
 import { FLOWS_FILE_REFUSED } from "./deploy-guard";
-import { flowSummary, requiredSecrets, stepName, type FlowSummary } from "./flow-summary";
+import { flowSummary, stepName, type FlowSummary } from "./flow-summary";
 
 export { flowNodeTypeOf, type FlowSummary } from "./flow-summary";
 
@@ -526,15 +531,24 @@ export class FlowAdmin {
     });
   }
 
-  /** The node with `values` applied, or the refusal naming what is wrong. */
+  /**
+   * The node with `values` applied, or the refusal naming what is wrong. Setup draws only single
+   * values: a group, a table or a list it does not send keeps the node's own, and a scalar it
+   * leaves out is cleared. A value for a property nobody declares is refused.
+   */
   async #configured(node: TabNode, type: FlowNodeType, values: Fields): Promise<TabNode> {
     const secrets = new Set(secretKeys(type.config));
     const plainSchema = withoutSecrets(type.config);
-    const declared = Object.keys(
-      isRecord(plainSchema["properties"]) ? plainSchema["properties"] : {},
-    );
+    const declared = propertiesOf(plainSchema);
+    const undrawn = (property: JsonSchema) =>
+      property["type"] === "object" || property["type"] === "array";
     const plain = Object.fromEntries(
-      declared.filter((key) => key in values).map((key) => [key, values[key]]),
+      declared.flatMap(([key, property]): [string, unknown][] => {
+        if (key in values) {
+          return [[key, values[key]]];
+        }
+        return undrawn(property) && key in node ? [[key, node[key]]] : [];
+      }),
     );
     const given = Object.fromEntries(
       [...secrets].flatMap((key) => {
@@ -542,12 +556,18 @@ export class FlowAdmin {
         return typeof value === "string" && value !== "" ? [[key, value]] : [];
       }),
     );
-    const problems = [...this.#deps.validator.check(plainSchema, plain)];
-    const unset = requiredSecrets(type).filter((key) => !(key in given));
-    if (unset.length > 0) {
-      const set = await this.#deps.engine.secretsSet(node);
-      for (const key of unset.filter((each) => !set.has(each))) {
-        problems.push({ path: `/${key}`, message: "is required" });
+    const known = new Set([...declared.map(([key]) => key), ...secrets]);
+    const problems = [
+      ...Object.keys(values)
+        .filter((key) => !known.has(key))
+        .map((key) => ({ path: `/${key}`, message: "is not a declared property" })),
+      ...this.#deps.validator.check(plainSchema, configOf(type.config, plain)),
+    ];
+    const config = configOf(type.config, plain);
+    if (secrets.size > 0) {
+      const set = new Set([...(await this.#deps.engine.secretsSet(node)), ...Object.keys(given)]);
+      for (const name of missingSecrets(type.config, config, set)) {
+        problems.push({ path: `/${name.replaceAll(".", "/")}`, message: "is required" });
       }
     }
     if (problems.length > 0) {
@@ -557,9 +577,8 @@ export class FlowAdmin {
         params,
       });
     }
-    // The declared values replace the old ones; one the form left out is cleared.
     const kept = Object.fromEntries(
-      Object.entries(node).filter(([key]) => !declared.includes(key)),
+      Object.entries(node).filter(([key]) => !declared.some(([name]) => name === key)),
     );
     return {
       ...kept,
