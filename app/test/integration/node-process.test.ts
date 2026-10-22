@@ -446,7 +446,7 @@ describe("an unexpected exit of a node process", () => {
     clock.advance(60_000);
     expect(node.node.pid).toBeNull();
     const [, refused] = send(node.node, { do: "echo" });
-    expect(refused.ends[0]?.message).toBe("the node process is stopped");
+    expect(refused.ends[0]?.message).toBe("the node process is stopped after repeated exits");
   });
 
   it("a type that says never to restart it is stopped at its first exit: red status, one notice, inputs refused", async () => {
@@ -479,7 +479,7 @@ describe("an unexpected exit of a node process", () => {
     expect(node.node.pid).toBeNull();
     expect(node.logger.lines.filter((line) => /spawned pid/.test(line.text))).toHaveLength(1);
     const [, refused] = send(node.node, { do: "echo" });
-    expect(refused.ends[0]?.message).toBe("the node process is stopped");
+    expect(refused.ends[0]?.message).toBe("the node process is stopped after repeated exits");
   });
 
   it("an instance stopped for good leaves every other alone: another still comes back after an exit", async () => {
@@ -537,7 +537,7 @@ describe("an unexpected exit of a node process", () => {
     expect(node.logger.lines.filter((line) => /spawned pid/.test(line.text))).toHaveLength(1);
     expect(queued.finished).toBe(true);
     const [, refused] = send(node.node, { do: "echo" });
-    expect(refused.ends[0]?.message).toBe("the node process is stopped");
+    expect(refused.ends[0]?.message).toBe("the node process is stopped after repeated exits");
     expect(node.notifier.notices).toHaveLength(1);
   });
 
@@ -667,15 +667,18 @@ describe("a node process whose type declares a heartbeat (spec 2.4.2)", () => {
         () => node.node.pid !== null && node.node.pid !== first,
         3_000,
       );
-      expect(Date.now() - stuck.before).toBeGreaterThanOrEqual(250);
+      // The 250 ms backoff, less the millisecond a timer may fire early by on a loaded machine.
+      expect(Date.now() - stuck.before).toBeGreaterThanOrEqual(249);
       expect(alive(first)).toBe(false);
       expect(wedged.ends[0]?.message).toMatch(/node process exited \(signal SIGKILL\)/);
       expect(node.crashes).toEqual([false]);
       // The new process answers: the episode is over, and its notice withdrawn. Said once only.
+      // Withdrawn once at creation (a redeploy clears all), and once now, after a whole window
+      // of progress from the new process.
       await waitFor(
         "the withdrawal",
-        () => node.notifier.cleared.includes("node-stuck raw"),
-        3_000,
+        () => node.notifier.cleared.filter((kind) => kind === "node-stuck raw").length === 2,
+        8_000,
       );
       expect(node.notifier.notices).toHaveLength(1);
     },

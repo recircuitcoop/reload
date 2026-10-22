@@ -114,7 +114,7 @@ class ChildNodeProcess implements NodeProcess {
   input(message: InputMessage, delivery: InputDelivery): string | null {
     const replayed = this.#journal.claim(message);
     if (this.#closing || this.#stopped) {
-      const why = `the node process is ${this.#closing ? "closing" : "stopped"}`;
+      const why = `the node process is ${this.#closing ? "closing" : "stopped after repeated exits"}`;
       this.#log(
         "warn",
         `refused ${replayed === undefined ? "an input" : `input ${replayed}`}: ${why}`,
