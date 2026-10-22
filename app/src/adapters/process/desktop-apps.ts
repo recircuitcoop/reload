@@ -14,8 +14,11 @@ import fs from "node:fs";
 import * as path from "node:path";
 import type { DesktopApps, FoundApp, StartedApp } from "../../ports/desktop-apps";
 
-/** How long a quit waits for the app to go after SIGTERM before SIGKILL. */
-export const QUIT_GRACE_MS = 5_000;
+/**
+ * How long a quit waits for the app to go after SIGTERM before SIGKILL: the old helper's
+ * `stop_timeout` (helper/config.py), on Quit and on a stop over a resource limit alike.
+ */
+export const QUIT_GRACE_MS = 10_000;
 /** How long the process table may take to answer. */
 const LIST_TIMEOUT_MS = 10_000;
 

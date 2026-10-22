@@ -6,6 +6,7 @@ import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 
 import {
+  commandRunner,
   plainRunner,
   resourceProbeFor,
   type CommandRunner,
@@ -80,10 +81,16 @@ describe("a sample", () => {
         executable: "/Applications/Reload.app/Contents/MacOS/Reload Helper",
       },
       sample: { memoryMb: 200, cpuSeconds: 62.5, openFiles: 4, children: 5 },
+      // The descendants outside its group: a stop of the group would not reach them.
+      strays: [300, 301, 302].map((pid) => ({
+        pid,
+        identity: { started: STARTED, executable: null },
+      })),
     });
     expect(readings.get(300)).toEqual({
       identity: { started: STARTED, executable: null },
       sample: { memoryMb: 2, cpuSeconds: 0.1, openFiles: 1, children: 2 },
+      strays: [{ pid: 302, identity: { started: STARTED, executable: null } }],
     });
   });
 
@@ -139,14 +146,32 @@ describe("a sample", () => {
     expect(calls.filter((call) => call.startsWith("/usr/sbin/lsof"))).toHaveLength(1);
   });
 
+  it("measures nothing for a pid that names a process group", async () => {
+    const table = `${row(0, 0, 0, 1024, "1:00.00")}\n${TABLE}`;
+    const calls: string[] = [];
+    const probe = resourceProbeFor(
+      "darwin",
+      runner({ "/bin/ps": table, "/usr/sbin/lsof": LSOF }, calls),
+    );
+    expect((await probe([0, -1])).size).toBe(0);
+    expect(calls.filter((call) => call.startsWith("/usr/sbin/lsof"))).toEqual([]);
+  });
+
   it("fails as a whole when the process table cannot be read", async () => {
     await expect(
       resourceProbeFor("darwin", runner({ "/bin/ps": new Error("no ps") }))([100]),
     ).rejects.toThrow("no ps");
   });
 
-  it("leaves open files and the executable unread when lsof cannot run, and still reads the rest", async () => {
-    const readings = await resourceProbeFor("darwin", runner({ "/bin/ps": TABLE }))([100]);
+  it("leaves open files and the executable unread when lsof cannot run, says so once, and still reads the rest", async () => {
+    const warned: string[] = [];
+    const probe = resourceProbeFor("darwin", runner({ "/bin/ps": TABLE }), undefined, (message) =>
+      warned.push(message),
+    );
+    await probe([100]);
+    const readings = await probe([100]);
+    expect(warned).toHaveLength(1);
+    expect(warned[0]).toMatch(/^lsof could not run .*open files are not judged/);
     expect(readings.get(100)?.sample).toMatchObject({ memoryMb: 200, openFiles: null });
     expect(readings.get(100)?.identity.executable).toBeNull();
   });
@@ -179,9 +204,42 @@ describe("the commands the probe runs", () => {
       return;
     }
     expect(await plainRunner("/bin/sh", ["-c", 'echo "$LC_ALL $TZ"'])).toBe("C UTC\n");
-    // lsof exits 1 when one of its pids has gone, and still lists the others.
-    expect(await plainRunner("/bin/sh", ["-c", "echo p100; exit 1"])).toBe("p100\n");
     await expect(plainRunner("/bin/sh", ["-c", "exit 1"])).rejects.toThrow();
+  });
+});
+
+describe("a command that hangs or is cut off", () => {
+  it("is killed and rejected at its timeout, however long its child takes to go", async () => {
+    if (process.platform === "win32") {
+      return;
+    }
+    const began = Date.now();
+    // Prints half an answer, then hangs: the half is never taken as one.
+    await expect(
+      commandRunner(200)("/bin/sh", ["-c", "echo '  100     1     1  1024 0:01.00 Wed'; sleep 30"]),
+    ).rejects.toThrow("/bin/sh did not answer within 200 ms");
+    expect(Date.now() - began).toBeLessThan(5_000);
+  });
+
+  it("is a failed read, never a process missing or someone else", async () => {
+    const probe = resourceProbeFor("darwin", () =>
+      Promise.reject(new Error("/bin/ps did not answer within 5000 ms")),
+    );
+    await expect(probe([100])).rejects.toThrow("did not answer");
+  });
+
+  it("ended by a signal or with a failing code is rejected, lsof's exit 1 with an answer kept", async () => {
+    if (process.platform === "win32") {
+      return;
+    }
+    await expect(commandRunner(5_000)("/bin/sh", ["-c", "echo half; kill -9 $$"])).rejects.toThrow(
+      "ended with SIGKILL",
+    );
+    await expect(commandRunner(5_000)("/bin/sh", ["-c", "echo p100; exit 1"])).rejects.toThrow(
+      "ended with code 1",
+    );
+    expect(await commandRunner(5_000)("/bin/sh", ["-c", "echo p100; exit 1"], true)).toBe("p100\n");
+    await expect(commandRunner(5_000)("/no/such/command", [])).rejects.toThrow();
   });
 });
 

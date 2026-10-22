@@ -106,7 +106,7 @@ function harness(samples: Record<number, ResourceSample>) {
       hostsAsked.push([...hosts]);
       const readings = new Map<number, ProcessReading>();
       for (const pid of pids) {
-        readings.set(pid, { sample: samples[pid] ?? QUIET, identity: identity(pid) });
+        readings.set(pid, { sample: samples[pid] ?? QUIET, identity: identity(pid), strays: [] });
       }
       return Promise.resolve(readings);
     },
@@ -114,7 +114,7 @@ function harness(samples: Record<number, ResourceSample>) {
     clock,
     logger: new RecordingLogger(),
     notifier,
-    signal: (pid: number, signal: "SIGKILL") => {
+    signal: (pid: number, signal: "SIGTERM" | "SIGKILL") => {
       signals.push([pid, signal]);
     },
   };
@@ -236,7 +236,7 @@ describe("the shell's managed processes", () => {
       const readings = new Map<number, ProcessReading>();
       for (const pid of pids) {
         const sample = hungry.has(pid) ? HUNGRY : QUIET;
-        readings.set(pid, { sample, identity: identity(pid) });
+        readings.set(pid, { sample, identity: identity(pid), strays: [] });
       }
       return Promise.resolve(readings);
     };
@@ -292,6 +292,36 @@ describe("the shell's managed processes", () => {
     await settle();
     await h.tick(1);
     expect(h.hostsAsked).toEqual([[100]]);
+  });
+
+  it("forget a tripped breaker when a planned restart overtakes its last stop", async () => {
+    const h = harness({});
+    const hungry = new Set<number>();
+    h.parts.probe = (pids) => {
+      const readings = new Map<number, ProcessReading>();
+      for (const pid of pids) {
+        const sample = hungry.has(pid) ? HUNGRY : QUIET;
+        readings.set(pid, { sample, identity: identity(pid), strays: [] });
+      }
+      return Promise.resolve(readings);
+    };
+    const runtime = new FakeChild("runtime");
+    watchManaged({ ...h.parts, children: [runtime], anytype: noAnytype() });
+    for (let generation = 1; generation <= 5; generation += 1) {
+      const pid = 100 + generation;
+      hungry.add(pid);
+      runtime.set("running", pid);
+      await h.tick(8);
+      if (generation < 5) {
+        runtime.set("down", null);
+      }
+    }
+    expect(runtime.stops.at(-1)?.[1]).not.toBeNull(); // the fifth stop is the last...
+    runtime.quit(); // ...but a planned restart's exit comes first, and the supervisor forgets it
+    hungry.add(200);
+    runtime.set("running", 200);
+    await h.tick(8);
+    expect(runtime.stops.at(-1)).toEqual([200, null]); // counted afresh: not the end
   });
 
   it("send nothing to a child once a quit has begun, even one 55 s over its limit", async () => {

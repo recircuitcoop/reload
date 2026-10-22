@@ -58,7 +58,7 @@ export interface ManagedWatchParts {
   readonly logger: Logger;
   readonly notifier: Notifier;
   /** `process.kill`, injected. */
-  readonly signal: (pid: number, signal: "SIGKILL") => void;
+  readonly signal: (pid: number, signal: "SIGTERM" | "SIGKILL") => void;
 }
 
 export function managedWatch(parts: ManagedWatchParts): ManagedWatchDeps {
@@ -71,6 +71,7 @@ export function managedWatch(parts: ManagedWatchParts): ManagedWatchDeps {
       log: (level, message) => {
         logger[level](message);
       },
+      signal: parts.signal,
     }),
     limits: () => readPersonalLimits(parts.settings, logger, parts.notifier),
     notifier: parts.notifier,
@@ -115,12 +116,23 @@ export function watchChild(supervisor: WatchedChild, deps: ManagedWatchDeps): vo
     const status = supervisor.status();
     return status.state === "running" && status.pid === pid;
   };
-  supervisor.onStopping(end);
+  /** The watchdog's breaker tripped, and the stop that ends the child has not crashed it yet. */
+  let tripped = false;
+  supervisor.onStopping(() => {
+    end();
+    if (tripped) {
+      // A quit or planned restart overtook the last stop, and the supervisor forgets it: so
+      // does this count, or the next generation's first breach would end it for good.
+      tripped = false;
+      interventions.reset();
+    }
+  });
   supervisor.onStatus((status) => {
     if (status.state === "down-for-good") {
       // The supervisor's one notice says what happened; a Restart starts a new count.
       end();
       stoppedFor = null;
+      tripped = false;
       interventions.reset();
       return;
     }
@@ -154,6 +166,7 @@ export function watchChild(supervisor: WatchedChild, deps: ManagedWatchDeps): vo
       stopped: (why) => {
         const first = interventions.crashesInWindow() === 0;
         if (!interventions.recordCrash()) {
+          tripped = true;
           const { maxCrashes, windowMs } = DEFAULT_INTERVENTIONS;
           forGood =
             `The Reload ${supervisor.child} went over its resource limits ${String(maxCrashes)} ` +

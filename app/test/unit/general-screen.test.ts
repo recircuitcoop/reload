@@ -708,12 +708,14 @@ describe("Stability defaults (plan 0031, the old helper form's six numbers)", ()
       problems: [
         { path: "children", message: "not-whole" },
         { path: "grace_s", message: "not-positive" },
+        { path: "memory_mb", message: "too-large" },
         { path: "nonsense", message: "not-a-limit" },
       ],
     });
     expect(errors).toEqual({
       children: STRINGS["general.limits.notWhole"],
       grace_s: STRINGS["general.limits.notPositive"],
+      memory_mb: STRINGS["general.limits.tooLarge"],
     });
     expect(limitErrors({ reason: "failed", sentence: "refused.failed" })).toEqual({});
   });

@@ -264,12 +264,15 @@ function generateNodeTypes(
         tree: processTreeFor(process.platform),
         // The resource watchdog of every node process (plan 0031 group A).
         watchdog: resourceWatchdog({
-          probe: resourceProbeFor(process.platform),
+          probe: resourceProbeFor(process.platform, undefined, undefined, (message) => {
+            logger.warn(message);
+          }),
           clock: monotonicClock,
           pace: DEFAULT_WATCH_PACE,
           log: (level, message) => {
             logger[level](message);
           },
+          signal: (pid, signal) => process.kill(pid, signal),
         }),
         newId: randomUUID,
         secrets: logger,

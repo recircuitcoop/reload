@@ -18,6 +18,11 @@ export interface ProcessIdentity {
 export interface ProcessReading {
   readonly sample: ResourceSample;
   readonly identity: ProcessIdentity;
+  /**
+   * The descendants it counts that left its process group: a stop of the group does not reach
+   * them, so they are stopped one by one (the old host's descendant sweep). Known by start time.
+   */
+  readonly strays: readonly { readonly pid: number; readonly identity: ProcessIdentity }[];
 }
 
 /**

@@ -33,7 +33,7 @@ Reload's state is from the code on main (2026-10-21), cited by file.
 
 | # | What the old app did | Rows | Reload today | If Reload doesn't do it | Default |
 |---|---|---|---|---|---|
-| A | **Resource watchdog.** Watched each plugin's memory, CPU over a window, open files and child processes; over a limit for longer than a grace window it stopped the plugin politely, then forced it, then restarted it. A plugin could declare higher limits, and the person could change the defaults. The host process and the Anytype app were watched for resources too: Anytype was stopped politely then forced under the same rule, never judged frozen. | ~25 | **No.** No limits anywhere (`domain/supervision/staleness.ts:41` says they were not carried over). | A runaway plugin (memory leak, CPU loop, file leak) slows or freezes the Mac until the person notices. | **Port** |
+| A | **Resource watchdog.** Watched each plugin's memory, CPU over a window, open files and child processes; over a limit for longer than a grace window it stopped the plugin politely, then forced it, then restarted it. A plugin could declare higher limits. The Anytype app was watched for resources too, never judged frozen. | ~25 | **No.** No limits anywhere (`domain/supervision/staleness.ts:41` says they were not carried over). | A runaway plugin (memory leak, CPU loop, file leak) slows or freezes the Mac until the person notices. | **Port** |
 | B | **Frozen-process detection.** A process still running but no longer answering is restarted. | ~12 | **MCP server: yes** (`application/mcp-heartbeat.ts:95-161`, restart with notice `anytype-service.ts:391-400`). **Plugins: no.** | A plugin that hangs (deadlock, stuck network call) stays hung; its flow stops quietly. | **Port** for plugins that declare a heartbeat |
 | C | **Crash-loop stop.** Five crashes in a short window: stopped for good, the person told. A plugin could say "never restart me" (`restartable: false`). | 5 | **Crash loop: yes** (`domain/supervision/breaker.ts:23`, `application/supervisor.ts:336-359`). **"Never restart me": no.** | A plugin that must not be restarted (it would repeat a side effect) is restarted anyway. | **Port** `restartable: false` |
 | D | **Anytype start, adopt, quit-if-ours.** Starts Anytype when needed; never quits an Anytype the person opened. | 3 | **Yes** (`application/anytype-app.ts:47-84`, quit path `shell/main.ts:237-238`, Quit menu `shell/lifecycle.ts:41-46`). | — | **Record as ported**, with its test named |
@@ -42,6 +42,13 @@ Reload's state is from the code on main (2026-10-21), cited by file.
 | G | **Restart rules.** A plugin that fails to start (bad setup) is not retried in a loop and costs no attempt; one that crashes later is still restarted; the two are told apart. | 3 | **Partly.** Crash vs failed start: told apart. An unreachable Anytype at start is retried on a fixed timer with no backoff (`anytype-service.ts:304-310`). | A setup problem causes endless retries and log noise. | **Port** the backoff |
 | H | **Test safety.** Tests may not write into the person's real folders. | 2 | **Yes, with a gap** (`app/test/home-guard.ts`): a child process started with the inherited environment is not covered (`:23-25`). | A test could write into the real Reload folder through a child process. | **Port** the child-process guard |
 | I | **Log hygiene.** A refused plugin kind is reported once, not every time; the log file's place can be found by the person; the end of the log can be shown. | 3 | **Partly.** Once-only notices exist (`domain/notices/notices.ts:12`); the log path is not shown anywhere; no "show the end of the log". | Support needs the log, and the person cannot find it. | **Port**: log path and "Show log" in General › Advanced |
+
+**Corrected 2026-10-22 (A):** the old app stopped a plugin on sustained CPU like any other limit
+(`tests/test_helper_detection.py::test_sustained_cpu_over_its_limit_is_a_breach`), stopped the
+Anytype it launched, politely then forced, after the same grace window
+(`test_the_anytype_desktop_app_is_stopped_politely_then_killed`, `…_given_the_same_grace_window`),
+and watched the host for resources too. Ported as it did; WI-0031-02's line below is corrected to
+match.
 
 ## The two proofs never run
 
@@ -65,35 +72,34 @@ test's id; nothing is marked without a test.
 
 1. **WI-0031-01 — reopen.** WI-0018-27/28/29 set back from DONE with a note; the ledger rows
    for D marked ported with their tests named.
-2. **WI-0031-02 — A, the resource watchdog** (the largest), as the old app did it: limits on
-   memory, CPU over a window, open files and children for every node process, the runtime and
-   the services process, and an Anytype Reload started; over a limit past the grace window,
-   polite stop then kill; a node process or a child restarted through its crash-loop breaker,
-   which counts the stop, and the watchdog's own breaker (five stops in ten minutes) ends it for
-   good; a notice once an episode. A type may set its own limits in its declaration, and the
-   person may change the defaults in the settings file, as `[helper.defaults]` allowed. CPU stops
-   a process like any other limit, as the old app did. An adopted Anytype is never stopped.
+2. **WI-0031-02 — A, the resource watchdog** (the largest): limits per node process on memory,
+   open files and children, grace window, polite stop then kill, restart through the existing
+   breaker, a notice; limits a package may raise in its declaration; CPU warns, never kills
+   (long jobs are legal); the Anytype app is never stopped.
+   **Corrected 2026-10-22:** the old app stopped on CPU and stopped the Anytype it launched;
+   ported as it did. CPU stops a process like any other limit; an Anytype Reload started is quit
+   (SIGTERM, then SIGKILL after 10 s, through Reload's own handle on it) and not started again;
+   an adopted Anytype is never stopped. The runtime and the services process are watched too,
+   and the person may change the defaults, as `[helper.defaults]` and its form allowed.
    **Implemented 2026-10-21, waiting on its verifier.** `domain/supervision/resources.ts` judges;
    `adapters/process/resource-probe.ts` measures (`ps`, `lsof`, `/proc`; Windows not measured);
    `application/resource-watch.ts` samples and stops; `adapters/process/resource-guard.ts` (node
    processes) and `application/managed-watch.ts` (the children and Anytype) hand processes to
    it. A type's limits are `types[i].reload.limits` (spec 2.4.2); the person's are `limits` in
    `shell-settings.json`, edited in General › Advanced's Stability defaults (the old helper form's
-   six numbers), and a broken one is told to the person naming the file. Defaults are the old app's: 1024 MB, 90 % over 120 s, 1024 files, 32
-   children, 60 s of grace, a sample every 10 s, 10 s from SIGTERM to SIGKILL. Each of the two
-   watchdogs (the runtime's, the shell's) reads the process table once a tick for all it
-   watches (see As built for the cost), and checks identity (pid, start time, executable) just
-   before every signal. Five rows that need this branch and WI-0031-03's together are
-   undecided with wi WI-0031-03, for the round after the merge: `test_helper_tick.py`
-   `test_one_lookup_answers_for_every_managed_process_and_not_only_for_plugins` (the MCP child's
-   own limits), `test_the_mcp_child_is_watched_against_its_own_limits_and_not_the_helper_wide_ones`,
-   `test_one_pass_reads_the_heartbeats_and_samples_every_managed_process`,
-   `test_a_plugin_is_watched_against_the_profile_its_manifest_published`, and
+   six numbers), and a broken one is told to the person naming the file. Defaults are the old
+   app's: 1024 MB, 90 % over 120 s, 1024 files, 32 children, 60 s of grace, a sample every 10 s,
+   10 s from SIGTERM to SIGKILL. Each of the two watchdogs (the runtime's, the shell's) reads the
+   process table once a tick for all it watches (see As built for the cost), and reads a process
+   again (pid, start time, executable) just before each signal it sends by pid. An Anytype Reload
+   started is quit through Reload's own handle on it, which has no pid to reuse, so it needs no
+   read. Three rows that need this branch and WI-0031-03's together are undecided with wi
+   WI-0031-03, for the round after the merge: `test_helper_tick.py`
+   `test_the_mcp_child_is_watched_against_its_own_limits_and_not_the_helper_wide_ones`,
+   `test_one_pass_reads_the_heartbeats_and_samples_every_managed_process`, and
    `test_helper_detection.py::test_the_anytype_desktop_app_is_never_judged_stale`. Left too:
    `test_addon_manifest.py`'s five stability rows about heartbeats and `restartable` (WI-0031-03's
-   fields); and `test_application_tab.py::test_helper_form_publishes_all_supervision_numbers`,
-   undecided with wi WI-0032-09: six of its twelve numbers are edited again, the other six are
-   plan 0032 group 9.
+   fields).
 3. **WI-0031-03 — B,** a heartbeat a package may declare, judged like the MCP child's.
 4. **WI-0031-04 — C,** `restartable: false` in the declaration, honoured by the supervisor.
 5. **WI-0031-05 — E,** `reload --status`, `--quit`, `--log` on the single running instance.
@@ -130,6 +136,12 @@ words.
   `lsof -p a,b,c`; Linux reads /proc), so two `ps` and two `lsof` every 10 s, not aligned; plus
   one more read just before each SIGTERM and SIGKILL. Measured on this Mac with 30 processes, one
   read for all of them takes about 190 ms, against 4.8 s for one read each.
+- **A, what a stop reaches.** A node process is stopped through its process group; a descendant
+  that left the group is counted among its children but a stop of the group does not reach it.
+  Those are stopped one by one, as the old host's descendant sweep ended a child's descendants
+  (`children.py` `stop` reads them first, then `_end_descendants`; tests in
+  `tests/test_host_children.py`, e.g. `test_every_descendant_is_asked_politely_first`): SIGTERM
+  each, then after the 10 s stop timeout read each again and SIGKILL the ones still themselves.
 - **A, sleep and time.** Grace windows are measured on a monotonic clock, and a gap of more than
   two ticks between passes starts every grace window again: one reading over a line before a
   sleep is never taken for an hour over it.

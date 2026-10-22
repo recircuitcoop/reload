@@ -140,7 +140,7 @@ export class JsonSettingsStore
     this.#write("appUpdate", { ...record });
   }
 
-  // Run history's retention (plan 0022 §C): `runs: {retentionDays}`, days or null for Forever.
+  // The person's own resource limits (plan 0031): `limits`, judged as a type's own are.
   readLimitDefaults(): DeclaredLimits | undefined {
     const limits = this.#read()["limits"];
     if (limits === undefined) {
@@ -157,6 +157,7 @@ export class JsonSettingsStore
     this.#write("limits", { ...limits });
   }
 
+  // Run history's retention (plan 0022 §C): `runs: {retentionDays}`, days or null for Forever.
   readRunRetentionDays(): number | null | undefined {
     const runs = this.#read()["runs"];
     if (runs === undefined) {

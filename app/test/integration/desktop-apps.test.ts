@@ -93,7 +93,7 @@ describe("ProcessTableApps and AnytypeApp, with a fake Anytype", () => {
     const began = Date.now();
     await app.quit();
     expect(isAlive(pid)).toBe(false);
-    expect(Date.now() - began).toBeGreaterThanOrEqual(4_000);
+    expect(Date.now() - began).toBeGreaterThanOrEqual(9_000);
     // A second quit of one already gone answers at once.
     await app.quit();
   }, 30_000);

@@ -32,6 +32,9 @@ function overItsLimit(
       clock: systemClock,
       pace: { sampleEveryMs: 100, stopTimeoutMs: 5_000 },
       log: () => undefined,
+      signal: (pid, signal) => {
+        process.kill(pid, signal);
+      },
     }),
     limits: { ...DEFAULT_LIMITS, memoryMb: 1, graceMs: 0 },
     settings: { respawnDelayMs: 100, crashLoop },

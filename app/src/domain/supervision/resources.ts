@@ -70,7 +70,7 @@ const MAX_LIMIT = Number.MAX_SAFE_INTEGER;
 /** What is wrong with one limit as written: not one we know, not above zero, not whole. */
 export interface LimitProblem {
   readonly key: string;
-  readonly problem: "not-a-limit" | "not-positive" | "not-whole";
+  readonly problem: "not-a-limit" | "not-positive" | "not-whole" | "too-large";
 }
 
 /**
@@ -88,8 +88,10 @@ export function limitProblems(value: unknown): readonly LimitProblem[] | null {
     const count = (COUNTS as readonly string[]).includes(key);
     if (!count && !(NUMBERS as readonly string[]).includes(key)) {
       problems.push({ key, problem: "not-a-limit" });
-    } else if (typeof number !== "number" || !(number > 0) || number > MAX_LIMIT) {
+    } else if (typeof number !== "number" || !(number > 0)) {
       problems.push({ key, problem: count ? "not-whole" : "not-positive" });
+    } else if (number > MAX_LIMIT) {
+      problems.push({ key, problem: "too-large" });
     } else if (count && !Number.isInteger(number)) {
       problems.push({ key, problem: "not-whole" });
     }
@@ -107,9 +109,16 @@ export function limitsProblem(value: unknown): string | null {
   if (first === undefined) {
     return null;
   }
-  return first.problem === "not-a-limit"
-    ? `${first.key} is not a limit (the limits are ${[...NUMBERS, ...COUNTS].join(", ")})`
-    : `${first.key} must be ${first.problem === "not-whole" ? "a whole number" : "a number"} greater than zero, and finite`;
+  switch (first.problem) {
+    case "not-a-limit":
+      return `${first.key} is not a limit (the limits are ${[...NUMBERS, ...COUNTS].join(", ")})`;
+    case "too-large":
+      return `${first.key} is larger than Reload can hold (at most ${String(MAX_LIMIT)})`;
+    case "not-whole":
+      return `${first.key} must be a whole number greater than zero`;
+    case "not-positive":
+      return `${first.key} must be a number greater than zero`;
+  }
 }
 
 /** The limits in force, written as a declaration or the settings file writes them. */
@@ -137,6 +146,18 @@ const fromDeclared = (declared: DeclaredLimits): Partial<ResourceLimits> => {
   }).filter(([, value]) => value !== undefined);
   return Object.fromEntries(entries);
 };
+
+/**
+ * The limits in force for one type (spec 2.4.2 rule 3): a type that declared `reload` is a
+ * profile, even one with no `limits` in it, so it gets the documented defaults and the person's
+ * child limit; a type that declared none gets the person's defaults.
+ */
+export function typeLimits(
+  reload: { readonly limits?: DeclaredLimits } | undefined,
+  personal: ResourceLimits,
+): ResourceLimits {
+  return limitsFor(reload === undefined ? undefined : (reload.limits ?? {}), personal);
+}
 
 /** The person's own defaults: what the settings file sets, the documented defaults for the rest. */
 export function personalLimits(settings: DeclaredLimits | undefined): ResourceLimits {
@@ -180,6 +201,9 @@ export interface Breach {
   /** Over for longer than the grace window: acted on. Inside it, only reported. */
   readonly sustained: boolean;
 }
+
+/** The most CPU samples one judge keeps, whatever its window. */
+export const MAX_CPU_SAMPLES = 1000;
 
 /** The judge of one process's samples, stateful between them (grace and CPU windows). */
 export class ResourceWatch {
@@ -243,6 +267,11 @@ export class ResourceWatch {
     const cutoff = now - this.#limits.cpuWindowMs;
     while (samples.length > 1 && (samples[1]?.[0] ?? now) <= cutoff) {
       samples.shift();
+    }
+    // shortcut: at most MAX_CPU_SAMPLES are kept, so a window longer than that many samples
+    // (2.8 hours at one every 10 s) is measured over that span; enough for any limit seen so far.
+    if (samples.length > MAX_CPU_SAMPLES) {
+      samples.splice(0, samples.length - MAX_CPU_SAMPLES);
     }
     const [oldestAt, oldestSeconds] = samples[0] ?? [now, seconds];
     const elapsedMs = now - oldestAt;

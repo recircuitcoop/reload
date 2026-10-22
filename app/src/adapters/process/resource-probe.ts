@@ -16,34 +16,68 @@
 // * A number the platform will not give (no lsof, a process gone between the two calls) is null
 //   on its own: the other numbers are still judged.
 
-import { execFile } from "node:child_process";
+import { spawn } from "node:child_process";
 import { readdir, readlink } from "node:fs/promises";
-import { promisify } from "node:util";
 
 import type { ProcessReading, ResourceProbe } from "../../ports/resource-watch";
 
-/** Runs a command and answers its stdout; rejects when it cannot run or fails. */
-export type CommandRunner = (file: string, args: readonly string[]) => Promise<string>;
-
-const execFileAsync = promisify(execFile);
+/**
+ * Runs a command and answers its whole stdout; rejects when it cannot run, fails or is cut off.
+ * `exitOne` accepts exit code 1 with a complete answer (lsof's, when one of its pids has gone).
+ */
+export type CommandRunner = (
+  file: string,
+  args: readonly string[],
+  exitOne?: boolean,
+) => Promise<string>;
 
 /** A fixed locale and zone, and no other environment: `ps` and `lsof` need neither. */
 const PLAIN = { LC_ALL: "C", TZ: "UTC" };
 
-/** The runner the probe uses: a fixed locale, a short timeout, and lsof's partial answers. */
-export const plainRunner: CommandRunner = async (file, args) => {
-  try {
-    return (await execFileAsync(file, args, { encoding: "utf8", timeout: 5_000, env: PLAIN }))
-      .stdout;
-  } catch (error) {
-    // lsof exits 1 when one of the pids has gone, and still lists the others.
-    const stdout = (error as { stdout?: unknown }).stdout;
-    if (typeof stdout === "string" && stdout !== "") {
-      return stdout;
-    }
-    throw error;
-  }
-};
+/**
+ * The probe's runner. A command that runs past `timeoutMs` is killed and the read rejected at
+ * once, whether or not the child ever goes (a `ps` stuck in an uninterruptible wait would never
+ * close its pipes): half an answer is never read, and the watch's next tick still comes.
+ */
+export function commandRunner(timeoutMs: number): CommandRunner {
+  return (file, args, exitOne = false) =>
+    new Promise((resolve, reject) => {
+      const child = spawn(file, args, { env: PLAIN, stdio: ["ignore", "pipe", "ignore"] });
+      const chunks: Buffer[] = [];
+      let settled = false;
+      const settle = (done: () => void): void => {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          done();
+        }
+      };
+      const timer = setTimeout(() => {
+        child.kill("SIGKILL");
+        settle(() => {
+          reject(new Error(`${file} did not answer within ${String(timeoutMs)} ms`));
+        });
+      }, timeoutMs);
+      child.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
+      child.on("error", (error) => {
+        settle(() => {
+          reject(error);
+        });
+      });
+      child.on("close", (code, signal) => {
+        const stdout = Buffer.concat(chunks).toString("utf8");
+        settle(() => {
+          if (code === 0 || (exitOne && code === 1 && stdout !== "")) {
+            resolve(stdout);
+          } else {
+            reject(new Error(`${file} ended with ${signal ?? `code ${String(code)}`}`));
+          }
+        });
+      });
+    });
+}
+
+export const plainRunner: CommandRunner = commandRunner(5_000);
 
 /** `ps` CPU time, `[[dd-]hh:]mm:ss[.cc]` (Linux and macOS spell it differently), in seconds. */
 function cpuSecondsOf(time: string): number | null {
@@ -94,9 +128,9 @@ function rowsOf(table: string): Map<number, Row> {
  * process group of its own (process-tree.ts) and is judged on its own, so for a host a direct
  * child that leads its own group is left out, with its whole tree.
  */
-function descendantsOf(pid: number, rows: Map<number, Row>, host: boolean): number {
+function descendantsOf(pid: number, rows: Map<number, Row>, host: boolean): number[] {
   const parents = new Set([pid]);
-  let found = 0;
+  const found: number[] = [];
   let grew = true;
   while (grew) {
     grew = false;
@@ -108,7 +142,7 @@ function descendantsOf(pid: number, rows: Map<number, Row>, host: boolean): numb
         continue; // a node process the host started
       }
       parents.add(child);
-      found += 1;
+      found.push(child);
       grew = true;
     }
   }
@@ -158,7 +192,10 @@ export function resourceProbeFor(
   platform: NodeJS.Platform,
   runCommand: CommandRunner = plainRunner,
   procfs: ProcReader = proc,
+  /** Told once, the first time lsof cannot run: open files and identities then go unread. */
+  warn: (message: string) => void = () => undefined,
 ): ResourceProbe {
+  let warned = false;
   if (platform === "win32") {
     // Not measured on Windows yet: no reading, never a crash.
     return () => Promise.resolve(new Map());
@@ -181,9 +218,16 @@ export function resourceProbeFor(
     try {
       const list = pids.map(String).join(",");
       return listedOf(
-        await runCommand("/usr/sbin/lsof", ["-n", "-P", "-w", "-p", list, "-F", "fn"]),
+        await runCommand("/usr/sbin/lsof", ["-n", "-P", "-w", "-p", list, "-F", "fn"], true),
       );
-    } catch {
+    } catch (error) {
+      if (!warned) {
+        warned = true;
+        warn(
+          `lsof could not run (${String(error)}): open files are not judged, and a process is ` +
+            "known by its start time alone, until it can",
+        );
+      }
       return { files: new Map(), executables: new Map() };
     }
   };
@@ -193,7 +237,12 @@ export function resourceProbeFor(
       return readings;
     }
     const rows = rowsOf(await runCommand("/bin/ps", ["-A", "-o", COLUMNS]));
+    // A pid of zero or less names a process group, never one process: never measured, as the
+    // old helper's process table refused it (helper/processes.py default_signaller).
     const present = pids.flatMap((pid) => {
+      if (pid < 1) {
+        return [];
+      }
       const own = rows.get(pid);
       return own === undefined ? [] : [{ pid, own }];
     });
@@ -202,14 +251,21 @@ export function resourceProbeFor(
         ? { files: new Map<number, number>(), executables: new Map<number, string>() }
         : await listed(present.map((p) => p.pid));
     for (const { pid, own } of present) {
+      const descendants = descendantsOf(pid, rows, hosts.has(pid));
       readings.set(pid, {
         identity: { started: own.started, executable: executables.get(pid) ?? null },
         sample: {
           memoryMb: own.rssKb / 1024,
           cpuSeconds: cpuSecondsOf(own.time),
           openFiles: files.get(pid) ?? null,
-          children: descendantsOf(pid, rows, hosts.has(pid)),
+          children: descendants.length,
         },
+        strays: descendants.flatMap((child) => {
+          const row = rows.get(child);
+          return row === undefined || row.pgid === own.pgid
+            ? []
+            : [{ pid: child, identity: { started: row.started, executable: null } }];
+        }),
       });
     }
     return readings;

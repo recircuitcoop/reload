@@ -208,8 +208,11 @@ of any type.
 The runtime watches every node process, and the shell watches the runtime, the services process
 and an Anytype app it started itself, against limits on memory, CPU over a window, open files and
 child processes. Over a limit for LONGER than the grace window, a process is stopped: SIGTERM (to
-its process group, for a node process), then SIGKILL after 10 s, each sent only once the process
-is read again and is still the one first seen (its pid, start time and executable). A node
+its process group, for a node process), then SIGKILL after 10 s, each sent by pid only once the
+process is read again and is still the one first seen (its pid, start time and executable). A
+descendant that left the process group is stopped the same way, one by one. An Anytype app is
+quit through the child handle Reload holds on it, SIGTERM then SIGKILL after 10 s; a handle has
+no pid that could be reused, so it needs no read. A node
 process, the runtime or the services process then comes back as after an unexpected exit (6.5),
 and the stop counts against the crash-loop limit; five stops in ten minutes and it is not started
 again. An Anytype app is not started again. The person is told once an episode. A platform that

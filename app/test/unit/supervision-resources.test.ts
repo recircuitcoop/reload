@@ -8,8 +8,11 @@ import {
   DEFAULT_LIMITS,
   describeBreach,
   limitsFor,
+  limitProblems,
   limitsProblem,
   personalLimits,
+  typeLimits,
+  MAX_CPU_SAMPLES,
   ResourceWatch,
   type Breach,
   type ResourceLimits,
@@ -94,21 +97,55 @@ describe("limits as written", () => {
       "memory is not a limit (the limits are memory_mb, cpu_percent, cpu_window_s, grace_s, " +
         "open_files, children)",
     );
-    expect(limitsProblem({ grace_s: 0 })).toBe(
-      "grace_s must be a number greater than zero, and finite",
-    );
-    expect(limitsProblem({ memory_mb: Infinity })).toBe(
-      "memory_mb must be a number greater than zero, and finite",
-    );
-    expect(limitsProblem({ memory_mb: 1e308 })).not.toBeNull();
+    expect(limitsProblem({ grace_s: 0 })).toBe("grace_s must be a number greater than zero");
     expect(limitsProblem({ children: 1.5 })).toBe(
-      "children must be a whole number greater than zero, and finite",
+      "children must be a whole number greater than zero",
     );
-    expect(limitsProblem({ memory_mb: "1" })).toBe(
-      "memory_mb must be a number greater than zero, and finite",
-    );
+    expect(limitsProblem({ memory_mb: "1" })).toBe("memory_mb must be a number greater than zero");
+    // Too large is its own problem, in its own words: 1e20, and Infinity.
+    for (const value of [1e20, Infinity]) {
+      expect(limitProblems({ memory_mb: value })).toEqual([
+        { key: "memory_mb", problem: "too-large" },
+      ]);
+      expect(limitsProblem({ memory_mb: value })).toBe(
+        "memory_mb is larger than Reload can hold (at most 9007199254740991)",
+      );
+    }
     expect(limitsProblem([])).toBe("must be an object of limits");
     expect(limitsProblem(null)).toBe("must be an object of limits");
+  });
+});
+
+describe("a type's limits (spec 2.4.2 rule 3)", () => {
+  it("are the documented defaults and the person's child limit for a type that declared reload: {}", () => {
+    const personal = personalLimits({ memory_mb: 4096, children: 4 });
+    expect(typeLimits({}, personal)).toEqual({ ...DEFAULT_LIMITS, children: 4 });
+    expect(typeLimits(undefined, personal)).toEqual(personal);
+    expect(typeLimits({ limits: { memory_mb: 2048 } }, personal)).toEqual({
+      ...DEFAULT_LIMITS,
+      memoryMb: 2048,
+      children: 4,
+    });
+  });
+});
+
+describe("CPU samples", () => {
+  it("are kept to a bound, however long the window: older ones are no longer counted", () => {
+    const watch = new ResourceWatch({
+      ...DEFAULT_LIMITS,
+      cpuWindowMs: 1e15,
+      cpuPercent: 5,
+      graceMs: 0,
+    });
+    // A full core for the first 100 samples, then idle for MAX_CPU_SAMPLES more.
+    let cpu = 0;
+    let breaches: readonly Breach[] = [];
+    for (let i = 0; i <= 100 + MAX_CPU_SAMPLES; i += 1) {
+      cpu += i < 100 ? 10 : 0;
+      breaches = watch.observe(sample({ cpuSeconds: cpu }), i * 10_000);
+    }
+    // Over the whole run that is 9 %, over the 5 % line; over the samples kept it is 0 %.
+    expect(breaches).toEqual([]);
   });
 });
 

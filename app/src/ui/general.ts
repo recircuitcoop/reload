@@ -388,7 +388,11 @@ export function limitErrors(refusal: Refusal): Partial<Record<keyof LimitValues,
     const field = LIMIT_FIELDS.find((one) => one.key === path);
     if (field !== undefined) {
       errors[field.key] = t(
-        message === "not-whole" ? "general.limits.notWhole" : "general.limits.notPositive",
+        message === "too-large"
+          ? "general.limits.tooLarge"
+          : message === "not-whole"
+            ? "general.limits.notWhole"
+            : "general.limits.notPositive",
       );
     }
   }

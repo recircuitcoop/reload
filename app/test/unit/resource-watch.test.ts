@@ -42,6 +42,8 @@ function harness(reading: (pid: number) => ResourceSample | null) {
   const events: string[] = [];
   const identities = new Map<number, string>();
   const executables = new Map<number, string | null>();
+  const strays = new Map<number, ProcessReading["strays"]>();
+  const sent: string[] = [];
   /** Fail the read this many reads from now (0: the next one); null: none fails. */
   let failIn: number | null = null;
   const probe: ResourceProbe = (pids, hosts = new Set()) => {
@@ -60,6 +62,7 @@ function harness(reading: (pid: number) => ResourceSample | null) {
       if (sample !== null) {
         readings.set(pid, {
           sample,
+          strays: strays.get(pid) ?? [],
           identity: {
             started: identities.get(pid) ?? `started-${String(pid)}`,
             executable: executables.get(pid) ?? "/usr/bin/python3",
@@ -75,6 +78,12 @@ function harness(reading: (pid: number) => ResourceSample | null) {
     pace: DEFAULT_WATCH_PACE,
     log: (level, message) => {
       logger[level](message);
+    },
+    signal: (pid, signal) => {
+      sent.push(`${signal} ${String(pid)}`);
+      if (pid === 666) {
+        throw Object.assign(new Error("kill ESRCH"), { code: "ESRCH" });
+      }
     },
   });
   const alive = new Set<number>();
@@ -101,6 +110,8 @@ function harness(reading: (pid: number) => ResourceSample | null) {
     target,
     identities,
     executables,
+    strays,
+    sent,
     hostsAsked,
     sleep: (ms: number) => {
       skew += ms;
@@ -286,6 +297,44 @@ describe("the resource watchdog", () => {
     expect(h.passes).toHaveLength(4);
   });
 
+  it("stops the strays that left its group too: asked now, killed after the timeout if still themselves", async () => {
+    const h = harness((pid) => (pid === 10 ? HUNGRY : QUIET));
+    const stray = (pid: number) => ({
+      pid,
+      identity: { started: `started-${String(pid)}`, executable: null },
+    });
+    h.strays.set(10, [stray(41), stray(42), stray(666)]);
+    h.watchdog(h.target(10));
+    await h.tick(8);
+    expect(h.sent).toEqual(["SIGTERM 41", "SIGTERM 42", "SIGTERM 666"]);
+    h.identities.set(42, "started-later"); // 42 went, and its pid was reused
+    h.exit(10); // the process itself stopped when asked: its watch ends, the sweep does not
+    h.clock.advance(STOP);
+    await settle();
+    expect(h.sent.slice(3)).toEqual(["SIGKILL 41", "SIGKILL 666"]);
+    expect(h.logger.has(/stopping 3 process\(es\) left running outside its group/)).toBe(true);
+  });
+
+  it("logs a sweep whose check fails, and kills nothing", async () => {
+    const h = harness(() => HUNGRY);
+    h.strays.set(10, [{ pid: 41, identity: { started: "started-41", executable: null } }]);
+    h.watchdog(h.target(10));
+    await h.tick(8);
+    h.failNextPass(); // the strays' read, the first after the stop timeout, fails
+    h.clock.advance(STOP);
+    await settle();
+    expect(h.sent).toEqual(["SIGTERM 41"]);
+    expect(h.logger.has(/left outside its group could not be checked/)).toBe(true);
+  });
+
+  it("arms no kill for a process its own stop already ended", async () => {
+    const h = harness(() => HUNGRY);
+    const target = h.target(10);
+    h.watchdog({ ...target, stop: () => h.exit(10) });
+    await h.tick(8);
+    expect(h.clock.pending).toBe(0);
+  });
+
   it("tells the probe which watched processes host node processes", async () => {
     const h = harness(() => QUIET);
     h.watchdog(h.target(10, DEFAULT_LIMITS, true));
@@ -393,7 +442,7 @@ describe("the settings file's limits", () => {
 
   it("are refused, naming the file and the problem, when they are not limits", () => {
     expect(() => store({ limits: { memory_mb: null } }).readLimitDefaults()).toThrow(
-      /memory_mb must be a number greater than zero, and finite/,
+      /memory_mb must be a number greater than zero/,
     );
     expect(() => store({ limits: { max_rss_mb: 4096 } }).readLimitDefaults()).toThrow(
       /the limits setting in .*shell-settings\.json: max_rss_mb is not a limit/,

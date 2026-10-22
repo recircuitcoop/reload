@@ -46,6 +46,11 @@ export interface WatchDeps {
   readonly clock: Clock;
   readonly pace: WatchPace;
   readonly log: (level: "warn" | "error", message: string) => void;
+  /**
+   * Send one signal to one pid (`process.kill`), for the strays below a stopped process; only
+   * ever called just after that pid was read again and found to be the same process.
+   */
+  readonly signal: (pid: number, signal: "SIGTERM" | "SIGKILL") => void;
 }
 
 /**
@@ -128,15 +133,15 @@ export function resourceWatchdog(deps: WatchDeps): ResourceWatchdog {
   };
 
   /**
-   * Read `entry` again just before a signal: "same" only if it is still itself. A read that
+   * Read `entry` again just before a signal: its reading if it is still itself. A read that
    * failed is one failed pass ("unknown"): nothing is sent, and the entry is kept. Only a process
    * that is gone, or is someone else now, leaves the watch.
    */
-  const check = async (entry: Entry): Promise<"same" | "unknown" | "ended"> => {
+  const check = async (entry: Entry): Promise<ProcessReading | "unknown" | "ended"> => {
     const { pid } = entry.target;
-    let identity: ProcessIdentity | undefined;
+    let reading: ProcessReading | undefined;
     try {
-      identity = (await deps.probe([pid], hostsOf([entry]))).get(pid)?.identity;
+      reading = (await deps.probe([pid], hostsOf([entry]))).get(pid);
     } catch (error) {
       log("error", `process ${String(pid)} could not be checked before a signal: ${String(error)}`);
       return ended(entry) ? "ended" : "unknown";
@@ -145,15 +150,58 @@ export function resourceWatchdog(deps: WatchDeps): ResourceWatchdog {
       return "ended";
     }
     if (
-      identity === undefined ||
+      reading === undefined ||
       entry.identity === null ||
-      !sameProcess(identity, entry.identity)
+      !sameProcess(reading.identity, entry.identity)
     ) {
       log("warn", `process ${String(pid)} is gone or is another process now; nothing is sent`);
       drop(entry);
       return "ended";
     }
-    return "same";
+    return reading;
+  };
+
+  /** A signal that finds the process already gone has done what it was for. */
+  const send = (pid: number, signal: "SIGTERM" | "SIGKILL"): void => {
+    try {
+      deps.signal(pid, signal);
+    } catch {
+      // ESRCH: gone already
+    }
+  };
+
+  /**
+   * The strays below a stopped process (descendants that left its group, which a stop of the
+   * group does not reach), as the old host's descendant sweep ended them (children.py
+   * `_end_descendants`): asked politely now, and after the stop timeout read again and killed if
+   * still themselves. This runs on even if the watch ends, since its process is gone by then.
+   */
+  const sweep = (strays: ProcessReading["strays"]): void => {
+    if (strays.length === 0) {
+      return;
+    }
+    log("warn", `stopping ${String(strays.length)} process(es) left running outside its group`);
+    for (const stray of strays) {
+      send(stray.pid, "SIGTERM");
+    }
+    deps.clock.after(deps.pace.stopTimeoutMs, () => {
+      void deps
+        .probe(strays.map((stray) => stray.pid))
+        .then((readings) => {
+          for (const stray of strays) {
+            const now = readings.get(stray.pid)?.identity;
+            if (now !== undefined && sameProcess(now, stray.identity)) {
+              send(stray.pid, "SIGKILL");
+            }
+          }
+        })
+        .catch((error: unknown) => {
+          log(
+            "error",
+            `the processes left outside its group could not be checked: ${String(error)}`,
+          );
+        });
+    });
   };
 
   /** SIGKILL after the stop timeout, if it is still itself; a failed check tries again later. */
@@ -165,7 +213,7 @@ export function resourceWatchdog(deps: WatchDeps): ResourceWatchdog {
           return;
         }
         const seen = await check(entry);
-        if (seen === "same") {
+        if (typeof seen === "object") {
           log("warn", `process ${String(entry.target.pid)} did not stop when asked; ending it`);
           entry.target.kill();
           drop(entry);
@@ -181,7 +229,7 @@ export function resourceWatchdog(deps: WatchDeps): ResourceWatchdog {
     const why = breaches.map(describeBreach).join("; ");
     entry.stopping = true;
     const seen = await check(entry);
-    if (seen !== "same") {
+    if (typeof seen !== "object") {
       // Unknown: sampled again next tick, its grace clock kept, so it is judged again then.
       entry.stopping = seen === "ended";
       return;
@@ -189,6 +237,12 @@ export function resourceWatchdog(deps: WatchDeps): ResourceWatchdog {
     log("warn", `process ${String(target.pid)} is over its limits (${why}); stopping it politely`);
     target.stopped(why);
     target.stop();
+    sweep(seen.strays);
+    if (!target.current()) {
+      // Ended by its own stop (an Anytype's quit forces it itself): nothing left to kill.
+      drop(entry);
+      return;
+    }
     killLater(entry, deps.pace.stopTimeoutMs);
   };
 

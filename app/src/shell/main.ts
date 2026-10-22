@@ -372,7 +372,7 @@ async function start(): Promise<DesktopWired["notices"] | null> {
   }
   wireChildCalls(ipcMain, supervisors, toPage);
   watchManaged({
-    probe: resourceProbeFor(process.platform),
+    probe: resourceProbeFor(process.platform, undefined, undefined, logger.warn.bind(logger)),
     settings: new JsonSettingsStore(path.join(userDir, "shell-settings.json")),
     clock: monotonicClock,
     logger,
