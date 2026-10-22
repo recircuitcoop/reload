@@ -131,9 +131,13 @@ export class Supervisor {
     this.#nodeCrashListeners.push(listener);
   }
 
-  /** The first fork. Called once; a second call does nothing. */
+  /**
+   * The first fork. Called once; a second call does nothing, and so does one after a quit began
+   * (Quit while the shell waited on the Anytype app): every other fork follows a running child,
+   * a crash or a person's Restart, each of which a quit has already ruled out.
+   */
   start(): void {
-    if (this.#started) {
+    if (this.#started || this.#quitting) {
       return;
     }
     this.#started = true;

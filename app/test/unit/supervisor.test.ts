@@ -70,6 +70,14 @@ describe("forking", () => {
     expect(launcher.children).toHaveLength(1);
   });
 
+  it("forks nothing once a quit began, as when Quit comes while the shell waits on Anytype", async () => {
+    const { supervisor, launcher } = supervised(obedient);
+    await supervisor.stop();
+    supervisor.start();
+    expect(launcher.children).toEqual([]);
+    expect(supervisor.status().state).toBe("stopped");
+  });
+
   it("is running once the child says ready, with the pid and port it reported", () => {
     const { supervisor, launcher, clock, states } = supervised(obedient);
     supervisor.start();
