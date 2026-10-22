@@ -9,7 +9,7 @@
 // Pure: no I/O, no library.
 
 import type { JsonSchema } from "../packages/declaration";
-import { isSecret, propertiesOf, withoutSecrets } from "./form-model";
+import { propertiesOf, secretsOf, withoutSecrets } from "./form-model";
 
 const INTEGER = /^[+-]?\d+$/;
 const NUMBER = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;
@@ -107,20 +107,58 @@ export function configOf(schema: JsonSchema, node: Fields): Record<string, unkno
       .filter(([key]) => key in node)
       .map(([key]) => [key, node[key]]),
   );
-  return coerceObject(plain, declared);
+  const config = coerceObject(plain, declared);
+  // A secret in a group never rides along in the plain config, whatever the node holds there.
+  for (const [name] of secretsOf(schema)) {
+    const path = name.split(".");
+    let at: unknown = config;
+    for (const segment of path.slice(0, -1)) {
+      at = isRecord(at) ? at[segment] : undefined;
+    }
+    if (isRecord(at)) {
+      Reflect.deleteProperty(at, path.at(-1) as string);
+    }
+  }
+  return config;
 }
 
 /**
  * An instance's `credentials` (spec 2.5.2, 4.1): the declared secrets Node-RED holds for it,
- * each a non-empty string. A secret never set is absent.
+ * each a non-empty string, by its credential's name ("token", or "account.token" for one in a
+ * nested object). A secret never set takes its declared default, and is absent without one.
  */
 export function credentialsOf(schema: JsonSchema, held: Fields): Record<string, string> {
   const credentials: Record<string, string> = {};
-  for (const [key, property] of propertiesOf(schema)) {
-    const value = held[key];
-    if (isSecret(property) && typeof value === "string" && value !== "") {
-      credentials[key] = value;
+  for (const [name, property] of secretsOf(schema)) {
+    const given = held[name];
+    const value = typeof given === "string" && given !== "" ? given : property["default"];
+    if (typeof value === "string" && value !== "") {
+      credentials[name] = value;
     }
   }
   return credentials;
+}
+
+/**
+ * The config with each credential put back where its schema declares it ("account.token" in
+ * `account`), so the whole is judged by the type's own schema: a required secret never set
+ * is refused like any other required value.
+ */
+export function withCredentials(
+  config: Fields,
+  credentials: Readonly<Record<string, string>>,
+): Record<string, unknown> {
+  const whole: Record<string, unknown> = structuredClone(config);
+  for (const [name, value] of Object.entries(credentials)) {
+    const path = name.split(".");
+    let at = whole;
+    for (const segment of path.slice(0, -1)) {
+      if (!isRecord(at[segment])) {
+        at[segment] = {};
+      }
+      at = at[segment] as Record<string, unknown>;
+    }
+    at[path.at(-1) as string] = value;
+  }
+  return whole;
 }

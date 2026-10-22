@@ -27,6 +27,7 @@ import {
 const PROBE = "reload-everycontrol-probe";
 const TICKER = "reload-everycontrol-ticker";
 const SECRET = "s3cret-e2e-9f2c";
+const GROUP_SECRET = "gr0up-s3cret-e2e-41d7";
 
 function request(
   port: number,
@@ -105,6 +106,7 @@ interface EditorNode {
   sizes: unknown;
   root: unknown;
   notes: unknown;
+  account: unknown;
 }
 interface EditorRed {
   view: { importNodes(nodes: unknown[]): void };
@@ -304,11 +306,14 @@ test("the form in the real editor: every control, required marked, rows added, r
     // A column's default list fills a row that has none.
     await expect(field("volumes.1.globs.0")).toHaveValue("WAV/**/*.WAV");
     // Required fields are marked: label, count, volumes, retry.attempts, each row's name and
-    // path; the token, a credential, in the type's own template.
-    await expect(form.getByTestId("reload-required")).toHaveCount(3 + 1 + 2 * 2);
+    // path, and the secret in the Account group; the token, a credential, in the template.
+    await expect(form.getByTestId("reload-required")).toHaveCount(3 + 1 + 2 * 2 + 1);
     await expect(frame.getByTestId("reload-required-token")).toHaveCount(1);
     await expect(frame.locator("#node-input-token")).toHaveCount(1);
     await expect(frame.locator("#node-input-token")).toHaveAttribute("type", "password");
+    // The secret in a group is drawn in its group, a password input like the template's.
+    const password = form.getByTestId("reload-secret-account.password");
+    await expect(password).toHaveAttribute("type", "password");
 
     // Clicks in the tray are dispatched: the hidden test window is small, and Node-RED's
     // sidebar can lie over the edit tray, which is layout, not the form under test. The
@@ -343,6 +348,8 @@ test("the form in the real editor: every control, required marked, rows added, r
     await field("label").fill("Filled");
     await field("count").fill("5");
     await field("retry.attempts").fill("1");
+    await field("account.user").fill("me");
+    await password.fill(GROUP_SECRET);
     await frame.locator("#node-input-token").fill(SECRET);
     await frame.locator("#node-dialog-ok").dispatchEvent("click");
 
@@ -351,8 +358,8 @@ test("the form in the real editor: every control, required marked, rows added, r
         const RED = (window as unknown as { RED: EditorRed }).RED;
         const node = RED.nodes.node("f1");
         RED.editor.validateNode(node);
-        const { valid, label, count, volumes, formats, sizes, root, notes } = node;
-        return { valid, label, count, volumes, formats, sizes, root, notes };
+        const { valid, label, count, volumes, formats, sizes, root, notes, account } = node;
+        return { valid, label, count, volumes, formats, sizes, root, notes, account };
       });
     const saved = {
       valid: true,
@@ -366,6 +373,7 @@ test("the form in the real editor: every control, required marked, rows added, r
       sizes: ["2", "4.5"],
       root: "/Volumes/chosen",
       notes: "one\ntwo",
+      account: { user: "me" },
     };
     expect(await read()).toEqual(saved);
 
@@ -385,8 +393,13 @@ test("the form in the real editor: every control, required marked, rows added, r
       sizes: [2, 4.5],
       root: "/Volumes/chosen",
       notes: "one\ntwo",
+      account: { user: "me" },
     });
-    expect(started?.["credentials"]).toEqual({ token: SECRET });
+    expect(started?.["credentials"]).toEqual({ token: SECRET, "account.password": GROUP_SECRET });
+    // Both secrets are credentials, never in the plain flows.
+    const flowsJson = fs.readFileSync(path.join(userData, "node-red", "flows.json"), "utf8");
+    expect(flowsJson).not.toContain(GROUP_SECRET);
+    expect(flowsJson).not.toContain(SECRET);
 
     await quit(app);
     await expect.poll(() => processesNaming(userData), { timeout: 10_000 }).toEqual([]);

@@ -24,7 +24,7 @@
 // The spike did this in `runtime/runtime.js` with its own journal and its own listener per
 // instance; here the process, the journal and the replay are the runtime's own, handed in.
 
-import { configOf, credentialsOf } from "../../domain/forms/coerce";
+import { configOf, credentialsOf, withCredentials } from "../../domain/forms/coerce";
 import { secretKeys } from "../../domain/forms/form-model";
 import { payloadRefusal, USER_EVENTS_PACKAGE } from "../../domain/events/event-types";
 import type { CloseReason } from "../../domain/journal/entry";
@@ -213,7 +213,7 @@ export class TypeRegistration {
     const config = configOf(schema, raw);
     const credentials = credentialsOf(schema, node.credentials ?? {});
     // Validated with its credentials, so a required secret never set is refused too.
-    const problems = validator.check(schema, { ...config, ...credentials });
+    const problems = validator.check(schema, withCredentials(config, credentials));
     let refusal: string | null =
       problems.length === 0
         ? null

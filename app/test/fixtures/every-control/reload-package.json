@@ -55,6 +55,15 @@
             "title": "Sizes",
             "items": { "type": "number", "minimum": 1, "maximum": 100, "multipleOf": 0.5 }
           },
+          "account": {
+            "type": "object",
+            "title": "Account",
+            "required": ["password"],
+            "properties": {
+              "user": { "type": "string", "title": "User" },
+              "password": { "type": "string", "title": "Password", "writeOnly": true }
+            }
+          },
           "token": { "type": "string", "title": "Token", "writeOnly": true },
           "apikey": { "type": "string", "title": "API key", "x-secret": true },
           "retry": {

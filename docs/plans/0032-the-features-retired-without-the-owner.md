@@ -74,6 +74,13 @@ settings.
   of text and a path with Browse… are controls of their own in the canvas form, in a table's rows
   as at the top; a number carries its bounds and step; a list is saved as a list. 22 rows
   ported; the 23rd, a list of secrets, is group 3's.
+- **Group 3, its data-loss half** (same branch): a secret inside a group is a Node-RED credential
+  named by its path, drawn in its group; a secret in a table's rows, or a list of secrets, is
+  refused at the declaration naming its path; a secret's default is kept. 5 rows ported, and
+  group 1's list of secrets `replaced` by that refusal, as it cannot be a credential. The 14
+  rows of a plugin writing its own settings (written by, who and when, a secret obtained at run
+  time) are not ported: they need a node→runtime write in the protocol and both SDKs, put to the
+  plan's owner as a decision.
 
 Each ported row moves to `ported` with the id of the test that proves the old behaviour. Each
 row an audit called `internal` or `equivalent` gets its new evidence in `reason`, and keeps no

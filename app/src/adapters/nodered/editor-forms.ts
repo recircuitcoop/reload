@@ -15,8 +15,10 @@
 // A property marked `reload.advanced` (spec 2.4.1) is drawn as any other, but in a closed
 // "Advanced" disclosure after the others; it is read back from there the same way.
 //
-// Secrets are not drawn here: they are Node-RED credential inputs in the type's own template,
-// which Node-RED fills and saves itself, and never hands back to the editor (spec 2.5.2).
+// A top-level secret is not drawn here: it is a Node-RED credential input in the type's own
+// template, which Node-RED fills and saves itself, and never hands back to the editor (spec
+// 2.5.2). A secret inside a group is the same credential, named by its path ("account.token"),
+// drawn here in its group, as Node-RED's own inputs are drawn: "set" shown, never its value.
 //
 // This file runs only in the editor's browser page, so no unit test loads it; it is excluded
 // from coverage like the preload bridge, and the e2e drives it in the real editor.
@@ -64,14 +66,20 @@ function registered(type: string): Registered {
 /** A generated type's definition: its full config schema (secrets are left out here). */
 function define(type: string, schema: JsonSchema): void {
   const plain = withoutSecrets(schema);
-  const fields = formModel(plain).fields;
+  // Drawn from the whole schema, so a secret in a group has its place; judged without them.
+  const fields = formModel(schema).fields;
   types.set(type, { schema: plain, fields, validate: ajv.compile(plain) });
+}
+
+/** The node's own values for its declared, non-secret properties, as Node-RED keeps them. */
+function ownOf(entry: Registered, node: Values): Values {
+  const plain = entry.fields.filter((field) => field.control !== "password");
+  return Object.fromEntries(plain.map((field) => [field.key, node[field.key]]));
 }
 
 /** The node's values for its declared properties, coerced as the runtime will coerce them. */
 function valuesOf(entry: Registered, node: Values): Values {
-  const own = Object.fromEntries(entry.fields.map((field) => [field.key, node[field.key]]));
-  return coerceObject(entry.schema, own);
+  return coerceObject(entry.schema, ownOf(entry, node));
 }
 
 /** Each ajv error as the field it is about and what is wrong with it. */
@@ -251,6 +259,19 @@ function list(field: Field, path: string, values: readonly unknown[]): HTMLEleme
   return holder;
 }
 
+/** A secret inside a group: its credential's input, showing only whether it is set. */
+function secret(path: string): HTMLInputElement {
+  const input = element("input", {
+    type: "password",
+    style: "width:70%",
+    "data-reload-secret": path,
+    "data-testid": `reload-secret-${path}`,
+  });
+  const held = editing?.["credentials"];
+  input.value = isRecord(held) && held[`has_${path}`] === true ? SET : "";
+  return input;
+}
+
 /** The controls of `fields`, holding `values`, under `container`; the advanced ones folded. */
 function draw(container: HTMLElement, fields: readonly Field[], values: Values, prefix: string) {
   const advanced = element("details", {
@@ -259,7 +280,7 @@ function draw(container: HTMLElement, fields: readonly Field[], values: Values, 
   });
   advanced.append(element("summary", {}, ADVANCED_LABEL));
   for (const field of fields) {
-    if (field.control === "password") {
+    if (field.control === "password" && prefix === "") {
       continue;
     }
     const path = prefix === "" ? field.key : `${prefix}.${field.key}`;
@@ -272,6 +293,8 @@ function draw(container: HTMLElement, fields: readonly Field[], values: Values, 
       row.append(group);
     } else if (field.control === "table") {
       row.append(table(field, path, Array.isArray(value) ? (value as Values[]) : []));
+    } else if (field.control === "password") {
+      row.append(secret(path));
     } else {
       row.append(control(field, path, value));
     }
@@ -294,6 +317,9 @@ function draw(container: HTMLElement, fields: readonly Field[], values: Values, 
   }
   wireOptions(container, fields);
 }
+
+/** What a set secret's input holds: Node-RED's own placeholder, never the value. */
+const SET = "__PWRD__";
 
 /** The button beside a path field. */
 const BROWSE_LABEL = "Browse…";
@@ -419,20 +445,47 @@ function containerOf(type: string): HTMLElement {
   return found;
 }
 
+/** The node whose form is open: its credentials say which secrets are set. */
+let editing: Values | null = null;
+
 /** oneditprepare: draw the form with the node's values. */
 function prepare(type: string, node: Values): void {
   const container = containerOf(type);
   container.replaceChildren();
+  editing = node;
   browsing = [];
   draw(container, registered(type).fields, node, "");
 }
 
-/** oneditsave: the drawn values back onto the node. */
-function save(type: string, node: Values): void {
-  const values = read(containerOf(type), registered(type).fields);
+/**
+ * oneditsave: the drawn values back onto the node, and each secret drawn in a group to its
+ * credential. True when a secret changed, which Node-RED cannot see itself.
+ */
+function save(type: string, node: Values): boolean {
+  const container = containerOf(type);
+  const values = read(container, registered(type).fields);
   for (const [key, value] of Object.entries(values)) {
     node[key] = value;
   }
+  return saveSecrets(container, node);
+}
+
+/** Each secret drawn in a group to its credential, as Node-RED saves its own inputs. */
+function saveSecrets(container: Element, node: Values): boolean {
+  const held: Values = isRecord(node["credentials"]) ? node["credentials"] : {};
+  node["credentials"] = held;
+  let changed = false;
+  for (const input of container.querySelectorAll<HTMLInputElement>("[data-reload-secret]")) {
+    const name = input.getAttribute("data-reload-secret") ?? "";
+    const set = held[`has_${name}`] === true;
+    if (input.value === SET || (input.value === "" && !set)) {
+      continue;
+    }
+    held[name] = input.value;
+    held[`has_${name}`] = input.value !== "";
+    changed = true;
+  }
+  return changed;
 }
 
 /** A path chosen with Browse… (shell/editor-browse.ts), into the field it was asked for. */

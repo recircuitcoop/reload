@@ -277,8 +277,26 @@ describe("a generated type's instance", () => {
       credentials: {
         token: { type: "password" },
         apikey: { type: "password" },
+        "account.password": { type: "password" },
       },
     });
+  });
+
+  it("hands a secret in a group over under its path, and refuses the group without it", async () => {
+    setUp();
+    const config = probeConfig("acc", { account: { user: "me" } });
+    const refusedNode = create(PROBE, { ...config, id: "acc-bad" }, { token: "t" });
+    expect(refusedNode.errors[0]).toContain("account/password is required");
+    create(PROBE, config, { token: "t", "account.password": "pw" });
+    const file = path.join(scratch, "instances", "acc", "start.json");
+    await waitFor(
+      "the whole start frame",
+      () => fs.existsSync(file) && fs.readFileSync(file, "utf8").endsWith("}"),
+    );
+    const frame = startFrame("acc");
+    expect(frame["credentials"]).toEqual({ token: "t", "account.password": "pw" });
+    expect(frame["config"]).toMatchObject({ account: { user: "me" } });
+    expect(JSON.stringify(frame["config"])).not.toContain("pw");
   });
 
   it("starts nothing when the schema refuses its config, says why, and fails its inputs", async () => {

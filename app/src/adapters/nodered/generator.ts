@@ -87,7 +87,7 @@ function defaultsOf(type: DeclaredType): Record<string, { value: unknown }> {
   return defaults;
 }
 
-/** Node-RED's `credentials`: every secret, as a password (spec 2.5.2). */
+/** Node-RED's `credentials`: every secret, nested ones by their path, as a password (2.5.2). */
 export function credentialsOf(type: DeclaredType): Record<string, { type: "password" }> {
   return Object.fromEntries(secretKeys(type.config).map((key) => [key, { type: "password" }]));
 }
@@ -115,11 +115,12 @@ export function editorHtml(declaration: Declaration, type: DeclaredType): string
     paletteLabel: ${scriptJson(type.label)},
     label: function () { return this.name || ${scriptJson(type.label)}; },
     oneditprepare: function () { window.ReloadForms.prepare(TYPE, this); },
-    oneditsave: function () { window.ReloadForms.save(TYPE, this); }
+    oneditsave: function () { return window.ReloadForms.save(TYPE, this); }
   }`;
-  const secretRows = secretKeys(type.config).map((key) => {
-    const property = (type.config["properties"] as Record<string, Record<string, unknown>>)[key];
-    const title = typeof property?.["title"] === "string" ? property["title"] : key;
+  // A top-level secret is Node-RED's own credential input; one in a group the form draws there.
+  const topSecrets = propertiesOf(type.config).filter(([, property]) => isSecret(property));
+  const secretRows = topSecrets.map(([key, property]) => {
+    const title = typeof property["title"] === "string" ? property["title"] : key;
     const mark = required.has(key)
       ? ` <span class="reload-required" data-testid="reload-required-${escapeHtml(key)}">*</span>`
       : "";

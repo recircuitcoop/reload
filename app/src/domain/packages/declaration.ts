@@ -146,12 +146,49 @@ function deepFreeze<T>(value: T): T {
   return value;
 }
 
+const isSecretProperty = (property: Readonly<Record<string, unknown>>): boolean =>
+  property["writeOnly"] === true || property["x-secret"] === true;
+
+/**
+ * The secrets a config declares inside an array's items, by their path through the schema
+ * ("volumes.token", "volumes.takes.token"), and every list of secrets ("keys"): Node-RED keeps
+ * a node's secrets by name, never per row or per element, so such a value could be neither
+ * stored nor shown, and would land in the plain flows (the old store refused it too).
+ */
+function rowSecrets(schema: Readonly<Record<string, unknown>>, path = "", inRow = false): string[] {
+  const properties = schema["properties"];
+  const own = isRecord(properties) ? Object.entries(properties) : [];
+  return own.flatMap(([key, property]) => {
+    if (!isRecord(property)) {
+      return [];
+    }
+    const name = path === "" ? key : `${path}.${key}`;
+    if (isSecretProperty(property)) {
+      return inRow ? [name] : [];
+    }
+    const items = property["items"];
+    if (isRecord(items) && isSecretProperty(items)) {
+      return [name]; // a list of secrets
+    }
+    return [
+      ...rowSecrets(property, name, inRow),
+      ...(isRecord(items) ? rowSecrets(items, name, true) : []),
+    ];
+  });
+}
+
 /** The rules a JSON Schema cannot state: uniqueness, reserved ports, event owners. */
 function beyondTheSchema(declaration: Declaration): string[] {
   const problems: string[] = [];
   const typeIds = new Set<string>();
   declaration.types.forEach((type, index) => {
     const at = `types/${String(index)}`;
+    for (const secret of rowSecrets(type.config)) {
+      problems.push(
+        `${at}/config: ${JSON.stringify(secret)} is a secret inside a table's rows or a list, ` +
+          "which cannot be stored; declare it as a property of its own",
+      );
+    }
     if (typeIds.has(type.id)) {
       problems.push(`${at}/id: ${JSON.stringify(type.id)} is declared twice in this package`);
     }

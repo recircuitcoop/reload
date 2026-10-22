@@ -390,9 +390,17 @@ export function describedProblems(
   return problems.map(({ path, message }) => describedProblem(schema, path, message)).join(" ");
 }
 
-/** The same schema without its secret properties: what `config` holds (spec 2.5.2). */
+/**
+ * The same schema without its secret properties, at the top and inside nested objects: what
+ * `config` holds (spec 2.5.2). A secret is never a table's column: the declaration refuses it.
+ */
 export function withoutSecrets(schema: JsonSchema): JsonSchema {
-  const kept = propertiesOf(schema).filter(([, property]) => !isSecret(property));
+  const kept = propertiesOf(schema)
+    .filter(([, property]) => !isSecret(property))
+    .map(([key, property]): [string, JsonSchema] => [
+      key,
+      typeOf(property) === "object" ? withoutSecrets(property) : property,
+    ]);
   const keys = new Set(kept.map(([key]) => key));
   const result: Record<string, unknown> = { ...schema, properties: Object.fromEntries(kept) };
   if (Array.isArray(schema["required"])) {
@@ -403,11 +411,23 @@ export function withoutSecrets(schema: JsonSchema): JsonSchema {
   return result;
 }
 
+/**
+ * Every secret property with its credential's name (spec 2.5.2): its key at the top, its path
+ * through the nested objects that hold it below ("account.token"), in declaration order.
+ */
+export function secretsOf(schema: JsonSchema, prefix = ""): [string, JsonSchema][] {
+  return propertiesOf(schema).flatMap(([key, property]): [string, JsonSchema][] => {
+    const name = prefix === "" ? key : `${prefix}.${key}`;
+    if (isSecret(property)) {
+      return [[name, property]];
+    }
+    return typeOf(property) === "object" ? secretsOf(property, name) : [];
+  });
+}
+
 /** The names of the secret properties: the type's Node-RED credentials (spec 2.5.2). */
 export function secretKeys(schema: JsonSchema): string[] {
-  return propertiesOf(schema)
-    .filter(([, property]) => isSecret(property))
-    .map(([key]) => key);
+  return secretsOf(schema).map(([name]) => name);
 }
 
 // ── rows of a table ──────────────────────────────────────────────────────────────────────

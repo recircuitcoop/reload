@@ -273,7 +273,11 @@ A type MAY set its own limits in `reload.limits`:
 
    `title` gives the label, `description` a tip, and `default` the default value.
 2. Secret properties MUST become Node-RED credentials, stored encrypted in `flows_cred.json` with
-   the runtime's credential secret. They MUST NOT appear in `flows.json`.
+   the runtime's credential secret. They MUST NOT appear in `flows.json`. A secret inside a nested
+   object is a credential named by its path (`"account.token"`), drawn in its group and delivered
+   under that name in `start.credentials`. A secret inside an array's items, or a list of
+   secrets, cannot be a credential and is refused at the declaration, naming its path. A secret
+   never set takes its `default`, when it declares one.
 3. Before the start frame, the runtime MUST coerce the form values to the schema types (Node-RED
    returns strings; proven).
    **[UNPROVEN]** Full validation with a real JSON Schema 2020-12 validator (for example ajv); the

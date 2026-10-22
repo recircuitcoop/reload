@@ -31,6 +31,8 @@ before you open Reload, and remove InnyTypes once Reload has opened. See
 - **A list setting is no longer lost when a step's form is saved.** The canvas form draws a list
   of values, ticked options, several lines of text and a file or folder with Browse…, in a table's
   rows as anywhere else, and saves a list as a list.
+- **A secret inside a group of settings is kept**, as a credential like any other; a package that
+  puts a secret in a table's rows or a list is refused, naming it, as it could not be kept.
 
 ## 0.3.0 — 2026-10-15
 
