@@ -35,11 +35,13 @@ import { childEnvironment } from "../domain/anytype/pins";
 import type { AnytypeState, AnytypeStatus } from "../domain/anytype/status";
 import { crashRestartDelay, type BackoffSettings } from "../domain/supervision/backoff";
 import { CrashLoopBreaker, type CrashLoopSettings } from "../domain/supervision/breaker";
+import { MCP_LIMITS } from "../domain/supervision/resources";
 import type { StabilityProfile } from "../domain/supervision/staleness";
 import type { AnytypeApi, McpChild, McpChildLauncher, McpSession, McpTool } from "../ports/anytype";
 import type { Cancel, Clock } from "../ports/clock";
 import type { Logger } from "../ports/logger";
 import type { Notifier } from "../ports/notifier";
+import type { ResourceWatchdog } from "../ports/resource-watch";
 import type { SecretStore } from "../ports/secret-store";
 import { Heartbeat } from "./heartbeat";
 import { Pairing } from "./pair-anytype";
@@ -86,6 +88,8 @@ export interface AnytypeServiceDeps {
   readonly notifier: Notifier;
   /** Called each time a child is validated and ready: the gateway opens on the first (WI-0018-19). */
   readonly onReady?: () => void;
+  /** The resource watchdog the child is handed to, under its own limits; absent: not watched. */
+  readonly watchdog?: ResourceWatchdog;
 }
 
 /**
@@ -408,6 +412,7 @@ export class AnytypeService {
     child.onExit((code, signal) => {
       this.#onExit(child, code, signal);
     });
+    this.#watchResources(child);
     child.session.initialize().then(
       (tools) => {
         if (child !== this.#child) {
@@ -479,6 +484,47 @@ export class AnytypeService {
     );
     void child.stop();
     this.#down(`the Anytype MCP child (pid ${String(child.pid)}) stopped answering pings`);
+  }
+
+  /**
+   * The child under the resource watchdog, against its own limits (MCP_LIMITS), never the
+   * person's defaults. A sustained breach stops it, as a stale one is stopped, and it is started
+   * again under the breaker. Its watch ends once it is no longer the current child.
+   */
+  #watchResources(child: McpChild): void {
+    const { watchdog } = this.#deps;
+    const pid = child.pid;
+    if (watchdog === undefined || pid === null) {
+      return;
+    }
+    let why = "";
+    watchdog({
+      pid,
+      limits: MCP_LIMITS,
+      stop: () => {
+        this.#onOverLimit(child, why);
+      },
+      // Its own stop kills it after the adapter's deadline (mcp-child.ts), through its handle.
+      kill: () => undefined,
+      current: () => child === this.#child && !this.#stopping,
+      stopped: (breaches) => {
+        why = breaches;
+      },
+    });
+  }
+
+  #onOverLimit(child: McpChild, why: string): void {
+    if (child !== this.#child || this.#stopping) {
+      return;
+    }
+    this.#child = null;
+    this.#heartbeat.stop();
+    this.#notice(
+      "mcp-child-restarted",
+      `It (pid ${String(child.pid)}) used ${why}, so it was restarted`,
+    );
+    void child.stop();
+    this.#down(`the Anytype MCP child (pid ${String(child.pid)}) used ${why}`);
   }
 
   /**

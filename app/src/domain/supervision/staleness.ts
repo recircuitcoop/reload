@@ -39,7 +39,7 @@ export const MCP_HEARTBEAT_INTERVAL_MS = 30_000;
 /**
  * The MCP child's declared profile (supervisor.py:105-111). `staleAfterMs` is left unnamed on
  * purpose, so the three-interval rule decides it: 90 s. The resource limits the old profile
- * also declared are not carried: the plan keeps only the staleness judgement for this child.
+ * also declared are MCP_LIMITS (resources.ts).
  */
 export const MCP_STABILITY: StabilityProfile = {
   heartbeatIntervalMs: MCP_HEARTBEAT_INTERVAL_MS,

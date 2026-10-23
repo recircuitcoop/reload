@@ -21,7 +21,9 @@ import { BundledRuntimeLocator } from "../adapters/process/bundled-runtime-locat
 import { unpackedDir } from "../adapters/process/command";
 import { signalProcessLiveness } from "../adapters/process/process-liveness";
 import { SystemRuntimeLocator } from "../adapters/process/runtime-locator";
-import { systemClock } from "../adapters/system/clock";
+import { monotonicClock, systemClock } from "../adapters/system/clock";
+import { resourceProbeFor } from "../adapters/process/resource-probe";
+import { DEFAULT_WATCH_PACE, resourceWatchdog } from "../application/resource-watch";
 import { syncWriter } from "../adapters/system/sync-writer";
 import { FileDownloads } from "../application/anytype-file-download";
 import {
@@ -260,6 +262,18 @@ function startService(config: InitConfig): void {
     notifier: shellNotifier(link),
     // The endpoint opens once, when the first child has been validated (plan 0007's order).
     onReady: () => void endpoint?.start(),
+    // The child under its own resource limits, as the old helper watched it (plan 0031 A).
+    watchdog: resourceWatchdog({
+      probe: resourceProbeFor(process.platform, undefined, undefined, (message) => {
+        logger.warn(message);
+      }),
+      clock: monotonicClock,
+      pace: DEFAULT_WATCH_PACE,
+      log: (level, message) => {
+        logger[level](message);
+      },
+      signal: (pid, signal) => process.kill(pid, signal),
+    }),
   });
   service.start();
 }

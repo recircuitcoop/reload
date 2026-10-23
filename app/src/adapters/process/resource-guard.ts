@@ -6,7 +6,8 @@
 // exit like any other, counted by the crash-loop breaker. The stops are also counted by their
 // own breaker (helper/config.py BreakerSettings: five in ten minutes), because a stop takes at
 // least the grace window and the crash-loop limit could never see five: at that limit the
-// instance is not started again until it is redeployed.
+// instance is not started again until it is redeployed. A stop by the heartbeat, for making no
+// progress, is counted by the same breaker, as the old one counted every intervention.
 //
 // The person is told once per episode: "started it again" when the next process starts after
 // the first stop in the window, and node-stopped, in the breaker's words, at its limit.
@@ -47,14 +48,34 @@ export class NodeResourceGuard {
     );
   }
 
+  /**
+   * The exit of a process, and whether its heartbeat stopped it for making no progress: that stop
+   * is an intervention too, counted with the stops over a limit by the same breaker, as the old
+   * helper counted both (five in ten minutes). Returns `stuck`.
+   */
+  counted(stuck: boolean): boolean {
+    if (stuck) {
+      this.#intervened("no progress");
+    }
+    return stuck;
+  }
+
+  /** One intervention counted; false, with the instance's last words set, at the limit. */
+  #intervened(why: string): boolean {
+    if (this.#interventions.recordCrash()) {
+      return true;
+    }
+    const { maxCrashes, windowMs } = DEFAULT_INTERVENTIONS;
+    this.#forGood =
+      `stopped after going over its resource limits or making no progress ` +
+      `${String(maxCrashes)} times in ${String(windowMs / 60_000)} minutes (the last: ${why})`;
+    this.#stoppedFor = null;
+    return false;
+  }
+
   #stopping(why: string): void {
     const first = this.#interventions.crashesInWindow() === 0;
-    if (!this.#interventions.recordCrash()) {
-      const { maxCrashes, windowMs } = DEFAULT_INTERVENTIONS;
-      this.#forGood =
-        `stopped after going over its resource limits ${String(maxCrashes)} times in ` +
-        `${String(windowMs / 60_000)} minutes (the last: ${why})`;
-      this.#stoppedFor = null;
+    if (!this.#intervened(why)) {
       return;
     }
     // Told once an episode: a node stopped again within the window is the same news.

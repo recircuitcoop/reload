@@ -280,7 +280,7 @@ class ChildNodeProcess implements NodeProcess {
     }
     this.#child = null;
     this.ready = false;
-    const stuck = this.#heartbeat?.takeStuckExit() === true;
+    const stuck = this.#guard.counted(this.#heartbeat?.takeStuckExit() === true);
     this.#cancelTimers();
     if (this.#closing) {
       this.#log("info", `process exited (${how}) on close`);

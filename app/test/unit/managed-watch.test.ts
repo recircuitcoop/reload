@@ -12,6 +12,7 @@ import {
   type WatchedChild,
 } from "../../src/application/managed-watch";
 import { DEFAULT_WATCH_PACE } from "../../src/application/resource-watch";
+import { MCP_STABILITY, staleWindow } from "../../src/domain/supervision/staleness";
 import type { ChildName, ChildState, ChildStatus } from "../../src/domain/supervision/child-state";
 import {
   DEFAULT_LIMITS,
@@ -203,6 +204,24 @@ describe("the shell's managed processes", () => {
         detail: "It used memory 2048 MB, over its limit of 1024 MB, for 70 s, so Reload stopped it",
       },
     ]);
+  });
+
+  it("never judge an Anytype Reload started stale: it sends no heartbeat, and is watched for resources only", async () => {
+    const h = harness({});
+    const anytype = new FakeAnytype(300);
+    watchManaged({ ...h.parts, children: [], anytype: Promise.resolve(anytype) });
+    await settle();
+    // Ten times the MCP child's stale window (90 s) of silence, five times over: sampled at
+    // every tick all the same, and nothing ever sent to it or said about it.
+    const window = staleWindow(MCP_STABILITY) ?? 0;
+    for (let round = 1; round <= 5; round += 1) {
+      await h.tick((window * 10) / EVERY);
+      expect(h.passes).toHaveLength((round * window * 10) / EVERY);
+      expect(h.passes.at(-1)).toEqual([300]);
+    }
+    expect(anytype.stopped).toBe(0);
+    expect(h.signals).toEqual([]);
+    expect(h.notifier.notices).toEqual([]);
   });
 
   it("stop watching an Anytype Reload started once it exits by itself", async () => {

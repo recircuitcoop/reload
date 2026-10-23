@@ -3,7 +3,7 @@ type: plan
 title: The features the old app had that Reload is missing
 status: APPROVED
 created: 2026-10-21
-updated: 2026-10-21
+updated: 2026-10-23
 ---
 
 # 0031 — The features the old app had that Reload is missing
@@ -93,14 +93,14 @@ test's id; nothing is marked without a test.
    process table once a tick for all it watches (see As built for the cost), and reads a process
    again (pid, start time, executable) just before each signal it sends by pid. An Anytype Reload
    started is quit through Reload's own handle on it, which has no pid to reuse, so it needs no
-   read. Three rows that need this branch and WI-0031-03's together are undecided with wi
-   WI-0031-03, for the round after the merge: `test_helper_tick.py`
-   `test_the_mcp_child_is_watched_against_its_own_limits_and_not_the_helper_wide_ones`,
-   `test_one_pass_reads_the_heartbeats_and_samples_every_managed_process`, and
-   `test_helper_detection.py::test_the_anytype_desktop_app_is_never_judged_stale`. Left too:
-   `test_addon_manifest.py`'s five stability rows about heartbeats and `restartable` (WI-0031-03's
-   fields).
-3. **WI-0031-03 — B,** a heartbeat a package may declare, judged like the MCP child's. **DONE** 2026-10-21: `reload.heartbeat` on a type, `ping`/`pong` frames (spec 2.4.2, 4.1, 4.2, C25), judged by the MCP child's own `application/heartbeat.ts`. A `pong` carries the node's progress marker (the old `progress_at`: a node whose frame loop answers while a handler is wedged is judged stuck; C27) and may carry its own health answer, `healthy` (each SDK's health hook, asked off the frame loop with a 0.5 s bound; C26), carried to a once-only notice. A stuck process is restarted as the old policy did: nothing signalled at the verdict, stopped when its escalating backoff has run out. Left for the round after the watchdog branch is merged: the old breaker's count of 5 interventions in 10 minutes across stuck restarts and breaches (the watchdog ports that breaker), and `test_a_plugin_that_may_never_be_relaunched_is_stopped_and_left_stopped` proved for a resource breach, which needs the watchdog's breach path.
+   read. **Rows left for after the merge, DONE 2026-10-23:** the Anytype MCP child is watched in
+   the services process against its own limits (`MCP_LIMITS`: the old profile's 512 MB, 50 % CPU
+   and 256 open files, the documented defaults for the rest; never the person's), stopped
+   through its own handle and started again under its breaker, with a notice
+   (`application/anytype-service.ts`); an Anytype Reload started is watched for resources only,
+   never judged stale; each watcher reads all it watches in one pass; and a declaration may set
+   every supervision field at once (`test_addon_manifest.py::test_every_stability_field_can_be_set`).
+3. **WI-0031-03 — B,** a heartbeat a package may declare, judged like the MCP child's. **DONE** 2026-10-21: `reload.heartbeat` on a type, `ping`/`pong` frames (spec 2.4.2, 4.1, 4.2, C25), judged by the MCP child's own `application/heartbeat.ts`. A `pong` carries the node's progress marker (the old `progress_at`: a node whose frame loop answers while a handler is wedged is judged stuck; C27) and may carry its own health answer, `healthy` (each SDK's health hook, asked off the frame loop with a 0.5 s bound; C26), carried to a once-only notice. A stuck process is restarted as the old policy did: nothing signalled at the verdict, stopped when its escalating backoff has run out. **Left for after the watchdog's merge, DONE 2026-10-23:** a stop for making no progress is counted with the stops over a limit by the watchdog's breaker, five of either in ten minutes and the node is not started again (`adapters/process/resource-guard.ts`, as the old breaker counted every intervention); and a type that says never to restart it is stopped for a resource breach like any other and left stopped (`test_a_plugin_that_may_never_be_relaunched_is_stopped_and_left_stopped`).
 4. **WI-0031-04 — C,** `restartable: false` in the declaration, honoured by the supervisor. **DONE** 2026-10-21: honoured where plugins are restarted, the node process adapter (`adapters/process/node-process.ts`); `application/supervisor.ts` restarts only the runtime and services processes, which no package declares.
 5. **WI-0031-05 — E,** `reload --status`, `--quit`, `--log` on the single running instance.
    **DONE 2026-10-21:** `shell/command-line.ts`; the answer returns as a 0600 file in userData.
@@ -130,11 +130,11 @@ words.
   change: the runtime's node processes (each leads a process group of its own, and is a direct
   child of the runtime) are left out of the runtime's count with their trees, because each is
   judged on its own; in the old app a flow of 33 nodes would have tripped the runtime's 32.
-- **A, the cost of looking.** Two watchdogs, not one lookup: the runtime watches its node
-  processes and the shell watches the runtime, the services process and an Anytype it started.
-  Each reads the process table once a tick for all it watches (one `ps`, and on macOS one
-  `lsof -p a,b,c`; Linux reads /proc), so two `ps` and two `lsof` every 10 s, not aligned; plus
-  one more read just before each SIGTERM and SIGKILL. Measured on this Mac with 30 processes, one
+- **A, the cost of looking.** Three watchdogs, not one lookup: the runtime watches its node
+  processes, the services process watches the MCP child, and the shell watches the runtime, the
+  services process and an Anytype it started. Each reads the process table once a tick for all
+  it watches (one `ps`, and on macOS one `lsof -p a,b,c`; Linux reads /proc), so three `ps` and
+  three `lsof` every 10 s, not aligned; plus one more read just before each SIGTERM and SIGKILL. Measured on this Mac with 30 processes, one
   read for all of them takes about 190 ms, against 4.8 s for one read each.
 - **A, what a stop reaches.** A node process is stopped through its process group; a descendant
   that left the group is counted among its children but a stop of the group does not reach it.
@@ -147,7 +147,8 @@ words.
   sleep is never taken for an hour over it.
 - **A, the watchdog's own breaker.** Five stops over a limit in ten minutes and the process is
   not started again (the old `BreakerSettings`): a stop takes at least the 60 s grace window, so
-  the crash-loop limit of five in two minutes could never end a loop of stops.
+  the crash-loop limit of five in two minutes could never end a loop of stops. A node's stops for
+  making no progress (B) count in the same five, as every intervention did in the old breaker.
 
 ## Risks
 

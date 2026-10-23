@@ -45,6 +45,18 @@ export const DEFAULT_LIMITS: ResourceLimits = {
 };
 
 /**
+ * The Anytype MCP child's own limits (anytype_mcp/supervisor.py MCP_STABILITY: 512 MB, 50 % CPU,
+ * 256 open files), the documented ones for the rest. Never the person's defaults: the child
+ * declared its own, as a package's type does.
+ */
+export const MCP_LIMITS: ResourceLimits = {
+  ...DEFAULT_LIMITS,
+  memoryMb: 512,
+  cpuPercent: 50,
+  openFiles: 256,
+};
+
+/**
  * Limits as they are written: a type's `reload.limits` (spec 2.4.2), or the person's own
  * defaults under `limits` in the settings file (the old `[helper.defaults]`). Every key is
  * optional.

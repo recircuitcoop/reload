@@ -130,12 +130,36 @@ describe("a node instance's resource guard", () => {
     }
     expect(guard.restartable).toBe(false);
     expect(guard.stopText({ maxCrashes: 5, windowMs: 120_000 })).toBe(
-      "stopped after going over its resource limits 5 times in 10 minutes " +
+      "stopped after going over its resource limits or making no progress 5 times in 10 minutes " +
         "(the last: memory 2005 MB, over its limit of 1024 MB, for 61 s)",
     );
     // The four restarts were one episode: told once, with the numbers of its first stop.
     expect(h.notifier.notices).toHaveLength(1);
     expect(h.notifier.notices[0]?.detail).toContain("memory 2001 MB");
+  });
+
+  it("counts a stop for making no progress with the stops over a limit: five of either in ten minutes end the instance", () => {
+    const h = harness();
+    const guard = new NodeResourceGuard(spec("n1", "Summarize"), h.deps);
+    const clock = h.deps.clock as FakeClock;
+    // Three stuck restarts and two breaches, two minutes apart: never five exits in two
+    // minutes, so the crash-loop limit never sees them, but five interventions in ten.
+    expect(guard.counted(false)).toBe(false); // an ordinary exit is no intervention
+    for (const stop of ["stuck", "over", "stuck", "over", "stuck"]) {
+      expect(guard.restartable).toBe(true);
+      if (stop === "stuck") {
+        expect(guard.counted(true)).toBe(true);
+      } else {
+        guard.watch(1, () => true);
+        h.handed.at(-1)?.stopped("memory 2001 MB, over its limit of 1024 MB, for 61 s");
+      }
+      clock.advance(120_000);
+    }
+    expect(guard.restartable).toBe(false);
+    expect(guard.stopText({ maxCrashes: 5, windowMs: 120_000 })).toBe(
+      "stopped after going over its resource limits or making no progress 5 times in 10 minutes " +
+        "(the last: no progress)",
+    );
   });
 
   it("starts a new episode once the ten minutes have passed", () => {

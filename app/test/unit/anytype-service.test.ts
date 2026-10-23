@@ -10,6 +10,9 @@ import {
 import { SessionError, ToolSurfaceMismatchError } from "../../src/domain/anytype/errors";
 import { DEFAULT_BACKOFF } from "../../src/domain/supervision/backoff";
 import { MCP_STABILITY } from "../../src/domain/supervision/staleness";
+import { DEFAULT_LIMITS, MCP_LIMITS } from "../../src/domain/supervision/resources";
+import { DEFAULT_WATCH_PACE, resourceWatchdog } from "../../src/application/resource-watch";
+import type { ProcessReading, ResourceWatchdog } from "../../src/ports/resource-watch";
 import { FakeClock } from "../fakes/clock";
 import { RecordingLogger, RecordingNotifier } from "../fakes/children";
 import { FakeAnytypeApi, FakeMcpLauncher, flush, MemorySecretStore } from "../fakes/anytype";
@@ -17,7 +20,9 @@ import { FakeAnytypeApi, FakeMcpLauncher, flush, MemorySecretStore } from "../fa
 const KEY = "service-key-0123456789";
 const TOOLS = [{ name: "API-search", inputSchema: { type: "object" } }];
 
-function service(options: { key?: string | null; onReady?: () => void } = {}) {
+function service(
+  options: { key?: string | null; onReady?: () => void; watchdog?: ResourceWatchdog } = {},
+) {
   const clock = new FakeClock();
   const logger = new RecordingLogger();
   const notifier = new RecordingNotifier();
@@ -50,6 +55,7 @@ function service(options: { key?: string | null; onReady?: () => void } = {}) {
     logger,
     notifier,
     ...(options.onReady === undefined ? {} : { onReady: options.onReady }),
+    ...(options.watchdog === undefined ? {} : { watchdog: options.watchdog }),
   });
   const advance = async (ms: number, step = 1_000) => {
     let moved = 0;
@@ -505,6 +511,72 @@ describe("the heartbeat", () => {
     await ctx.advance(3_600_000, 30_000);
     expect(ctx.launcher.children).toHaveLength(1);
     expect(ctx.notifier.notices).toEqual([]);
+  });
+});
+
+describe("the MCP child's own resource limits", () => {
+  it("are the ones it declared, never the defaults: over 512 MB it is stopped and restarted, a process beside it is not", async () => {
+    // 600 MB: over the 512 MB the child declared, and under the 1024 MB everything else gets.
+    expect(MCP_LIMITS).toEqual({
+      ...DEFAULT_LIMITS,
+      memoryMb: 512,
+      cpuPercent: 50,
+      openFiles: 256,
+    });
+    const reading = (pid: number): ProcessReading => ({
+      identity: { started: `started ${String(pid)}`, executable: "/node" },
+      sample: { memoryMb: 600, cpuSeconds: 0, openFiles: 10, children: 0 },
+      strays: [],
+    });
+    const passes: number[][] = [];
+    const signals: string[] = [];
+    // One watchdog for the services process: the child, and a process beside it under the
+    // documented limits, judged in the same pass.
+    let one: ResourceWatchdog | null = null;
+    const ctx = service({ watchdog: (target) => (one as ResourceWatchdog)(target) });
+    one = resourceWatchdog({
+      probe: (pids) => {
+        passes.push([...pids]);
+        return Promise.resolve(new Map(pids.map((pid) => [pid, reading(pid)])));
+      },
+      clock: ctx.clock,
+      pace: DEFAULT_WATCH_PACE,
+      log: () => undefined,
+      signal: (pid, signal) => signals.push(`${signal} ${String(pid)}`),
+    });
+    let besideStopped = 0;
+    one({
+      pid: 7,
+      limits: DEFAULT_LIMITS,
+      stop: () => (besideStopped += 1),
+      kill: () => undefined,
+      current: () => true,
+      stopped: () => undefined,
+    });
+    ctx.subject.start();
+    await ctx.advance(0);
+    const child = ctx.launcher.current;
+    expect(child.stops).toBe(0);
+    await ctx.advance(90_000, 10_000);
+    // Both in one read of the process table, each judged against its own line.
+    expect(passes).toContainEqual([7, child.pid]);
+    // Stopped through its own handle, for its own line, and started again under the breaker.
+    expect(child.stops).toBe(1);
+    expect(besideStopped).toBe(0);
+    expect(signals).toEqual([]);
+    expect(ctx.notifier.notices[0]).toMatchObject({ kind: "mcp-child-restarted" });
+    expect(ctx.notifier.notices[0]?.detail).toMatch(
+      new RegExp(`^It \\(pid ${String(child.pid)}\\) used memory 600 MB, over its limit of 512 MB`),
+    );
+    await ctx.advance(1_000);
+    expect(ctx.launcher.children).toHaveLength(2);
+    expect(ctx.subject.status().state).toBe("ready");
+  });
+
+  it("is not watched without a watchdog", async () => {
+    const ctx = await running();
+    await ctx.advance(600_000, 10_000);
+    expect(ctx.launcher.children).toHaveLength(1);
   });
 });
 

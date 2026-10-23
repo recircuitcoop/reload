@@ -19,7 +19,13 @@ import { systemClock } from "../../src/adapters/system/clock";
 import { resourceWatchdog } from "../../src/application/resource-watch";
 import { DEFAULT_LIMITS } from "../../src/domain/supervision/resources";
 import type { NodeProcess } from "../../src/ports/node-process";
-import { alive, startRaw, waitFor, type RawNode } from "../fixtures/raw-node/fixture";
+import {
+  alive,
+  RecordingDelivery,
+  startRaw,
+  waitFor,
+  type RawNode,
+} from "../fixtures/raw-node/fixture";
 import { RecordingLogger } from "../fakes/children";
 
 const started: NodeProcess[] = [];
@@ -32,8 +38,10 @@ afterEach(async () => {
 function overItsLimit(
   tree: ProcessTree,
   crashLoop = { maxCrashes: 5, windowMs: 120_000 },
+  restartable = true,
 ): RawNode {
   const raw = startRaw({
+    restartable,
     tree,
     watchdog: resourceWatchdog({
       probe: resourceProbeFor(process.platform),
@@ -91,6 +99,27 @@ describe.skipIf(process.platform === "win32")("the resource watchdog", () => {
     );
   });
 
+  it("stops one whose type says never to restart it like any other, and leaves it stopped", async () => {
+    const { tree, stopped } = recording();
+    const raw = overItsLimit(tree, undefined, false);
+    await waitFor("the first process", () => raw.node.pid !== null);
+    const first = raw.node.pid as number;
+    await waitFor("the stop", () => stopped.length > 0, 10_000);
+    await waitFor("its end", () => raw.crashes.length === 1, 10_000);
+    // Stopped politely for the breach, once, and never started again however long one waits.
+    expect(stopped).toEqual([first]);
+    expect(raw.crashes).toEqual([true]);
+    // No restart was decided on: the instance refuses inputs as one that is stopped for good.
+    const refused = new RecordingDelivery();
+    raw.node.input({ payload: {}, topic: "t.in.v1", _msgid: "m" }, refused);
+    expect(refused.ends[0]?.message).toBe(
+      "the node process is stopped: this kind is never restarted",
+    );
+    expect(raw.node.pid).toBeNull();
+    expect(raw.notifier.notices.map((notice) => notice.kind)).toEqual(["node-not-restarted"]);
+    expect(raw.host.statuses.at(-1)?.text).toMatch(/its type says never to restart it$/);
+  });
+
   it("counts every stop as an attempt, until the breaker stops restarting it", async () => {
     const { tree, stopped } = recording();
     const raw = overItsLimit(tree, { maxCrashes: 3, windowMs: 120_000 });
@@ -115,7 +144,7 @@ describe.skipIf(process.platform === "win32")("the resource watchdog", () => {
       "node-stopped",
     ]);
     expect(raw.notifier.notices[1]?.detail).toMatch(
-      /^Its process stopped after going over its resource limits 5 times in 10 minutes \(the last: memory \d+ MB/,
+      /^Its process stopped after going over its resource limits or making no progress 5 times in 10 minutes \(the last: memory \d+ MB/,
     );
     expect(raw.node.pid).toBeNull();
   }, 40_000);

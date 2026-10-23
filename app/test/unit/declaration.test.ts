@@ -19,6 +19,7 @@ import {
   type DeclaredType,
   type ParsedDeclaration,
 } from "../../src/domain/packages/declaration";
+import { DEFAULT_LIMITS, typeLimits } from "../../src/domain/supervision/resources";
 
 const REPOSITORY = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
@@ -135,6 +136,34 @@ describe("parseDeclaration", () => {
     expect(refused(declaration({ types: [snapshot] }))).toEqual([
       "types/0/view: must be equal to constant",
     ]);
+  });
+
+  it("lets every supervision field be set at once, and each is what supervises the type (spec 2.4.2)", () => {
+    const reload = {
+      heartbeat: { interval_s: 5, stale_after_s: 60 },
+      limits: {
+        memory_mb: 256,
+        cpu_percent: 50,
+        cpu_window_s: 30,
+        open_files: 64,
+        children: 2,
+        grace_s: 10,
+      },
+      restartable: false,
+    };
+    const parsed = parse(declaration({ types: [nodeType({ reload })] }));
+    const type = parsed.ok ? parsed.declaration.types[0] : undefined;
+    expect(type?.reload).toEqual(reload);
+    expect(type && stabilityOf(type)).toEqual({ heartbeatIntervalMs: 5_000, staleAfterMs: 60_000 });
+    expect(typeLimits(type?.reload, DEFAULT_LIMITS)).toEqual({
+      memoryMb: 256,
+      cpuPercent: 50,
+      cpuWindowMs: 30_000,
+      openFiles: 64,
+      children: 2,
+      graceMs: 10_000,
+    });
+    expect(type?.reload?.restartable).toBe(false);
   });
 
   it("accepts resource limits on a type, and refuses an unknown key or a bad value (spec 2.4.2)", () => {
