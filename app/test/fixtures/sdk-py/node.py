@@ -109,6 +109,15 @@ def run_kitchen() -> None:
             same = node.credential("token") == "ya29-written"
             node.emit("out", {"recorded": outcome["recorded"], "credential": same}, input_id)
             node.done(input_id)
+        elif action == "write-unanswered":
+            # A runtime older than 2.2 never answers: the write fails in its time (C28).
+            try:
+                node.write_settings({"root": "/x"}, timeout=0.05)
+                failed = ""
+            except TimeoutError as caught:
+                failed = str(caught)
+            node.emit("out", {"failed": failed}, input_id)
+            node.done(input_id)
         elif action == "noise":
             # A stray print cannot reach the frame channel at all once the SDK has started
             # (C3): it lands on stderr, redacted, not on the stdout the runtime decodes.

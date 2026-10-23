@@ -28,8 +28,9 @@ import { configOf, credentialsOf, emptyRequired, withCredentials } from "../../d
 import { secretKeys } from "../../domain/forms/form-model";
 import { hiddenPaths, unhidden } from "../../domain/forms/hidden";
 import { uniqueClashes } from "../../domain/forms/unique";
+import type { Notice, Notifier } from "../../ports/notifier";
 import type { WrittenStore } from "../../ports/written-store";
-import { startingValues, writeSettings } from "./written-settings";
+import { forgetWritten, startingValues, writeSettings } from "./written-settings";
 import { unkeptSecretsOfNode } from "../../domain/forms/unkept";
 import { payloadRefusal, USER_EVENTS_PACKAGE } from "../../domain/events/event-types";
 import type { CloseReason } from "../../domain/journal/entry";
@@ -159,6 +160,8 @@ export interface RegistrationDeps {
   readonly personalLimits?: ResourceLimits;
   /** Where what a node writes of its own settings is kept (spec 4.6); absent, none is kept. */
   readonly written?: WrittenStore;
+  /** Where the person is told that such a store cannot be read; absent, only the log says it. */
+  readonly notifier?: Notifier;
 }
 
 /** Node-RED's `wires` of an instance's config: for each output port, the nodes it feeds. */
@@ -218,10 +221,26 @@ export class TypeRegistration {
     const who = `[${typeName} ${node.id}]`;
     const schema = loaded.type.config;
     // What the node itself wrote, merged over what the person deployed (spec 4.6).
-    const written = { store: this.#deps.written, validator, logger, now: Date.now };
+    const notifier = this.#deps.notifier;
+    const written = {
+      store: this.#deps.written,
+      validator,
+      logger,
+      now: Date.now,
+      ...(notifier === undefined
+        ? {}
+        : {
+            notify: (notice: Notice) => {
+              notifier.raise(notice);
+            },
+          }),
+    };
+    const writing = { id: node.id, who, own: loaded.declaration.package, schema };
+    // Set once its close is sent: a write arriving after it is never kept (spec 4.6).
+    let closing = false;
     const { config, credentials } = startingValues(
       written,
-      { id: node.id, who, node: raw },
+      { ...writing, node: raw },
       configOf(schema, raw),
       credentialsOf(schema, node.credentials ?? {}),
     );
@@ -253,7 +272,9 @@ export class TypeRegistration {
       }
     }
     if (refusal !== null || command === null) {
-      this.#refuse(node, who, refusal ?? "it cannot start");
+      this.#refuse(node, who, refusal ?? "it cannot start", () => {
+        forgetWritten(written, writing);
+      });
       return;
     }
 
@@ -285,12 +306,7 @@ export class TypeRegistration {
         node.error(message);
       },
       writeSettings: (values, by) =>
-        writeSettings(
-          written,
-          { id: node.id, who, own: loaded.declaration.package, schema },
-          values,
-          by,
-        ),
+        writeSettings(written, { ...writing, closing: () => closing }, values, by),
     };
     const isView = loaded.type.kind === "view";
     const stability = stabilityOf(loaded.type);
@@ -410,6 +426,10 @@ export class TypeRegistration {
       detachView();
       detachSource();
       const reason: CloseReason = removed ? "removed" : this.#deps.closeReason();
+      closing = true;
+      if (removed) {
+        forgetWritten(written, writing); // deleted: what it wrote goes with it
+      }
       const closed = (): void => {
         if (isView) {
           views.changed(); // a removal drops its pending views (spec 6.7)
@@ -424,14 +444,17 @@ export class TypeRegistration {
   }
 
   /** An instance that cannot start: said on the canvas and in the log; its inputs fail. */
-  #refuse(node: NodeRedNode, who: string, refusal: string): void {
+  #refuse(node: NodeRedNode, who: string, refusal: string, forget: () => void): void {
     this.#deps.logger.error(`${who} not started: ${refusal}`);
     node.status({ fill: "red", shape: "ring", text: "invalid configuration" });
     node.error(`not started: ${refusal}`);
     node.on("input", (_message, _send, done) => {
       done(new Error(`not started: ${refusal}`));
     });
-    node.on("close", (_removed, done) => {
+    node.on("close", (removed, done) => {
+      if (removed) {
+        forget(); // deleted: what it wrote goes with it (spec 4.6)
+      }
       done();
     });
   }

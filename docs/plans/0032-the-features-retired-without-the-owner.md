@@ -67,7 +67,8 @@ every ledger row against its old test, the other checks behaviour under failure.
    a node→runtime message that writes declared values, in both SDKs and the conformance suite,
    refused for a property the author left to the person or in another package's name; a store per
    instance, beside its data folder and never flows.json, holding each value with who wrote it
-   and when, merged over the deployed config at start and on each write without a redeploy;
+   and when, recorded on each write without a redeploy and merged over the deployed config at
+   every start (the running node is not handed its own write again);
    plugin-written secrets kept encrypted with the credential secret, never readable back; and the
    editor drawing such a field read-only, with "Set by <package>, <time>".
 4. **Wave 4, packages and updates:** groups 6, 7, 8, 16, 17, 18, 19, 21, 39.

@@ -22,6 +22,7 @@ import {
 } from "../../src/application/flows";
 import { HEALTH_RUNS, recentRuns } from "../../src/application/flow-summary";
 import type { TabNode } from "../../src/domain/flows/tab";
+import { NO_RECORD, type WrittenRecord } from "../../src/domain/forms/written";
 import type { LoadedType } from "../../src/domain/packages/declaration";
 import { fold, type Run, type RunEvent } from "../../src/domain/runs/run";
 import type {
@@ -37,6 +38,20 @@ import { RecordingLogger } from "../fakes/children";
 import { FakeClock } from "../fakes/clock";
 
 const TYPES: Record<string, FlowNodeType> = {
+  // Its package may set `shared` and `key` too (spec 4.6): either writer, the later one winning.
+  "reload-pkg-shared": {
+    package: "pkg",
+    kind: "node",
+    label: "Shared",
+    config: {
+      type: "object",
+      properties: {
+        shared: { type: "string", title: "Shared", reload: { writtenBy: "both" } },
+        found: { type: "string", title: "Found", reload: { writtenBy: "plugin" } },
+        key: { type: "string", title: "Key", writeOnly: true, reload: { writtenBy: "both" } },
+      },
+    },
+  },
   "reload-pkg-source": {
     package: "pkg",
     kind: "source",
@@ -123,6 +138,8 @@ class MemoryEngine implements FlowEngine {
   readonly calls: string[] = [];
   readonly tabsById = new Map<string, FlowTab>();
   readonly secrets = new Map<string, Record<string, string>>();
+  /** What each node wrote of its own settings (spec 4.6). */
+  readonly records = new Map<string, WrittenRecord>();
   #ids = 0;
   fail: Error | null = null;
 
@@ -177,6 +194,9 @@ class MemoryEngine implements FlowEngine {
   }
   secretsSet(node: TabNode) {
     return Promise.resolve(new Set(Object.keys(this.secrets.get(node.id) ?? {})));
+  }
+  written(nodeId: string): WrittenRecord {
+    return this.records.get(nodeId) ?? NO_RECORD;
   }
 }
 
@@ -998,6 +1018,56 @@ describe("flow.node.form and flow.node.configure", () => {
     const nodes = tab.nodes.map((node) => (node.id === "f" ? { ...node, space: "" } : node));
     const [flow] = await list(harness({ tabs: [{ ...tab, nodes }] }));
     expect(flow?.steps.find((step) => step.id === "f")?.setUp).toBe(false);
+  });
+
+  it("shows the package's value in force with who set it, keeps it the package's on Continue, and stamps a secret given", async () => {
+    const tab: FlowTab = {
+      id: "sh",
+      label: "Shared",
+      disabled: false,
+      nodes: [{ id: "s", type: "reload-pkg-shared", z: "sh", shared: "mine", wires: [], y: 1 }],
+      configs: [],
+    };
+    const h = harness({ tabs: [tab] });
+    const at = "2026-10-23T10:00:00.000Z";
+    h.engine.records.set("s", {
+      values: { shared: "theirs" },
+      secrets: { key: "sealed" },
+      written: { shared: { by: "pkg", at }, key: { by: "pkg", at } },
+    });
+    const form = await h.call("flow.node.form", { flowId: "sh", nodeId: "s" });
+    expect(form).toMatchObject({
+      value: {
+        values: { shared: "theirs" },
+        secretsSet: ["key"],
+        written: { shared: { by: "pkg", at }, key: { by: "pkg", at } },
+      },
+    });
+    expect(JSON.stringify(form)).not.toContain("sealed");
+    // Continue sends back what it showed, and gives a secret: the package's value stays its,
+    // never written into the flow nor stamped the person's; the secret given is stamped.
+    await h.write("flow.node.configure", {
+      flowId: "sh",
+      nodeId: "s",
+      values: { shared: "theirs", key: "mine-now" },
+    });
+    const node = (await h.engine.getFlow("sh"))?.nodes[0] as Record<string, unknown>;
+    expect(node["shared"]).toBe("mine");
+    const stamps = node["reload.written"] as Record<string, string>;
+    expect(Object.keys(stamps)).toEqual(["key"]);
+    // A value for what only its package sets is refused by Setup.
+    const refused = await h.write("flow.node.configure", {
+      flowId: "sh",
+      nodeId: "s",
+      values: { found: "/x" },
+    });
+    expect(refused).toMatchObject({
+      value: {
+        refused: {
+          problems: [{ path: "/found", message: "is set by its package, never by the person" }],
+        },
+      },
+    });
   });
 
   it("sets a secret given, keeps one left empty, and refuses a required one never set", async () => {

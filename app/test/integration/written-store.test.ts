@@ -10,10 +10,15 @@ import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { FsWrittenStore, writtenStore } from "../../src/adapters/fs/written-store";
-import { startingValues, writeSettings } from "../../src/adapters/nodered/written-settings";
+import {
+  forgetWritten,
+  startingValues,
+  writeSettings,
+} from "../../src/adapters/nodered/written-settings";
 import { WRITTEN_PATH, writtenRoute } from "../../src/adapters/nodered/written-route";
 import { AjvSchemaValidator } from "../../src/adapters/schema/ajv-validator";
 import { NO_RECORD, WRITTEN_KEY } from "../../src/domain/forms/written";
+import type { Notice } from "../../src/ports/notifier";
 import type { WrittenStore } from "../../src/ports/written-store";
 import { RecordingLogger } from "../fakes/children";
 
@@ -66,6 +71,19 @@ describe("the store of what a node wrote", () => {
     expect(writtenStore(path.dirname(folder), "a-credential-secret")).toBeInstanceOf(
       FsWrittenStore,
     );
+    // A sealed value moved to another property, or another instance, does not open.
+    const moved = JSON.parse(text) as { secrets: Record<string, string> };
+    const sealed = moved.secrets["token"];
+    fs.writeFileSync(
+      path.join(folder, "n4.settings.json"),
+      JSON.stringify({ values: {}, written: {}, secrets: { token: sealed } }),
+    );
+    expect(() => store.read("n4")).toThrow();
+    fs.writeFileSync(
+      path.join(folder, "n1.settings.json"),
+      JSON.stringify({ values: {}, written: {}, secrets: { other: sealed } }),
+    );
+    expect(() => store.read("n1")).toThrow();
   });
 
   it("refuses an id that would name a file elsewhere, and a file that is no record", () => {
@@ -86,83 +104,125 @@ describe("the store of what a node wrote", () => {
 });
 
 describe("one instance's write, judged and recorded", () => {
-  const deps = (store: WrittenStore = new FsWrittenStore(folder, () => "s")) => ({
+  const deps = (
+    store: WrittenStore = new FsWrittenStore(folder, () => "s"),
+    notices: Notice[] = [],
+  ) => ({
     store,
     validator: new AjvSchemaValidator(),
     logger,
     now: () => Date.parse("2026-10-23T10:00:00.000Z"),
+    notify: (notice: Notice) => {
+      notices.push(notice);
+    },
   });
   const instance = { id: "n1", who: "[probe n1]", own: "monty", schema: SCHEMA };
+  const open = { ...instance, closing: () => false };
 
   it("records what passes, names only what it wrote in the log, and starts the node with it", () => {
     const given = deps();
-    expect(
-      writeSettings(given, instance, { interval: 20, token: SECRET, nope: 1 }, undefined),
-    ).toEqual({
-      recorded: ["interval", "token"],
-      refused: [{ path: "/nope", message: "is not a declared property" }],
-    });
+    expect(writeSettings(given, open, { interval: 20, token: SECRET, nope: 1 }, undefined)).toEqual(
+      {
+        recorded: ["interval", "token"],
+        refused: [{ path: "/nope", message: "is not a declared property" }],
+      },
+    );
     expect(logger.lines).toEqual(["INFO [probe n1] wrote its settings: interval, token"]);
     expect(JSON.stringify(logger.lines)).not.toContain(SECRET);
-    const start = startingValues(
-      given,
-      { id: "n1", who: "[probe n1]", node: {} },
-      { interval: 5 },
-      {},
-    );
-    expect(start).toEqual({ config: { interval: 20 }, credentials: { token: SECRET } });
-    // The person changed it since: theirs.
-    const person = { [WRITTEN_KEY]: { interval: "2026-10-23T11:00:00.000Z" } };
+    expect(startingValues(given, { ...instance, node: {} }, { interval: 5 }, {})).toEqual({
+      config: { interval: 20 },
+      credentials: { token: SECRET },
+    });
+    // The person changed it since, a secret given included: theirs.
+    const person = {
+      [WRITTEN_KEY]: { interval: "2026-10-23T11:00:00.000Z", token: "2026-10-23T11:00:00.000Z" },
+    };
     expect(
-      startingValues(given, { id: "n1", who: "w", node: person }, { interval: 5 }, {}).config,
+      startingValues(given, { ...instance, node: person }, { interval: 5 }, { token: "mine" }),
     ).toEqual({
-      interval: 5,
+      config: { interval: 5 },
+      credentials: { token: "mine" },
     });
     // Nothing recorded, nothing written.
-    expect(
-      writeSettings(given, { ...instance, id: "n9" }, { nope: 1 }, undefined).recorded,
-    ).toEqual([]);
+    expect(writeSettings(given, { ...open, id: "n9" }, { nope: 1 }, undefined).recorded).toEqual(
+      [],
+    );
     expect(fs.existsSync(path.join(folder, "n9.settings.json"))).toBe(false);
   });
 
-  it("refuses what it cannot keep, says so, and starts with nothing it could not read", () => {
-    expect(
-      writeSettings({ ...deps(), store: undefined }, instance, { interval: 2 }, undefined),
-    ).toEqual({
-      recorded: [],
-      refused: [
-        {
-          path: "/interval",
-          message: "cannot be kept: this runtime has no store for what a node writes",
-        },
-      ],
-    });
-    const broken = deps({
-      read: () => NO_RECORD,
-      write: () => {
-        throw new Error("disk full");
-      },
-    });
-    expect(writeSettings(broken, instance, { interval: 2, nope: 1 }, undefined)).toEqual({
-      recorded: [],
-      refused: [
-        { path: "/nope", message: "is not a declared property" },
-        { path: "/interval", message: "could not be kept" },
-      ],
-    });
-    const unreadable = deps({
-      read: () => {
-        throw new Error("garbled");
-      },
-      write: () => undefined,
-    });
-    expect(startingValues(unreadable, { id: "n1", who: "[w]", node: {} }, { a: 1 }, {})).toEqual({
+  it("never writes over a record it cannot read, truncated or sealed under another key, and says so", () => {
+    const file = path.join(folder, "n1.settings.json");
+    const notices: Notice[] = [];
+    writeSettings(deps(), open, { token: SECRET }, undefined);
+    for (const [why, store] of [
+      ["sealed under another credential secret", new FsWrittenStore(folder, () => "another")],
+      ["truncated", new FsWrittenStore(folder, () => "s")],
+    ] as const) {
+      if (why === "truncated") {
+        fs.writeFileSync(file, fs.readFileSync(file, "utf8").slice(0, 20));
+      }
+      const before = fs.readFileSync(file, "utf8");
+      expect(writeSettings(deps(store, notices), open, { interval: 3 }, undefined)).toEqual({
+        recorded: [],
+        refused: [
+          { path: "/interval", message: "could not be kept: what it wrote before cannot be read" },
+        ],
+      });
+      expect(fs.readFileSync(file, "utf8")).toBe(before);
+    }
+    expect(notices.map((notice) => notice.kind)).toEqual([
+      "written-unreadable",
+      "written-unreadable",
+    ]);
+    expect(JSON.stringify(notices)).not.toContain(SECRET);
+    // And it starts with what was deployed, said in the log.
+    expect(startingValues(deps(), { ...instance, node: {} }, { a: 1 }, {})).toEqual({
       config: { a: 1 },
       credentials: {},
     });
     expect(logger.lines.some((line) => line.includes("cannot be read, so none are used"))).toBe(
       true,
     );
+  });
+
+  it("refuses a write once its close was sent, with no store, or when it cannot be kept, and forgets it when deleted", () => {
+    expect(
+      writeSettings(deps(), { ...instance, closing: () => true }, { interval: 2 }, undefined),
+    ).toEqual({
+      recorded: [],
+      refused: [{ path: "/interval", message: "cannot be kept: the step is closing" }],
+    });
+    expect(fs.existsSync(path.join(folder, "n1.settings.json"))).toBe(false);
+    expect(
+      writeSettings({ ...deps(), store: undefined }, open, { interval: 2 }, undefined).refused,
+    ).toEqual([
+      {
+        path: "/interval",
+        message: "cannot be kept: this runtime has no store for what a node writes",
+      },
+    ]);
+    const full = deps({
+      read: () => NO_RECORD,
+      write: () => {
+        throw new Error("disk full");
+      },
+      remove: () => {
+        throw new Error("busy");
+      },
+    });
+    expect(writeSettings(full, open, { interval: 2, nope: 1 }, undefined)).toEqual({
+      recorded: [],
+      refused: [
+        { path: "/nope", message: "is not a declared property" },
+        { path: "/interval", message: "could not be kept" },
+      ],
+    });
+    forgetWritten(full, instance);
+    expect(logger.lines.some((line) => line.includes("could not be removed"))).toBe(true);
+    writeSettings(deps(), open, { interval: 2 }, undefined);
+    forgetWritten(deps(), instance);
+    expect(fs.existsSync(path.join(folder, "n1.settings.json"))).toBe(false);
+    forgetWritten({ ...deps(), store: undefined }, instance);
   });
 });
 

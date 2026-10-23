@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 import { AjvSchemaValidator } from "../../src/adapters/schema/ajv-validator";
 import { formModel } from "../../src/domain/forms/form-model";
-import { isReadOnly } from "../../src/domain/forms/reload-keyword";
+import { isReadOnly, writtenBy } from "../../src/domain/forms/reload-keyword";
 import {
   attributionOf,
   judgeWrite,
@@ -15,11 +15,12 @@ import {
   personStamp,
   personWrites,
   recorded,
+  stampedAtDeploy,
   stamped,
   USER,
+  withoutEcho,
   withWritten,
   WRITTEN_KEY,
-  writtenByOf,
 } from "../../src/domain/forms/written";
 import { parseDeclaration } from "../../src/domain/packages/declaration";
 
@@ -81,12 +82,12 @@ describe("a node's write of its own settings, judged", () => {
         { path: "/interval", message: "is left to the person: its package may not set it" },
       ],
     });
-    expect([writtenByOf(SCHEMA.properties.found), writtenByOf(SCHEMA.properties.shared)]).toEqual([
+    expect([writtenBy(SCHEMA.properties.found), writtenBy(SCHEMA.properties.shared)]).toEqual([
       "plugin",
       "both",
     ]);
-    expect(writtenByOf(SCHEMA.properties.interval)).toBeNull();
-    expect(writtenByOf({ reload: { writtenBy: "anyone" } })).toBeNull();
+    expect(writtenBy(SCHEMA.properties.interval)).toBeNull();
+    expect(writtenBy({ reload: { writtenBy: "anyone" } })).toBeNull();
   });
 
   it("refuses a write in another package's name whole, and records nothing of it", () => {
@@ -156,15 +157,19 @@ describe("the record of who wrote what", () => {
     const record = recorded(NO_RECORD, SCHEMA, { shared: 30 }, "monty", "2026-10-23T10:00:00.000Z");
     // The person typed it first: the package's later write is the one in force.
     const before = { shared: "2026-10-23T09:00:00.000Z", interval: "2026-10-23T09:00:00.000Z" };
-    expect(attributionOf(record, before)).toEqual({
+    expect(attributionOf(record, before, SCHEMA, "monty")).toEqual({
       shared: { by: "monty", at: "2026-10-23T10:00:00.000Z" },
       interval: { by: USER, at: "2026-10-23T09:00:00.000Z" },
     });
-    expect(withWritten({ shared: 20 }, {}, record, before).config).toEqual({ shared: 30 });
+    expect(withWritten({ shared: 20 }, {}, record, before, SCHEMA, "monty").config).toEqual({
+      shared: 30,
+    });
     // The person changed it after: theirs is in force, and it is theirs.
     const after = { shared: "2026-10-23T12:00:00.000Z" };
-    expect(attributionOf(record, after)["shared"]?.by).toBe(USER);
-    expect(withWritten({ shared: 20 }, {}, record, after).config).toEqual({ shared: 20 });
+    expect(attributionOf(record, after, SCHEMA, "monty")["shared"]?.by).toBe(USER);
+    expect(withWritten({ shared: 20 }, {}, record, after, SCHEMA, "monty").config).toEqual({
+      shared: 20,
+    });
     // A secret it wrote goes to the credentials, never the config.
     const secret = recorded(
       NO_RECORD,
@@ -173,7 +178,7 @@ describe("the record of who wrote what", () => {
       "monty",
       "2026-10-23T10:00:00.000Z",
     );
-    expect(withWritten({}, { other: "o" }, secret, {})).toEqual({
+    expect(withWritten({}, { other: "o" }, secret, {}, SCHEMA, "monty")).toEqual({
       config: {},
       credentials: { other: "o", token: "ya29" },
     });
@@ -182,10 +187,130 @@ describe("the record of who wrote what", () => {
       withWritten(
         { a: 1 },
         {},
-        { values: {}, secrets: {}, written: { b: { by: "monty", at: "x" } } },
+        { values: {}, secrets: {}, written: { found: { by: "monty", at: "x" } } },
         {},
+        SCHEMA,
+        "monty",
       ).config,
     ).toEqual({ a: 1 });
+  });
+
+  it("merges only what the instance's own package wrote, of what the schema still lets it set", () => {
+    const at = "2026-10-23T10:00:00.000Z";
+    const record = {
+      values: { found: "/theirs", interval: 5, shared: 30 },
+      secrets: {},
+      written: {
+        // In another package's name, and before an update took the right away: never merged.
+        found: { by: "whodunnit", at },
+        interval: { by: "monty", at },
+        shared: { by: "monty", at },
+      },
+    };
+    expect(
+      withWritten({ found: "/mine", interval: 1 }, {}, record, {}, SCHEMA, "monty").config,
+    ).toEqual({
+      found: "/mine",
+      interval: 1,
+      shared: 30,
+    });
+    expect(Object.keys(attributionOf(record, {}, SCHEMA, "monty"))).toEqual(["shared"]);
+  });
+
+  it("lets a secret the person gave later win over the one its package wrote", () => {
+    const record = recorded(
+      NO_RECORD,
+      SCHEMA,
+      { token: "ya29-theirs" },
+      "monty",
+      "2026-10-23T10:00:00.000Z",
+    );
+    const mine = { token: "2026-10-23T11:00:00.000Z" };
+    expect(withWritten({}, { token: "mine" }, record, mine, SCHEMA, "monty").credentials).toEqual({
+      token: "mine",
+    });
+    expect(withWritten({}, { token: "mine" }, record, {}, SCHEMA, "monty").credentials).toEqual({
+      token: "ya29-theirs",
+    });
+  });
+
+  it("lets the person's edit win from its deploy: written 10:00, edited 10:15, rewritten 10:20, deployed 10:30", () => {
+    const declared = () => new Set(["shared"]);
+    const first = recorded(NO_RECORD, SCHEMA, { shared: 30 }, "monty", "2026-10-23T10:00:00.000Z");
+    const rewritten = recorded(first, SCHEMA, { shared: 31 }, "monty", "2026-10-23T10:20:00.000Z");
+    // Edited at 10:15 on the canvas, Done, not deployed: no stamp yet. Deployed at 10:30.
+    const deployed = [{ id: "n", type: "reload-monty-watch", shared: 20 }];
+    const [node] = stampedAtDeploy(
+      [{ id: "n", type: "reload-monty-watch", shared: 25 }],
+      deployed,
+      declared,
+      "2026-10-23T10:30:00.000Z",
+    ) as Record<string, unknown>[];
+    const person = personWrites(node ?? {});
+    expect(withWritten({ shared: 25 }, {}, rewritten, person, SCHEMA, "monty").config).toEqual({
+      shared: 25,
+    });
+    // Had it been stamped at its Done (10:15), the package's 10:20 write would have won.
+    const atDone = { shared: "2026-10-23T10:15:00.000Z" };
+    expect(withWritten({ shared: 25 }, {}, rewritten, atDone, SCHEMA, "monty").config).toEqual({
+      shared: 31,
+    });
+  });
+
+  it("keeps the package's value in force, sent back unchanged, the node's own", () => {
+    const at = "2026-10-23T10:00:00.000Z";
+    const record = recorded(NO_RECORD, SCHEMA, { shared: 30 }, "monty", at);
+    const node = { id: "n", shared: 20, [WRITTEN_KEY]: { shared: "2026-10-23T09:00:00.000Z" } };
+    // Shown 30 (the package's), sent back 30: still the node's 20, so nothing is the person's.
+    expect(withoutEcho({ shared: 30, interval: 4 }, node, record, SCHEMA, "monty")).toEqual({
+      shared: 20,
+      interval: 4,
+    });
+    // Changed by the person, it is theirs.
+    expect(withoutEcho({ shared: 31 }, node, record, SCHEMA, "monty")).toEqual({ shared: 31 });
+    // Echoed where the node holds none: left out.
+    expect(withoutEcho({ shared: 30 }, { id: "n" }, record, SCHEMA, "monty")).toEqual({});
+  });
+
+  it("stamps a deploy's changes at the deploy: a value changed, a secret given, nothing else", () => {
+    const declared = (type: string) =>
+      type === "reload-monty-watch" ? new Set(["interval", "shared", "token"]) : null;
+    const deployed = [
+      {
+        id: "n",
+        type: "reload-monty-watch",
+        interval: 1,
+        shared: 2,
+        [WRITTEN_KEY]: { interval: "old" },
+      },
+    ];
+    const incoming = [
+      {
+        id: "n",
+        type: "reload-monty-watch",
+        interval: 1,
+        shared: 3,
+        credentials: { token: "new", other: "x" },
+      },
+      { id: "m", type: "reload-monty-watch", interval: 9 },
+      { id: "o", type: "inject" },
+      "not a node",
+    ];
+    const [stampedNode, fresh, other, odd] = stampedAtDeploy(
+      incoming,
+      deployed,
+      declared,
+      "2026-10-23T10:30:00.000Z",
+    );
+    expect((stampedNode as Record<string, unknown>)[WRITTEN_KEY]).toEqual({
+      interval: "old",
+      shared: "2026-10-23T10:30:00.000Z",
+      token: "2026-10-23T10:30:00.000Z",
+    });
+    expect([fresh, other, odd]).toEqual(incoming.slice(1));
+    // Unchanged, and a secret Node-RED kept as it was: nothing is stamped.
+    const same = [{ ...deployed[0], credentials: { token: "__PWRD__" } }];
+    expect(stampedAtDeploy(same, deployed, declared, "x")).toEqual(same);
   });
 
   it("stamps when the person changed each property, on the canvas and in Setup, and only what changed", () => {

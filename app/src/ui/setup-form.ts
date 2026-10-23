@@ -108,6 +108,17 @@ export interface SetupField {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+/**
+ * Shown, never typed over: `readOnly`, or one only its package sets (spec 4.6), as the canvas
+ * reads it (domain/forms/reload-keyword.ts `isReadOnly`, which the UI may not import).
+ */
+function isReadOnly(property: Record<string, unknown>): boolean {
+  const annotation = property["reload"];
+  return (
+    property["readOnly"] === true || (isRecord(annotation) && annotation["writtenBy"] === "plugin")
+  );
+}
+
 function kindOf(property: Record<string, unknown>): SetupFieldKind | null {
   if (property["writeOnly"] === true || property["x-secret"] === true) {
     return "secret";
@@ -184,10 +195,7 @@ export function setupFields(schema: Readonly<Record<string, unknown>>): SetupFie
         options: kind === "enum" ? (property["enum"] as unknown[]).map((each) => String(each)) : [],
         reload: reloadOf(property),
         advanced: isRecord(property["reload"]) && property["reload"]["advanced"] === true,
-        // Shown, never typed over: `readOnly`, or one only its package sets (spec 4.6).
-        readOnly:
-          property["readOnly"] === true ||
-          (isRecord(property["reload"]) && property["reload"]["writtenBy"] === "plugin"),
+        readOnly: isReadOnly(property),
         pathKind:
           kind === "path" && isRecord(property["reload"])
             ? (property["reload"]["path"] as "file" | "folder")

@@ -724,15 +724,26 @@ Every frame is a JSON object with a string field `t`.
    refused whole, and nothing of it is recorded.
 3. What is recorded is kept per instance, beside its `data_dir` and never in the flows file:
    each value with who wrote it (the package) and when, one record per property however many
-   rows a table holds. A secret's value is kept apart, encrypted with the runtime's credential
-   secret, and never read back by anyone but the node: it is not in `config`, not in the editor,
-   not in Setup, which say only that it is set.
+   rows a table holds. A secret's value is kept apart, encrypted (AES-256-GCM, its key derived
+   from the runtime's credential secret by HKDF-SHA256, bound to `<instance>\0<property>`),
+   and never read back by anyone but the node: it is not in `config`, not in the editor, not in
+   Setup, which say only that it is set. A record that cannot be read (damaged, or sealed under
+   another credential secret) is kept as it is: every later write is refused ("could not be
+   kept") and the person told once. A write from an instance whose `close` was sent is refused
+   ("the step is closing"). The record goes when its node is deleted.
 4. At every `start` the recorded values are merged over the deployed config (a secret into
-   `credentials`), each where it is newer than the person's own last change of that property
-   (`reload.written` on the node, which the editor and Setup stamp); a write needs no redeploy.
-   The SDKs keep a secret the node wrote for its `credentials` at once.
-5. The person may not change a `"plugin"` property: the editor and Setup draw it read-only, and
-   a save keeps it as it was.
+   `credentials`), each only where it was written by the instance's own package, the current
+   schema still lets the package set it, and it is newer than the person's own last change of
+   that property (`reload.written` on the node: stamped at the deploy for a change on the canvas,
+   a secret given included, and at Setup's Continue). A write is recorded with no redeploy, but
+   the running node is not handed it again: it has it, and every later start carries it. The
+   SDKs keep a secret the node wrote for its `credentials` at once.
+5. The person may not change a `"plugin"` property: the editor and Setup draw it read-only, a
+   save keeps it as it was, and Setup's Continue refuses a value for it. Where the value in force
+   is the package's, the editor and Setup show it, with "Set by <package>, <time>"; sent back
+   unchanged, it stays the package's, never written into the flows as the person's.
+6. A write is answered or it fails: the SDKs reject one with no answer within 30 s (a runtime
+   older than 2.2 never answers, and nothing was recorded) and one still waiting at `close`.
 
 ### 4.5 JSON Schemas for the frames
 

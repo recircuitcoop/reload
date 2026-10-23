@@ -14,6 +14,7 @@ import {
 } from "../../domain/forms/written";
 import type { JsonSchema } from "../../domain/packages/declaration";
 import type { Logger } from "../../ports/logger";
+import type { Notice } from "../../ports/notifier";
 import type { SchemaValidator } from "../../ports/schema-validator";
 import type { WrittenStore } from "../../ports/written-store";
 
@@ -23,90 +24,105 @@ export interface WrittenSettingsDeps {
   readonly validator: Pick<SchemaValidator, "check">;
   readonly logger: Logger;
   readonly now: () => number;
+  /** Tell the person once that a store cannot be read (`written-unreadable`). */
+  readonly notify?: (notice: Notice) => void;
 }
 
-/** The instance's record; the empty one, said in the log, when it cannot be read. */
-function recordOf(deps: WrittenSettingsDeps, instanceId: string, who: string): WrittenRecord {
+/** One instance as these judge it: its id, its log prefix, its package and its config schema. */
+export interface WritingInstance {
+  readonly id: string;
+  readonly who: string;
+  readonly own: string;
+  readonly schema: JsonSchema;
+}
+
+/** The instance's record; null when it cannot be read, which is said, never written over. */
+function recordOf(deps: WrittenSettingsDeps, instance: WritingInstance): WrittenRecord | null {
   try {
-    return deps.store?.read(instanceId) ?? NO_RECORD;
+    return deps.store?.read(instance.id) ?? NO_RECORD;
   } catch (error) {
     deps.logger.error(
-      `${who} the settings it wrote cannot be read, so none are used: ${String(error)}`,
+      `${instance.who} the settings it wrote cannot be read, so none are used and none are ` +
+        `kept: ${String(error)}`,
     );
-    return NO_RECORD;
+    deps.notify?.({
+      kind: "written-unreadable",
+      subject: instance.who,
+      detail: "Its file of settings it wrote cannot be read",
+    });
+    return null;
   }
 }
 
 /**
  * The config and credentials an instance starts with: what its node wrote merged over what the
- * person deployed, wherever the node's write is the later one (domain/forms/written.ts).
+ * person deployed, wherever the node's write is in force and the later one (domain/forms/written).
  */
 export function startingValues(
   deps: WrittenSettingsDeps,
-  instance: {
-    readonly id: string;
-    readonly who: string;
-    readonly node: Readonly<Record<string, unknown>>;
-  },
+  instance: WritingInstance & { readonly node: Readonly<Record<string, unknown>> },
   config: Readonly<Record<string, unknown>>,
   credentials: Readonly<Record<string, string>>,
 ): { config: Record<string, unknown>; credentials: Record<string, string> } {
-  const record = recordOf(deps, instance.id, instance.who);
-  return withWritten(config, credentials, record, personWrites(instance.node));
+  const record = recordOf(deps, instance) ?? NO_RECORD;
+  const person = personWrites(instance.node);
+  return withWritten(config, credentials, record, person, instance.schema, instance.own);
 }
 
-/** The write a node of package `own` makes of its settings, judged, recorded and answered. */
+/** Every key a write would have recorded, refused for one reason. */
+const refusedAll = (outcome: WriteOutcome, message: string): WriteOutcome => ({
+  recorded: [],
+  refused: [...outcome.refused, ...outcome.recorded.map((key) => ({ path: `/${key}`, message }))],
+});
+
+/**
+ * The write a node makes of its settings, judged, recorded and answered. Nothing is kept from
+ * an instance whose close was sent (`closing`: a later deploy's values are the person's), nor
+ * over a record that cannot be read, which is kept as it is.
+ */
 export function writeSettings(
   deps: WrittenSettingsDeps,
-  instance: {
-    readonly id: string;
-    readonly who: string;
-    readonly own: string;
-    readonly schema: JsonSchema;
-  },
+  instance: WritingInstance & { readonly closing: () => boolean },
   values: Readonly<Record<string, unknown>>,
   by: unknown,
 ): WriteOutcome {
-  const { accepted, outcome } = judgeWrite(
-    instance.schema,
-    values,
-    instance.own,
-    by,
-    (schema, value) => deps.validator.check(schema, value),
+  const { schema, own } = instance;
+  const { accepted, outcome } = judgeWrite(schema, values, own, by, (inner, value) =>
+    deps.validator.check(inner, value),
   );
   const { store } = deps;
-  if (outcome.recorded.length === 0 || store === undefined) {
-    if (store === undefined && outcome.recorded.length > 0) {
-      const message = "cannot be kept: this runtime has no store for what a node writes";
-      return {
-        recorded: [],
-        refused: outcome.recorded.map((key) => ({ path: `/${key}`, message })),
-      };
-    }
+  if (outcome.recorded.length === 0) {
     return outcome;
+  }
+  if (store === undefined) {
+    return refusedAll(outcome, "cannot be kept: this runtime has no store for what a node writes");
+  }
+  if (instance.closing()) {
+    return refusedAll(outcome, "cannot be kept: the step is closing");
+  }
+  const before = recordOf(deps, instance);
+  if (before === null) {
+    return refusedAll(outcome, "could not be kept: what it wrote before cannot be read");
   }
   try {
     const at = new Date(deps.now()).toISOString();
-    const record = recorded(
-      recordOf(deps, instance.id, instance.who),
-      instance.schema,
-      accepted,
-      instance.own,
-      at,
-    );
-    store.write(instance.id, record);
+    store.write(instance.id, recorded(before, schema, accepted, own, at));
   } catch (error) {
     deps.logger.error(`${instance.who} the settings it wrote could not be kept: ${String(error)}`);
-    const message = "could not be kept";
-    return {
-      recorded: [],
-      refused: [
-        ...outcome.refused,
-        ...outcome.recorded.map((key) => ({ path: `/${key}`, message })),
-      ],
-    };
+    return refusedAll(outcome, "could not be kept");
   }
   // Names only: a value, a secret above all, is never logged.
   deps.logger.info(`${instance.who} wrote its settings: ${outcome.recorded.join(", ")}`);
   return outcome;
+}
+
+/** The instance's node was deleted: what it wrote goes with it. */
+export function forgetWritten(deps: WrittenSettingsDeps, instance: WritingInstance): void {
+  try {
+    deps.store?.remove(instance.id);
+  } catch (error) {
+    deps.logger.warn(
+      `${instance.who} the settings it wrote could not be removed: ${String(error)}`,
+    );
+  }
 }

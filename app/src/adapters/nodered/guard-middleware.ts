@@ -10,6 +10,7 @@ import type { Server } from "node:http";
 import type { Duplex } from "node:stream";
 import express, { type RequestHandler, type Router } from "express";
 import { withUndeclaredKept } from "../../domain/forms/kept-undeclared";
+import { stampedAtDeploy } from "../../domain/forms/written";
 import type { FlowsRoute, RequestGuard as Guard } from "../../ports/request-guard";
 
 /** Node-RED's own default for `apiMaxLength`. */
@@ -95,7 +96,14 @@ export function keepUndeclared(
     }
     deployed().then(
       (before) => {
-        const kept = withUndeclaredKept(flows, before, declared);
+        // When the person changed each property is stamped now, at the deploy (spec 4.6).
+        const at = new Date().toISOString();
+        const kept = stampedAtDeploy(
+          withUndeclaredKept(flows, before, declared),
+          before,
+          declared,
+          at,
+        );
         request.body = versioned ? { ...(body as Record<string, unknown>), flows: kept } : kept;
         next();
       },

@@ -44,7 +44,6 @@ import {
 } from "../../domain/forms/kept-on-save";
 import { originsOf, seedOrigins, seedRecorded } from "../../domain/forms/row-origins";
 import { uniqueClashes } from "../../domain/forms/unique";
-import { personWrites, stamped, WRITTEN_KEY } from "../../domain/forms/written";
 import { RELOAD_ANNOTATION } from "../../domain/forms/reload-keyword";
 import {
   ADVANCED_LABEL,
@@ -58,7 +57,7 @@ import type { JsonSchema } from "../../domain/packages/declaration";
 import { judge, nodeProblems, ownOf, problems, UNKEPT, type Registered } from "./editor-judge";
 import { element, LOADING, rowOf, showSelect, wireOptions } from "./editor-options";
 import { drawTable } from "./editor-table";
-import { showWritten } from "./editor-written";
+import { showWritten, withoutEchoes } from "./editor-written";
 import { isRecord, originOf, read, readList, saveSecrets, SET, typedUnkept } from "./editor-read";
 
 type Values = Record<string, unknown>;
@@ -400,7 +399,7 @@ function prepare(type: string, node: Values): void {
     }
     seedOrigins(fields, node, originOf);
     draw(container, fields, node, "");
-    showWritten(container, fields, node);
+    showWritten(container, fields, node, full);
     return;
   }
   const said = { class: "form-tips reload-refused", "data-testid": "reload-refused" };
@@ -423,7 +422,8 @@ function prepare(type: string, node: Values): void {
 function save(type: string, node: Values): boolean {
   const entry = registered(type);
   const container = containerOf(type);
-  const submitted = read(container, entry.fields);
+  // The package's values the form showed, sent back unchanged, stay the node's own (spec 4.6).
+  const submitted = withoutEchoes(read(container, entry.fields), node);
   // A row whose required cell is empty, or whose required nested table holds no row, is
   // refused like any other bad row; an empty required field at the top is saved and the node
   // held, as the runtime refuses it (coerce.ts emptyRequired).
@@ -446,18 +446,8 @@ function save(type: string, node: Values): boolean {
     path: `/${path.replaceAll(".", "/")}`,
     message: UNKEPT,
   }));
-  // When the person changed each property, so a later write of its package wins (spec 4.6).
-  const stamps = stamped(
-    personWrites(node),
-    ownOf(entry, node),
-    kept.values,
-    new Date().toISOString(),
-  );
   for (const [key, value] of Object.entries(kept.values)) {
     node[key] = value;
-  }
-  if (stamps !== undefined) {
-    node[WRITTEN_KEY] = stamps;
   }
   const all = { ...kept, refused: [...kept.refused, ...unkept] };
   // Kept and said without a secret's value, at any depth (storedRefusal).

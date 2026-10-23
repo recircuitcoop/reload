@@ -12,14 +12,8 @@ import type { FieldProblem, JsonSchema } from "../packages/declaration";
 import { isSecret, propertiesOf, rowSchemaOf } from "./form-model";
 import { writtenBy } from "./reload-keyword";
 
-/** Who may set a property besides the person: the node only, or either. */
-export type Writer = "plugin" | "both";
-
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
-
-/** A property's `reload.writtenBy`; null when only the person sets it. */
-export const writtenByOf = writtenBy;
 
 /** Who wrote one property, and when (ISO 8601): a package's name, or "user" for the person. */
 export interface WrittenBy {
@@ -101,7 +95,7 @@ export function judgeWrite(
       refused.push({ path: at, message: "is not a declared property" });
       continue;
     }
-    if (writtenByOf(property) === null) {
+    if (writtenBy(property) === null) {
       refused.push({ path: at, message: "is left to the person: its package may not set it" });
       continue;
     }
@@ -213,24 +207,45 @@ export function personStamp(
 }
 
 /**
- * The config and credentials an instance starts with: what a node wrote merged over what the
- * person deployed, property by property, wherever the node's write is later than the person's
- * own last change of it (`person`, from the node's stamps).
+ * The keys of `record` that may still be in force: written by `own` (the instance's package)
+ * and declared by the current schema as its package's to set (`reload.writtenBy`). A key it
+ * wrote before an update stopped letting it, or one in another's name, is never merged.
+ */
+function inForce(record: WrittenRecord, schema: JsonSchema, own: string): string[] {
+  const declared = new Map(propertiesOf(schema));
+  return Object.entries(record.written)
+    .filter(([key, written]) => {
+      const property = declared.get(key);
+      return written.by === own && property !== undefined && writtenBy(property) !== null;
+    })
+    .map(([key]) => key);
+}
+
+/** Whether the node's write of `key` is later than the person's own last change of it. */
+const later = (record: WrittenRecord, person: Readonly<Record<string, string>>, key: string) => {
+  const theirs = person[key];
+  const at = record.written[key]?.at ?? "";
+  return theirs === undefined || theirs <= at;
+};
+
+/**
+ * The config and credentials an instance starts with: what a node of package `own` wrote merged
+ * over what the person deployed, property by property, wherever its write is still in force
+ * (`inForce`) and later than the person's own last change of it (`person`, the node's stamps).
  */
 export function withWritten(
   config: Readonly<Record<string, unknown>>,
   credentials: Readonly<Record<string, string>>,
   record: WrittenRecord,
   person: Readonly<Record<string, string>>,
+  schema: JsonSchema,
+  own: string,
 ): { config: Record<string, unknown>; credentials: Record<string, string> } {
   const merged = { config: { ...config }, credentials: { ...credentials } };
-  for (const [key, { at }] of Object.entries(record.written)) {
-    const theirs = person[key];
-    if (theirs !== undefined && theirs > at) {
-      continue;
-    }
-    if (key in record.secrets) {
-      merged.credentials[key] = record.secrets[key] as string;
+  for (const key of inForce(record, schema, own).filter((each) => later(record, person, each))) {
+    const secret = record.secrets[key];
+    if (secret !== undefined) {
+      merged.credentials[key] = secret;
     } else if (key in record.values) {
       merged.config[key] = record.values[key];
     }
@@ -239,21 +254,97 @@ export function withWritten(
 }
 
 /**
- * Who set each property, for the editor and Setup: the node's record where it is the later
- * write, else the person's stamp. A secret's value is never in it, only that it is set.
+ * What the person sent, without the package's own value echoed back (Setup and the canvas show
+ * the value in force, which may be the package's): a key whose value is the package's value in
+ * force is the node's own again, so it is neither written into the flows nor stamped the
+ * person's.
+ */
+export function withoutEcho(
+  values: Readonly<Record<string, unknown>>,
+  node: Readonly<Record<string, unknown>>,
+  record: WrittenRecord,
+  schema: JsonSchema,
+  own: string,
+): Record<string, unknown> {
+  const person = personWrites(node);
+  const echoed = new Set(
+    inForce(record, schema, own).filter(
+      (key) =>
+        later(record, person, key) &&
+        key in values &&
+        JSON.stringify(values[key]) === JSON.stringify(record.values[key]),
+    ),
+  );
+  return Object.fromEntries(
+    Object.entries(values).flatMap(([key, value]): [string, unknown][] => {
+      if (!echoed.has(key)) {
+        return [[key, value]];
+      }
+      return key in node ? [[key, node[key]]] : [];
+    }),
+  );
+}
+
+/**
+ * Who set each property, for the editor and Setup: the package's record where its write is in
+ * force and the later one, else the person's stamp. A secret's value is never in it.
  */
 export function attributionOf(
   record: WrittenRecord,
   person: Readonly<Record<string, string>>,
+  schema: JsonSchema,
+  own: string,
 ): Record<string, WrittenBy> {
   const by: Record<string, WrittenBy> = Object.fromEntries(
     Object.entries(person).map(([key, at]) => [key, { by: USER, at }]),
   );
-  for (const [key, written] of Object.entries(record.written)) {
-    const theirs = person[key];
-    if (theirs === undefined || theirs <= written.at) {
-      by[key] = written;
-    }
+  for (const key of inForce(record, schema, own).filter((each) => later(record, person, each))) {
+    by[key] = record.written[key] as WrittenBy;
   }
   return by;
+}
+
+/** Node-RED's placeholder for a credential the editor did not change. */
+const UNCHANGED_SECRET = "__PWRD__";
+
+/**
+ * A deployment's nodes, each generated one stamped with when the person changed its properties:
+ * now (`at`, the deploy), for each top-level property `declared` names whose value differs from
+ * the deployed node's, and each credential it carries a new value for. The person's change
+ * takes effect at the deploy, so a write its package makes before then is still overruled by
+ * it, and one after it overrules it (spec 4.6). A node not deployed before is left as it came.
+ */
+export function stampedAtDeploy(
+  incoming: readonly unknown[],
+  deployed: readonly unknown[],
+  declared: (type: string) => ReadonlySet<string> | null,
+  at: string,
+): unknown[] {
+  const isNode = (value: unknown): value is Readonly<Record<string, unknown>> =>
+    isRecord(value) && typeof value["id"] === "string" && typeof value["type"] === "string";
+  const before = new Map(deployed.filter(isNode).map((node) => [node["id"] as string, node]));
+  return incoming.map((node) => {
+    const keys = isNode(node) ? declared(node["type"] as string) : null;
+    const old = isNode(node) ? before.get(node["id"] as string) : undefined;
+    if (!isNode(node) || keys === null || old === undefined || old["type"] !== node["type"]) {
+      return node;
+    }
+    const given = isRecord(node["credentials"]) ? node["credentials"] : {};
+    const secrets = Object.entries(given)
+      .filter(([key, value]) => keys.has(key) && typeof value === "string")
+      .filter(([, value]) => value !== "" && value !== UNCHANGED_SECRET)
+      .map(([key]) => key);
+    const plain = [...keys].filter(
+      (key) => JSON.stringify(old[key] ?? "") !== JSON.stringify(node[key] ?? ""),
+    );
+    const changed = [...new Set([...plain, ...secrets])];
+    if (changed.length === 0) {
+      return node;
+    }
+    const stamps = { ...personWrites(old), ...personWrites(node) };
+    return {
+      ...node,
+      [WRITTEN_KEY]: { ...stamps, ...Object.fromEntries(changed.map((key) => [key, at])) },
+    };
+  });
 }

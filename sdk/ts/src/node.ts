@@ -287,34 +287,68 @@ export interface WriteOutcome {
   readonly refused: readonly { readonly path: string; readonly message: string }[];
 }
 
-const pendingWrites = new Map<string, (outcome: WriteOutcome) => void>();
+/** How long a write waits for the runtime's answer by default (spec 4.6). */
+export const WRITE_TIMEOUT_MS = 30_000;
+
+const pendingWrites = new Map<
+  string,
+  { settle: (outcome: WriteOutcome) => void; fail: (error: Error) => void }
+>();
 const written = new Map<string, string>();
 let writes = 0;
 
 /**
  * Write values of this node's own settings: only properties its type lets the node set
- * (`reload.writtenBy`). Resolves with what the runtime recorded and refused; a runtime older
- * than revision 2.2 never answers, and then nothing was recorded. A secret recorded is kept
- * for `credential()` at once, and protected like any credential. The frame is never redacted:
- * a value is written as it is given.
+ * (`reload.writtenBy`). Resolves with what the runtime recorded and refused. It rejects when no
+ * answer comes within `timeoutMs` (a runtime older than revision 2.2 never answers: nothing was
+ * recorded), and when the node is closed before the answer. A secret recorded is kept for
+ * `credential()` at once, and protected like any credential. The frame is never redacted: a
+ * value is written as it is given.
  */
-export function writeSettings(values: Readonly<Record<string, unknown>>): Promise<WriteOutcome> {
+export function writeSettings(
+  values: Readonly<Record<string, unknown>>,
+  timeoutMs = WRITE_TIMEOUT_MS,
+): Promise<WriteOutcome> {
   writes += 1;
   const id = `w${String(writes)}`;
-  const answered = new Promise<WriteOutcome>((resolve) => {
-    pendingWrites.set(id, (outcome) => {
-      for (const key of outcome.recorded) {
-        const value = values[key];
-        if (typeof value === "string") {
-          written.set(key, value);
-          protect(value);
+  const answered = new Promise<WriteOutcome>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pendingWrites.delete(id);
+      reject(
+        new Error(
+          `the runtime did not answer the write in ${String(timeoutMs)} ms, so nothing was ` +
+            "recorded (a runtime older than protocol revision 2.2 never answers)",
+        ),
+      );
+    }, timeoutMs);
+    pendingWrites.set(id, {
+      settle: (outcome) => {
+        clearTimeout(timer);
+        for (const key of outcome.recorded) {
+          const value = values[key];
+          if (typeof value === "string") {
+            written.set(key, value);
+            protect(value);
+          }
         }
-      }
-      resolve(outcome);
+        resolve(outcome);
+      },
+      fail: (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
     });
   });
   process.stdout.write(JSON.stringify({ t: "settings", id, values }) + "\n");
   return answered;
+}
+
+/** The node is closing: a write still waiting is never answered, so it fails now. */
+function failWrites(): void {
+  for (const [id, pending] of pendingWrites) {
+    pendingWrites.delete(id);
+    pending.fail(new Error("the node closed before the runtime answered its write"));
+  }
 }
 
 /** A credential: one this node wrote and the runtime recorded, else the start frame's own. */
@@ -324,8 +358,8 @@ export function credential(name: string, info: StartInfo): string | undefined {
 
 function answerWrite(frame: Record<string, unknown>): void {
   const id = frame["id"];
-  const settle = typeof id === "string" ? pendingWrites.get(id) : undefined;
-  if (settle === undefined || typeof id !== "string") {
+  const pending = typeof id === "string" ? pendingWrites.get(id) : undefined;
+  if (pending === undefined || typeof id !== "string") {
     return;
   }
   pendingWrites.delete(id);
@@ -337,7 +371,7 @@ function answerWrite(frame: Record<string, unknown>): void {
         message: String(each["message"]),
       }))
     : [];
-  settle({ recorded: strings(frame["recorded"]), refused });
+  pending.settle({ recorded: strings(frame["recorded"]), refused });
 }
 
 export function emit(port: string, data: unknown, inputId?: string): void {
@@ -584,6 +618,7 @@ export async function run(handlers: Handlers): Promise<void> {
   for (;;) {
     const next = await reader.next();
     if (next.done === true) {
+      failWrites();
       await handlers.close?.();
       process.exit(0);
     }
@@ -647,6 +682,7 @@ export async function run(handlers: Handlers): Promise<void> {
       // Answered apart from this loop (spec 2.4.2, 4.1): a slow health check never holds it.
       void pong(frame["id"], handlers);
     } else if (frame["t"] === "close") {
+      failWrites();
       await handlers.close?.();
       closeAndExit();
       return;

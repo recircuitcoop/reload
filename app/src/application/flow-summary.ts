@@ -179,9 +179,10 @@ export async function formValues(
 }> {
   const record = engine.written?.(node.id) ?? NO_RECORD;
   const stamps = personWrites(node);
-  const { config } = withWritten(configOf(type.config, node), {}, record, stamps);
+  const own = [record, stamps, type.config, type.package] as const;
+  const { config } = withWritten(configOf(type.config, node), {}, ...own);
   const set = new Set([...(await engine.secretsSet(node)), ...Object.keys(record.secrets)]);
-  return { values: config, secretsSet: [...set].sort(), written: attributionOf(record, stamps) };
+  return { values: config, secretsSet: [...set].sort(), written: attributionOf(...own) };
 }
 
 /**

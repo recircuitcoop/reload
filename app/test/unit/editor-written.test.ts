@@ -1,9 +1,11 @@
 // @vitest-environment happy-dom
 //
 // Who set a property, in the canvas form (adapters/nodered/editor-written.ts; spec 4.6,
-// revision 2.2; plan 0032, WI-0032-41): a property its package set last says so beside it, a
-// property only its package sets is drawn read-only with what it wrote, and the person's own
-// changes are stamped, so their later change wins. Setup words the same note.
+// revision 2.2; plan 0032, WI-0032-41): a property whose value in force is its package's shows
+// that value and says so beside it, a property only its package sets is drawn read-only, and
+// the package's value sent back unchanged stays the node's own, never the person's. The
+// person's change is stamped at the deploy (guard-middleware, kept-undeclared.test.ts), not at
+// Done. Setup words the same note.
 
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -47,13 +49,14 @@ describe("a property its package set, in the canvas form", () => {
   it("is drawn read-only with what the package wrote, and says who set it and when", async () => {
     const answer = {
       values: { found: "/found-by-monty", shared: "theirs" },
-      written: { found: { by: "monty", at: AT }, shared: { by: "monty", at: AT } },
+      written: { found: { by: "demo", at: AT }, shared: { by: "demo", at: AT } },
       set: [],
     };
     const fetched = vi.fn(() => Promise.resolve(new Response(JSON.stringify(answer))));
     vi.stubGlobal("fetch", fetched);
     const node = {
       id: "n1",
+      type: TYPE,
       interval: 20,
       found: "",
       shared: "mine",
@@ -67,37 +70,38 @@ describe("a property its package set, in the canvas form", () => {
     expect(field("found").disabled).toBe(true);
     expect(field("found").value).toBe("/found-by-monty");
     expect(form().querySelector("[data-testid='reload-written-found']")?.textContent).toBe(
-      setBy("monty", AT),
+      setBy("demo", AT),
     );
     // Either may set it: the package's later write says so, and it stays the person's to type.
     expect(form().querySelector("[data-testid='reload-written-shared']")?.textContent).toBe(
-      setBy("monty", AT),
+      setBy("demo", AT),
     );
     expect(field("shared").disabled).toBe(false);
+    // The value in force is the package's later one: shown, not the node's older own.
+    expect(field("shared").value).toBe("theirs");
+    // Sent back unchanged, it stays the package's: the node keeps its own.
+    forms().save(TYPE, node);
+    expect(node.shared).toBe("mine");
+    expect(node["reload.written"]).toEqual({ shared: "2026-10-23T09:00:00.000Z" });
     // The person's own property says nothing.
     expect(form().querySelector("[data-testid='reload-written-interval']")).toBeNull();
     vi.unstubAllGlobals();
   });
 
-  it("keeps a package-only property as it was on a save, and stamps when the person changed theirs", () => {
+  it("keeps a package-only property as it was on a save, and stamps nothing at Done", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(() => Promise.reject(new Error("offline"))),
     );
-    const node: Record<string, unknown> = { id: "n2", interval: 20, found: "before" };
+    const node: Record<string, unknown> = { id: "n2", type: TYPE, interval: 20, found: "before" };
     forms().prepare(TYPE, node);
     field("interval").value = "30";
     field("found").value = "typed over";
     forms().save(TYPE, node);
     expect(node["found"]).toBe("before");
     expect(node["interval"]).toBe("30");
-    const stamps = node["reload.written"] as Record<string, string>;
-    expect(Object.keys(stamps)).toEqual(["interval"]);
-    expect(Math.abs(Date.parse(stamps["interval"] ?? "") - Date.now())).toBeLessThan(60_000);
-    // A save that changes nothing stamps nothing more.
-    forms().prepare(TYPE, node);
-    forms().save(TYPE, node);
-    expect(node["reload.written"]).toEqual(stamps);
+    // When it takes effect is the deploy's to say, not this Done's.
+    expect(node["reload.written"]).toBeUndefined();
     vi.unstubAllGlobals();
   });
 });

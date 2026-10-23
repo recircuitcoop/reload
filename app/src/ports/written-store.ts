@@ -9,4 +9,6 @@ export interface WrittenStore {
   read(instanceId: string): WrittenRecord;
   /** Replace the instance's record, whole. */
   write(instanceId: string, record: WrittenRecord): void;
+  /** Forget the instance's record: its node was deleted. Nothing to forget is no error. */
+  remove(instanceId: string): void;
 }

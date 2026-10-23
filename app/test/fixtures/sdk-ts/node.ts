@@ -126,6 +126,14 @@ async function runKitchen(): Promise<void> {
         const same = credential("token", info) === "ya29-written";
         emit("out", { recorded: outcome.recorded, credential: same }, id);
         done(id);
+      } else if (action === "write-unanswered") {
+        // A runtime older than 2.2 never answers: the write fails in its time (C28).
+        const failed = await writeSettings({ root: "/x" }, 50).then(
+          () => "",
+          (caught: unknown) => (caught instanceof Error ? caught.message : String(caught)),
+        );
+        emit("out", { failed }, id);
+        done(id);
       } else if (action === "noise") {
         // console.log is redirected to stderr, redacted, once the SDK has started (C3): it
         // never reaches the frame channel the runtime decodes.

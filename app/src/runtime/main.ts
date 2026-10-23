@@ -332,6 +332,7 @@ function generateNodeTypes(
     }),
     dataDirFor: (id) => path.join(config.userDir, "instances", id),
     written: writtenStore(config.userDir, config.credentialSecret),
+    notifier,
     closeReason: () => (stopping === null ? "redeploy" : CLOSE_REASON[stopping]),
   });
   (globalThis as Record<symbol, unknown>)[Symbol.for(REGISTER_GLOBAL)] = (

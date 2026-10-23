@@ -107,10 +107,14 @@ describe("the editor deploy's middleware", () => {
   it("keeps the undeclared values in either API version's body", async () => {
     const url = await app(() => Promise.resolve(DEPLOYED));
     const node = { id: "n1", type: TYPE, interval: 30 };
+    // The changed interval is stamped the person's, now, at the deploy (spec 4.6).
+    const stamp = { "reload.written": { interval: expect.stringMatching(/^\d{4}-/) as string } };
     const v1 = (await (await post(url, [node])).json()) as unknown[];
-    expect(v1).toEqual([{ ...node, quality: "low" }]);
+    expect(v1).toEqual([{ ...node, quality: "low", ...stamp }]);
     const v2 = (await (await post(url, { flows: [node], rev: "abc" })).json()) as unknown;
-    expect(v2).toEqual({ flows: [{ ...node, quality: "low" }], rev: "abc" });
+    expect(v2).toEqual({ flows: [{ ...node, quality: "low", ...stamp }], rev: "abc" });
+    const stamped = (v1[0] as { "reload.written": { interval: string } })["reload.written"];
+    expect(Math.abs(Date.parse(stamped.interval) - Date.now())).toBeLessThan(60_000);
   });
 
   it("passes a body with no flows on as it came, and a failure to read the flows on as an error", async () => {

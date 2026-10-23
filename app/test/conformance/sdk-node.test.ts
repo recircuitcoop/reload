@@ -383,6 +383,22 @@ describe.each(SDK_LANGUAGES)("conformance: the %s SDK's kitchen reference node",
     expect(node.rejected).toEqual([]);
   });
 
+  it("C28 settings (revision 2.2): a write the runtime never answers fails in its time, recording nothing", async () => {
+    const node = session(language);
+    node.start();
+    node.send({
+      t: "input",
+      id: "u",
+      event: { type: "x.v1", data: { do: "write-unanswered" }, run: "r" },
+    });
+    await waitFor("its done", () => node.frames.some((f) => f.t === "done"));
+    const emitted = node.frames.find((f) => f.t === "emit");
+    expect(emitted?.t === "emit" ? emitted.data : null).toEqual({
+      failed: expect.stringContaining("did not answer the write") as string,
+    });
+    expect(node.rejected).toEqual([]);
+  });
+
   it("C13 credentials: a credential value never appears on stdout or stderr, even where a handler logs it outright", async () => {
     const canary = "reload-canary-5f2c9a71e0d34b8c";
     const node = session(language);

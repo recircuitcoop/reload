@@ -5,6 +5,7 @@
 // process emits through this port. The host never sees a frame: it sees Node-RED-shaped
 // messages whose envelope the runtime stamped (spec 5.3, 11.2).
 
+import type { WriteOutcome } from "../domain/forms/written";
 import type { CloseReason, JournaledMessage } from "../domain/journal/entry";
 import type { QueueReport } from "../domain/journal/queue";
 import type { StepOutcome, StepStatus } from "../domain/runs/step-report";
@@ -97,8 +98,6 @@ export interface InputDelivery {
 }
 
 /** View content (spec 4.5 `viewContent`). */
-import type { WriteOutcome } from "../domain/forms/written";
-
 export type ViewContent = Readonly<Record<string, unknown>>;
 
 /** What the instance's host is told that belongs to no one input. */

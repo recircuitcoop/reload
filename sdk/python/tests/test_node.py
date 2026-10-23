@@ -825,3 +825,32 @@ def test_a_node_writes_its_settings_and_keeps_a_recorded_secret_for_its_credenti
     assert node.credential("token") == "ya29-new"
     assert node.credential("missing") is None
     assert redact("the token is ya29-new") == f"the token is {REDACTED}"
+
+
+def test_a_write_never_answered_times_out_and_one_waiting_at_close_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    out, _ = patch_io(monkeypatch)
+    node = start_node(monkeypatch)
+    with pytest.raises(TimeoutError, match="did not answer the write"):
+        node.write_settings({"root": "/x"}, timeout=0.01)
+    failures: list[BaseException] = []
+
+    def write() -> None:
+        try:
+            node.write_settings({"root": "/y"})
+        except RuntimeError as caught:
+            failures.append(caught)
+
+    def closing_lines() -> Iterator[str]:
+        wait_until(lambda: sum(1 for f in frames_of(out) if f.get("t") == "settings") == 2)
+        yield json.dumps({"t": "close"}) + "\n"
+
+    writer = threading.Thread(target=write)
+    writer.start()
+    monkeypatch.setattr("sys.stdin", closing_lines())
+    node.run()
+    writer.join(2)
+    assert [str(failure) for failure in failures] == [
+        "the node closed before the runtime answered its write"
+    ]

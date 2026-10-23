@@ -52,6 +52,9 @@ __all__ = [
 ]
 
 #: The largest frame, in encoded UTF-8 bytes, excluding the newline (spec 3.5).
+# How long a write of its own settings waits for the runtime's answer by default (spec 4.6).
+WRITE_TIMEOUT_S = 30.0
+
 MAX_FRAME_BYTES = 1_048_576
 # The longest a health check may take before its pong answers ``healthy: false`` (spec 4.2): far
 # inside the shortest interval a type may declare (1 s), so the pong is never late for it.
@@ -236,14 +239,17 @@ class Node:
 
     # ── a node writes its own settings (spec 4.6, revision 2.2) ──────────────────────────
 
-    def write_settings(self, values: dict[str, Any]) -> dict[str, Any]:
+    def write_settings(
+        self, values: dict[str, Any], timeout: float = WRITE_TIMEOUT_S
+    ) -> dict[str, Any]:
         """Writes values of this node's own settings: only properties its type lets the node
         set (``reload.writtenBy``). Returns what the runtime recorded and refused, as
         ``{"recorded": [names], "refused": [{"path", "message"}]}``, once it answers; call it
-        from a handler, while ``run()`` reads the answer. A runtime older than revision 2.2
-        never answers, and then nothing was recorded. A secret recorded is kept for
-        ``credential()`` at once, and protected like any credential. The frame is never
-        redacted: a value is written as it is given.
+        from a handler, while ``run()`` reads the answer. Raises ``TimeoutError`` when no
+        answer comes within ``timeout`` seconds (a runtime older than revision 2.2 never
+        answers: nothing was recorded), and ``RuntimeError`` when the node is closed first. A
+        secret recorded is kept for ``credential()`` at once, and protected like any
+        credential. The frame is never redacted: a value is written as it is given.
         """
         with self._write_lock:
             self._writes += 1
@@ -254,7 +260,14 @@ class Node:
             frame = {"t": "settings", "id": write_id, "values": values}
             self._out.write(json.dumps(frame, separators=(",", ":")) + "\n")
             self._out.flush()
-        answered.wait()
+        if not answered.wait(timeout):
+            self._pending_writes.pop(write_id, None)
+            raise TimeoutError(
+                f"the runtime did not answer the write in {timeout} s, so nothing was recorded "
+                "(a runtime older than protocol revision 2.2 never answers)"
+            )
+        if not box:
+            raise RuntimeError("the node closed before the runtime answered its write")
         outcome = box[0]
         for name in outcome["recorded"]:
             value = values.get(name)
@@ -262,6 +275,12 @@ class Node:
                 self._written[name] = value
                 protect(value)
         return outcome
+
+    def _fail_writes(self) -> None:
+        """The node is closing: a write still waiting is never answered, so it fails now."""
+        for answered, _box in list(self._pending_writes.values()):
+            answered.set()
+        self._pending_writes.clear()
 
     def credential(self, name: str) -> str | None:
         """A credential: one this node wrote and the runtime recorded, else the start frame's."""
@@ -558,6 +577,7 @@ class Node:
                         target=self._pong, args=(ping_id, on_health), daemon=True
                     ).start()
             elif t == "close":
+                self._fail_writes()
                 if on_close is not None:
                     on_close()
                 self.send({"t": "closed"})
@@ -565,5 +585,6 @@ class Node:
             # Any other frame type, "future" included, is ignored (spec 1.3).
         # End of input means close (spec 6.4): stop and exit, without sending "closed" (that
         # frame answers an explicit close, and by now there is nobody left reading stdout).
+        self._fail_writes()
         if on_close is not None:
             on_close()

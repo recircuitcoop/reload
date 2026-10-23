@@ -18,7 +18,7 @@ import { remapIds, withoutCredentials, type TabNode } from "../domain/flows/tab"
 import { configOf, missingSecrets } from "../domain/forms/coerce";
 import { hiddenPaths, unhidden } from "../domain/forms/hidden";
 import { isReadOnly } from "../domain/forms/reload-keyword";
-import { personRefusals, personStamp } from "../domain/forms/written";
+import { NO_RECORD, personRefusals, personStamp, withoutEcho } from "../domain/forms/written";
 import { REFUSED_KEY } from "../domain/forms/kept-on-save";
 import {
   describedProblems,
@@ -539,7 +539,10 @@ export class FlowAdmin {
    * values: a group, a table or a list it does not send keeps the node's own, and a scalar it
    * leaves out is cleared. A value for a property nobody declares is refused.
    */
-  async #configured(node: TabNode, type: FlowNodeType, values: Fields): Promise<TabNode> {
+  async #configured(node: TabNode, type: FlowNodeType, sent: Fields): Promise<TabNode> {
+    // The package's own value in force, sent back as Setup showed it, stays its (spec 4.6).
+    const record = this.#deps.engine.written?.(node.id) ?? NO_RECORD;
+    const values = withoutEcho(sent, node, record, type.config, type.package);
     const secrets = new Set(secretKeys(type.config));
     const plainSchema = withoutSecrets(type.config);
     const declared = propertiesOf(plainSchema);
@@ -589,7 +592,8 @@ export class FlowAdmin {
       ...plain,
       // A refused canvas save is answered by this one: never shown again over what Setup saved.
       ...(REFUSED_KEY in node ? { [REFUSED_KEY]: null } : {}),
-      ...personStamp(node, plain, new Date(this.#deps.clock.now()).toISOString()),
+      // A secret given is the person's change too, so it wins over an older write of the package.
+      ...personStamp(node, { ...plain, ...given }, new Date(this.#deps.clock.now()).toISOString()),
       ...(Object.keys(given).length === 0 ? {} : { credentials: given }),
     } as TabNode;
   }
