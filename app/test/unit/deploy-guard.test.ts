@@ -210,7 +210,8 @@ describe("DeployGuard", () => {
       problem: "is not valid JSON",
       safeCopy: "/u/flows.json.broken-x",
       backup: null,
-      running: false,
+      loadsChanged: false,
+      state: "not-loaded",
     };
     const { deployGuard, logger, asked } = guard(SETS, [refused]);
     for (const [route, body] of [

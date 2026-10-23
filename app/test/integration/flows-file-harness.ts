@@ -53,7 +53,6 @@ export async function startGuarded(userDir: string): Promise<GuardedNodeRed> {
   const flowFiles: FlowFiles = new FlowFiles({
     files: FLOW_FILES.map((name) => path.join(userDir, name)),
     check: () => keepBrokenFlowFiles(userDir, FLOW_FILES, new Date()),
-    saveRunning: (files) => storage.saveRunning(files),
     notifier,
     logger,
   });

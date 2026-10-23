@@ -120,8 +120,8 @@ function StatusPillOf({ pill }: { readonly pill: Pill }) {
 }
 
 /**
- * A refused flows file (application/flow-files.ts), in the notice's own words, until fixed: Show
- * in Finder always, and Save the flows that are running when it broke while they run.
+ * A refused flows file (application/flow-files.ts), in the notice's own words, until fixed, with
+ * Show in Finder for the folder that holds it, its copy and its backup.
  */
 function FlowsFileBanner({
   refused,
@@ -140,17 +140,6 @@ function FlowsFileBanner({
         {refused.body}
       </InlineMessage>
       <div className="flex gap-2">
-        {refused.canSave ? (
-          <Button
-            kind="primary"
-            data-testid="flows-file-save"
-            onClick={() => {
-              void api.saveRunningFlows();
-            }}
-          >
-            {t("flowsFile.save")}
-          </Button>
-        ) : null}
         <Button
           kind="secondary"
           data-testid="flows-file-show"

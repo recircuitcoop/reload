@@ -43,7 +43,7 @@ import { noticeAnytypeRefusals } from "../application/anytype-refusals";
 import { DeployGuard } from "../application/deploy-guard";
 import { answerEditorCall } from "../application/editor-events";
 import { EventTypeService, isEventOp } from "../application/event-types";
-import { FlowFiles, SAVE_RUNNING_OP } from "../application/flow-files";
+import { FlowFiles } from "../application/flow-files";
 import { FlowAdmin, flowNodeTypeOf, isFlowOp } from "../application/flows";
 import { JournalReplay } from "../application/journal-replay";
 import { isRunActionOp, RunActions } from "../application/run-actions";
@@ -191,9 +191,6 @@ let packageOfType: (type: string) => string | undefined = () => undefined;
 // Flow administration (plan 0022 §D): one tab is one flow, and the runtime owns its writes.
 let flows: FlowAdmin | null = null;
 let flowNodeType: (type: string) => ReturnType<typeof flowNodeTypeOf> | undefined = () => undefined;
-// Save the flows that are running, over a flows file broken meanwhile: null once saved, else why not.
-let savedRunning: () => Promise<string | null> = () =>
-  Promise.resolve("the Reload runtime is still starting");
 
 // A step's dynamic options (plan 0022 §B, D9): the services process holds the Anytype key, so
 // the spaces and types a form chooses from are asked of it over the direct channel. One
@@ -359,12 +356,10 @@ async function startNodeRed(config: InitConfig): Promise<void> {
   const flowFiles: FlowFiles = new FlowFiles({
     files: FLOW_FILES.map((name) => path.join(userDir, name)),
     check: () => keepBrokenFlowFiles(userDir, FLOW_FILES, new Date()),
-    saveRunning: (files) => storage.saveRunning(files),
     notifier: shellNotifier(link),
     logger,
   });
   flowFiles.refused();
-  savedRunning = () => flowFiles.saveRunning();
 
   const packages = new InstalledPackageStore(
     new DeclaredPackageStore(PACKAGE_ROOTS, logger),
@@ -499,11 +494,6 @@ serveShell({
     // One instance's last status, from the processes of this generation.
     if (op === "node.status") {
       return Promise.resolve(readiness.status(args));
-    }
-    if (op === SAVE_RUNNING_OP) {
-      return savedRunning().then((why) =>
-        why === null ? { ok: true, value: null } : { ok: false, error: why },
-      );
     }
     if (
       views === null ||

@@ -62,6 +62,5 @@ export const V2_UNUSED: AppApiV2 = {
   onOpenLive: ignored,
   retention: never,
   setRetention: never,
-  saveRunningFlows: never,
   showFlowsFile: never,
 };

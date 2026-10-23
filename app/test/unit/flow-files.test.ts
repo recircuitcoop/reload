@@ -17,6 +17,7 @@ import {
   FLOW_FILES,
   flowFileProblem,
   refusedFlowFileSentence,
+  refusedFlowFileTitle,
   safeCopyName,
   unreadableProblem,
   type BrokenFlowFile,
@@ -73,13 +74,20 @@ describe("flowFileProblem: judged as Node-RED loads the file", () => {
   });
 });
 
-describe("the words for a refused file", () => {
+describe("the words for a refused file: true to what was loaded", () => {
   const atStart: RefusedFlowFile = {
     file: "/u/flows.json",
     problem: "isn't valid JSON",
     safeCopy: "/u/flows.json.broken-x",
     backup: "/u/.flows.json.backup",
-    running: false,
+    loadsChanged: false,
+    state: "not-loaded",
+  };
+  const creds: RefusedFlowFile = {
+    ...atStart,
+    file: "/u/flows_cred.json",
+    safeCopy: "/u/flows_cred.json.broken-x",
+    backup: null,
   };
 
   it("names a read error by its plain cause, never its code", () => {
@@ -95,14 +103,13 @@ describe("the words for a refused file", () => {
     expect(safeCopyName("/u/flows.json", NOW, 2)).toBe(`/u/flows.json.${STAMP}-2`);
   });
 
-  it("at the start: names the file, the copy, the hidden backup and what to do", () => {
-    const sentence = refusedFlowFileSentence(atStart);
-    expect(sentence).toBe(
+  it("nothing loaded: says so, with the copy, the hidden backup and what to do", () => {
+    expect(refusedFlowFileTitle(atStart)).toBe("Reload didn't load your flows");
+    expect(refusedFlowFileSentence(atStart)).toBe(
       "/u/flows.json isn't valid JSON, so Reload didn't load your flows from it and won't save " +
-        "over it. Reload kept a copy of it at /u/flows.json.broken-x. Your last good flows may " +
-        "be in /u/.flows.json.backup. Its name starts with a dot, so Finder hides it. To use " +
-        "it, quit Reload, copy it over flows.json, and start Reload again; or fix flows.json " +
-        "and start Reload again.",
+        "over it. Reload kept a copy of it at /u/flows.json.broken-x. To use its backup " +
+        "/u/.flows.json.backup (its name starts with a dot, so Finder hides it), quit Reload, " +
+        "copy it over flows.json, and start Reload again. Or fix flows.json and start Reload again.",
     );
     expect(refusedFlowFileSentence({ ...atStart, safeCopy: null, backup: null })).toBe(
       "/u/flows.json isn't valid JSON, so Reload didn't load your flows from it and won't save " +
@@ -110,19 +117,67 @@ describe("the words for a refused file", () => {
     );
   });
 
-  it("while running: says the flows still run and offers to save them, never to restart", () => {
-    const sentence = refusedFlowFileSentence({ ...atStart, running: true });
+  it("loaded with characters replaced: never says the flows weren't loaded", () => {
+    const changed: RefusedFlowFile = {
+      ...atStart,
+      problem: "isn't UTF-8 text",
+      state: "loaded-changed",
+    };
+    expect(refusedFlowFileTitle(changed)).toBe("Reload won't save over your flows file");
+    const sentence = refusedFlowFileSentence(changed);
     expect(sentence).toBe(
-      "Your flows are still running, but /u/flows.json isn't valid JSON. Reload kept a copy " +
-        "of it at /u/flows.json.broken-x. Reload won't save over the file. Choose Save the " +
-        "flows that are running to write them back to it.",
+      "/u/flows.json isn't UTF-8 text. Reload loaded your flows from it, but some of its " +
+        "characters couldn't be read and were replaced, so saving would change them for good. " +
+        "Reload kept a copy of it at /u/flows.json.broken-x. Reload won't save over the file: " +
+        "fix its text, then start Reload again.",
     );
-    for (const word of ["Node-RED", "deploy", "start Reload again"]) {
-      expect(sentence).not.toContain(word);
-      expect(refusedFlowFileSentence(atStart)).not.toContain(
-        word === "start Reload again" ? "Node-RED" : word,
-      );
+    expect(sentence).not.toContain("didn't load");
+  });
+
+  it("broken while running: says what still runs and how saving resumes, never to restart", () => {
+    const running: RefusedFlowFile = { ...atStart, state: "running" };
+    expect(refusedFlowFileTitle(running)).toBe("Your flows file is damaged");
+    expect(refusedFlowFileSentence(running)).toBe(
+      "/u/flows.json isn't valid JSON. The flows Reload loaded when it started are still " +
+        "running, and Reload won't save over the file. Reload kept a copy of it at " +
+        "/u/flows.json.broken-x. If you didn't mean to change it, copy its backup " +
+        "/u/.flows.json.backup (its name starts with a dot, so Finder hides it) over it, or " +
+        "fix it: Reload saves again once the file can be read.",
+    );
+    expect(refusedFlowFileSentence({ ...running, backup: null })).toContain(
+      "Fix the file: Reload saves again once it can be read.",
+    );
+    for (const sentence of [refusedFlowFileSentence(running), refusedFlowFileSentence(atStart)]) {
+      expect(sentence).not.toMatch(/Node-RED|deploy/);
     }
+    expect(refusedFlowFileSentence(running)).not.toMatch(/start Reload again|didn't load/);
+  });
+
+  it("the credentials file: its passwords weren't loaded, it's encrypted, and what to do", () => {
+    expect(refusedFlowFileTitle(creds)).toBe("Reload didn't load your flows' passwords");
+    expect(refusedFlowFileSentence(creds)).toBe(
+      "/u/flows_cred.json isn't valid JSON, so Reload didn't load the passwords and tokens " +
+        "your flows use, and won't save over it. Reload kept a copy of it at " +
+        "/u/flows_cred.json.broken-x. The file is encrypted, so it can't be fixed by hand. To " +
+        "start over, quit Reload, move flows_cred.json out of its folder, start Reload again, " +
+        "and enter the passwords in your flows again.",
+    );
+    expect(refusedFlowFileSentence({ ...creds, backup: "/u/.flows_cred.json.backup" })).toContain(
+      "To use its backup /u/.flows_cred.json.backup (its name starts with a dot, so Finder " +
+        "hides it), quit Reload, copy it over flows_cred.json, and start Reload again. " +
+        "Otherwise, quit Reload, move flows_cred.json",
+    );
+    const running: RefusedFlowFile = { ...creds, state: "running" };
+    expect(refusedFlowFileTitle(running)).toBe("Your flows' passwords file is damaged");
+    expect(refusedFlowFileSentence(running)).toBe(
+      "/u/flows_cred.json isn't valid JSON. The passwords and tokens Reload loaded when it " +
+        "started are still in use, and Reload won't save over the file. Reload kept a copy of " +
+        "it at /u/flows_cred.json.broken-x. The file is encrypted, so it can't be fixed by hand.",
+    );
+    expect(refusedFlowFileSentence({ ...running, backup: "/u/.b" })).toContain(
+      "copy its backup /u/.b (its name starts with a dot, so Finder hides it) over it: Reload",
+    );
+    expect(refusedFlowFileSentence(creds)).not.toContain("your flows from it");
   });
 });
 
@@ -160,12 +215,14 @@ describe("keepBrokenFlowFiles", () => {
         problem: "isn't valid JSON",
         safeCopy: path.join(dir, `${FLOWS}.${STAMP}`),
         backup: path.join(dir, `.${FLOWS}.backup`),
+        loadsChanged: false,
       },
       {
         file: path.join(dir, CREDS),
         problem: "isn't UTF-8 text",
         safeCopy: path.join(dir, `${CREDS}.${STAMP}`),
         backup: null,
+        loadsChanged: false,
       },
     ]);
     expect(fs.readFileSync(path.join(dir, FLOWS), "utf8")).toBe("[{");
@@ -191,9 +248,9 @@ describe("keepBrokenFlowFiles", () => {
     const [second] = keepBrokenFlowFiles(dir, [FLOWS], NOW);
     expect(second?.safeCopy).toBe(path.join(dir, `${FLOWS}.${STAMP}-2`));
     expect(fs.readFileSync(path.join(dir, `${FLOWS}.${STAMP}-2`), "utf8")).toBe("{{");
-    expect(refusedFlowFileSentence({ ...(second as BrokenFlowFile), running: false })).toContain(
-      `Reload kept a copy of it at ${path.join(dir, `${FLOWS}.${STAMP}-2`)}.`,
-    );
+    expect(
+      refusedFlowFileSentence({ ...(second as BrokenFlowFile), state: "not-loaded" }),
+    ).toContain(`Reload kept a copy of it at ${path.join(dir, `${FLOWS}.${STAMP}-2`)}.`);
   });
 
   it("offers no empty backup, and says so when no copy can be made", () => {
@@ -202,7 +259,13 @@ describe("keepBrokenFlowFiles", () => {
     fs.chmodSync(dir, 0o500);
     try {
       expect(keepBrokenFlowFiles(dir, [FLOWS], NOW)).toEqual([
-        { file: path.join(dir, FLOWS), problem: "isn't valid JSON", safeCopy: null, backup: null },
+        {
+          file: path.join(dir, FLOWS),
+          problem: "isn't valid JSON",
+          safeCopy: null,
+          backup: null,
+          loadsChanged: false,
+        },
       ]);
     } finally {
       fs.chmodSync(dir, 0o700);
@@ -218,8 +281,43 @@ describe("keepBrokenFlowFiles", () => {
         problem: "is a folder, not a file",
         safeCopy: null,
         backup: path.join(dir, `.${FLOWS}.backup`),
+        loadsChanged: false,
       },
     ]);
+  });
+
+  it("says when Node-RED loads a file that isn't UTF-8 anyway, its characters replaced", () => {
+    // The bad bytes sit inside a string: read loosely, it is a list of nodes.
+    write(
+      FLOWS,
+      Buffer.concat([Buffer.from('[{"id":"t","label":"'), Buffer.from([0xff]), Buffer.from('"}]')]),
+    );
+    write(CREDS, new Uint8Array([0xff]));
+    const [flows, creds] = keepBrokenFlowFiles(dir, FLOW_FILES, NOW);
+    expect(flows).toMatchObject({ problem: "isn't UTF-8 text", loadsChanged: true });
+    expect(creds).toMatchObject({ problem: "isn't UTF-8 text", loadsChanged: false });
+  });
+
+  it("refuses an empty file over a backup Node-RED cannot load, keeping the backup's bytes", () => {
+    write(FLOWS, "");
+    write(`.${FLOWS}.backup`, "[{");
+    const [found] = keepBrokenFlowFiles(dir, [FLOWS], NOW);
+    expect(found).toEqual({
+      file: path.join(dir, FLOWS),
+      problem: `is empty, and its backup ${path.join(dir, `.${FLOWS}.backup`)} isn't valid JSON`,
+      safeCopy: path.join(dir, `${FLOWS}.${STAMP}`),
+      backup: null,
+      loadsChanged: false,
+    });
+    expect(fs.readFileSync(path.join(dir, `${FLOWS}.${STAMP}`), "utf8")).toBe("[{");
+    // A good backup, or an empty one, or none: Node-RED restores or starts empty, and loses nothing.
+    write(`.${FLOWS}.backup`, "[]");
+    expect(keepBrokenFlowFiles(dir, [FLOWS], NOW)).toEqual([]);
+    write(`.${FLOWS}.backup`, "");
+    expect(keepBrokenFlowFiles(dir, [FLOWS], NOW)).toEqual([]);
+    fs.rmSync(path.join(dir, `.${FLOWS}.backup`));
+    fs.mkdirSync(path.join(dir, `.${FLOWS}.backup`));
+    expect(keepBrokenFlowFiles(dir, [FLOWS], NOW)).toEqual([]);
   });
 
   it("offers no backup it cannot read, and skips a copy it cannot read", () => {
@@ -238,13 +336,13 @@ describe("FlowFiles", () => {
     problem: "isn't valid JSON",
     safeCopy: "/u/flows.json.broken-x",
     backup: null,
+    loadsChanged: false,
   };
   const files = ["/u/flows.json", "/u/flows_cred.json"];
 
   function harness(found: (readonly BrokenFlowFile[])[]) {
     const notifier = new RecordingNotifier();
     const logger = new RecordingLogger();
-    const saved: (readonly string[])[] = [];
     let checks = 0;
     const flowFiles = new FlowFiles({
       files,
@@ -252,19 +350,15 @@ describe("FlowFiles", () => {
         checks += 1;
         return found.length > 1 ? (found.shift() ?? []) : (found[0] ?? []);
       },
-      saveRunning: (names) => {
-        saved.push(names);
-        return Promise.resolve();
-      },
       notifier,
       logger,
     });
-    return { flowFiles, notifier, logger, saved, checks: () => checks };
+    return { flowFiles, notifier, logger, checks: () => checks };
   }
 
-  it("at the start: tells once, logs it, and stays refused without checking again", async () => {
+  it("at the start: tells once, in its own title, and stays refused without checking again", () => {
     const h = harness([[broken], []]);
-    const refused = { ...broken, running: false };
+    const refused: RefusedFlowFile = { ...broken, state: "not-loaded" };
     expect(h.flowFiles.refused()).toEqual([refused]);
     expect(h.flowFiles.refused()).toEqual([refused]);
     expect(h.checks()).toBe(1);
@@ -272,6 +366,7 @@ describe("FlowFiles", () => {
       {
         kind: "flows-file-refused",
         subject: "/u/flows.json",
+        title: "Reload didn't load your flows",
         detail: refusedFlowFileSentence(refused),
       },
     ]);
@@ -281,22 +376,26 @@ describe("FlowFiles", () => {
       "flows-file-damaged /u/flows_cred.json",
     ]);
     expect(h.logger.lines).toEqual([`ERROR ${refusedFlowFileSentence(refused)}`]);
-    // No flows were loaded from it: there are none to save over it.
-    expect(await h.flowFiles.saveRunning()).toContain("there are none to save");
-    expect(h.saved).toEqual([]);
+  });
+
+  it("at the start, a file Node-RED loads with characters replaced is told as loaded", () => {
+    const h = harness([[{ ...broken, problem: "isn't UTF-8 text", loadsChanged: true }]]);
+    expect(h.flowFiles.refused()[0]?.state).toBe("loaded-changed");
+    expect(h.notifier.notices[0]?.title).toBe("Reload won't save over your flows file");
   });
 
   it("broken while running: told once, checked at every save, cleared when fixed by hand", () => {
     const h = harness([[], [broken], [broken], []]);
     expect(h.flowFiles.refused()).toEqual([]);
     expect(h.notifier.cleared).toHaveLength(4);
-    const refused = { ...broken, running: true };
+    const refused: RefusedFlowFile = { ...broken, state: "running" };
     expect(h.flowFiles.refused()).toEqual([refused]);
     expect(h.flowFiles.refused()).toEqual([refused]);
     expect(h.notifier.notices).toEqual([
       {
         kind: "flows-file-damaged",
         subject: "/u/flows.json",
+        title: "Your flows file is damaged",
         detail: refusedFlowFileSentence(refused),
       },
     ]);
@@ -304,46 +403,15 @@ describe("FlowFiles", () => {
     expect(h.flowFiles.refused()).toEqual([]);
     expect(h.notifier.cleared.slice(4)).toEqual(["flows-file-damaged /u/flows.json"]);
   });
-
-  it("Save the flows that are running: writes them over the broken file and clears the refusal", async () => {
-    const h = harness([[], [broken]]);
-    h.flowFiles.refused();
-    expect(await h.flowFiles.saveRunning()).toBeNull();
-    expect(h.saved).toEqual([["/u/flows.json"]]);
-    expect(h.notifier.cleared.at(-1)).toBe("flows-file-damaged /u/flows.json");
-    expect(h.logger.lines.at(-1)).toBe(
-      "INFO saved the running flows over /u/flows.json; its copy is /u/flows.json.broken-x",
-    );
-  });
-
-  it("saves nothing when nothing is refused, or when no copy of the broken file was kept", async () => {
-    const fine = harness([[]]);
-    fine.flowFiles.refused();
-    expect(await fine.flowFiles.saveRunning()).toBeNull();
-    expect(fine.saved).toEqual([]);
-    const uncopied = harness([[], [{ ...broken, safeCopy: null }]]);
-    uncopied.flowFiles.refused();
-    expect(await uncopied.flowFiles.saveRunning()).toContain("could not keep a copy");
-    expect(uncopied.saved).toEqual([]);
-  });
 });
 
 describe("GuardedStorage", () => {
-  let dir: string;
-  beforeEach(() => {
-    dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-guarded-")));
-  });
-  afterEach(() => {
-    fs.rmSync(dir, { recursive: true, force: true });
-  });
-
-  /** Node-RED's storage as far as these calls go: it records what it is asked to save. */
-  function local(flows: unknown, credentials: unknown) {
+  it("keeps Node-RED's own module, and refuses every save while a file is refused", async () => {
     const saved: [string, unknown][] = [];
     const storage: NodeRedFileStorage & { other: string } = {
       other: "kept",
-      getFlows: () => Promise.resolve(flows),
-      getCredentials: () => Promise.resolve(credentials),
+      getFlows: () => Promise.resolve([]),
+      getCredentials: () => Promise.resolve({}),
       saveFlows: (value) => {
         saved.push(["flows", value]);
         return Promise.resolve();
@@ -353,20 +421,12 @@ describe("GuardedStorage", () => {
         return Promise.resolve();
       },
     };
-    return { storage, saved };
-  }
-  type Module = {
-    other: string;
-    getFlows(): Promise<unknown>;
-    getCredentials(): Promise<unknown>;
-    saveFlows(flows: unknown): Promise<void>;
-    saveCredentials(credentials: unknown): Promise<void>;
-  };
-
-  it("keeps Node-RED's own module, and refuses every save while a file is refused", async () => {
-    const { storage, saved } = local([{ id: "t" }], { $: "x" });
     let refusal: string | null = "Your flows file is damaged.";
-    const module = new GuardedStorage(storage, () => refusal).module() as unknown as Module;
+    const module = new GuardedStorage(storage, () => refusal).module() as unknown as {
+      other: string;
+      saveFlows(flows: unknown): Promise<void>;
+      saveCredentials(credentials: unknown): Promise<void>;
+    };
     expect(module.other).toBe("kept");
     await expect(module.saveFlows([])).rejects.toThrow("Your flows file is damaged.");
     await expect(module.saveCredentials({})).rejects.toThrow("Your flows file is damaged.");
@@ -378,26 +438,5 @@ describe("GuardedStorage", () => {
       ["flows", [{ id: "u" }]],
       ["credentials", { $: "y" }],
     ]);
-  });
-
-  it("writes back what runs, the last loaded or saved, with the broken file removed first", async () => {
-    const { storage, saved } = local([{ id: "t" }], { $: "x" });
-    const guarded = new GuardedStorage(storage, () => null);
-    const module = guarded.module() as unknown as Module;
-    await module.getFlows();
-    await module.getCredentials();
-    const flows = path.join(dir, "flows.json");
-    const creds = path.join(dir, "flows_cred.json");
-    fs.writeFileSync(flows, "[{");
-    await guarded.saveRunning([flows, creds]);
-    expect(fs.existsSync(flows)).toBe(false);
-    expect(saved).toEqual([
-      ["flows", [{ id: "t" }]],
-      ["credentials", { $: "x" }],
-    ]);
-    await module.saveFlows([{ id: "v" }]);
-    saved.length = 0;
-    await guarded.saveRunning([flows]);
-    expect(saved).toEqual([["flows", [{ id: "v" }]]]);
   });
 });

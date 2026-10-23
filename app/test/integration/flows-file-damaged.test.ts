@@ -1,6 +1,6 @@
 // A flows file broken while Reload runs, at a real Node-RED: the flows loaded at the start still
 // run. Every save is refused, whatever the route, so Node-RED never rotates the broken file over
-// the good backup; Save the flows that are running writes them back and keeps the backup.
+// the good backup; once the file can be read again, saving resumes.
 //
 // RED.init and RED.start run once per process, so one Node-RED serves the whole file.
 import fs from "node:fs";
@@ -46,7 +46,7 @@ describe("a flows file broken while Reload runs, at a real Node-RED", () => {
   it("refuses a flow's DELETE: the file and the good backup stay as they were", async () => {
     const answer = await red.send("DELETE", "/red/flow/t1");
     expect(answer.status).toBe(409);
-    expect(answer.text).toContain("Your flows are still running");
+    expect(answer.text).toContain("The flows Reload loaded when it started are still running");
     expect(read("flows.json")).toBe(BROKEN);
     expect(read(".flows.json.backup")).toBe(goodBackup);
     expect(red.notifier.notices.map((notice) => notice.kind)).toEqual(["flows-file-damaged"]);
@@ -56,7 +56,7 @@ describe("a flows file broken while Reload runs, at a real Node-RED", () => {
     expect((await red.send("POST", "/red/flows", [{ id: "t9", type: "tab" }])).status).toBe(409);
     await expect(
       new NodeRedFlows().addFlow({ label: "Sneaky", disabled: false, nodes: [], configs: [] }),
-    ).rejects.toThrow("Your flows are still running");
+    ).rejects.toThrow("The flows Reload loaded when it started are still running");
     expect(read("flows.json")).toBe(BROKEN);
     expect(read(".flows.json.backup")).toBe(goodBackup);
     expect(copies()).toHaveLength(1);
@@ -65,17 +65,15 @@ describe("a flows file broken while Reload runs, at a real Node-RED", () => {
     expect(red.notifier.notices).toHaveLength(1);
   });
 
-  it("Save the flows that are running: written back, the backup kept good, the copy kept", async () => {
-    expect(await red.flowFiles.saveRunning()).toBeNull();
-    expect(JSON.parse(read("flows.json"))).toEqual(RUNNING);
-    expect(read(".flows.json.backup")).toBe(goodBackup);
-    expect(copies()).toHaveLength(1);
+  it("saves again once the file can be read: the running flows, with the good backup kept", async () => {
+    // The person puts the backup back, as the message says.
+    fs.copyFileSync(path.join(userDir, ".flows.json.backup"), path.join(userDir, "flows.json"));
+    expect((await red.send("DELETE", "/red/flow/t1")).status).toBe(204);
+    expect(JSON.parse(read("flows.json"))).toEqual([]);
+    expect(JSON.parse(read(".flows.json.backup"))).toEqual(RUNNING);
     expect(red.notifier.cleared).toContain(
       `flows-file-damaged ${path.join(userDir, "flows.json")}`,
     );
-    expect(red.flowFiles.refused()).toEqual([]);
-    // Saving works again.
-    expect((await red.send("DELETE", "/red/flow/t1")).status).toBe(204);
-    expect(JSON.parse(read("flows.json"))).toEqual([]);
+    expect(copies()).toHaveLength(1);
   });
 });

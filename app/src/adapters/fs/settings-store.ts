@@ -188,15 +188,23 @@ export class JsonSettingsStore
   }
 
   #read(): Document {
-    let text: string;
+    let bytes: Buffer;
     try {
-      text = fs.readFileSync(this.#file, "utf8");
+      bytes = fs.readFileSync(this.#file);
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
       if (code === "ENOENT") {
         return {};
       }
       throw new SettingsFileError(`could not read ${this.#file}: ${String(code)}`);
+    }
+    let text: string;
+    try {
+      // Strict: bytes that are not UTF-8 would be read as replacement characters, and the next
+      // write would put those back in place of what the person had (test_helper_config.py).
+      text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    } catch {
+      throw new SettingsFileError(`${this.#file} is not UTF-8 text`);
     }
     let parsed: unknown;
     try {

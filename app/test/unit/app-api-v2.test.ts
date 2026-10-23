@@ -794,7 +794,6 @@ describe("AppApi v2 calls, through the shell to its processes", () => {
     const refused = {
       title: "Reload didn't load your flows",
       body: "Fix it.",
-      canSave: false,
       showIn: "finder",
     };
     expect(h.sent).toContainEqual([
@@ -809,15 +808,16 @@ describe("AppApi v2 calls, through the shell to its processes", () => {
     expect(await h.api.status()).toMatchObject({ value: { flowsFile: null } });
     expect(await h.api.showFlowsFile()).toEqual({ ok: true, value: null });
     expect(h.shown).toHaveLength(1);
-    // Broken while running: Save the flows that are running is offered, and asks the runtime.
-    h.notices.raise({ kind: "flows-file-damaged", subject: "/u/flows.json", detail: "Running" });
-    expect(await h.api.status()).toMatchObject({
-      value: { flowsFile: { title: "Your flows file is damaged", canSave: true } },
+    // Broken while running: shown too, in the title its raiser gave it.
+    h.notices.raise({
+      kind: "flows-file-damaged",
+      subject: "/u/flows.json",
+      title: "Your flows file is damaged",
+      detail: "Running.",
     });
-    h.runtime.answers.set("flows.saveRunning", () => ({ ok: true, value: null }));
-    expect(await h.api.saveRunningFlows()).toEqual({ ok: true, value: null });
-    h.runtime.answers.set("flows.saveRunning", () => ({ ok: false, error: "No copy" }));
-    expect(await h.api.saveRunningFlows()).toEqual(FAILED);
+    expect(await h.api.status()).toMatchObject({
+      value: { flowsFile: { title: "Your flows file is damaged", body: "Running." } },
+    });
     h.services.answers.set("anytype.status", () => ({ ok: false, code: "down", error: "d" }));
     expect(await h.api.status()).toMatchObject({ value: { pill: "running" } });
     expect(await h.api.retention()).toEqual({ ok: true, value: { days: 90 } });

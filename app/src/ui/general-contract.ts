@@ -90,12 +90,11 @@ export interface StatusView {
   readonly crashLoop: { readonly crashes: number; readonly minutes: number };
   /**
    * A refused flows file's notice, as the desktop showed it; null while none is refused.
-   * `canSave`: it broke while the flows run, so Save the flows that are running is offered.
+   * `showIn` names the button that shows the file in its folder.
    */
   readonly flowsFile: {
     readonly title: string;
     readonly body: string;
-    readonly canSave: boolean;
     readonly showIn: "finder" | "folder";
   } | null;
 }

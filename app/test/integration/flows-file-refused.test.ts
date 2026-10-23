@@ -77,7 +77,5 @@ describe("a flows file Node-RED cannot load, at a real start", () => {
       new NodeRedFlows().addFlow({ label: "Sneaky", disabled: false, nodes: [], configs: [] }),
     ).rejects.toThrow("won't save over it");
     intact();
-    expect(await red.flowFiles.saveRunning()).toContain("there are none to save");
-    intact();
   });
 });

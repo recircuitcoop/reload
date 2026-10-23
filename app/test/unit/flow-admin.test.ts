@@ -550,7 +550,8 @@ describe("every write", () => {
       problem: "is not valid JSON",
       safeCopy: null,
       backup: null,
-      running: false,
+      loadsChanged: false,
+      state: "not-loaded" as const,
     };
     const h = harness({ refused: [refused] });
     const answer = await h.write("flow.rename", { id: "rec", name: "New name" });

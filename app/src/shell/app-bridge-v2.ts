@@ -104,7 +104,6 @@ export function appApiV2Over(ipc: RendererIpc): AppApiV2 {
     },
     retention: () => general("retention.get"),
     setRetention: (days) => general("retention.set", { days }),
-    saveRunningFlows: () => general("flowsFile.save"),
     showFlowsFile: () => general("flowsFile.show"),
   };
 }

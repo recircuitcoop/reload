@@ -7,6 +7,7 @@ import fs from "node:fs";
 import * as path from "node:path";
 import {
   flowFileProblem,
+  loadsWithReplacements,
   safeCopyName,
   unreadableProblem,
   type BrokenFlowFile,
@@ -95,16 +96,57 @@ function check(file: string, now: Date): BrokenFlowFile | null {
     bytes = readOrNull(file);
   } catch (error) {
     const problem = unreadableProblem((error as NodeJS.ErrnoException).code);
-    return { file, problem, safeCopy: null, backup: goodBackup(file) };
+    return { file, problem, safeCopy: null, backup: goodBackup(file), loadsChanged: false };
   }
   if (bytes === null) {
     return null;
   }
-  const problem = flowFileProblem(path.basename(file), bytes);
+  const name = path.basename(file);
+  if (bytes.length === 0) {
+    return emptyOverBrokenBackup(file, now);
+  }
+  const problem = flowFileProblem(name, bytes);
   if (problem === null) {
     return null;
   }
-  return { file, problem, safeCopy: keepCopy(file, bytes, now), backup: goodBackup(file) };
+  return {
+    file,
+    problem,
+    safeCopy: keepCopy(file, bytes, now),
+    backup: goodBackup(file),
+    loadsChanged: loadsWithReplacements(name, bytes),
+  };
+}
+
+/**
+ * An empty file: Node-RED copies its backup over it and loads that. Fine when the backup is,
+ * or when there is none; a backup it cannot load means it loads nothing, so that is refused,
+ * with the backup's bytes kept aside.
+ */
+function emptyOverBrokenBackup(file: string, now: Date): BrokenFlowFile | null {
+  const name = path.basename(file);
+  const backup = path.join(path.dirname(file), `.${name}.backup`);
+  let bytes: Buffer | null;
+  try {
+    bytes = readOrNull(backup);
+  } catch {
+    // Node-RED cannot read it either: it starts with nothing, and has nothing to lose.
+    return null;
+  }
+  if (bytes === null || bytes.length === 0) {
+    return null;
+  }
+  const problem = flowFileProblem(name, bytes);
+  if (problem === null) {
+    return null;
+  }
+  return {
+    file,
+    problem: `is empty, and its backup ${backup} ${problem}`,
+    safeCopy: keepCopy(file, bytes, now),
+    backup: null,
+    loadsChanged: loadsWithReplacements(name, bytes),
+  };
 }
 
 /** Every file of `names` in `dir` that Node-RED could not load, each kept aside first. */

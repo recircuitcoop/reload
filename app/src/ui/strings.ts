@@ -262,8 +262,7 @@ export const STRINGS = {
   "flows.refused.notInstalled":
     "A step of this flow comes from a package that isn't installed. Add it in Configuration › General.",
   "flows.refused.flowsFile": "Reload can't save your flows now: see the message above.",
-  // The flows file banner's buttons (application/flow-files.ts).
-  "flowsFile.save": "Save the flows that are running", // decided
+  // The flows file banner's button (application/flow-files.ts).
   "flowsFile.showInFinder": "Show in Finder", // decided
   "flowsFile.showInFolder": "Show in folder", // decided
   "runState.copying": "copying",

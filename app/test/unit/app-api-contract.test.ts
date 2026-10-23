@@ -241,10 +241,6 @@ const CALLS: Record<string, { call: (api: AppApi) => Promise<unknown>; sent: unk
     call: (api) => api.status(),
     sent: [IPC.generalCall, { op: "status.get", args: null }],
   },
-  saveRunningFlows: {
-    call: (api) => api.saveRunningFlows(),
-    sent: [IPC.generalCall, { op: "flowsFile.save", args: null }],
-  },
   showFlowsFile: {
     call: (api) => api.showFlowsFile(),
     sent: [IPC.generalCall, { op: "flowsFile.show", args: null }],

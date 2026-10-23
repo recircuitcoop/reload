@@ -15,14 +15,23 @@ export interface BrokenFlowFile {
   readonly safeCopy: string | null;
   /** Node-RED's `.<name>.backup` beside it, when that one is loadable; never restored by Reload. */
   readonly backup: string | null;
+  /**
+   * Node-RED loads it all the same, its bytes that are not UTF-8 replaced as it reads them: a
+   * save would write the replacements over what the person had.
+   */
+  readonly loadsChanged: boolean;
 }
 
 /**
- * A broken file, refused. `running`: it broke while Reload ran, so the flows Node-RED loaded at
- * the start still run, and are newer than anything on disk; otherwise none were loaded from it.
+ * What Node-RED holds from a refused file, which is what the person is told:
+ * * `not-loaded`: refused at the start, and Node-RED loaded nothing from it;
+ * * `loaded-changed`: refused at the start, and Node-RED loaded it with characters replaced;
+ * * `running`: it broke while Reload ran; what Node-RED loaded at the start is still in use.
  */
+export type FlowFileState = "not-loaded" | "loaded-changed" | "running";
+
 export interface RefusedFlowFile extends BrokenFlowFile {
-  readonly running: boolean;
+  readonly state: FlowFileState;
 }
 
 const isObject = (value: unknown): boolean =>
@@ -59,6 +68,12 @@ export function flowFileProblem(name: string, bytes: Uint8Array): string | null 
     : "doesn't hold a list of flows Reload can read";
 }
 
+/** Whether Node-RED loads these bytes as `name` anyway, reading them as UTF-8 with replacements. */
+export function loadsWithReplacements(name: string, bytes: Uint8Array): boolean {
+  const text = new TextDecoder("utf-8", { ignoreBOM: true }).decode(bytes);
+  return flowFileProblem(name, new TextEncoder().encode(text)) === null;
+}
+
 /** What a read error means, in plain words, to follow the file's name. */
 export function unreadableProblem(code: string | undefined): string {
   switch (code) {
@@ -87,28 +102,74 @@ export function safeCopyName(file: string, now: Date, attempt = 1): string {
 const baseName = (file: string): string =>
   file.slice(Math.max(file.lastIndexOf("/"), file.lastIndexOf("\\")) + 1);
 
+const isCredentials = (file: string): boolean => baseName(file) === "flows_cred.json";
+
+/** The title of what the person is told about one refused file. */
+export function refusedFlowFileTitle(refused: RefusedFlowFile): string {
+  if (isCredentials(refused.file)) {
+    return refused.state === "running"
+      ? "Your flows' passwords file is damaged"
+      : "Reload didn't load your flows' passwords";
+  }
+  switch (refused.state) {
+    case "not-loaded":
+      return "Reload didn't load your flows";
+    case "loaded-changed":
+      return "Reload won't save over your flows file";
+    case "running":
+      return "Your flows file is damaged";
+  }
+}
+
+/** The backup, named as Finder shows it: or rather, hides it. */
+const hidden = (backup: string): string =>
+  `${backup} (its name starts with a dot, so Finder hides it)`;
+
 /** What the person reads about one refused file: which, why, the copy, and what to do. */
 export function refusedFlowFileSentence(refused: RefusedFlowFile): string {
-  const name = baseName(refused.file);
+  const { file, problem, backup, state } = refused;
+  const name = baseName(file);
   const kept =
     refused.safeCopy === null
       ? "Reload could not make a copy of it."
       : `Reload kept a copy of it at ${refused.safeCopy}.`;
-  if (refused.running) {
+  const credentials = isCredentials(file);
+  if (state === "running") {
+    const what = credentials
+      ? "The passwords and tokens Reload loaded when it started are still in use"
+      : "The flows Reload loaded when it started are still running";
+    const remedy =
+      backup === null
+        ? credentials
+          ? "The file is encrypted, so it can't be fixed by hand."
+          : "Fix the file: Reload saves again once it can be read."
+        : `If you didn't mean to change it, copy its backup ${hidden(backup)} over it` +
+          `${credentials ? "" : ", or fix it"}: Reload saves again once the file can be read.`;
+    return `${file} ${problem}. ${what}, and Reload won't save over the file. ${kept} ${remedy}`;
+  }
+  const useBackup =
+    backup === null
+      ? null
+      : `To use its backup ${hidden(backup)}, quit Reload, copy it over ${name}, and start Reload again.`;
+  if (credentials) {
+    const startOver =
+      `quit Reload, move ${name} out of its folder, start Reload again, and enter the ` +
+      "passwords in your flows again.";
     return (
-      `Your flows are still running, but ${refused.file} ${refused.problem}. ${kept} ` +
-      "Reload won't save over the file. Choose Save the flows that are running to write them " +
-      "back to it."
+      `${file} ${problem}, so Reload didn't load the passwords and tokens your flows use, and ` +
+      `won't save over it. ${kept} The file is encrypted, so it can't be fixed by hand. ` +
+      (useBackup === null ? `To start over, ${startOver}` : `${useBackup} Otherwise, ${startOver}`)
     );
   }
-  const backup =
-    refused.backup === null
-      ? `Fix ${name}, then start Reload again.`
-      : `Your last good flows may be in ${refused.backup}. Its name starts with a dot, so ` +
-        `Finder hides it. To use it, quit Reload, copy it over ${name}, and start Reload ` +
-        `again; or fix ${name} and start Reload again.`;
+  if (state === "loaded-changed") {
+    return (
+      `${file} ${problem}. Reload loaded your flows from it, but some of its characters ` +
+      "couldn't be read and were replaced, so saving would change them for good. " +
+      `${kept} Reload won't save over the file: fix its text, then start Reload again.`
+    );
+  }
   return (
-    `${refused.file} ${refused.problem}, so Reload didn't load your flows from it and won't ` +
-    `save over it. ${kept} ${backup}`
+    `${file} ${problem}, so Reload didn't load your flows from it and won't save over it. ` +
+    `${kept} ${useBackup === null ? `Fix ${name}, then start Reload again.` : `${useBackup} Or fix ${name} and start Reload again.`}`
   );
 }

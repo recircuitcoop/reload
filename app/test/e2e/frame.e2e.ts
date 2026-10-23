@@ -198,9 +198,7 @@ test("a flows file that is not JSON is kept, told by notice and in the window, a
     await expect(banner).toBeVisible({ timeout: 15_000 });
     await expect(banner).toContainText("Reload didn't load your flows");
     await expect(banner).toContainText(`${flowsFile} isn't valid JSON`);
-    // Broken at the start: no running flows to save, so only Show in Finder is offered.
     await expect(window.getByTestId("flows-file-show")).toBeVisible();
-    await expect(window.getByTestId("flows-file-save")).toHaveCount(0);
     await expect(banner).toContainText(path.join(folder, ".flows.json.backup"));
     const copies = fs.readdirSync(folder).filter((name) => name.startsWith("flows.json.broken-"));
     expect(copies).toHaveLength(1);
@@ -222,35 +220,46 @@ test("a flows file that is not JSON is kept, told by notice and in the window, a
   }
 });
 
-test("a flows file broken while Reload runs: a save is refused, and Save the flows that are running writes them back", async () => {
+test("a flows file broken while Reload runs: a save is refused, told as still running, and saves resume once fixed", async () => {
   const { scratch, userData, env } = scratchDirectories();
   const folder = path.join(userData, "node-red");
   const flowsFile = path.join(folder, "flows.json");
   const flows = [{ id: "a1b2c3d4e5f60718", type: "tab", label: "Recordings to Anytype" }];
+  const broken = '[{"id":"a1b2c3d4e5f60718","type":"ta';
   fs.mkdirSync(folder, { recursive: true });
   fs.writeFileSync(flowsFile, JSON.stringify(flows));
   const apps: ElectronApplication[] = [];
+  const setOn = (window: Page, on: boolean) =>
+    window.evaluate(
+      (value) =>
+        (
+          globalThis as unknown as {
+            reload: { app: { setFlowOn(id: string, on: boolean): Promise<unknown> } };
+          }
+        ).reload.app.setFlowOn("a1b2c3d4e5f60718", value),
+      on,
+    );
   try {
     const { app, window } = await launchApp(env);
     apps.push(app);
     await waitForRunning(window, "runtime");
     await expect(frame(window)).toHaveAttribute("data-route", "live", { timeout: 15_000 });
-    fs.writeFileSync(flowsFile, '[{"id":"a1b2c3d4e5f60718","type":"ta');
+    fs.writeFileSync(flowsFile, broken);
     // Switching the flow off saves the flows: refused, the file left as it is.
-    const answer = await window.evaluate(() =>
-      (
-        globalThis as unknown as {
-          reload: { app: { setFlowOn(id: string, on: boolean): Promise<unknown> } };
-        }
-      ).reload.app.setFlowOn("a1b2c3d4e5f60718", false),
-    );
-    expect(answer).toMatchObject({ ok: false, refused: { reason: "flows-file" } });
+    expect(await setOn(window, false)).toMatchObject({
+      ok: false,
+      refused: { reason: "flows-file" },
+    });
+    expect(fs.readFileSync(flowsFile, "utf8")).toBe(broken);
     const banner = window.getByTestId("flows-file-banner");
     await expect(banner).toBeVisible({ timeout: 15_000 });
-    await expect(banner).toContainText("Your flows are still running");
-    await window.getByTestId("flows-file-save").click();
+    await expect(banner).toContainText("Your flows file is damaged");
+    await expect(banner).toContainText("The flows Reload loaded when it started are still running");
+    await expect(banner).not.toContainText("didn't load");
+    // Fixed by hand: the next save goes through, and the banner goes.
+    fs.writeFileSync(flowsFile, JSON.stringify(flows));
+    expect(await setOn(window, false)).toMatchObject({ ok: true });
     await expect(banner).toBeHidden({ timeout: 15_000 });
-    expect(JSON.parse(fs.readFileSync(flowsFile, "utf8"))).toEqual(flows);
     const copies = fs.readdirSync(folder).filter((name) => name.startsWith("flows.json.broken-"));
     expect(copies).toHaveLength(1);
     await quit(app);

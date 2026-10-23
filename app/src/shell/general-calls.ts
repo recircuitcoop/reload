@@ -6,7 +6,6 @@
 // counts them from run records, hidden places included.
 import type { IpcMain } from "electron";
 import { DEFAULT_RETENTION_DAYS } from "../application/runs";
-import { SAVE_RUNNING_OP } from "../application/flow-files";
 import type { NoticeBoard } from "../application/notices";
 import type { Supervisor } from "../application/supervisor";
 import type { AnytypeStatus } from "../domain/anytype/status";
@@ -17,7 +16,7 @@ import type { Logger } from "../ports/logger";
 import type { RunRetentionSetting } from "../ports/settings-store";
 import type { Answer } from "../ui/answer";
 import { RETENTION_CHOICES, type Retention, type StatusView } from "../ui/general-contract";
-import { fromChild, guarded, opOf, refused, unknownOp } from "./answer";
+import { guarded, opOf, refused, unknownOp } from "./answer";
 import { IPC } from "./ipc";
 import type { PendingQuestions } from "./views";
 
@@ -26,7 +25,7 @@ export interface GeneralCallsDeps {
   /** Every supervised child: the runtime and the services process. */
   readonly children: readonly Pick<Supervisor, "status" | "onStatus">[];
   /** The runtime's supervisor: the banner's Down sentence names its crash-loop limit. */
-  readonly runtime: Pick<Supervisor, "crashLoop" | "call">;
+  readonly runtime: Pick<Supervisor, "crashLoop">;
   readonly services: Pick<Supervisor, "call">;
   readonly pending: PendingQuestions;
   /** The notices current now: a refused flows file is shown in the window too. */
@@ -67,7 +66,6 @@ export function wireGeneralCalls(deps: GeneralCallsDeps): void {
           ? null
           : {
               ...compose(refused),
-              canSave: refused.kind === "flows-file-damaged",
               showIn: deps.platform === "darwin" ? "finder" : "folder",
             },
     };
@@ -98,8 +96,6 @@ export function wireGeneralCalls(deps: GeneralCallsDeps): void {
         case "status.get":
           await readAnytype();
           return { ok: true, value: view() };
-        case "flowsFile.save":
-          return fromChild<null>(await deps.runtime.call(SAVE_RUNNING_OP, null), op, logger);
         case "flowsFile.show": {
           const shown = flowsFileNotice();
           if (shown !== undefined) {
