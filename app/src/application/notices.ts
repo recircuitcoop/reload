@@ -31,7 +31,19 @@ export interface NoticeBoardDeps {
   /** Where the current conditions are recorded; null keeps them in memory only. */
   readonly store: NoticeStore | null;
   readonly logger: Logger;
+  /**
+   * The terminal Reload was started from, told what it came up without as the old host told it
+   * (`  not started <what>: <why>`, test_control_channel.py); absent: told nowhere else.
+   */
+  readonly report?: (line: string) => void;
 }
+
+/** The kinds that name something Reload is running without. */
+const CAME_UP_WITHOUT: readonly NoticeKind[] = [
+  "endpoint-degraded",
+  "endpoint-blocked-by-legacy-helper",
+  "mcp-child-stopped",
+];
 
 export class NoticeBoard implements Notifier {
   readonly #deps: NoticeBoardDeps;
@@ -63,6 +75,9 @@ export class NoticeBoard implements Notifier {
     this.#write();
     const message = compose(notice);
     this.#deps.logger.info(`notice: ${message.title}: ${message.body}`);
+    if (CAME_UP_WITHOUT.includes(notice.kind)) {
+      this.#deps.report?.(`  not started ${notice.subject}: ${notice.detail ?? message.body}\n`);
+    }
     try {
       this.#deps.deliver(message);
     } catch (error) {

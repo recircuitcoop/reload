@@ -148,6 +148,25 @@ describe("compose", () => {
 });
 
 describe("NoticeBoard: the once-only rule", () => {
+  it("tells the terminal what Reload came up without, once, and nothing else", () => {
+    const told: string[] = [];
+    const subject = new NoticeBoard({
+      deliver: () => undefined,
+      store: null,
+      logger: new RecordingLogger(),
+      report: (line) => told.push(line),
+    });
+    const degraded: Notice = {
+      kind: "endpoint-degraded",
+      subject: "MCP endpoint",
+      detail: "Port 31010 is used by another app",
+    };
+    subject.raise(degraded);
+    subject.raise({ ...degraded });
+    subject.raise(crashLoop);
+    expect(told).toEqual(["  not started MCP endpoint: Port 31010 is used by another app\n"]);
+  });
+
   it("tells a notice once, however many times it is raised while it stays true", () => {
     const { subject, shown } = board();
     subject.raise(crashLoop);

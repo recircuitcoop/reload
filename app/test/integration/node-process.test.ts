@@ -117,13 +117,43 @@ describe("a node process", () => {
     expect(output?.message.reload.cause).toBeUndefined();
   });
 
-  it("refuses and logs an emit on an undeclared port", async () => {
+  it("refuses every emit on an undeclared port, and tells it once: one log line, one notice", async () => {
     const node = raw();
-    const [, delivery] = send(node.node, { do: "undeclared" });
-    await waitFor("done", () => delivery.finished);
-    expect(delivery.outputs).toEqual([]);
+    for (let n = 0; n < 5; n += 1) {
+      const [, delivery] = send(node.node, { do: "undeclared" });
+      await waitFor("done", () => delivery.finished);
+      expect(delivery.outputs).toEqual([]);
+    }
     expect(node.host.sent).toEqual([]);
-    expect(node.logger.has(/refused an emit on undeclared port "nope"/)).toBe(true);
+    const told = node.logger.lines.filter((line) =>
+      line.text.includes('refused an emit on undeclared port "nope"'),
+    );
+    expect(told).toHaveLength(1);
+    expect(node.notifier.notices).toEqual([
+      {
+        kind: "emit-refused",
+        subject: 'raw (port "nope")',
+        detail: "Its package does not declare that port, so what it sent there went nowhere",
+      },
+    ]);
+    const [notice] = node.notifier.notices;
+    expect(notice === undefined ? null : compose(notice).title).toBe(
+      'Reload refused what raw (port "nope") sent',
+    );
+  });
+
+  it("withdraws a refused port's notice once its package declares the port", async () => {
+    const first = raw();
+    const [, delivery] = send(first.node, { do: "undeclared" });
+    await waitFor("done", () => delivery.finished);
+    expect(first.notifier.notices.map((notice) => notice.subject)).toEqual(['raw (port "nope")']);
+    // Redeployed with a package that declares it: built again, and the notice goes.
+    const declared = [
+      { port: "out", event: "rawnode.out.v1" },
+      { port: "nope", event: "rawnode.nope.v1" },
+    ];
+    const again = raw({ notifier: first.notifier, ports: declared });
+    expect(again.notifier.cleared).toContain('emit-refused raw (port "nope")');
   });
 
   it("refuses and logs an emit for an input id that is not its own", async () => {

@@ -228,6 +228,10 @@ export interface StartOptions {
   readonly id?: string;
   /** An action view's props judgement (spec 8.1.5), as the registration hands it. */
   readonly judgeProps?: NonNullable<NodeProcessSpec["judgeProps"]>;
+  /** The ports its package declares, in place of the fixture's one. */
+  readonly ports?: NodeProcessSpec["ports"];
+  /** The notifier it raises to, to see a notice outlive the process that raised it. */
+  readonly notifier?: RecordingNotifier;
 }
 
 /** Start the raw node through the real adapter, as the runtime would. */
@@ -236,12 +240,13 @@ export function startRaw(options: StartOptions = {}): RawNode {
   const withId =
     options.id === undefined ? base : { ...base, identity: { ...base.identity, id: options.id } };
   const argv = options.argv === undefined ? withId : { ...withId, argv: options.argv };
-  const spec =
+  const judged =
     options.judgeProps === undefined ? argv : { ...argv, judgeProps: options.judgeProps };
+  const spec = options.ports === undefined ? judged : { ...judged, ports: options.ports };
   const journal = options.journal ?? new MemoryJournal();
   const host = new RecordingHost();
   const logger = new RecordingLogger();
-  const notifier = new RecordingNotifier();
+  const notifier = options.notifier ?? new RecordingNotifier();
   const secrets = new RecordingSecrets();
   const crashes: boolean[] = [];
   const launcher = nodeProcessLauncher({

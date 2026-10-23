@@ -47,6 +47,7 @@ import {
 import { inputJournalFor, type Admitted, type Input, type InputJournal } from "./input-journal";
 import type { NodeProcessDeps } from "./node-process-settings";
 import { watchExit } from "./exit-watch";
+import { RefusedPorts } from "./refused-ports";
 import { ViewDeadlines } from "./view-deadlines";
 
 export * from "./node-process-settings";
@@ -66,6 +67,7 @@ class ChildNodeProcess implements NodeProcess {
   readonly #deadlines: ViewDeadlines;
   readonly #who: string;
   readonly #closeWaiters: (() => void)[] = [];
+  readonly #refused: RefusedPorts;
 
   #child: ChildProcess | null = null;
   ready = false;
@@ -99,6 +101,9 @@ class ChildNodeProcess implements NodeProcess {
     fs.mkdirSync(spec.dataDir, { recursive: true });
     // Created again (a redeploy): a crash loop from here on is news again.
     deps.notifier.clear("node-stopped", spec.identity.name || spec.identity.typeId);
+    this.#refused = new RefusedPorts(spec, deps.notifier, (message) => {
+      this.#log("error", message);
+    });
     this.#spawn();
   }
 
@@ -439,7 +444,7 @@ class ChildNodeProcess implements NodeProcess {
     const index = this.#spec.ports.findIndex((declared) => declared.port === port);
     const declared = this.#spec.ports[index];
     if (declared === undefined) {
-      this.#log("error", `refused an emit on undeclared port ${JSON.stringify(port)}`);
+      this.#refused.refuse(port);
       return;
     }
     const input = inputId === undefined ? undefined : this.#inputs.get(inputId);

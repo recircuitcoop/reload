@@ -50,6 +50,8 @@ export type NoticeKind =
   | "flows-file-refused"
   /** A flows file broken while Reload runs: the flows still run; kept, never saved over. */
   | "flows-file-damaged"
+  /** A node sent on a port its package does not declare: refused, told once (plan 0031 I). */
+  | "emit-refused"
   /** A file `reload --status` or `--quit` reads could not be written (plan 0031 group E). */
   | "command-line-unwritable"
   /** A run started (plan 0022 §I, ux-writing "Notifications"); stops after five good runs. */
@@ -78,6 +80,7 @@ export const NOTICE_KINDS: readonly NoticeKind[] = [
   "old-data-left",
   "flows-file-refused",
   "flows-file-damaged",
+  "emit-refused",
   "command-line-unwritable",
   "run-started",
   "run-done",
@@ -253,6 +256,11 @@ function composeWords(notice: Notice): Message {
       return { title: "Reload didn't load your flows", body: sentences(detail) };
     case "flows-file-damaged":
       return { title: "Your flows file is damaged", body: sentences(detail) };
+    case "emit-refused":
+      return {
+        title: `Reload refused what ${subject} sent`,
+        body: sentences(detail, "Update the package, or change the flow."),
+      };
     case "command-line-unwritable":
       return {
         title: `Reload could not write its ${subject}`,

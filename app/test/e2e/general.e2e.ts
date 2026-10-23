@@ -6,6 +6,7 @@
 // Never the owner's Anytype, key, port or clipboard: a fake Anytype on a free loopback port, the
 // fake MCP child, a scratch HOME (app-harness), free ports, and the page's clipboard replaced by a
 // stub that only keeps what it was given (the system clipboard is never read or written).
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
 import net from "node:net";
@@ -18,6 +19,7 @@ import {
   anytypeKeyFile,
   APP,
   cleanUp,
+  ELECTRON_BINARY,
   freePortNow,
   launchApp,
   openGeneral,
@@ -388,6 +390,43 @@ test("Set up ChatGPT says ChatGPT's own steps, Copy address copies the address s
     expect(fs.existsSync(log)).toBe(true);
     expect(fs.readFileSync(log, "utf8")).not.toContain(token);
   } finally {
+    await anytype.close();
+    await cleanUp(apps, scratch);
+  }
+});
+
+test("a taken MCP port at start is said in the terminal Reload was started from, and by reload --status", async () => {
+  const { scratch, env } = scratchDirectories();
+  const anytype = await fakeAnytype();
+  const blocker = net.createServer();
+  const apps: ElectronApplication[] = [];
+  try {
+    // Taken before Reload starts: it comes up without its MCP endpoint, as the old host came up
+    // without its MCP child.
+    const port = Number(env["RELOAD_MCP_PORT"]);
+    await new Promise<void>((resolve) => blocker.listen(port, "127.0.0.1", resolve));
+    const runEnv = {
+      ...env,
+      ANYTYPE_API_BASE_URL: anytype.url,
+      RELOAD_TEST_ANYTYPE: fakeChild(scratch),
+    };
+    const { app, output } = await launchApp(runEnv);
+    apps.push(app);
+    await expect
+      .poll(() => output.join(""), { timeout: 20_000 })
+      .toMatch(/^ {2}not started MCP endpoint: .+$/m);
+    const said = /^ {2}not started MCP endpoint: (.+)$/m.exec(output.join(""))?.[1] ?? "";
+    // The same condition crossed to the notice file, and a third process prints it.
+    const status = spawnSync(ELECTRON_BINARY, [APP, "--status"], {
+      env: runEnv,
+      encoding: "utf8",
+      timeout: 30_000,
+    });
+    expect(status.status).toBe(0);
+    expect(status.stdout).toContain(`  Reload is running without its MCP endpoint — ${said}`);
+    await quit(app);
+  } finally {
+    await new Promise((resolve) => blocker.close(resolve));
     await anytype.close();
     await cleanUp(apps, scratch);
   }

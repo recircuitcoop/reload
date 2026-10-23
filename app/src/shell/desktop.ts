@@ -7,6 +7,7 @@
 // stop, and the window rules in main.ts itself (closing is not quitting; no tray icon on any
 // OS, checked by test/unit/no-tray.test.ts).
 
+import fs from "node:fs";
 import type { IpcMain } from "electron";
 import {
   LaunchAtLogin,
@@ -48,7 +49,18 @@ export function wireDesktop(deps: DesktopWiring): DesktopWired {
     logger,
   });
   wireLaunchAtLogin(ipc, launchAtLogin);
-  const notices = new NoticeBoard({ deliver: deps.deliver, store: deps.noticeFile, logger });
+  const notices = new NoticeBoard({
+    deliver: deps.deliver,
+    store: deps.noticeFile,
+    logger,
+    report: (line) => {
+      try {
+        fs.writeSync(1, line);
+      } catch {
+        // No terminal to tell, or one gone: the notice and the log still say it.
+      }
+    },
+  });
   return { notices, launchAtLogin };
 }
 
