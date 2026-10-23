@@ -138,9 +138,15 @@ export function runtimeRestarter(
         done(null);
       });
       logger.info(`restarting only the runtime: ${reason}`);
-      if (!ask() && !settledStopped()) {
-        logger.info("the runtime is starting: it restarts once it runs");
+      if (ask() || settledStopped()) {
+        return;
       }
+      if (whileStopped === undefined) {
+        // Nothing to change between generations: a starting runtime reads the packages anyway.
+        done(null);
+        return;
+      }
+      logger.info("the runtime is starting: it restarts once it runs");
     });
 }
 
