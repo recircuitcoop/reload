@@ -24,6 +24,19 @@ describe("a node instance's notices", () => {
     ]);
   });
 
+  it("a notifier that fails is told to the caller, never thrown at the node process", () => {
+    const { notice } = stoppedFor("raw", LOOP, { restartable: true, how: "code 1", stuck: false });
+    const failing = {
+      raise: () => {
+        throw new Error("the notice file is read-only");
+      },
+      clear: () => undefined,
+    };
+    const told: unknown[] = [];
+    raiseStopped(failing, notice, "tab1", (error) => told.push(error));
+    expect(told).toEqual([new Error("the notice file is read-only")]);
+  });
+
   it("a stop is one notice on the node's flow: stuck and unhealthy are withdrawn as it is said", () => {
     const notifier = new RecordingNotifier();
     const { notice } = stoppedFor("raw", LOOP, {
