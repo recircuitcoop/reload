@@ -625,6 +625,11 @@ test("General shows the queued reports in full, Advanced's status details, Recor
       `http://127.0.0.1:${env["RELOAD_MCP_PORT"] ?? ""}/mcp`,
       { timeout: 20_000 },
     );
+    // The runtime's node processes (the old process list): no flow has a step, so none runs.
+    const nodes = advanced.getByTestId("general-advanced-nodes");
+    await expect(nodes).toContainText(STRINGS["general.advanced.nodes"]);
+    await expect(nodes).toContainText(STRINGS["general.advanced.nodes.none"]);
+    await expect(advanced.getByTestId("general-advanced-node")).toHaveCount(0);
     await expect(advanced.getByTestId("general-advanced-anytype")).toBeVisible();
     await expect(advanced.getByTestId("general-advanced-secrets")).toHaveAttribute(
       "data-backend",

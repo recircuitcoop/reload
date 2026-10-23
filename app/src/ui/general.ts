@@ -10,7 +10,12 @@ import type { AppApiV2 } from "./app-api-v2";
 import type { AnytypeStatus, McpEndpointStatus } from "./contract";
 import type { Answer, Refusal } from "./answer";
 import type { FlowSummary, NodeOptions } from "./flow-contract";
-import { RETENTION_CHOICES, type LimitValues, type PackagesView } from "./general-contract";
+import {
+  RETENTION_CHOICES,
+  type LimitValues,
+  type NodeProcessRow,
+  type PackagesView,
+} from "./general-contract";
 import { plural, t, type PlainKey } from "./strings";
 
 /** The Anytype section's state line, and whether its button is Pair or Pair again. */
@@ -156,6 +161,23 @@ export function servedPort(status: McpEndpointStatus): number | null {
   }
   const port = Number(address.slice(address.lastIndexOf(":") + 1));
   return Number.isInteger(port) ? port : null;
+}
+
+/** A node process's state in words: running, coming up, coming back, or stopped for good. */
+const NODE_STATE_WORD: Readonly<Record<NodeProcessRow["state"], PlainKey>> = {
+  running: "status.running",
+  starting: "status.starting",
+  restarting: "status.restarting",
+  stopped: "status.stopped",
+};
+
+/** One node process in General › Advanced: its state's word, then its pid and why it stopped. */
+export function nodeRowWords(row: NodeProcessRow): {
+  readonly word: string;
+  readonly detail: string;
+} {
+  const detail = [row.pid ?? "–", row.why ?? ""].filter((part) => part !== "").join(" · ");
+  return { word: t(NODE_STATE_WORD[row.state]), detail };
 }
 
 /** The AI apps section's state line. */

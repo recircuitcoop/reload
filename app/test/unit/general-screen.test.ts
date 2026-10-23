@@ -21,6 +21,7 @@ import {
   recorderLine,
   moveRefusal,
   nameParts,
+  nodeRowWords,
   PACKAGE_ACTIONS,
   packagesLine,
   PRIVACY_NOTICE,
@@ -231,6 +232,24 @@ describe("the MCP endpoint, read while General is open", () => {
     expect(asks).toBe(3);
     expect(shown.map(servedAddress)).toEqual([null, "127.0.0.1:31010"]);
     stop();
+  });
+});
+
+describe("General › Advanced's list of node processes", () => {
+  it("says each one's state, then its pid, and why one stopped for good", () => {
+    const row = { name: "ping", package: "monty", pid: 7, why: null } as const;
+    expect(nodeRowWords({ ...row, state: "running" })).toEqual({
+      word: STRINGS["status.running"],
+      detail: "7",
+    });
+    expect(nodeRowWords({ ...row, state: "starting" }).word).toBe(STRINGS["status.starting"]);
+    expect(nodeRowWords({ ...row, pid: null, state: "restarting" })).toEqual({
+      word: STRINGS["status.restarting"],
+      detail: "–",
+    });
+    expect(
+      nodeRowWords({ ...row, pid: null, state: "stopped", why: "it exited 5 times in 60 s" }),
+    ).toEqual({ word: STRINGS["status.stopped"], detail: "– · it exited 5 times in 60 s" });
   });
 });
 

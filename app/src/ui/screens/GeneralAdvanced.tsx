@@ -20,7 +20,7 @@ import { NumberField } from "../components/atoms/NumberField";
 import { Field } from "../components/molecules/Field";
 import { KeyValue } from "../components/molecules/KeyValue";
 import { GeneralSection } from "../components/organisms/GeneralSection";
-import { LIMIT_FIELDS, limitErrors, limitsToSave, limitsTyped } from "../general";
+import { LIMIT_FIELDS, limitErrors, limitsToSave, limitsTyped, nodeRowWords } from "../general";
 import type { LimitValues, NodeProcessRow } from "../general-contract";
 import { useChildren } from "../store";
 import { t, type PlainKey } from "../strings";
@@ -47,11 +47,11 @@ const processLine = (status: ChildStatus) =>
   [status.pid ?? "–", status.port ?? "–", status.generation].map(String).join(" · ");
 
 /** A node process's state in a pill: running, coming up, coming back, or stopped for good. */
-const NODE_WORD: Readonly<Record<NodeProcessRow["state"], readonly [StatusPillState, PlainKey]>> = {
-  running: ["running", "status.running"],
-  starting: ["waiting", "status.starting"],
-  restarting: ["waiting", "status.restarting"],
-  stopped: ["failed", "status.stopped"],
+const NODE_LOOK: Readonly<Record<NodeProcessRow["state"], StatusPillState>> = {
+  running: "running",
+  starting: "waiting",
+  restarting: "waiting",
+  stopped: "failed",
 };
 
 /** Each of the runtime's node processes with its state and pid, and why one stopped for good. */
@@ -64,7 +64,7 @@ function NodeRows({ rows }: { readonly rows: readonly NodeProcessRow[] }) {
         value={rows.length === 0 ? t("general.advanced.nodes.none") : ""}
       />
       {rows.map((row, index) => {
-        const [look, word] = NODE_WORD[row.state];
+        const { word, detail } = nodeRowWords(row);
         return (
           <KeyValue
             key={`${row.name}-${String(index)}`}
@@ -72,8 +72,7 @@ function NodeRows({ rows }: { readonly rows: readonly NodeProcessRow[] }) {
             label={row.name}
             value={
               <span data-testid="general-advanced-node" data-state={row.state}>
-                <StatusPill state={look}>{t(word)}</StatusPill>{" "}
-                {[row.pid ?? "–", row.why ?? ""].filter((part) => part !== "").join(" · ")}
+                <StatusPill state={NODE_LOOK[row.state]}>{word}</StatusPill> {detail}
               </span>
             }
           />
