@@ -79,7 +79,7 @@ import { stopLeftNodes } from "../application/left-nodes";
 import { OneLog } from "../application/one-log";
 import { linkPeers } from "../application/peer-link";
 import { credentialSecretOf, openSecretStore } from "../application/secrets";
-import { QuitFlow } from "../application/quit";
+import { QuitFlow, stopInReverse } from "../application/quit";
 import { printCanary } from "../application/source-log";
 import { Supervisor } from "../application/supervisor";
 import type { UpdateCheck } from "../application/update-check";
@@ -226,13 +226,12 @@ const quitFlow = new QuitFlow({
   editor,
   ask: (problem) => question.ask(problem),
   stopping: () => telemetry?.stopping(updates?.staged === true ? "update" : "quit"),
-  stopChildren: async () => {
-    await Promise.all([
-      ...[...supervisors.values()].map((supervisor) => supervisor.stop()),
-      // Quit only if Reload started it (launcher.py:986); an adopted Anytype keeps running.
-      anytypeApp.quitIfOurs(),
-    ]);
-  },
+  // The runtime, the services process, then the Anytype Reload started (launcher.py:986).
+  stopChildren: () =>
+    stopInReverse(
+      CHILD_NAMES.flatMap((c) => supervisors.get(c) ?? []),
+      anytypeApp,
+    ),
   exit: installThenQuit(() => updates, app), // a staged update is installed first (WI-0018-24)
   logger,
 });

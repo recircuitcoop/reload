@@ -13,6 +13,10 @@ import {
   substitute,
   unpackedDir,
 } from "../../src/adapters/process/command";
+import { EventEmitter } from "node:events";
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
+
+import { watchExit } from "../../src/adapters/process/exit-watch";
 import { processTreeFor } from "../../src/adapters/process/process-tree";
 import type { CommandRunner } from "../../src/adapters/process/resource-probe";
 
@@ -124,15 +128,16 @@ describe("the minimal environment", () => {
 });
 
 describe("the process tree", () => {
-  it("on POSIX is a detached group, ended by signalling the negative pid", () => {
+  it("on POSIX is a detached group: asked to stop as a group, and a forced end ends the node itself", () => {
     const signals: [number, string][] = [];
     const tree = processTreeFor("darwin", (pid, signal) => signals.push([pid, signal]));
     expect(tree.detached).toBe(true);
     expect(tree.blocked).toBeNull();
     tree.kill(42);
     tree.stop(42);
+    // What the node started is the sweep's after its exit: politely first, never killed outright.
     expect(signals).toEqual([
-      [-42, "SIGKILL"],
+      [42, "SIGKILL"],
       [-42, "SIGTERM"],
     ]);
   });
@@ -150,29 +155,69 @@ describe("the process tree", () => {
     ]);
   });
 
-  it("after its leader exited, signals its group only while a member is left, and never on Windows", async () => {
+  /**
+   * A process table of group members (pid, pgid) that answers signals to a group: `stays` ignore
+   * SIGTERM, `outlives` ignore SIGKILL too. Every `ps` run is counted.
+   */
+  function machine(members: [number, number][], stays: number[] = [], outlives: number[] = []) {
+    let table = [...members];
     const signals: [number, string][] = [];
-    const record = (pid: number, signal: string) => signals.push([pid, signal]);
-    const asked: string[][] = [];
-    const table =
-      (pgids: number[]): CommandRunner =>
-      (file, args) => {
-        asked.push([file, ...args]);
-        return Promise.resolve(pgids.map((pgid) => `  ${String(pgid)}\n`).join(""));
-      };
-    // A grandchild is still in the group: the number is nobody else's, and it is ended.
-    await processTreeFor("darwin", record, table([1, 420, 42])).sweep(42);
-    expect(signals).toEqual([[-42, "SIGKILL"]]);
-    expect(asked).toEqual([["/bin/ps", "-A", "-o", "pgid="]]);
-    // Nothing left of it: nothing is signalled, a pid that only starts with its digits included.
-    signals.length = 0;
-    await processTreeFor("linux", record, table([1, 420])).sweep(42);
-    expect(signals).toEqual([]);
+    const reads: string[][] = [];
+    const run: CommandRunner = (file, args) => {
+      reads.push([file, ...args]);
+      return Promise.resolve(
+        table.map(([pid, pgid]) => `${String(pid)} ${String(pgid)}\n`).join(""),
+      );
+    };
+    const signal = (target: number, name: string): void => {
+      signals.push([target, name]);
+      const spared = name === "SIGTERM" ? [...stays, ...outlives] : outlives;
+      table = table.filter(([pid, pgid]) => pgid !== -target || spared.includes(pid));
+    };
+    const pace = { waitMs: 1_000, lookEveryMs: 250, sleep: () => Promise.resolve() };
+    return { signals, reads, run, signal, pace };
+  }
+
+  it("after its leader exited, asks every descendant politely first, at any depth, and never kills one that went", async () => {
+    // The node 42 exited; its child 51 and that one's child 52 are still in its group.
+    const m = machine([
+      [1, 1],
+      [51, 42],
+      [52, 42],
+      [420, 420],
+    ]);
+    expect(await processTreeFor("darwin", m.signal, m.run, m.pace).sweep(42)).toEqual([]);
+    expect(m.signals).toEqual([[-42, "SIGTERM"]]);
+    expect(m.reads[0]).toEqual(["/bin/ps", "-A", "-o", "pid=,pgid="]);
+  });
+
+  it("kills one that ignores the polite stop, and names one that outlives the kill", async () => {
+    const stubborn = machine([[51, 42]], [51]);
+    expect(
+      await processTreeFor("darwin", stubborn.signal, stubborn.run, stubborn.pace).sweep(42),
+    ).toEqual([]);
+    expect(stubborn.signals).toEqual([
+      [-42, "SIGTERM"],
+      [-42, "SIGKILL"],
+    ]);
+    const unkillable = machine([[51, 42]], [], [51]);
+    expect(
+      await processTreeFor("darwin", unkillable.signal, unkillable.run, unkillable.pace).sweep(42),
+    ).toEqual([51]);
+  });
+
+  it("signals nothing after an exit with nothing left in its group, and never on Windows", async () => {
+    // A pid that only starts with its digits is another group's.
+    const m = machine([
+      [1, 1],
+      [4200, 420],
+    ]);
+    expect(await processTreeFor("linux", m.signal, m.run, m.pace).sweep(42)).toEqual([]);
+    expect(m.signals).toEqual([]);
     // Windows: the bare pid of a process that is gone; no table is read, nothing is sent.
-    asked.length = 0;
-    await processTreeFor("win32", record, table([42])).sweep(42);
-    expect(signals).toEqual([]);
-    expect(asked).toEqual([]);
+    const w = machine([[51, 42]]);
+    expect(await processTreeFor("win32", w.signal, w.run, w.pace).sweep(42)).toEqual([]);
+    expect([...w.signals, ...w.reads]).toEqual([]);
   });
 
   it("signals nothing after an exit when the process table cannot be read", async () => {
@@ -200,5 +245,31 @@ describe("the process tree", () => {
     expect(() => {
       processTreeFor("linux").kill(2 ** 30);
     }).not.toThrow();
+  });
+});
+
+describe("a node process's exit", () => {
+  it("names what its tree left running after a forced kill", async () => {
+    const child = Object.assign(new EventEmitter(), { pid: 42 });
+    const lines: string[] = [];
+    let swept: () => void = () => undefined;
+    const done = new Promise<void>((resolve) => {
+      swept = resolve;
+    });
+    watchExit(child as unknown as ChildProcessWithoutNullStreams, {
+      graceMs: 0,
+      after: () => undefined,
+      tree: {
+        sweep: () => {
+          setImmediate(swept);
+          return Promise.resolve([51, 52]);
+        },
+      },
+      log: (line) => lines.push(line),
+      exited: () => undefined,
+    });
+    child.emit("exit", null, "SIGKILL");
+    await done;
+    expect(lines).toEqual(["still running beneath it after a forced kill: 51, 52"]);
   });
 });

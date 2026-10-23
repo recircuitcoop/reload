@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { isQuitChoice, QuitFlow, type QuitChoice } from "../../src/application/quit";
+import { isQuitChoice, QuitFlow, stopInReverse, type QuitChoice } from "../../src/application/quit";
 import type { EditorPalette, EditorWindow } from "../../src/ports/editor";
 import { RecordingLogger } from "../fakes/children";
 
@@ -122,5 +122,31 @@ describe("isQuitChoice", () => {
   it("knows the three answers and nothing else", () => {
     expect(["deploy", "discard", "cancel"].every(isQuitChoice)).toBe(true);
     expect([undefined, "quit", 1].some(isQuitChoice)).toBe(false);
+  });
+});
+
+describe("the quit's order", () => {
+  it("is the reverse of the start: the runtime, then the services process, then the Anytype Reload started, each after the one before", async () => {
+    const events: string[] = [];
+    const later = (name: string) => ({
+      stop: async () => {
+        events.push(`stop ${name}`);
+        await new Promise((resolve) => setImmediate(resolve));
+        events.push(`stopped ${name}`);
+      },
+    });
+    await stopInReverse([later("runtime"), later("services")], {
+      quitIfOurs: () => {
+        events.push("quit Anytype");
+        return Promise.resolve();
+      },
+    });
+    expect(events).toEqual([
+      "stop runtime",
+      "stopped runtime",
+      "stop services",
+      "stopped services",
+      "quit Anytype",
+    ]);
   });
 });

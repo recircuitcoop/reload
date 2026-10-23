@@ -29,6 +29,22 @@ export interface QuitDeps {
 
 export type QuitOutcome = "quit" | "cancelled" | "busy";
 
+/**
+ * Stop everything in the reverse of its start (the old `quit_order`): the runtime first, whose
+ * nodes close while everything they use still runs; then the services process and its MCP
+ * child; and the Anytype Reload started last, so a step still writing to it reaches it. Each
+ * waits for the one before. `children` are in start order.
+ */
+export async function stopInReverse(
+  children: readonly { stop(): Promise<void> }[],
+  anytype: { quitIfOurs(): Promise<unknown> },
+): Promise<void> {
+  for (const child of children) {
+    await child.stop();
+  }
+  await anytype.quitIfOurs();
+}
+
 export class QuitFlow {
   readonly #deps: QuitDeps;
   #phase: "idle" | "deciding" | "stopping" | "done" = "idle";

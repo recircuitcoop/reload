@@ -145,6 +145,16 @@ class Node:
             )
             send({"t": "emit", "port": "out", "data": sleeper.pid, "in": input_id})
             send({"t": "done", "in": input_id})
+        elif action == "stubborn-grandchild":
+            # A grandchild that ignores a polite stop: only a kill ends it.
+            sleeper = subprocess.Popen(
+                ["/bin/sh", "-c", "trap '' TERM; while :; do sleep 1; done"],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            send({"t": "emit", "port": "out", "data": sleeper.pid, "in": input_id})
+            send({"t": "done", "in": input_id})
         elif action == "whoami":
             about = {
                 "env": sorted(os.environ),

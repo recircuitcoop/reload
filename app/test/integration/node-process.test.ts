@@ -961,6 +961,26 @@ describe("no orphan: a node's grandchildren end with it", () => {
     await waitFor("the grandchild to go", () => !alive(pid), 3_000);
   });
 
+  it("asks what a node started to stop politely first, after a crash, and kills it only if it stays", async () => {
+    const signals: string[] = [];
+    const tree = processTreeFor(process.platform, (pid, signal) => {
+      signals.push(`${signal} ${String(pid)}`);
+      process.kill(pid, signal);
+    });
+    const node = raw({ tree, settings: { respawnDelayMs: 60_000 } });
+    await ready(node);
+    const leader = node.node.pid as number;
+    const [, polite] = send(node.node, { do: "grandchild" });
+    await waitFor("the grandchild", () => polite.finished);
+    const [, stubborn] = send(node.node, { do: "stubborn-grandchild" });
+    await waitFor("the stubborn one", () => stubborn.finished);
+    const pids = [polite, stubborn].map((d) => d.outputs[0]?.message.payload as number);
+    process.kill(leader, "SIGKILL"); // the node crashed
+    await waitFor("both gone", () => pids.every((pid) => !alive(pid)), 15_000);
+    // Its group asked first, then killed, since one stayed; never the node's own pid again.
+    expect(signals).toEqual([`SIGTERM -${String(leader)}`, `SIGKILL -${String(leader)}`]);
+  }, 20_000);
+
   it("and a node that exited with nothing left behind is forgotten: nothing is signalled at its pid", async () => {
     // Every signal any part of the tree sends, its sweep after the exit included.
     const signals: number[] = [];
@@ -972,8 +992,9 @@ describe("no orphan: a node's grandchildren end with it", () => {
     const tree: ProcessTree = {
       ...real,
       sweep: async (pid) => {
-        await real.sweep(pid);
+        const survivors = await real.sweep(pid);
         swept.push(pid);
+        return survivors;
       },
     };
     const node = raw({ tree, settings: { respawnDelayMs: 60_000 } });

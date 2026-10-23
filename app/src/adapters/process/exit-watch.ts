@@ -87,11 +87,18 @@ export function watchExit(child: ChildProcess, watch: ExitWatch): void {
     // The node is gone; whatever it started goes too, on close and on crash alike. Its number
     // may be reused once its group is empty, so the sweep signals only a group with a member.
     if (child.pid !== undefined) {
-      watch.tree.sweep(child.pid).catch((error: unknown) => {
-        watch.log(
-          `what it started could not be checked, so nothing was signalled: ${String(error)}`,
-        );
-      });
+      watch.tree.sweep(child.pid).then(
+        (survivors) => {
+          if (survivors.length > 0) {
+            watch.log(`still running beneath it after a forced kill: ${survivors.join(", ")}`);
+          }
+        },
+        (error: unknown) => {
+          watch.log(
+            `what it started could not be checked, so nothing was signalled: ${String(error)}`,
+          );
+        },
+      );
     }
     watch.after(watch.graceMs, handle);
   });

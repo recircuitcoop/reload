@@ -2,10 +2,12 @@
 // it started end together.
 //
 // POSIX: the node process is started detached, which makes it the leader of a new session
-// and process group whose id is its pid. Killing the negative pid signals the whole group,
-// so a grandchild the node started (a `sleep`, a model server) goes with it, on close and on
-// crash. The group outlives its leader while any member is alive, so it can still be killed
-// after the node itself has exited.
+// and process group whose id is its pid, and every process it starts, at any depth, is in that
+// group unless it leaves it. A forced end (`kill`) ends the node itself; what it started is
+// ended by the sweep after its exit, as the old host ended a child's descendants
+// (children.py `_end_descendants`): asked politely first (SIGTERM to the group), killed after
+// the stop timeout if still there, and named when one outlives even that. The group outlives
+// its leader while any member is alive, so it can still be signalled after the node exited.
 //
 // Windows: BLOCKED(WI-0025-01). The equivalent is a Job Object with
 // JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, which needs native code Node does not ship. Until then
@@ -23,16 +25,17 @@ import { plainRunner, type CommandRunner } from "./resource-probe";
 export interface ProcessTree {
   /** Pass to `spawn` as `detached`. */
   readonly detached: boolean;
-  /** End the whole tree now. Safe when it is already gone. */
+  /** End the node process now (SIGKILL); what it started is the sweep's. Safe when it is gone. */
   kill(pid: number): void;
   /** Ask the whole tree to stop (SIGTERM), politely. Safe when it is already gone. */
   stop(pid: number): void;
   /**
-   * After the process `pid` exited: end what is left of its tree, if anything. Never signals a
-   * group with no member left, whose number may be another program's by now. Rejects when the
-   * process table could not be read; nothing is signalled then.
+   * After the process `pid` exited: end what is left of its tree, politely and then forcibly;
+   * the pids still running after the kill. Never signals a group with no member left, whose
+   * number may be another program's by now. Rejects when the process table could not be read;
+   * nothing more is signalled then.
    */
-  sweep(pid: number): Promise<void>;
+  sweep(pid: number): Promise<readonly number[]>;
   /** Why this platform cannot end the whole tree, or null when it can. */
   readonly blocked: string | null;
 }
@@ -52,23 +55,44 @@ function quietly(action: () => void): void {
   }
 }
 
-/** Whether any process is a member of process group `pgid` now, from one `ps`. */
-export async function groupHasMembers(pgid: number, run: CommandRunner): Promise<boolean> {
-  const table = await run("/bin/ps", ["-A", "-o", "pgid="]);
-  return table.split("\n").some((line) => Number(line.trim()) === pgid);
+/** The members of process group `pgid` now, from one `ps`. */
+export async function groupMembers(pgid: number, run: CommandRunner): Promise<number[]> {
+  const table = await run("/bin/ps", ["-A", "-o", "pid=,pgid="]);
+  return table.split("\n").flatMap((line) => {
+    const [pid, group] = line.trim().split(/\s+/).map(Number);
+    return group === pgid && pid !== undefined && pid > 0 ? [pid] : [];
+  });
 }
+
+/** How long a sweep gives a polite stop, and then a kill, and how often it looks meanwhile. */
+export interface SweepPace {
+  readonly waitMs: number;
+  readonly lookEveryMs: number;
+  readonly sleep: (ms: number) => Promise<void>;
+}
+
+export const DEFAULT_SWEEP: SweepPace = {
+  // The old host's stop timeout for a child's descendants.
+  waitMs: 5_000,
+  lookEveryMs: 250,
+  sleep: (ms) =>
+    new Promise((resolve) => {
+      setTimeout(resolve, ms);
+    }),
+};
 
 export function processTreeFor(
   platform: NodeJS.Platform,
   signal: Signaller = (pid, name) => process.kill(pid, name),
   run: CommandRunner = plainRunner,
+  pace: SweepPace = DEFAULT_SWEEP,
 ): ProcessTree {
   if (platform === "win32") {
     return {
       detached: false,
       blocked: WINDOWS_BLOCKED,
       // Only the bare pid exists here, and the process that had it is gone.
-      sweep: () => Promise.resolve(),
+      sweep: () => Promise.resolve([]),
       kill: (pid) => {
         quietly(() => {
           signal(pid, "SIGKILL");
@@ -85,15 +109,33 @@ export function processTreeFor(
     detached: true,
     blocked: null,
     sweep: async (pid) => {
-      if (await groupHasMembers(pid, run)) {
+      // Each signal follows a read that found a member: the number is the group's still.
+      const left = async (): Promise<number[]> => {
+        const deadline = Date.now() + pace.waitMs;
+        let members = await groupMembers(pid, run);
+        while (members.length > 0 && Date.now() < deadline) {
+          await pace.sleep(pace.lookEveryMs);
+          members = await groupMembers(pid, run);
+        }
+        return members;
+      };
+      for (const name of ["SIGTERM", "SIGKILL"] as const) {
+        if ((await groupMembers(pid, run)).length === 0) {
+          return [];
+        }
         quietly(() => {
-          signal(-pid, "SIGKILL");
+          signal(-pid, name);
         });
+        const still = await left();
+        if (still.length === 0 || name === "SIGKILL") {
+          return still;
+        }
       }
+      return [];
     },
     kill: (pid) => {
       quietly(() => {
-        signal(-pid, "SIGKILL");
+        signal(pid, "SIGKILL");
       });
     },
     stop: (pid) => {
