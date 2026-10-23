@@ -3,8 +3,8 @@
 // supervised child's state with its process, port and generation, Anytype's state and its
 // bridge's process, the MCP endpoint served against saved, where secrets are kept, and the old
 // installation's leftovers with their Delete button, and where the log is, with Show log (plan 0031
-// group I), and the command that asks this Reload from a terminal, with Copy command (group E).
-// These are the only internals General shows, as values beside a label, never inside a sentence.
+// group I). These are the only internals General shows, as values beside a label, never inside a
+// sentence.
 import { useCallback, useEffect, useState } from "react";
 import type {
   AnytypeStatus,
@@ -14,10 +14,8 @@ import type {
   McpEndpointStatus,
   SecretStorageStatus,
 } from "../contract";
-import type { LogFile } from "../general-contract";
 import { Button } from "../components/atoms/Button";
 import { StatusPill, type StatusPillState } from "../components/atoms/StatusPill";
-import { InlineMessage } from "../components/molecules/InlineMessage";
 import { KeyValue } from "../components/molecules/KeyValue";
 import { GeneralSection } from "../components/organisms/GeneralSection";
 import { useChildren } from "../store";
@@ -76,14 +74,13 @@ export function AdvancedSection({
   const children = useChildren();
   const [secrets, setSecrets] = useState<SecretStorageStatus | null>(null);
   const [legacy, setLegacy] = useState<readonly string[]>([]);
-  const [log, setLog] = useState<LogFile | null>(null);
-  const [copied, setCopied] = useState<"done" | "failed" | null>(null);
+  const [log, setLog] = useState<string | null>(null);
   useEffect(() => {
     api.secretStorage().then(setSecrets, () => undefined);
     api.legacyPackages().then(setLegacy, () => undefined);
     api.logFile().then(
       (answer) => {
-        if (answer.ok) setLog(answer.value);
+        if (answer.ok) setLog(answer.value.path);
       },
       () => undefined,
     );
@@ -91,17 +88,6 @@ export function AdvancedSection({
   const showLog = useCallback(() => {
     void api.showLog();
   }, [api]);
-  const copyCommand = useCallback(() => {
-    if (log === null) return;
-    navigator.clipboard.writeText(log.command).then(
-      () => {
-        setCopied("done");
-      },
-      () => {
-        setCopied("failed");
-      },
-    );
-  }, [log]);
   const deleteLegacy = useCallback(() => {
     api.deleteLegacyPackages().then(
       () => {
@@ -157,33 +143,14 @@ export function AdvancedSection({
             }
           />
         )}
-        {log?.path == null ? null : (
+        {log === null ? null : (
           <div data-testid="general-advanced-log" className="flex flex-col gap-2">
-            <KeyValue kind="mono" label={t("general.advanced.log")} value={log.path} />
+            <KeyValue kind="mono" label={t("general.advanced.log")} value={log} />
             <div>
               <Button kind="secondary" onClick={showLog} data-testid="general-advanced-log-show">
                 {t("general.advanced.log.show")}
               </Button>
             </div>
-          </div>
-        )}
-        {log === null ? null : (
-          <div data-testid="general-advanced-command" className="flex flex-col gap-2">
-            <KeyValue kind="mono" label={t("general.advanced.command")} value={log.command} />
-            <div>
-              <Button
-                kind="secondary"
-                onClick={copyCommand}
-                data-testid="general-advanced-command-copy"
-              >
-                {t("general.advanced.command.copy")}
-              </Button>
-            </div>
-            {copied === null ? null : (
-              <InlineMessage kind={copied}>
-                {t(copied === "done" ? "general.aiApps.copied" : "refused.failed")}
-              </InlineMessage>
-            )}
           </div>
         )}
         {legacy.length === 0 ? null : (

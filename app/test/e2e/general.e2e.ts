@@ -6,7 +6,6 @@
 // Never the owner's Anytype, key, port or clipboard: a fake Anytype on a free loopback port, the
 // fake MCP child, a scratch HOME (app-harness), free ports, and the page's clipboard replaced by a
 // stub that only keeps what it was given (the system clipboard is never read or written).
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
 import net from "node:net";
@@ -586,46 +585,6 @@ test("General shows the queued reports in full, Advanced's status details, Recor
     const revealed = () => first.app.evaluate(() => (globalThis as { revealed?: string }).revealed);
     await expect.poll(revealed).toMatch(/reload\.log$/);
     expect((await revealed())?.startsWith(scratch)).toBe(true);
-    // The command that asks this Reload from a terminal (plan 0031 group E), named in full (a
-    // development run's: Electron's executable, then the app folder), and Copy command puts
-    // exactly it on the clipboard (a stub here, never the system's).
-    const commandRow = advanced.getByTestId("general-advanced-command");
-    await expect(commandRow).toContainText(STRINGS["general.advanced.command"]);
-    await window.evaluate(() => {
-      const kept = globalThis as unknown as { copiedCommand?: string };
-      Object.defineProperty(navigator, "clipboard", {
-        configurable: true,
-        value: {
-          writeText: (text: string) => {
-            kept.copiedCommand = text;
-            return Promise.resolve();
-          },
-        },
-      });
-    });
-    const copyCommand = commandRow.getByTestId("general-advanced-command-copy");
-    await expect(copyCommand).toHaveText(STRINGS["general.advanced.command.copy"]);
-    await copyCommand.click();
-    await expect(commandRow).toContainText(STRINGS["general.aiApps.copied"]);
-    const copied =
-      (await window.evaluate(
-        () => (globalThis as unknown as { copiedCommand?: string }).copiedCommand,
-      )) ?? "";
-    const executable = await first.app.evaluate(() => process.execPath);
-    expect(copied.startsWith(`${executable} `)).toBe(true);
-    expect(copied.endsWith(" --status")).toBe(true);
-    await expect(commandRow).toContainText(copied);
-    // Typed in a terminal exactly as copied, it asks this very Reload, and it answers.
-    const shellPid = await first.app.evaluate(() => process.pid);
-    const asked = spawnSync("/bin/sh", ["-c", copied], {
-      env: runEnv,
-      encoding: "utf8",
-      timeout: 30_000,
-    });
-    expect(asked.status).toBe(0);
-    expect(asked.stdout).toMatch(
-      new RegExp(`^Reload \\S+ is running \\(process ${String(shellPid)}\\)\\.\\n`),
-    );
     // A restart is followed: the runtime's next generation shows without a reload.
     process.kill(runtime.pid, "SIGKILL");
     const next = await waitForRunning(window, "runtime", runtime.generation + 1);

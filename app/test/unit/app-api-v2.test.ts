@@ -125,11 +125,8 @@ class FakeBoard {
 
 /** Where the harness's log is, unless a test says none could be opened. */
 const LOG_FILE = "/Users/me/Library/Logs/reload/reload.log";
-const MAC_EXECUTABLE = "/Applications/Reload.app/Contents/MacOS/Reload";
 
-function harness(
-  options: { readonly logFile?: string | null; readonly command?: readonly string[] } = {},
-) {
+function harness(options: { readonly logFile?: string | null } = {}) {
   const handlers = new Map<string, Handler>();
   const pageListeners = new Map<string, Listener[]>();
   const ipcMain: Pick<IpcMain, "handle"> = {
@@ -257,7 +254,6 @@ function harness(
     log: {
       file: options.logFile === undefined ? LOG_FILE : options.logFile,
       shell: { showItemInFolder: (file) => revealed.push(file) },
-      command: options.command ?? [MAC_EXECUTABLE],
     },
     clock: { now: () => new Date(2026, 9, 2, 9, 30).getTime() },
     logger,
@@ -842,36 +838,14 @@ describe("AppApi v2 calls, through the shell to its processes", () => {
 
   it("the log: where it is, and Show log reveals it in the file manager", async () => {
     const h = harness();
-    const value = { path: LOG_FILE, command: `${MAC_EXECUTABLE} --status` };
-    expect(await h.api.logFile()).toEqual({ ok: true, value });
-    expect(await h.api.showLog()).toEqual({ ok: true, value });
+    expect(await h.api.logFile()).toEqual({ ok: true, value: { path: LOG_FILE } });
+    expect(await h.api.showLog()).toEqual({ ok: true, value: { path: LOG_FILE } });
     expect(h.revealed).toEqual([LOG_FILE]);
-  });
-
-  it("the terminal command: the executable named in full, quoted where a shell needs it", async () => {
-    const command = async (...argv: string[]) => {
-      const answer = await harness({ command: argv }).api.logFile();
-      return answer.ok ? answer.value.command : null;
-    };
-    expect(await command("/opt/Reload/reload")).toBe("/opt/Reload/reload --status");
-    expect(await command("/Users/me/Apps/Reload 2.app/Contents/MacOS/Reload")).toBe(
-      "'/Users/me/Apps/Reload 2.app/Contents/MacOS/Reload' --status",
-    );
-    // A development run: Electron's own executable, then the app folder.
-    expect(await command("/src/node_modules/electron/dist/electron", "/src/my app")).toBe(
-      "/src/node_modules/electron/dist/electron '/src/my app' --status",
-    );
-    expect(await command("/home/me/it's/Reload.AppImage")).toBe(
-      `'/home/me/it'\\''s/Reload.AppImage' --status`,
-    );
   });
 
   it("the log: none could be opened, so there is no place to name and nothing to show", async () => {
     const h = harness({ logFile: null });
-    expect(await h.api.logFile()).toEqual({
-      ok: true,
-      value: { path: null, command: `${MAC_EXECUTABLE} --status` },
-    });
+    expect(await h.api.logFile()).toEqual({ ok: true, value: { path: null } });
     expect(await h.api.showLog()).toEqual(FAILED);
     expect(h.revealed).toEqual([]);
   });

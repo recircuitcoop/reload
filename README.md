@@ -38,9 +38,6 @@ Type the full path of the application, then the flag:
 /path/to/Reload.AppImage --status                          # Linux, the AppImage where you keep it
 ```
 
-Configuration › General › Advanced shows this exact command for the Reload you run, with a
-**Copy command** button.
-
 ## Run from a checkout (developers)
 
 The application lives in `app/` and is built with npm workspaces from the repository root:

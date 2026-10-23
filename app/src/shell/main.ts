@@ -256,6 +256,7 @@ async function start(): Promise<DesktopWired["notices"] | null> {
   logger.info(`the runtime's port for this session is ${String(port)}`);
   // Anytype first, as the old helper did (launcher.py:894), so its API is up sooner.
   void anytypeApp.start();
+
   // ── the secret store (WI-0018-06): safeStorage is usable only once Electron is ready ────
   const userDir = app.getPath("userData");
   const secrets = openSecretStore({
@@ -278,7 +279,6 @@ async function start(): Promise<DesktopWired["notices"] | null> {
   // The login item: the e2e gate's autostart directory, else none for a non-installed run (it refuses), else Linux's autostart entry or Electron's login item.
   const autostart = e2eHooks ? process.env["RELOAD_TEST_AUTOSTART_DIR"] : undefined;
   const entry = { executable: process.env["APPIMAGE"] ?? process.execPath, icon: "reload" };
-  const terminalArgv = app.isPackaged ? [entry.executable] : [entry.executable, APP_DIR];
   const xdg = autostartDirectory(process.env["XDG_CONFIG_HOME"], os.homedir());
   // A notification's click opens Live on its flow; each button runs its own run's binding.
   const handlers = noticeHandlers({
@@ -514,7 +514,7 @@ async function start(): Promise<DesktopWired["notices"] | null> {
     quit: () => {
       app.quit();
     },
-    log: { file: logFile?.path ?? null, shell, command: terminalArgv },
+    log: { file: logFile?.path ?? null, shell },
     clock: systemClock,
     logger,
   });

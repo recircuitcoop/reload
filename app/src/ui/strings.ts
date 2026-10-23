@@ -401,8 +401,6 @@ export const STRINGS = {
   "general.advanced.legacy.delete": "Delete them", // decided
   "general.advanced.log": "Log file", // decided (plan 0031): where the log is, for support
   "general.advanced.log.show": "Show log", // decided (plan 0031): shows the file in its folder
-  "general.advanced.command": "Terminal command", // decided (plan 0031): `reload --status` in full
-  "general.advanced.command.copy": "Copy command", // decided (plan 0031)
   "general.aiApps.host": "Address", // decided: the endpoint's host field (owner, 2026-10-15)
   "general.aiApps.port": "Port", // decided: the endpoint's port field
   "general.aiApps.change": "Change", // decided: the one button that moves both

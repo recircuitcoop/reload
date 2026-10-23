@@ -38,7 +38,7 @@ Windows is where the spike expected trouble: paths, SIGKILL emulation, Job Objec
 - Self-update on Windows (`app/src/shell/update.ts` returns null there today).
 - `reload --status`, `--quit` and `--log` print through `fs.writeSync(1, …)`
   (`app/src/shell/command-line.ts` runCommandLine), which a GUI Electron process may not have a
-  console for on Windows; and General › Advanced quotes its command for a POSIX shell only.
+  console for on Windows.
 
 The design is plan 0018 §5.4 and its WI-0018-30 entry; this plan does not restate it.
 
