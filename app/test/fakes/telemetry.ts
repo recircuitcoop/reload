@@ -19,9 +19,6 @@ import type {
 import { FakeClock } from "./clock";
 import { RecordingLogger } from "./children";
 
-/** The fixed time of every test world (`now`): an off at it keeps no later report back. */
-const OFF_NOW = Date.UTC(2026, 8, 26, 12);
-
 export class MemorySetting implements TelemetrySetting {
   answer: TelemetryAnswer;
   reads = 0;
@@ -46,16 +43,6 @@ export class MemorySetting implements TelemetrySetting {
     }
     this.answer = on ? "on" : "off";
     this.olderYes = false;
-    if (!on) {
-      this.off = OFF_NOW;
-    }
-  }
-
-  /** When reports were last turned off: the world's own clock, so its reports are not before. */
-  off: number | null = null;
-
-  offAt(): number | null {
-    return this.off;
   }
 
   /** A yes to an older notice: read as unset, and asked again. */

@@ -276,31 +276,58 @@ describe("a report is sent only as this pipeline stamped it", () => {
 });
 
 describe("a report queued before reports were last turned off never leaves", () => {
-  it("not even when the purge failed and a later yes drains the queue", async () => {
-    const queue = new MemoryQueue();
-    const world = telemetryWorld("on", { queue });
-    const pipeline = new TelemetryPipeline(world.deps);
-    pipeline.recordUsage("setup_step", { step: "launched" });
-    // Off, and the purge fails: the report stays on disk.
-    vi.spyOn(queue, "purge").mockImplementationOnce(() => {
-      throw new Error("EPERM: rename telemetry-queue");
+  it("not when the purge's move failed, the app restarted, a later yes drains, and its clock ran ahead", async () => {
+    scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-queue-"));
+    const root = path.join(scratch, "telemetry-queue");
+    // Made while the clock was a year ahead: its `at` is after the off below.
+    const ahead = telemetryWorld("on", {
+      queue: new DiskReportQueue(root, new RecordingLogger()),
+      now: () => Date.UTC(2027, 8, 26, 12),
     });
-    world.setting.writeTelemetry(false);
-    world.setting.off = Date.UTC(2026, 8, 26, 13);
-    pipeline.state();
-    expect(queue.reports).toHaveLength(1);
-    // A yes later: the old report is dropped, never sent.
-    world.setting.writeTelemetry(true);
-    expect(await pipeline.flush()).toEqual({ sent: 0, retryInMs: null });
-    expect(world.poster.sent).toEqual([]);
-    expect(queue.reports).toEqual([]);
+    const before = new TelemetryPipeline(ahead.deps);
+    before.recordUsage("setup_step", { step: "launched" });
+    vi.spyOn(fs, "renameSync").mockImplementationOnce(() => {
+      throw new Error("EPERM: operation not permitted");
+    });
+    before.answer(false);
+    expect(fs.readdirSync(root).filter((name) => name.endsWith(".json"))).toEqual([]);
+    // Restarted, with the clock right again, and a yes.
+    const world = telemetryWorld("off", {
+      queue: new DiskReportQueue(root, new RecordingLogger()),
+    });
+    const pipeline = new TelemetryPipeline(world.deps);
+    pipeline.answer(true);
+    pipeline.recordUsage("setup_step", { step: "anytype_paired" });
+    expect(await pipeline.flush()).toEqual({ sent: 1, retryInMs: null });
+    expect(world.poster.sent.map((request) => request.body).join()).not.toContain("launched");
   });
 
-  it("a purge whose rename fails leaves the queue's index as it was", () => {
+  it("a purge whose move fails fences what was queued, by queue order, for this queue and the next", () => {
     scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-queue-"));
     const root = path.join(scratch, "telemetry-queue");
     const queue = new DiskReportQueue(root, new RecordingLogger());
     queue.enqueue("usage", { n: 1 });
+    queue.enqueue("usage", { n: 2 });
+    vi.spyOn(fs, "renameSync").mockImplementationOnce(() => {
+      throw new Error("EPERM: operation not permitted");
+    });
+    expect(queue.purge()).toBe(2);
+    expect(queue.count()).toBe(0);
+    expect(queue.enqueue("usage", { n: 3 }).sequence).toBe(3);
+    const next = new DiskReportQueue(root, new RecordingLogger());
+    expect(next.pending().map((report) => report.payload)).toEqual([{ n: 3 }]);
+    expect(next.purge()).toBe(1);
+    expect(next.count()).toBe(0);
+  });
+
+  it("a purge that can neither fence nor move the queue throws, and nothing was forgotten", () => {
+    scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-queue-"));
+    const root = path.join(scratch, "telemetry-queue");
+    const queue = new DiskReportQueue(root, new RecordingLogger());
+    queue.enqueue("usage", { n: 1 });
+    vi.spyOn(fs, "writeFileSync").mockImplementationOnce(() => {
+      throw new Error("EROFS: read-only file system");
+    });
     vi.spyOn(fs, "renameSync").mockImplementationOnce(() => {
       throw new Error("EPERM: operation not permitted");
     });

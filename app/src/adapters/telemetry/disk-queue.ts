@@ -39,6 +39,11 @@ export const DEFAULT_MAX_QUEUE_BYTES = 16 * 1024 * 1024;
 const QUEUE_FILENAME = /^(\d{12})-(usage|error)\.json$/;
 /** A purged queue folder, moved aside until its files are deleted: `telemetry-queue.purged-…`. */
 const TRASH_INFIX = ".purged-";
+/**
+ * The last sequence a purge took out of the queue, written before the folder is moved aside: a
+ * report at or below it is never read again, even when the move failed and its file stayed.
+ */
+const FENCE_FILENAME = ".fence";
 
 interface QueueFile {
   readonly sequence: number;
@@ -63,6 +68,8 @@ export class DiskReportQueue implements ReportQueue {
   readonly #logger: Logger;
   /** The queue's files, oldest first, as this queue last knew them; null before the first scan. */
   #index: Indexed[] | null = null;
+  /** The fence the last scan read (FENCE_FILENAME): no sequence at or below it is claimed again. */
+  #fence = 0;
 
   constructor(root: string, logger: Logger, options: DiskQueueOptions = {}) {
     const maxReports = options.maxReports ?? DEFAULT_MAX_REPORTS;
@@ -175,18 +182,40 @@ export class DiskReportQueue implements ReportQueue {
   }
 
   purge(): number {
-    const count = this.#files().length;
-    if (count > 0) {
+    const files = this.#files();
+    const last = files.at(-1);
+    if (last !== undefined) {
+      // Fenced first, by queue order: whatever is on disk now never leaves, whatever its `at`
+      // says and whether or not the folder can be moved aside below.
+      let fenced = false;
+      try {
+        fs.writeFileSync(path.join(this.#root, FENCE_FILENAME), String(last.sequence), {
+          mode: 0o600,
+        });
+        fenced = true;
+      } catch (error) {
+        this.#logger.warn(`the telemetry queue could not be fenced: ${String(error)}`);
+      }
       // One rename takes every report out of the queue at once: nothing in the trash is ever read
       // or sent, and deleting thousands of files does not block the caller.
       const trash = `${this.#root}${TRASH_INFIX}${String(process.pid)}-${String(Date.now())}`;
-      fs.renameSync(this.#root, trash);
+      try {
+        fs.renameSync(this.#root, trash);
+      } catch (error) {
+        if (!fenced) {
+          throw error;
+        }
+        // Behind the fence they are gone from the queue: the scan deletes what it can of them.
+        this.#logger.warn(`the telemetry queue could not be moved aside: ${String(error)}`);
+        this.#index = null;
+        this.#indexed();
+        return files.length;
+      }
     }
-    // Forgotten only once they are gone: a rename that failed leaves them known, and kept back
-    // by the off they were queued before (application/telemetry.ts).
     this.#index = [];
+    this.#fence = 0;
     this.#emptyTrash();
-    return count;
+    return files.length;
   }
 
   /**
@@ -227,7 +256,7 @@ export class DiskReportQueue implements ReportQueue {
 
   /** Link the written file into the first free sequence after the newest this queue knows. */
   #claim(scratch: string, kind: ReportKind, index: readonly Indexed[]): number {
-    let sequence = (index.at(-1)?.sequence ?? 0) + 1;
+    let sequence = Math.max(index.at(-1)?.sequence ?? 0, this.#fence) + 1;
     for (; ; sequence += 1) {
       // Another writer may have claimed this sequence between the scan and now, under either
       // kind: a sequence is one place in the queue, whatever the report's kind.
@@ -245,7 +274,7 @@ export class DiskReportQueue implements ReportQueue {
     }
   }
 
-  /** Every queue file, oldest first. */
+  /** Every queue file past the fence, oldest first; those behind it are deleted as found. */
   #files(): QueueFile[] {
     let names: string[];
     try {
@@ -253,6 +282,7 @@ export class DiskReportQueue implements ReportQueue {
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
       if (code === "ENOENT" || code === "ENOTDIR") {
+        this.#fence = 0;
         return [];
       }
       throw error;
@@ -265,7 +295,34 @@ export class DiskReportQueue implements ReportQueue {
         found.push({ sequence: Number(matched[1]), kind, file: path.join(this.#root, name) });
       }
     }
-    return found.sort((a, b) => a.sequence - b.sequence);
+    found.sort((a, b) => a.sequence - b.sequence);
+    this.#fence = this.#readFence(found);
+    for (const behind of found.filter((entry) => entry.sequence <= this.#fence)) {
+      try {
+        fs.rmSync(behind.file, { recursive: true, force: true });
+      } catch {
+        // Behind the fence it is never read, deleted or not: the next scan tries again.
+      }
+    }
+    return found.filter((entry) => entry.sequence > this.#fence);
+  }
+
+  /**
+   * The fence a purge left, 0 when none; one that cannot be read or makes no sense fences every
+   * report found, since a purge was meant to take them all.
+   */
+  #readFence(found: readonly QueueFile[]): number {
+    let text: string;
+    try {
+      text = fs.readFileSync(path.join(this.#root, FENCE_FILENAME), "utf8");
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return 0;
+      }
+      return found.at(-1)?.sequence ?? 0;
+    }
+    const fence = Number(text.trim());
+    return Number.isSafeInteger(fence) && fence >= 0 ? fence : (found.at(-1)?.sequence ?? 0);
   }
 
   /** Drop the oldest until the queue is inside both bounds. */

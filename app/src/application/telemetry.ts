@@ -236,15 +236,9 @@ export class TelemetryPipeline {
       // Every field held to its rule again, just before it leaves (plan 0029): a report made
       // under other rules is dropped, never sent as it was queued.
       const current: QueuedReport[] = [];
-      const offAt = this.#offAt();
       const identity = this.#ownIdentity();
       for (const report of head) {
-        const at = report.payload["at"];
-        const queuedBeforeOff =
-          offAt !== null && (typeof at !== "string" || !(Date.parse(at) >= offAt));
-        const payload = queuedBeforeOff
-          ? null
-          : checkAtSend(report.payload, report.kind, this.#deps.vouch, identity);
+        const payload = checkAtSend(report.payload, report.kind, this.#deps.vouch, identity);
         if (payload === null) {
           this.#deps.queue.remove(report);
           this.#deps.logger.info(
@@ -423,15 +417,6 @@ export class TelemetryPipeline {
       // A full disk, a read-only folder, a machine with no identifier: none of them are the
       // caller's problem. The caller is a restart, and it carries on (telemetry.py:1319).
       this.#deps.logger.warn(`a ${named(kind)} could not be queued: ${reasonOf(error)}`);
-      return null;
-    }
-  }
-
-  /** When reports were last turned off; null when never, or when it cannot be read. */
-  #offAt(): number | null {
-    try {
-      return this.#deps.setting.offAt();
-    } catch {
       return null;
     }
   }
