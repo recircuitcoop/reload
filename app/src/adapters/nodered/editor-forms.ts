@@ -423,12 +423,17 @@ function save(type: string, node: Values): boolean {
   // A row whose required cell is empty, or whose required nested table holds no row, is
   // refused like any other bad row; an empty required field at the top is saved and the node
   // held, as the runtime refuses it (coerce.ts emptyRequired).
-  const check = (value: Values) => [
-    ...(entry.validate(value) ? [] : problems(entry.validate)),
-    ...emptyRequired(entry.schema, value).filter(({ path }) => /\/\d+(\/|$)/.test(path)),
-    // A row repeating another's unique value is refused, each naming the other (unique.ts).
-    ...uniqueClashes(entry.schema, value),
-  ];
+  const check = (value: Values) => {
+    const found = entry.validate(value) ? [] : problems(entry.validate);
+    return [
+      ...found,
+      ...emptyRequired(entry.schema, value, "", found).filter(({ path }) =>
+        /\/\d+(\/|$)/.test(path),
+      ),
+      // A row repeating another's unique value is refused, each naming the other (unique.ts).
+      ...uniqueClashes(entry.schema, value),
+    ];
+  };
   const origins = originsOf(entry.fields, submitted, originOf);
   const kept = keptOnSave(entry.schema, ownOf(entry, node), submitted, check, origins);
   const unkept = typedUnkept(container).map((path) => ({

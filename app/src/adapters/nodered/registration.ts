@@ -215,11 +215,12 @@ export class TypeRegistration {
     const config = configOf(schema, raw);
     const credentials = credentialsOf(schema, node.credentials ?? {});
     // Validated with its credentials, so a required secret never set is refused too.
+    const checked = validator.check(schema, withCredentials(config, credentials));
     const problems = [
-      ...validator.check(schema, withCredentials(config, credentials)),
+      ...checked,
       // A required text left empty, or a required table with no rows (coerce.ts), and a row
       // repeating another's unique value (unique.ts).
-      ...emptyRequired(schema, config),
+      ...emptyRequired(schema, config, "", checked),
       ...uniqueClashes(schema, config),
     ];
     // A secret no credential can hold, found in the flow: never handed over (unkept.ts).

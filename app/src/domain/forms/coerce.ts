@@ -251,6 +251,17 @@ export function emptyRequired(
   schema: JsonSchema,
   value: Fields,
   path = "",
+  refused: readonly { readonly path: string }[] = [],
+): { path: string; message: string }[] {
+  // A value the schema already refused (minLength, minItems) is said once, by the schema.
+  const said = new Set(refused.map((problem) => problem.path));
+  return missingIn(schema, value, path).filter((problem) => !said.has(problem.path));
+}
+
+function missingIn(
+  schema: JsonSchema,
+  value: Fields,
+  path: string,
 ): { path: string; message: string }[] {
   const required = new Set(Array.isArray(schema["required"]) ? schema["required"] : []);
   return propertiesOf(schema).flatMap(([key, property]) => {
@@ -268,11 +279,9 @@ export function emptyRequired(
       return row === null
         ? []
         : given.flatMap((each: unknown, index) =>
-            isRecord(each) ? emptyRequired(row, each, `${at}/${String(index)}`) : [],
+            isRecord(each) ? missingIn(row, each, `${at}/${String(index)}`) : [],
           );
     }
-    return property["type"] === "object" && isRecord(given)
-      ? emptyRequired(property, given, at)
-      : [];
+    return property["type"] === "object" && isRecord(given) ? missingIn(property, given, at) : [];
   });
 }

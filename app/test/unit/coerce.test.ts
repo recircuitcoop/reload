@@ -355,6 +355,10 @@ describe("a required value left empty (plan 0032, group 27)", () => {
     expect(
       emptyRequired(RECORDERS, { root: "/x", volumes: [{ label: "a", takes: [{}] }], tags: [] }),
     ).toEqual([]);
+    // What the schema already refused (minLength) is said once, by the schema.
+    expect(emptyRequired(RECORDERS, { root: "", volumes: [] }, "", [{ path: "/root" }])).toEqual([
+      { path: "/volumes", message: "is required and holds no recorder" },
+    ]);
     const tagged = { ...RECORDERS, required: ["tags"] };
     expect(emptyRequired(tagged, { tags: [] })).toEqual([
       { path: "/tags", message: "is required and holds no value" },

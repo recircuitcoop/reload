@@ -563,12 +563,13 @@ export class FlowAdmin {
       }),
     );
     const known = new Set([...declared.map(([key]) => key), ...secrets]);
+    const checked = this.#deps.validator.check(plainSchema, configOf(type.config, plain));
     const problems = [
       ...Object.keys(values)
         .filter((key) => !known.has(key))
         .map((key) => ({ path: `/${key}`, message: "is not a declared property" })),
-      ...this.#deps.validator.check(plainSchema, configOf(type.config, plain)),
-      ...emptyRequired(plainSchema, configOf(type.config, plain)),
+      ...checked,
+      ...emptyRequired(plainSchema, configOf(type.config, plain), "", checked),
       ...uniqueClashes(plainSchema, configOf(type.config, plain)),
     ];
     const config = configOf(type.config, plain);

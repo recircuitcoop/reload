@@ -74,7 +74,10 @@ export function nodeProblems(entry: Registered, node: Values): NodeProblem[] {
   const found = entry.validate(values) ? [] : problems(entry.validate);
   // A key a row does not take, which `valuesOf` left out: said on the row that holds it.
   found.push(...forbiddenKeys(entry.schema, coerceObject(entry.schema, ownOf(entry, node))));
-  found.push(...emptyRequired(entry.schema, values), ...uniqueClashes(entry.schema, values));
+  found.push(
+    ...emptyRequired(entry.schema, values, "", found),
+    ...uniqueClashes(entry.schema, values),
+  );
   for (const path of unkeptSecretsOfNode(entry.full, node)) {
     found.push({ path: `/${path.replaceAll(".", "/")}`, message: UNKEPT });
   }
