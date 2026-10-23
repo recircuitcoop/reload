@@ -136,6 +136,8 @@ export class TelemetryPipeline {
   #halted = false;
   /** The off or unset answer the queue was last emptied for; null while it is on. */
   #purgedFor: TelemetryAnswer | null = null;
+  /** Whether a purge is owed, as this launch knows it; null: as the stored marker says. */
+  #owedNow: boolean | null = null;
 
   constructor(deps: TelemetryDeps) {
     this.#deps = deps;
@@ -187,8 +189,9 @@ export class TelemetryPipeline {
   answer(on: boolean): void {
     this.#deps.setting.writeTelemetry(on);
     this.#deps.logger.info(`telemetry is turned ${on ? "on" : "off"}`);
-    // An answer is a change: an off after it empties the queue again.
+    // An answer is a change: an off after it empties the queue again, and owes a purge.
     this.#purgedFor = null;
+    this.#owedNow = null;
     if (on) {
       this.#wake();
     } else {
@@ -238,12 +241,17 @@ export class TelemetryPipeline {
       const current: QueuedReport[] = [];
       const identity = this.#ownIdentity();
       for (const report of head) {
-        const payload = checkAtSend(report.payload, report.kind, this.#deps.vouch, identity);
+        const payload = checkAtSend(
+          report.payload,
+          report.kind,
+          this.#deps.vouch,
+          identity,
+          (why) => {
+            this.#deps.logger.info(`a ${named(report.kind)} ${why} is dropped unsent`);
+          },
+        );
         if (payload === null) {
           this.#deps.queue.remove(report);
-          this.#deps.logger.info(
-            `a ${named(report.kind)} made under other rules is dropped unsent`,
-          );
         } else {
           current.push({ ...report, payload });
         }
@@ -358,27 +366,64 @@ export class TelemetryPipeline {
     }
     if (answer === "on") {
       this.#purgedFor = null;
-      return true;
+      // A purge owed since an off, an unset or a purge that failed: nothing leaves, and nothing is
+      // queued, until it succeeds, so what was queued before is never sent after a yes.
+      return !this.#owed() || this.#purge(answer);
     }
     // Purged once each time the answer becomes off or unset (and at the first look after start),
     // never on every report while it stays so: a signal with reports off reads no folder.
-    if (this.#purgedFor === answer) {
-      return false;
+    if (this.#purgedFor !== answer && this.#purge(answer)) {
+      this.#purgedFor = answer;
+    }
+    return false;
+  }
+
+  /** Whether a purge is owed; one that cannot be read is owed, so nothing leaves unchecked. */
+  #owed(): boolean {
+    if (this.#owedNow !== null) {
+      return this.#owedNow;
     }
     try {
+      return this.#deps.setting.purgeOwed();
+    } catch (error) {
+      this.#deps.logger.warn(`the telemetry purge marker could not be read: ${reasonOf(error)}`);
+      return true;
+    }
+  }
+
+  /** Empty the queue; true when it was, and then no purge is owed any more. */
+  #purge(answer: TelemetryAnswer): boolean {
+    try {
       const dropped = this.#deps.queue.purge();
-      this.#purgedFor = answer;
       if (dropped > 0) {
         this.#deps.logger.info(
-          `telemetry is ${answer}: dropped ${String(dropped)} queued report(s)`,
+          answer === "on"
+            ? `dropped ${String(dropped)} report(s) queued before reports were turned off, unsent`
+            : `telemetry is ${answer}: dropped ${String(dropped)} queued report(s)`,
         );
       }
     } catch (error) {
       // Telemetry never breaks the app: what could not be purged is tried again at the next look,
-      // and nothing is sent meanwhile.
+      // and nothing is sent meanwhile, on this launch or, as far as the marker is written, after.
       this.#deps.logger.warn(`the telemetry queue could not be emptied: ${reasonOf(error)}`);
+      this.#owedNow = true;
+      try {
+        this.#deps.setting.writePurgeOwed(true);
+      } catch {
+        // Kept owed in memory for this launch; an off stored its marker when it was answered.
+      }
+      return false;
     }
-    return false;
+    // Paid for this launch whatever the marker says; a marker left owed purges at the next launch.
+    this.#owedNow = false;
+    try {
+      if (this.#deps.setting.purgeOwed()) {
+        this.#deps.setting.writePurgeOwed(false);
+      }
+    } catch (error) {
+      this.#deps.logger.warn(`the telemetry purge marker could not be cleared: ${reasonOf(error)}`);
+    }
+    return true;
   }
 
   /** Stamp, redact and queue one report. Null when nothing was queued. */

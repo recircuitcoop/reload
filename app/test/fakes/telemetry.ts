@@ -41,6 +41,9 @@ export class MemorySetting implements TelemetrySetting {
     if (this.unwritable) {
       throw new Error("could not write shell-settings.json: EACCES");
     }
+    if (!on) {
+      this.owed = true;
+    }
     this.answer = on ? "on" : "off";
     this.olderYes = false;
   }
@@ -50,6 +53,21 @@ export class MemorySetting implements TelemetrySetting {
 
   askAgain(): boolean {
     return this.answer === "unset" && this.olderYes;
+  }
+
+  /** A purge owed (shell-settings.json's telemetryPurgeOwed); `owedUnreadable` makes it throw. */
+  owed = false;
+  owedUnreadable = false;
+
+  purgeOwed(): boolean {
+    if (this.owedUnreadable) {
+      throw new Error("shell-settings.json is not JSON");
+    }
+    return this.owed;
+  }
+
+  writePurgeOwed(owed: boolean): void {
+    this.owed = owed;
   }
 }
 

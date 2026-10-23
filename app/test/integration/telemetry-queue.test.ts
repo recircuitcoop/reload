@@ -250,7 +250,12 @@ describe("the telemetry switch in shell-settings.json", () => {
       launchAtLogin: true,
       telemetry: false,
       telemetryNotice: NOTICE_VERSION,
+      // A no owes a purge of the queue: nothing leaves until one succeeded.
+      telemetryPurgeOwed: true,
     });
+    expect(store.purgeOwed()).toBe(true);
+    store.writePurgeOwed(false);
+    expect(store.purgeOwed()).toBe(false);
     // A yes to an older privacy notice (plan 0029) is asked again; a no stays a no.
     // The frame asks it on launch only for such a yes (askAgain), never for an unanswered one.
     expect(store.askAgain()).toBe(false);
@@ -270,5 +275,17 @@ describe("the telemetry switch in shell-settings.json", () => {
     expect(() => store.readTelemetry()).toThrow("must be true or false");
     fs.writeFileSync(file, "{broken");
     expect(() => store.readTelemetry()).toThrow("is not JSON");
+    expect(() => store.purgeOwed()).toThrow("is not JSON");
+    fs.writeFileSync(file, JSON.stringify({ telemetryPurgeOwed: "no" }));
+    expect(() => store.purgeOwed()).toThrow("must be true or false");
+  });
+
+  it("stores the owed purge before the no, so a no is never stored without it", () => {
+    const file = path.join(scratch, "shell-settings.json");
+    new JsonSettingsStore(file).writeTelemetry(false);
+    expect(Object.keys(JSON.parse(fs.readFileSync(file, "utf8")) as object)).toEqual([
+      "telemetryPurgeOwed",
+      "telemetry",
+    ]);
   });
 });

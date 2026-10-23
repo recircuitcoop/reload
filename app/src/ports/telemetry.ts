@@ -19,6 +19,12 @@ export interface TelemetrySetting {
    * unanswered, and the question is asked again on launch. Throws when the file cannot be read.
    */
   askAgain(): boolean;
+  /**
+   * Whether a purge of the queue is owed: set when reports go off, and when a purge failed;
+   * cleared once one succeeded. While it is owed nothing is sent. Throws when unreadable.
+   */
+  purgeOwed(): boolean;
+  writePurgeOwed(owed: boolean): void;
 }
 
 /** Reports on disk, in order, bounded, dropping the oldest when full (telemetry.py:737). */

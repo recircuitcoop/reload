@@ -247,17 +247,24 @@ export function vouchedFields<T extends Readonly<Record<string, unknown>>>(
 /**
  * A queued report's payload as it may leave, or null when it may not leave at all: stamped under
  * other rules, naming no known event, carrying a field named like a credential, or not stamped
- * by this pipeline with `machineId` (this machine's) and a report id of its own.
+ * by this pipeline with `machineId` (this machine's) and a report id of its own. `dropped` is told
+ * why, in words for the log.
  */
 export function checkAtSend(
   payload: JsonObject,
   kind: "usage" | "error",
   vouch: Vouch,
   machineId: string | null,
+  dropped: (why: string) => void = () => undefined,
 ): JsonObject | null {
   // A report under other rules, or one carrying a field named like a credential, was not made
   // by this app as it is: it does not leave at all.
-  if (payload["rules"] !== RULES_VERSION || credentialFieldName(payload) !== null) {
+  if (payload["rules"] !== RULES_VERSION) {
+    dropped("made under other rules");
+    return null;
+  }
+  if (credentialFieldName(payload) !== null) {
+    dropped("carrying a field named like a credential");
     return null;
   }
   // The pipeline's own stamps, or not its report: this machine's id, and a random id of its own.
@@ -269,6 +276,7 @@ export function checkAtSend(
     typeof id !== "string" ||
     !/^[0-9a-f]{32}$/.test(id)
   ) {
+    dropped("not stamped with this machine's id and a report id of this app's own");
     return null;
   }
   const event = payload["event"];
@@ -278,6 +286,7 @@ export function checkAtSend(
   } else if (isSignalName(event)) {
     own = ["event", ...EVENT_FIELDS[event]];
   } else {
+    dropped("naming no known event");
     return null;
   }
   const allowed = new Set([...COMMON, ...COMMON_REST, ...own]);

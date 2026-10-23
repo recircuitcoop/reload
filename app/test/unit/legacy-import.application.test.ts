@@ -35,6 +35,12 @@ class MemoryShellSettings implements ShellSettings {
   askAgain(): boolean {
     return false;
   }
+  purgeOwed(): boolean {
+    return false;
+  }
+  writePurgeOwed(): void {
+    // Nothing is queued here to purge.
+  }
   readLaunchAtLogin(): boolean {
     return this.launchAtLogin;
   }

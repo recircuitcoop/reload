@@ -499,6 +499,8 @@ test("telemetry asks first, sends nothing before a yes, sends only redacted repo
         telemetry: false,
         // The notice the earlier yes answered (plan 0029); off stays off whatever it says.
         telemetryNotice: NOTICE_VERSION,
+        // The off owed a purge of the queue, and the purge that followed paid it.
+        telemetryPurgeOwed: false,
         setup: expect.objectContaining({ step: "connect-anytype", completed: true }) as unknown,
       },
     );

@@ -113,11 +113,29 @@ export class JsonSettingsStore
   }
 
   writeTelemetry(on: boolean): void {
+    if (!on) {
+      // Owed before the no is stored: what was queued before it is purged before anything leaves.
+      this.writePurgeOwed(true);
+    }
     // The answer first: should the notice's version not be written, the yes reads as unset.
     this.#write("telemetry", on);
     if (on) {
       this.#write("telemetryNotice", NOTICE_VERSION);
     }
+  }
+
+  purgeOwed(): boolean {
+    const owed = this.#read()["telemetryPurgeOwed"];
+    if (owed !== undefined && typeof owed !== "boolean") {
+      throw new SettingsFileError(
+        `the telemetryPurgeOwed setting in ${this.#file} must be true or false`,
+      );
+    }
+    return owed ?? false;
+  }
+
+  writePurgeOwed(owed: boolean): void {
+    this.#write("telemetryPurgeOwed", owed);
   }
 
   // The package settings (WI-0018-17), raw: domain/packages judges them.

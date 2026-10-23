@@ -272,6 +272,68 @@ describe("a report is sent only as this pipeline stamped it", () => {
     world.queue.enqueue("usage", { ...own, report_id: "F".repeat(32) });
     expect(await pipeline.flush()).toEqual({ sent: 1, retryInMs: null });
     expect(world.queue.reports).toEqual([]);
+    expect(world.logger.lines).toContain(
+      "INFO a usage report not stamped with this machine's id and a report id of this app's own is dropped unsent",
+    );
+  });
+});
+
+describe("while a purge is owed, nothing leaves (an off, an unset, or a purge that failed)", () => {
+  it("a yes to a newer notice after the older yes's purge failed sends nothing queued before", async () => {
+    const world = telemetryWorld("on");
+    const pipeline = new TelemetryPipeline(world.deps);
+    pipeline.recordUsage("setup_step", { step: "launched" });
+    // A new notice: the older yes reads as unanswered, like an off, and its purge fails.
+    world.setting.answer = "unset";
+    world.setting.olderYes = true;
+    vi.spyOn(world.queue, "purge").mockImplementationOnce(() => {
+      throw new Error("EPERM: rename telemetry-queue");
+    });
+    expect(pipeline.state().queued).toBe(0);
+    expect(world.queue.reports).toHaveLength(1);
+    expect(world.setting.owed).toBe(true);
+    pipeline.answer(true);
+    expect(await pipeline.flush()).toEqual({ sent: 0, retryInMs: null });
+    expect(world.poster.sent).toEqual([]);
+    expect(world.queue.reports).toEqual([]);
+    expect(world.setting.owed).toBe(false);
+  });
+
+  it("an off whose purge keeps failing sends nothing after a yes on a later launch, until one succeeds", async () => {
+    const queue = new MemoryQueue();
+    const first = telemetryWorld("on", { queue });
+    new TelemetryPipeline(first.deps).recordUsage("setup_step", { step: "launched" });
+    const purge = vi.spyOn(queue, "purge").mockImplementation(() => {
+      throw new Error("EPERM: rename telemetry-queue");
+    });
+    new TelemetryPipeline(first.deps).answer(false);
+    // A later launch, on the same disk: the marker the off stored is still owed.
+    const world = telemetryWorld("off", { queue });
+    world.setting.owed = first.setting.owed;
+    const pipeline = new TelemetryPipeline(world.deps);
+    pipeline.answer(true);
+    expect(await pipeline.flush()).toEqual({ sent: 0, retryInMs: null });
+    expect(pipeline.recordUsage("setup_step", { step: "anytype_paired" })).toBeNull();
+    expect(queue.reports).toHaveLength(1);
+    purge.mockRestore();
+    expect(await pipeline.flush()).toEqual({ sent: 0, retryInMs: null });
+    expect(queue.reports).toEqual([]);
+    expect(world.logger.lines).toContain(
+      "INFO dropped 1 report(s) queued before reports were turned off, unsent",
+    );
+    pipeline.recordUsage("setup_step", { step: "anytype_paired" });
+    expect(await pipeline.flush()).toEqual({ sent: 1, retryInMs: null });
+  });
+
+  it("a purge marker that cannot be read purges before anything is sent", async () => {
+    const world = telemetryWorld("on");
+    const pipeline = new TelemetryPipeline(world.deps);
+    pipeline.recordUsage("setup_step", { step: "launched" });
+    world.setting.owedUnreadable = true;
+    const fresh = new TelemetryPipeline(world.deps);
+    expect(await fresh.flush()).toEqual({ sent: 0, retryInMs: null });
+    expect(world.poster.sent).toEqual([]);
+    expect(world.queue.reports).toEqual([]);
   });
 });
 
