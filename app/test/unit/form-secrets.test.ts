@@ -18,7 +18,7 @@ import {
   withCredentials,
 } from "../../src/domain/forms/coerce";
 import { formModel, secretKeys, withoutSecrets } from "../../src/domain/forms/form-model";
-import { unkeptSecretsOfNode } from "../../src/domain/forms/unkept";
+import { unkeptSecretsOfNode, withoutSecretValues } from "../../src/domain/forms/unkept";
 import {
   parseDeclaration,
   type Declaration,
@@ -258,6 +258,62 @@ describe("a secret that cannot be a credential", () => {
     const nested = { properties: { a: { type: "object", properties: CONFIG["properties"] } } };
     expect(problemsOf(nested)).toEqual([]);
     expect(secretKeys(nested)).toEqual(["a.token", "a.account.password"]);
+  });
+
+  it("a keyring (a list of lists of secrets) is handled as a list of secrets", () => {
+    const config: JsonSchema = {
+      type: "object",
+      properties: {
+        keyring: {
+          type: "array",
+          title: "Keyring",
+          items: { type: "array", items: { type: "string", writeOnly: true } },
+        },
+        label: { type: "string" },
+      },
+    };
+    expect(problemsOf(config)).toEqual([]);
+    expect(formModel(config).fields[0]).toMatchObject({ key: "keyring", control: "unkept" });
+    expect(Object.keys(withoutSecrets(config)["properties"] as object)).toEqual(["label"]);
+    expect(configOf(config, { keyring: [["hunter2"]], label: "l" })).toEqual({ label: "l" });
+    expect(unkeptSecretsOfNode(config, { keyring: [["hunter2"]] })).toEqual(["keyring"]);
+    expect(withoutSecretValues(config, { keyring: [["hunter2"]], label: "l" })).toEqual({
+      label: "l",
+    });
+  });
+
+  it("takes a secret's value out wherever the schema puts one", () => {
+    const config: JsonSchema = {
+      type: "object",
+      properties: {
+        rows: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: { name: { type: "string" }, token: { type: "string", writeOnly: true } },
+            additionalProperties: { type: "string", writeOnly: true },
+          },
+        },
+        either: {
+          type: "object",
+          anyOf: [{ properties: { token: { type: "string", "x-secret": true } } }],
+        },
+        plain: { type: "array" },
+      },
+    };
+    const value = {
+      rows: [{ name: "a", token: "hunter2", extra: "hunter3" }],
+      either: { token: "hunter4", other: "kept" },
+      plain: [1, 2],
+      undeclared: "kept",
+    };
+    expect(withoutSecretValues(config, value)).toEqual({
+      rows: [{ name: "a" }],
+      either: { other: "kept" },
+      plain: [1, 2],
+      undeclared: "kept",
+    });
+    expect(withoutSecretValues(config, "x")).toBe("x");
   });
 
   it("a default that holds a secret's value is refused, as it would be written into the flows", () => {

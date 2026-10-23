@@ -924,6 +924,20 @@ describe("flow.node.form and flow.node.configure", () => {
     });
   });
 
+  it("clears a refused canvas save once Continue saves the step, so it never comes back", async () => {
+    const h = grouped(undefined);
+    const tab = h.engine.tabsById.get("rec");
+    const node = tab?.nodes.find((each) => each.id === "g") as Record<string, unknown>;
+    node["reload.refused"] = { values: { label: "stale" }, problems: [], origins: [] };
+    await h.write("flow.node.configure", { flowId: "rec", nodeId: "g", values: { label: "set" } });
+    const saved = h.engine.tabsById.get("rec")?.nodes.find((each) => each.id === "g");
+    expect(saved).toMatchObject({ label: "set", "reload.refused": null });
+    // A step that never had one gets none.
+    await h.write("flow.node.configure", { flowId: "rec", nodeId: "f", values: { space: "s" } });
+    const other = h.engine.tabsById.get("rec")?.nodes.find((each) => each.id === "f");
+    expect(other).not.toHaveProperty("reload.refused");
+  });
+
   it("refuses a required secret in a group never set, and takes it once given", async () => {
     const h = grouped({ user: "me" });
     expect(

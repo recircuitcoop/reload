@@ -553,7 +553,7 @@ describe("a refused save kept until it is corrected", () => {
     const kept = save(schema, before, submitted, new Map([["/volumes", [null, 1, 0]]]));
     // Stored: "two" kept at its own place, "one" saved; the added row left out.
     expect(rows(kept.values["volumes"]).map((row) => row["label"])).toEqual(["two", "one"]);
-    const stored = storedRefusal(submitted, kept);
+    const stored = storedRefusal(schema, submitted, kept);
     expect(stored?.values).toEqual(submitted);
     // Every cell typed is kept, the good with the bad: "two-edited" with its refused gain.
     expect(rows(stored?.values["volumes"])[1]).toEqual({ label: "two-edited", gain: "0" });
@@ -563,7 +563,7 @@ describe("a refused save kept until it is corrected", () => {
 
   it("is matched against the stored rows on the next save, so nothing is lost", () => {
     const first = save(schema, before, submitted, new Map([["/volumes", [null, 1, 0]]]));
-    const stored = storedRefusal(submitted, first);
+    const stored = storedRefusal(schema, submitted, first);
     if (stored === null) throw new Error("nothing was refused");
     // Corrected: the typed rows matched where their stored rows now stand.
     const corrected = {
@@ -579,7 +579,7 @@ describe("a refused save kept until it is corrected", () => {
       "two-edited",
       "one",
     ]);
-    expect(storedRefusal(corrected, second)).toBeNull();
+    expect(storedRefusal(schema, corrected, second)).toBeNull();
   });
 
   it("reads back nothing that is not of its shape", () => {
@@ -594,5 +594,46 @@ describe("a refused save kept until it is corrected", () => {
     ]) {
       expect(readRefusal(raw)).toBeNull();
     }
+  });
+});
+
+describe("a refused save never keeps a secret", () => {
+  it("takes every secret out of what was typed and of each refusal, at any depth", () => {
+    const full: JsonSchema = {
+      type: "object",
+      properties: {
+        label: { type: "string", title: "Label", minLength: 2 },
+        keyring: {
+          type: "array",
+          title: "Keyring",
+          items: { type: "array", items: { type: "string", writeOnly: true } },
+        },
+        account: {
+          type: "object",
+          properties: { password: { type: "string", writeOnly: true }, user: { type: "string" } },
+        },
+      },
+    };
+    const submitted = {
+      label: "x",
+      keyring: [["hunter2"]],
+      account: { password: "hunter3", user: "me" },
+    };
+    const kept = {
+      values: {},
+      refused: [
+        { path: "/label", message: "must NOT have fewer than 2 characters", value: "x" },
+        { path: "/keyring/0", message: "is wrong", value: ["hunter2"] },
+        { path: "/account/password", message: "is wrong", value: "hunter3" },
+      ],
+      dropped: [],
+      origins: new Map(),
+    };
+    const stored = storedRefusal(full, submitted, kept);
+    expect(JSON.stringify(stored)).not.toMatch(/hunter/);
+    expect(stored?.values).toEqual({ label: "x", account: { user: "me" } });
+    expect(stored?.problems.map((problem) => problem.value)).toEqual(["x", undefined, undefined]);
+    // So the sentence said beside the field and in the notice holds none either.
+    expect(notKeptSentence(full, stored?.problems ?? [])).not.toMatch(/hunter/);
   });
 });

@@ -138,12 +138,17 @@ function itemsOf(property: JsonSchema): JsonSchema | null {
   return isRecord(items) ? items : null;
 }
 
+/** An array of secrets, through any depth of nested arrays ("a keyring": lists of secrets). */
+export function isSecretList(property: JsonSchema): boolean {
+  const items = itemsOf(property);
+  return typeOf(property) === "array" && items !== null && (isSecret(items) || isSecretList(items));
+}
+
 function controlOf(property: JsonSchema, inRow: boolean): Control {
   if (isSecret(property)) {
     return inRow ? "unkept" : "password";
   }
-  const items = itemsOf(property);
-  if (typeOf(property) === "array" && items !== null && isSecret(items)) {
+  if (isSecretList(property)) {
     return "unkept";
   }
   if (Array.isArray(property["enum"])) {
@@ -281,7 +286,7 @@ export function withoutSecrets(schema: JsonSchema): JsonSchema {
         return [[key, withoutSecrets(property)]];
       }
       if (typeOf(property) === "array" && items !== null) {
-        if (isSecret(items)) {
+        if (isSecretList(property)) {
           return [];
         }
         const rows = typeOf(items) === "object" ? withoutSecrets(items) : items;

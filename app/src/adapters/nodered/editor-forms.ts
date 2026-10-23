@@ -523,9 +523,11 @@ function save(type: string, node: Values): boolean {
     node[key] = value;
   }
   const all = { ...kept, refused: [...kept.refused, ...unkept] };
-  node[REFUSED_KEY] = storedRefusal(submitted, all);
+  // Kept and said without a secret's value, at any depth (storedRefusal).
+  const stored = storedRefusal(entry.full, submitted, all);
+  node[REFUSED_KEY] = stored;
   const said = [
-    ...(all.refused.length === 0 ? [] : [notKeptSentence(entry.full, all.refused)]),
+    ...(stored === null ? [] : [notKeptSentence(entry.full, stored.problems)]),
     ...(kept.dropped.length === 0 ? [] : [droppedSentence(kept.dropped)]),
   ];
   if (said.length > 0) {

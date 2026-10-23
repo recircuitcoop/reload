@@ -19,6 +19,7 @@
 import type { JsonSchema } from "../packages/declaration";
 import { coerceObject } from "./coerce";
 import { describedProblems, propertiesOf, rowSchemaOf } from "./form-model";
+import { withoutSecretValues } from "./unkept";
 
 /** One refusal: the JSON Pointer of the value, and what is wrong with it. */
 export interface Problem {
@@ -282,8 +283,8 @@ export function droppedSentence(dropped: readonly string[]): string {
  * The node property a refused save is kept in until it is corrected: what was typed, why each
  * part was refused, and where each typed row now stands, so the form shows it again after a
  * reopen or a reload of the editor and its next save matches every row. A property name holds
- * no dot (declaration.ts), so no package can declare this one. It never holds a secret: secrets
- * are never read back from the form.
+ * no dot (declaration.ts), so no package can declare this one. It never holds a secret: every
+ * secret value is taken out before it is kept (storedRefusal).
  */
 export const REFUSED_KEY = "reload.refused";
 
@@ -293,11 +294,25 @@ export interface StoredRefusal {
   readonly origins: readonly (readonly [string, readonly (number | null)[]])[];
 }
 
-/** The refusal to keep on the node after a save; null when nothing was refused. */
-export function storedRefusal(submitted: Values, kept: Kept): StoredRefusal | null {
-  return kept.refused.length === 0
-    ? null
-    : { values: submitted, problems: kept.refused, origins: [...kept.origins] };
+/**
+ * The refusal to keep on the node after a save, by the type's whole schema `full`; null when
+ * nothing was refused. No secret is kept, at any depth: not among what was typed, not as a
+ * problem's value (unkept.ts withoutSecretValues), so neither the flows nor a notice holds one.
+ */
+export function storedRefusal(
+  full: JsonSchema,
+  submitted: Values,
+  kept: Kept,
+): StoredRefusal | null {
+  if (kept.refused.length === 0) {
+    return null;
+  }
+  const values = withoutSecretValues(full, submitted) as Values;
+  const problems = kept.refused.map(({ path, message }) => {
+    const value = path === "" ? undefined : valueAt(values, path);
+    return value === undefined ? { path, message } : { path, message, value };
+  });
+  return { values, problems, origins: [...kept.origins] };
 }
 
 /** A refusal read back from a node; null for anything not of its shape. */

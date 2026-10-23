@@ -16,6 +16,7 @@
 import type { CallOp, OpResult } from "../domain/channel/messages";
 import { remapIds, withoutCredentials, type TabNode } from "../domain/flows/tab";
 import { configOf, missingSecrets } from "../domain/forms/coerce";
+import { REFUSED_KEY } from "../domain/forms/kept-on-save";
 import {
   describedProblems,
   propertiesOf,
@@ -587,6 +588,8 @@ export class FlowAdmin {
     return {
       ...kept,
       ...plain,
+      // A refused canvas save is answered by this one: never shown again over what Setup saved.
+      ...(REFUSED_KEY in node ? { [REFUSED_KEY]: null } : {}),
       ...(Object.keys(given).length === 0 ? {} : { credentials: given }),
     } as TabNode;
   }

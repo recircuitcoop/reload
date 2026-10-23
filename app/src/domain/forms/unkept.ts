@@ -10,7 +10,7 @@
 // Pure: no I/O, no library.
 
 import type { JsonSchema } from "../packages/declaration";
-import { isSecret, propertiesOf } from "./form-model";
+import { isSecret, isSecretList, propertiesOf } from "./form-model";
 
 type Fields = Readonly<Record<string, unknown>>;
 
@@ -57,7 +57,7 @@ export function unkeptSecrets(
       if (inRow && held(inner)) {
         found.push(at(key));
       }
-    } else if (isRecord(items) && isSecret(items)) {
+    } else if (isSecretList(property)) {
       if (held(inner)) {
         found.push(at(key));
       }
@@ -92,4 +92,38 @@ export function unkeptSecretsOfNode(schema: JsonSchema, node: Fields): string[] 
   const named = new Set([...propertiesOf(schema), ...branchProperties(schema)].map(([key]) => key));
   const own = Object.fromEntries(Object.entries(node).filter(([key]) => named.has(key)));
   return unkeptSecrets(schema, own);
+}
+
+/**
+ * `value` with every value a secret holds taken out, by `schema`, at every depth: a secret
+ * property, a list of secrets (of lists of secrets…), a secret under `additionalProperties`, a
+ * branch's secret. What is left may be kept or shown: it holds no secret.
+ */
+export function withoutSecretValues(schema: JsonSchema, value: unknown): unknown {
+  if (Array.isArray(value)) {
+    const items = schema["items"];
+    if (!isRecord(items)) {
+      return value;
+    }
+    return isSecret(items) || isSecretList(schema)
+      ? []
+      : value.map((item: unknown) => withoutSecretValues(items, item));
+  }
+  if (!isRecord(value)) {
+    return value;
+  }
+  const declared = new Map(propertiesOf(schema));
+  const branches = new Map(branchProperties(schema));
+  const extra = schema["additionalProperties"];
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([key, inner]): [string, unknown][] => {
+      const property = declared.get(key) ?? branches.get(key);
+      if (property !== undefined) {
+        return isSecret(property) || isSecretList(property)
+          ? []
+          : [[key, withoutSecretValues(property, inner)]];
+      }
+      return isRecord(extra) && isSecret(extra) ? [] : [[key, inner]];
+    }),
+  );
 }
