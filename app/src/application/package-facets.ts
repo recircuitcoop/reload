@@ -258,7 +258,7 @@ export function brokenRows(
 }
 
 /**
- * Each row with why the runtime holds it back, and who requires it (spec 2.1.5), judged from the
+ * Each row with why the runtime holds it back, and who requires it (spec 2.1.6), judged from the
  * same declarations and settings (`off`, the unregistered) the runtime loads by.
  */
 export function withRequires<Row extends { readonly package: Package }>(

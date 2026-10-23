@@ -54,7 +54,7 @@ export type NoticeKind =
   | "package-update-refused"
   /** A swap cut short left a package with no live version; its last whole one was put back. */
   | "package-recovered"
-  /** A package that requires another is held back while that one is not loaded (spec 2.1.5). */
+  /** A package that requires another is held back while that one is not loaded (spec 2.1.6). */
   | "package-held-back"
   /** A newer version of Reload itself is verified and queued to install at quit (WI-0018-24). */
   | "core-update-available"

@@ -466,7 +466,7 @@ export const STRINGS = {
   "packages.action.unregister": "unregister",
   "packages.action.remove": "remove",
   "packages.shipped": "*{name}* comes with Reload and can't be removed. Unregister it instead.", // decided
-  // A package another one requires (spec 2.1.5, plan 0032 group 15): decided.
+  // A package another one requires (spec 2.1.6, plan 0032 group 15): decided.
   "packages.required": "{by}, so it stays. Unregister the package that needs it first.", // decided
   "packages.requiredBy": "Stays while {by}.", // decided
   "packages.heldBack": "Held back: it {why}. None of its nodes run until that changes.", // decided

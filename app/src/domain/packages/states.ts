@@ -133,9 +133,9 @@ export interface Package {
   readonly registration: Registration | null;
   readonly installation: Installation | null;
   readonly update: PackageUpdate | null;
-  /** Why the runtime holds it back (spec 2.1.5): "requires beta, which is off". */
+  /** Why the runtime holds it back (spec 2.1.6): "requires beta, which is off". */
   readonly heldBack?: string;
-  /** Who requires it while on (spec 2.1.5): "whodunnit requires monty"; it stays until they go. */
+  /** Who requires it while on (spec 2.1.6): "whodunnit requires monty"; it stays until they go. */
   readonly requiredBy?: string;
 }
 
@@ -153,7 +153,7 @@ export type Refusal =
       readonly action: "unregister" | "remove";
       readonly uses: readonly StepUse[];
     }
-  /** Another package that is on requires it (spec 2.1.5): `by` names who. */
+  /** Another package that is on requires it (spec 2.1.6): `by` names who. */
   | { readonly reason: "required"; readonly by: string }
   /** It ships with the app: it is never removed. */
   | { readonly reason: "shipped" }
@@ -444,7 +444,7 @@ export interface RowActions {
  * Check for changes or Go back). An unverified facet offers nothing; a busy package offers
  * nothing new; Unregister and Remove stay enabled while used, so pressing them gives the
  * refusal that names every use; while a package that is on requires it, they are drawn disabled
- * (spec 2.1.5). A package that failed its check is removed or installed again
+ * (spec 2.1.6). A package that failed its check is removed or installed again
  * from where it came from; a shipped one offers neither (reinstalling Reload restores it). A
  * folder is asked with Check for changes, never updated, and not while it cannot be read.
  */

@@ -94,7 +94,7 @@ export interface Declaration {
   readonly protocol: 2;
   readonly package: string;
   readonly version: string;
-  /** The other packages it needs (spec 2.1.5, revision 2.2): held back while one is not loaded. */
+  /** The other packages it needs (spec 2.1.6, revision 2.2): held back while one is not loaded. */
   readonly requires?: readonly string[];
   readonly environment?: {
     readonly kind: "uv-python" | "node" | "executable";
@@ -347,6 +347,11 @@ function beyondTheSchema(declaration: Declaration): string[] {
     problems.push(
       `version: ${JSON.stringify(declaration.version)} is not an exact version; a package ` +
         "declares the one version it is, as numbers joined by dots (1.4.0, or 2.0.0-rc.1)",
+    );
+  }
+  if (declaration.package === "services") {
+    problems.push(
+      'package: "services" is reserved: `reload --kill services` names Reload\'s own process',
     );
   }
   if (declaration.requires?.includes(declaration.package) === true) {

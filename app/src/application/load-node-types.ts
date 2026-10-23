@@ -9,7 +9,7 @@
 // A package a person unregistered (plan 0022 §F, D6) is skipped whole: its files stay where they
 // are, and its types are not loaded until it is registered again.
 //
-// A package that requires another (spec 2.1.5) is held back while that one is not installed, is
+// A package that requires another (spec 2.1.6) is held back while that one is not installed, is
 // off, is refused, or is held back itself: none of its types load, so none of its nodes is ever
 // spawned, and the person is told why with one notice, withdrawn once it loads.
 

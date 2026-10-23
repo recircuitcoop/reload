@@ -105,7 +105,7 @@ export interface PackageBoardPorts {
   readonly settings: Pick<PackageSettingsStore, "readPackages" | "writePackages">;
   /** The node types the running runtime generated; null while it is not running to ask. */
   readonly loadedTypes: () => Promise<readonly string[] | null>;
-  /** Every package's `requires`, shipped and installed, as its declaration says (spec 2.1.5). */
+  /** Every package's `requires`, shipped and installed, as its declaration says (spec 2.1.6). */
   readonly requiring: () => readonly Requiring[];
   readonly restartRuntime: RestartRuntime;
   readonly one: OneAtATime;

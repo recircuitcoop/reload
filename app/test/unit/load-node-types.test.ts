@@ -89,7 +89,7 @@ describe("loadNodeTypes", () => {
   });
 });
 
-// A package that requires another (spec 2.1.5; the old resolver's holds, test_host_children.py,
+// A package that requires another (spec 2.1.6; the old resolver's holds, test_host_children.py,
 // test_addons_cli.py, test_enable_switch.py).
 describe("a package that requires another", () => {
   const packagesOf = (loaded: ReturnType<typeof loadNodeTypes>) => [
@@ -154,6 +154,15 @@ describe("a package that requires another", () => {
     );
     expect(packagesOf(loaded)).toEqual(["beta", "delta"]);
     expect(notifier.cleared).toContain("package-held-back delta");
+  });
+
+  it("is refused when it takes the name a terminal command gives Reload's own process", () => {
+    const logger = new RecordingLogger();
+    expect(loadNodeTypes([declared("services")], validator, logger)).toEqual([]);
+    expect(logger.lines).toEqual([
+      "ERROR node package services (/packages/services) is refused and not loaded: package: " +
+        '"services" is reserved: `reload --kill services` names Reload\'s own process',
+    ]);
   });
 
   it("is refused when it requires itself, or names a package that is no package name", () => {

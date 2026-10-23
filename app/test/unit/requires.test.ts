@@ -1,4 +1,4 @@
-// A package that requires another (domain/packages/requires.ts, spec 2.1.5; the old resolver,
+// A package that requires another (domain/packages/requires.ts, spec 2.1.6; the old resolver,
 // test_enable_switch.py, test_addons_remove.py): what is held back and why, in one shape, and
 // who keeps a package from going.
 import { describe, expect, it } from "vitest";
@@ -34,6 +34,23 @@ describe("a package that requires another", () => {
       new Map([
         ["lonely", "requires absent, which is not installed"],
         ["needy", "requires lonely, which is held back"],
+      ]),
+    );
+  });
+
+  it("holds back every package of a cycle, naming it, and what requires one of them", () => {
+    const packages = [
+      { package: "alpha", requires: ["beta"] },
+      { package: "beta", requires: ["gamma"] },
+      { package: "gamma", requires: ["alpha"] },
+      { package: "omega", requires: ["alpha"] },
+    ];
+    expect(heldBack(packages, NONE)).toEqual(
+      new Map([
+        ["alpha", "requires beta, which requires it in turn: alpha → beta → gamma → alpha"],
+        ["beta", "requires gamma, which requires it in turn: beta → gamma → alpha → beta"],
+        ["gamma", "requires alpha, which requires it in turn: gamma → alpha → beta → gamma"],
+        ["omega", "requires alpha, which is held back"],
       ]),
     );
   });

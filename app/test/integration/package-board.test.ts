@@ -50,7 +50,7 @@ let stopping: () => void;
 /** How long the fake restart took; null: the runtime was not running to restart. */
 let took: number | null;
 let types: readonly string[] | null;
-/** What each package requires, as the shell reads it from the declarations (spec 2.1.5). */
+/** What each package requires, as the shell reads it from the declarations (spec 2.1.6). */
 let requiring: { package: string; requires: string[] }[];
 
 beforeEach(() => {
@@ -914,7 +914,7 @@ describe("per-package update controls: a mode from the page, Off, and Update all
   });
 });
 
-// A package that requires another (spec 2.1.5; the old resolver's `requires`,
+// A package that requires another (spec 2.1.6; the old resolver's `requires`,
 // test_addons_remove.py, test_plugin_page.py, test_enable_switch.py).
 describe("a package another one requires", () => {
   it("is refused for removal and unregistering by name, nothing removed nor restarted, and drawn not removable", async () => {

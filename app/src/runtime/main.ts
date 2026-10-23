@@ -257,6 +257,7 @@ function generateNodeTypes(
     validator,
     types,
     python: ownPython,
+    notifier,
     generate: (entries, name) => generatePackageTypes(entries, generatedDir, name),
     engine: {
       deployedFlows: () => nodeRed?.deployedFlows() ?? Promise.resolve([]),

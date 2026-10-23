@@ -367,7 +367,7 @@ export function wirePackages(given: ShellPackagesOptions): PackageBoard {
 }
 
 /**
- * What every package requires (spec 2.1.5), from its declaration: shipped, and installed in the
+ * What every package requires (spec 2.1.6), from its declaration: shipped, and installed in the
  * live root. A declaration that cannot be read requires nothing here; the runtime refuses it.
  */
 function requiring(options: ShellPackagesOptions): Requiring[] {
