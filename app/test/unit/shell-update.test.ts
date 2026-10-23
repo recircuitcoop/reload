@@ -2,7 +2,13 @@
 // hands off rather than doing itself (plan 0018 §2.3, its own 600-line limit).
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { e2eHooksOn } from "../../src/shell/e2e-hooks";
-import { updateSource, wireUpdate, type WireUpdateOptions } from "../../src/shell/update";
+import {
+  installThenQuit,
+  protocolsOf,
+  updateSource,
+  wireUpdate,
+  type WireUpdateOptions,
+} from "../../src/shell/update";
 import type { Notice } from "../../src/domain/notices/notices";
 import type { Clock } from "../../src/ports/clock";
 
@@ -107,5 +113,29 @@ describe("updateSource: only a build that is not installed can be pointed elsewh
       publicKey: "the built-in key",
       releases: "https://github.com/acme/reload/releases",
     });
+  });
+});
+
+describe("the quit's last step and the installed packages' protocols", () => {
+  it("installs a staged update first, then quits; with no updater it only quits", async () => {
+    const order: string[] = [];
+    const updates = { installAtQuit: () => Promise.resolve(void order.push("install")) };
+    const app = { quit: () => order.push("quit") };
+    await installThenQuit(() => updates, app)();
+    await installThenQuit(() => null, app)();
+    expect(order).toEqual(["install", "quit", "quit"]);
+  });
+
+  it("reads each package's declared protocol, and none from a declaration it cannot read", () => {
+    const read = protocolsOf(() => [
+      { name: "monty", document: { protocol: 2 } },
+      { name: "broken", document: null },
+      { name: "odd", document: { protocol: "2" } },
+    ]);
+    expect(read()).toEqual([
+      { name: "monty", protocol: 2 },
+      { name: "broken", protocol: null },
+      { name: "odd", protocol: null },
+    ]);
   });
 });

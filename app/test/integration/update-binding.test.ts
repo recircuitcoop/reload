@@ -16,7 +16,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { FsReleaseStaging } from "../../src/adapters/fs/release-staging";
+import { FsReleaseStaging } from "../../src/adapters/fs/catalogue-cache";
 import { JsonSettingsStore } from "../../src/adapters/fs/settings-store";
 import { HttpsClient } from "../../src/adapters/net/https-client";
 import { sha512Base64 } from "../../src/adapters/signature/digest";

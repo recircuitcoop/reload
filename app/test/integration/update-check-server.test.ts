@@ -15,7 +15,7 @@ import { MinisignVerifier } from "../../src/adapters/signature/minisign";
 import { HttpsClient } from "../../src/adapters/net/https-client";
 import { JsonSettingsStore } from "../../src/adapters/fs/settings-store";
 import { UpdateCheck } from "../../src/application/update-check";
-import { FsReleaseStaging } from "../../src/adapters/fs/release-staging";
+import { FsReleaseStaging } from "../../src/adapters/fs/catalogue-cache";
 import type { SelfUpdater, StagedHandoff } from "../../src/ports/self-updater";
 import { RecordingLogger, RecordingNotifier } from "../fakes/children";
 import { Signer } from "../fakes/minisign-signer";

@@ -78,6 +78,17 @@ export function updateSource(options: {
 }
 
 /** Null on a platform this application does not self-update on (Windows: WI-0025-01). */
+/** The quit's last step: the staged update installed (or not, and why), then the app quits. */
+export function installThenQuit(
+  updates: () => Pick<UpdateCheck, "installAtQuit"> | null,
+  app: { quit(): void },
+): () => Promise<void> {
+  return async () => {
+    await updates()?.installAtQuit();
+    app.quit();
+  };
+}
+
 /** Each installed package's declared protocol, for the check before Reload updates itself. */
 export function protocolsOf(
   documents: () => readonly { readonly name: string; readonly document: unknown }[],
