@@ -11,6 +11,7 @@ const NODE_NOTICES = [
   "node-not-started",
   "node-stuck",
   "node-unhealthy",
+  "node-overloaded",
 ] as const;
 
 /** A new instance (a redeploy), or a removed one: nothing said about the old one still holds. */

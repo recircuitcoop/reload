@@ -855,6 +855,7 @@ describe("closing a node process", () => {
       "node-not-started",
       "node-stuck",
       "node-unhealthy",
+      "node-overloaded",
     ];
     // Created (a deploy or a redeploy, with or without a heartbeat now): all withdrawn.
     expect(mine(node)).toEqual(said.map((kind) => `${kind} raw`));

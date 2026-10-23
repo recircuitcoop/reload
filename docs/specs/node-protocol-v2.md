@@ -920,6 +920,10 @@ When the runtime sends an event to the next node on a wire, the Node-RED `msg` M
    dropping.
    - At the bound it MUST either hold further inputs at the upstream wire, or fail them with
      `done(err)` ("queue full"). Which one is a runtime setting.
+   - Held inputs MUST be bounded too, by the same value. One more than that cuts the instance
+     off: every held input and every further one MUST fail with `done(err)` ("queue full: the
+     node is not keeping up"), said in the log and once to the person, until the instance
+     finishes an input again.
    - The value is a runtime setting.
    - **[UNPROVEN]** The spike had no bound.
 

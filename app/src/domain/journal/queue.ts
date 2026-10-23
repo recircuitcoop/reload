@@ -3,6 +3,8 @@
 // Outstanding means journaled and not yet done. At the bound a further input is either held,
 // at the upstream wire, until one finishes, or failed with `done(err)` "queue full"; which
 // one is a runtime setting, and so is the bound. Either way it is reported, never dropped.
+// Held inputs have the same bound: past it the instance is cut off and every input fails until
+// it finishes one (adapters/process/input-journal.ts).
 
 /** What happens to an input that arrives at the bound. */
 export type QueuePolicy = "hold" | "fail";

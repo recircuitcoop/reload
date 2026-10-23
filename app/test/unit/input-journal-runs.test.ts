@@ -1,13 +1,14 @@
 // adapters/process/input-journal.ts: every write that moves a step says so to the store, so
 // the run records are written in the journal's own transaction (plan 0022 §C, D15), and every
-// entry it journals carries the instance's flow.
+// entry it journals carries the instance's flow. And the held inputs' own bound (spec 7.6).
 import { describe, expect, it } from "vitest";
 
-import { InputJournal } from "../../src/adapters/process/input-journal";
+import { InputJournal, NOT_KEEPING_UP } from "../../src/adapters/process/input-journal";
 import { DEFAULT_QUEUE } from "../../src/domain/journal/queue";
 import type { InputDelivery } from "../../src/ports/node-process";
 import { FakeClock } from "../fakes/clock";
 import { MemoryJournal } from "../fakes/journal";
+import { RecordingNotifier } from "../fixtures/raw-node/fixture";
 
 function journalOf(store = new MemoryJournal()) {
   let n = 0;
@@ -109,5 +110,77 @@ describe("the input journal's run changes", () => {
     expect(logs).toEqual([
       "error the journal entry of in-1 could not be updated: Error: disk full",
     ]);
+  });
+});
+
+describe("the held inputs' bound (spec 7.6), in the runtime's own process", () => {
+  /** A node with `bound` inputs outstanding that never finishes one: everything else is held. */
+  function stuck(bound: number) {
+    let n = 0;
+    const logs: string[] = [];
+    const notifier = new RecordingNotifier();
+    const store = new MemoryJournal();
+    const journal = new InputJournal({
+      store,
+      clock: new FakeClock(),
+      queue: { bound, policy: "hold" },
+      instanceId: "n1",
+      flowId: "tab1",
+      type: "reload-pkg-t",
+      label: "Transcribe",
+      newId: () => `in-${String((n += 1))}`,
+      log: (level, line) => logs.push(`${level} ${line}`),
+      notifier,
+    });
+    for (let index = 0; index < bound; index += 1) {
+      journal.admit(message, delivery(), index);
+    }
+    return { journal, store, logs, notifier };
+  }
+
+  it("a node that is never drained stops at the bound and is cut off: what it held fails, unsent", () => {
+    const { journal, store, logs, notifier } = stuck(2);
+    const sizes: number[] = [];
+    const deliveries = [];
+    for (let index = 0; index < 8; index += 1) {
+      const held = delivery();
+      deliveries.push(held);
+      expect(journal.admit(message, held, 2)).toBeNull(); // nothing here reaches the node
+      sizes.push(journal.report(2).held);
+    }
+    // Never more held than the bound, and then nothing held at all: cut off, not fed.
+    expect(Math.max(...sizes)).toBe(2);
+    expect(sizes).toEqual([1, 2, 0, 0, 0, 0, 0, 0]);
+    expect(journal.report(2)).toMatchObject({ held: 0, refused: 8 });
+    // Every one of them failed with done(err), each once; none was journaled or sent.
+    for (const held of deliveries) {
+      expect(held.ends.map((end) => end?.message)).toEqual([NOT_KEEPING_UP]);
+    }
+    expect(store.all().map((entry) => entry.inputId)).toEqual(["in-1", "in-2"]);
+    expect(journal.nextHeld()).toBeUndefined();
+    expect(logs.filter((line) => line.includes("not keeping up"))).toHaveLength(1);
+    expect(notifier.notices).toEqual([
+      {
+        kind: "node-overloaded",
+        subject: "Transcribe",
+        detail:
+          "It finished none of its 2 inputs while 2 more waited, so those failed, and new ones " +
+          "fail until it finishes one",
+      },
+    ]);
+  });
+
+  it("holds again once the node finishes one, and the notice is withdrawn", () => {
+    const { journal, notifier } = stuck(1);
+    journal.admit(message, delivery(), 1); // held
+    journal.admit(message, delivery(), 1); // over the bound: cut off
+    expect(journal.report(1)).toMatchObject({ held: 0, refused: 2 });
+    journal.finished("in-1");
+    expect(journal.nextHeld()).toBeUndefined();
+    expect(notifier.cleared).toEqual(["node-overloaded Transcribe"]);
+    const later = delivery();
+    expect(journal.admit(message, later, 1)).toBeNull();
+    expect(later.ends).toEqual([]);
+    expect(journal.report(1)).toMatchObject({ held: 1 });
   });
 });

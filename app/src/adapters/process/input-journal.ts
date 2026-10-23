@@ -31,6 +31,7 @@ import { boundedContent, SAMPLE_TOO_LARGE, titleOf } from "../../domain/views/vi
 import type { StepOutcome } from "../../domain/runs/step-report";
 import type { Clock } from "../../ports/clock";
 import type { JournalStore } from "../../ports/journal-store";
+import type { Notifier } from "../../ports/notifier";
 import type {
   HeldInputs,
   InputDelivery,
@@ -84,12 +85,17 @@ export interface InputJournalDeps {
   readonly log: (level: "info" | "warn" | "error", message: string) => void;
   /** Told which runs have inputs held here, so none is taken for done meanwhile. */
   readonly held?: HeldInputs;
+  /** Where a node cut off at the held bound is told (the person hears it once). */
+  readonly notifier?: Notifier;
 }
+
+/** Why an input of a node cut off at the held bound fails (spec 7.6, never silently dropped). */
+export const NOT_KEEPING_UP = "queue full: the node is not keeping up";
 
 /** The journal side of the instance `identity`, from a node process's dependencies. */
 export function inputJournalFor(
   identity: NodeIdentity,
-  deps: Pick<NodeProcessDeps, "journal" | "clock" | "newId" | "settings" | "held">,
+  deps: Pick<NodeProcessDeps, "journal" | "clock" | "newId" | "settings" | "held" | "notifier">,
   log: InputJournalDeps["log"],
 ): InputJournal {
   return new InputJournal({
@@ -102,6 +108,7 @@ export function inputJournalFor(
     label: identity.name || identity.typeId,
     newId: deps.newId,
     log,
+    notifier: deps.notifier,
     ...(deps.held === undefined ? {} : { held: deps.held }),
   });
 }
@@ -112,6 +119,8 @@ export class InputJournal {
   readonly #replays = new WeakMap<object, string>();
   readonly #held: Held[] = [];
   #refused = 0;
+  /** Cut off at the held bound: every input fails until the node finishes one again. */
+  #cutOff = false;
 
   constructor(deps: InputJournalDeps) {
     this.#deps = deps;
@@ -143,6 +152,12 @@ export class InputJournal {
         delivery.done(new Error("queue full"));
         return null;
       case "hold":
+        // Held inputs have a bound too, the queue's own: past it the node is cut off, as the
+        // old bus cut off a subscriber that fell behind, rather than held for without end.
+        if (this.#cutOff || this.#held.length >= queue.bound) {
+          this.#overflow(delivery);
+          return null;
+        }
         if (this.#held.length === 0) {
           log(
             "warn",
@@ -200,8 +215,44 @@ export class InputJournal {
     return { id, event: decision.entry.event, awaiting: decision.entry.state === "awaiting" };
   }
 
-  /** The oldest held input, when there is one. */
+  /**
+   * One more input than the held bound: the node is cut off. What was held for it fails, and so
+   * does every further input, each with `done(err)`, until it finishes one again (`nextHeld`);
+   * said in the log and once as a notice. Never dropped unsaid (spec 7.6).
+   */
+  #overflow(delivery: InputDelivery): void {
+    const error = new Error(NOT_KEEPING_UP);
+    this.#refused += 1;
+    if (!this.#cutOff) {
+      this.#cutOff = true;
+      const failed = this.failHeld(error);
+      this.#refused += failed;
+      const bound = String(this.#deps.queue.bound);
+      this.#deps.log(
+        "error",
+        `queue full: ${bound} inputs held besides the ${bound} outstanding (the bound); the node ` +
+          `is not keeping up, so ${String(failed + 1)} inputs failed, and each further one ` +
+          `fails until it finishes one`,
+      );
+      this.#deps.notifier?.raise({
+        kind: "node-overloaded",
+        subject: this.#deps.label,
+        detail:
+          `It finished none of its ${bound} inputs while ${bound} more waited, so those failed, ` +
+          `and new ones fail until it finishes one`,
+      });
+    }
+    delivery.done(error);
+  }
+
+  /** The oldest held input, when there is one. Called as an input finishes. */
   nextHeld(): Held | undefined {
+    if (this.#cutOff) {
+      // It finished one: it is keeping up again, and inputs are held at the bound again.
+      this.#cutOff = false;
+      this.#deps.log("info", "the node finished an input; inputs are held at the bound again");
+      this.#deps.notifier?.clear("node-overloaded", this.#deps.label);
+    }
     // A held input of a run deleted from Run history (plan 0022 §E) fails here and gives the
     // place to the next: it is never admitted, so never journaled nor sent.
     let next = this.#held.shift();

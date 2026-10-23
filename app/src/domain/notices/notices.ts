@@ -34,6 +34,8 @@ export type NoticeKind =
   | "node-stuck"
   /** A node's own health check says it is not working (spec 4.2 `pong`). */
   | "node-unhealthy"
+  /** A node fell behind until its held inputs reached their bound: they were failed (spec 7.6). */
+  | "node-overloaded"
   /** Anytype's local API did not answer at start; asked again on the person's action. */
   | "anytype-unreachable"
   /** The Anytype MCP child stopped for good after the breaker's limit (§4.1 point 2). */
@@ -92,6 +94,7 @@ export const NOTICE_KINDS: readonly NoticeKind[] = [
   "node-not-started",
   "node-stuck",
   "node-unhealthy",
+  "node-overloaded",
   "anytype-unreachable",
   "mcp-child-stopped",
   "mcp-child-restarted",
@@ -244,6 +247,8 @@ function composeWords(notice: Notice): Message {
       return { title: `The node ${subject} stopped making progress`, body: sentences(detail) };
     case "node-unhealthy":
       return { title: `The node ${subject} says it is not working`, body: sentences(detail) };
+    case "node-overloaded":
+      return { title: `The node ${subject} is not keeping up`, body: sentences(detail) };
     case "mcp-child-stopped":
       // The body is the service's sentence and nothing else: it already says why, and a remedy
       // invented here would be a second, worse account of it (notification.py HOST_DEGRADED).

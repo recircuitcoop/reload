@@ -3,6 +3,7 @@
 // The retry rules across restarts are conformance C15 (test/conformance/journal.test.ts).
 import { afterEach, describe, expect, it } from "vitest";
 
+import { NOT_KEEPING_UP } from "../../src/adapters/process/input-journal";
 import { queueSettings, type QueueSettings } from "../../src/domain/journal/queue";
 import type { InputMessage, NodeProcess } from "../../src/ports/node-process";
 import { MemoryJournal } from "../fakes/journal";
@@ -199,6 +200,31 @@ describe("the bounded queue (spec 7.6)", () => {
     expect(held.outputs[0]?.message.payload).toBe("held");
     expect(node.node.queue()).toMatchObject({ outstanding: 1, held: 0 });
     expect(node.logger.has(/every held input has been sent/)).toBe(true);
+  });
+
+  it("hold: a node that falls behind is cut off at the held bound, its held inputs failed and never sent", async () => {
+    const node = raw(new MemoryJournal(), queueSettings(2, "hold"));
+    send(node.node, { do: "present" });
+    send(node.node, { do: "present" });
+    await waitFor("two presents", () => node.host.presented.length === 2);
+    const sizes: number[] = [];
+    const held: RecordingDelivery[] = [];
+    for (let index = 0; index < 8; index += 1) {
+      const [id, delivery] = send(node.node, { do: "echo", value: index });
+      expect(id).toBeNull();
+      held.push(delivery);
+      sizes.push(node.node.queue().held);
+    }
+    // The queue never grew past its bound, and the node was cut off rather than fed.
+    expect(Math.max(...sizes)).toBe(2);
+    expect(node.node.queue()).toMatchObject({ outstanding: 2, held: 0, refused: 8 });
+    for (const delivery of held) {
+      expect(delivery.ends.map((end) => end?.message)).toEqual([NOT_KEEPING_UP]);
+      expect(delivery.outputs).toEqual([]);
+    }
+    expect(node.journal.all()).toHaveLength(2);
+    expect(node.logger.has(/the node is not keeping up, so 3 inputs failed/)).toBe(true);
+    expect(node.notifier.notices.map((notice) => notice.kind)).toEqual(["node-overloaded"]);
   });
 
   it("fail: at the bound further inputs fail with 'queue full', counted and logged", () => {

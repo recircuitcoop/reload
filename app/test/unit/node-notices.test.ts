@@ -20,6 +20,7 @@ describe("a node instance's notices", () => {
       "node-not-started raw",
       "node-stuck raw",
       "node-unhealthy raw",
+      "node-overloaded raw",
     ]);
   });
 
