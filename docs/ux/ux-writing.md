@@ -265,6 +265,10 @@ a run is found again, read, and re-run (owner, 2026-10-02).
   Configuration › General to choose a space." The fields a package marks advanced (where a step
   reads a value from, the address it calls) sit under a closed Advanced disclosure; Setup
   never shows them.
+  A table's controls say what the package calls a row (its row's title): **Add recorder**,
+  "recorder 1 holds values. Remove it?" with **Remove it** and **Keep it** on the row, a row's
+  **More (3)** and **Fewer**, and **Collapse** and **Expand** on a table inside a row. A row is
+  called "row" only when the package names it nothing.
 
 ## Configuration › General
 
@@ -327,7 +331,7 @@ Sections, each with a one-line state:
 | Key refused | "Anytype refused the key. Pair again in Configuration › General." |
 | Transcription key refused | "Mistral refused the key. Check the key in the *Transcribe* step." |
 | Recorder full or unreadable | "Couldn't read *BOYA*. Unplug it and plug it back in." |
-| A step's form incomplete | "*Summarise* isn't set up yet. Object type: choose one." (each field by its label, then what to do: choose one, fill this in, or what its value must be; a table's field as Properties, row 2, Value from) |
+| A step's form incomplete | "*Summarise* isn't set up yet. Object type: choose one." (each field by its label, then what to do: choose one, fill this in, or what its value must be; a table's field as Properties, Property 2, Value from, by the row's title, else row) |
 | Port taken | "Port 31010 is used by another app. Choose another port." |
 | Update download tampered | "The update didn't pass its safety check and wasn't installed. Try again later." |
 | Runtime down for good | "Reload stopped unexpectedly 5 times in 2 minutes, so it's no longer restarted. Press Restart to try again." (kept as is) |
