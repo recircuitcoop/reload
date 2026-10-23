@@ -26,6 +26,7 @@ function harness(watched = true) {
     blocked: null,
     kill: (pid) => signals.push(`SIGKILL ${String(pid)}`),
     stop: (pid) => signals.push(`SIGTERM ${String(pid)}`),
+    sweep: () => Promise.resolve(),
   };
   const deps: NodeProcessDeps = {
     clock: new FakeClock(),

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { INHERITED_VARIABLES } from "../../src/adapters/process/command";
 import { MAX_FRAME_BYTES } from "../../src/adapters/process/codec";
+import { processTreeFor, type ProcessTree } from "../../src/adapters/process/process-tree";
 import { systemClock } from "../../src/adapters/system/clock";
 import { Heartbeat } from "../../src/application/heartbeat";
 import { GUARD_VARIABLES } from "../home-guard";
@@ -921,5 +922,33 @@ describe("no orphan: a node's grandchildren end with it", () => {
     const pid = await grandchild(node);
     process.kill(node.node.pid as number, "SIGKILL");
     await waitFor("the grandchild to go", () => !alive(pid), 3_000);
+  });
+
+  it("and a node that exited with nothing left behind is forgotten: nothing is signalled at its pid", async () => {
+    // Every signal any part of the tree sends, its sweep after the exit included.
+    const signals: number[] = [];
+    const real = processTreeFor(process.platform, (pid, signal) => {
+      signals.push(pid);
+      process.kill(pid, signal);
+    });
+    const swept: number[] = [];
+    const tree: ProcessTree = {
+      ...real,
+      sweep: async (pid) => {
+        await real.sweep(pid);
+        swept.push(pid);
+      },
+    };
+    const node = raw({ tree, settings: { respawnDelayMs: 60_000 } });
+    await ready(node);
+    const pid = node.node.pid as number;
+    send(node.node, { do: "crash", code: 5 });
+    await waitFor("its exit, reported", () =>
+      node.logger.has(/process exited unexpectedly \(code 5\)/),
+    );
+    await waitFor("the sweep after its exit", () => swept.includes(pid));
+    expect(node.node.pid).toBeNull();
+    await node.node.close("removed");
+    expect(signals).toEqual([]);
   });
 });

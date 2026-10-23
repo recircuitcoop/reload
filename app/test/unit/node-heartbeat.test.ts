@@ -54,6 +54,7 @@ function harness(options: Options = {}) {
       blocked: null,
       kill: (pid) => killed.push(pid),
       stop: (pid) => killed.push(pid),
+      sweep: () => Promise.resolve(),
     },
     newId: () => `ping-${String((ids += 1))}`,
     secrets: { protect: () => undefined },

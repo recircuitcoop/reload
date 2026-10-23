@@ -14,6 +14,7 @@ import {
   unpackedDir,
 } from "../../src/adapters/process/command";
 import { processTreeFor } from "../../src/adapters/process/process-tree";
+import type { CommandRunner } from "../../src/adapters/process/resource-probe";
 
 const VALUES = { python: "/env/bin/python", node: "/app/node", package: "/pkgs/monty" };
 
@@ -147,6 +148,39 @@ describe("the process tree", () => {
       [42, "SIGKILL"],
       [42, "SIGTERM"],
     ]);
+  });
+
+  it("after its leader exited, signals its group only while a member is left, and never on Windows", async () => {
+    const signals: [number, string][] = [];
+    const record = (pid: number, signal: string) => signals.push([pid, signal]);
+    const asked: string[][] = [];
+    const table =
+      (pgids: number[]): CommandRunner =>
+      (file, args) => {
+        asked.push([file, ...args]);
+        return Promise.resolve(pgids.map((pgid) => `  ${String(pgid)}\n`).join(""));
+      };
+    // A grandchild is still in the group: the number is nobody else's, and it is ended.
+    await processTreeFor("darwin", record, table([1, 420, 42])).sweep(42);
+    expect(signals).toEqual([[-42, "SIGKILL"]]);
+    expect(asked).toEqual([["/bin/ps", "-A", "-o", "pgid="]]);
+    // Nothing left of it: nothing is signalled, a pid that only starts with its digits included.
+    signals.length = 0;
+    await processTreeFor("linux", record, table([1, 420])).sweep(42);
+    expect(signals).toEqual([]);
+    // Windows: the bare pid of a process that is gone; no table is read, nothing is sent.
+    asked.length = 0;
+    await processTreeFor("win32", record, table([42])).sweep(42);
+    expect(signals).toEqual([]);
+    expect(asked).toEqual([]);
+  });
+
+  it("signals nothing after an exit when the process table cannot be read", async () => {
+    const signals: number[] = [];
+    const broken: CommandRunner = () => Promise.reject(new Error("ps ended with code 1"));
+    const tree = processTreeFor("darwin", (pid) => signals.push(pid), broken);
+    await expect(tree.sweep(42)).rejects.toThrow("ps ended with code 1");
+    expect(signals).toEqual([]);
   });
 
   it("treats a tree that is already gone as ended", () => {

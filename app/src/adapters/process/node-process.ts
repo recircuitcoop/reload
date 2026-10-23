@@ -38,7 +38,7 @@ import {
 } from "./codec";
 import { inputJournalFor, type Admitted, type Input, type InputJournal } from "./input-journal";
 import { prepareInstance, type NodeProcessDeps } from "./node-process-settings";
-import { readPipes, watchExit } from "./exit-watch";
+import { killLive, livePid, readPipes, watchExit } from "./exit-watch";
 import { nodeHeartbeat, type NodeHeartbeat } from "./node-heartbeat";
 import { clearNodeNotices, raiseStopped, stoppedFor } from "./node-notices";
 import { RefusedPorts } from "./refused-ports";
@@ -106,7 +106,7 @@ class ChildNodeProcess implements NodeProcess {
   }
 
   get pid(): number | null {
-    return this.#child?.pid ?? null;
+    return this.#child === null ? null : livePid(this.#child);
   }
 
   // ── from the runtime ───────────────────────────────────────────────────────────────────
@@ -212,13 +212,13 @@ class ChildNodeProcess implements NodeProcess {
     }
     this.#write({ t: "close" });
     this.#after(this.#deps.settings.closeDeadlineMs, () => {
-      if (child === this.#child && child.pid !== undefined) {
+      if (child === this.#child && livePid(child) !== null) {
         this.#log(
           "warn",
           `did not exit within ${String(this.#deps.settings.closeDeadlineMs)} ms of close; ` +
             `sending SIGKILL to its process group`,
         );
-        this.#deps.tree.kill(child.pid);
+        killLive(this.#deps.tree, child);
       }
     });
     return gone;
@@ -265,11 +265,11 @@ class ChildNodeProcess implements NodeProcess {
       this.#sendInput(id, input);
     }
     this.#after(this.#deps.settings.readyDeadlineMs, () => {
-      if (child === this.#child && !this.ready && child.pid !== undefined) {
+      if (child === this.#child && !this.ready && livePid(child) !== null) {
         const seconds = String(this.#deps.settings.readyDeadlineMs / 1000);
         this.#log("error", `sent no ready within ${seconds} s of start; killing it`);
         this.#host.status({ fill: "red", shape: "dot", text: `did not start in ${seconds} s` });
-        this.#deps.tree.kill(child.pid);
+        killLive(this.#deps.tree, child);
       }
     });
   }

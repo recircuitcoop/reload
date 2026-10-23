@@ -35,13 +35,29 @@ export interface ExitWatch {
   /** Schedule on the instance's own timers, which a close or an exit cancels. */
   readonly after: (ms: number, callback: () => void) => void;
   /** Its process group: whatever the process started goes with it. */
-  readonly tree: Pick<ProcessTree, "kill">;
+  readonly tree: Pick<ProcessTree, "sweep">;
   readonly log: (message: string) => void;
   /**
    * Called once, with how it ended: `code N`, `signal S` or "failed to start"; for a process
    * that never started, also why (the spawn error), so it is not taken for a crash.
    */
   readonly exited: (how: string, failure?: string) => void;
+}
+
+/**
+ * The pid of a process that has not exited, else null: once it has, its pid may be another
+ * program's, and is never signalled.
+ */
+export function livePid(child: ChildProcess): number | null {
+  return child.exitCode === null && child.signalCode === null ? (child.pid ?? null) : null;
+}
+
+/** End the tree of a process that has not exited; nothing once it has. */
+export function killLive(tree: Pick<ProcessTree, "kill">, child: ChildProcess): void {
+  const pid = livePid(child);
+  if (pid !== null) {
+    tree.kill(pid);
+  }
 }
 
 /** Handle the exit once its pipes have closed, or after the grace period if they do not. */
@@ -68,9 +84,14 @@ export function watchExit(child: ChildProcess, watch: ExitWatch): void {
   });
   child.on("exit", (code, signal) => {
     how = signal !== null ? `signal ${signal}` : `code ${String(code)}`;
-    // The node is gone; whatever it started goes too, on close and on crash alike.
+    // The node is gone; whatever it started goes too, on close and on crash alike. Its number
+    // may be reused once its group is empty, so the sweep signals only a group with a member.
     if (child.pid !== undefined) {
-      watch.tree.kill(child.pid);
+      watch.tree.sweep(child.pid).catch((error: unknown) => {
+        watch.log(
+          `what it started could not be checked, so nothing was signalled: ${String(error)}`,
+        );
+      });
     }
     watch.after(watch.graceMs, handle);
   });
