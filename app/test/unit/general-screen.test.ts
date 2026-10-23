@@ -3,7 +3,7 @@
 // retention's five choices (D8). No DOM: the screen only draws these.
 import fs from "node:fs";
 import * as path from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AnytypeStatus, FlowSummary, McpEndpointStatus } from "../../src/ui/contract";
 import {
   aiAppsLine,
@@ -21,6 +21,7 @@ import {
   packagesLine,
   PRIVACY_NOTICE,
   PRIVACY_NOTICE_OPENING,
+  readSpaces,
   reportsLine,
   RETENTION_OPTIONS,
   retentionDays,
@@ -32,6 +33,8 @@ import {
   showsPrivacyNotice,
   withoutMarks,
 } from "../../src/ui/general";
+import type { Answer, RefusalReason } from "../../src/ui/answer";
+import type { NodeOptions } from "../../src/ui/flow-contract";
 import type { PackagesView } from "../../src/ui/general-contract";
 import { wordChecked } from "../../src/ui/words";
 import { checkedAddress } from "../../src/domain/endpoint/address";
@@ -114,6 +117,68 @@ describe("the Anytype section's state line", () => {
       expect(line.line).toBe(STRINGS["general.anytype.unavailable"]);
       expect(line.line).not.toContain("added=");
     }
+  });
+});
+
+describe("Anytype's spaces, read once Anytype is ready", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+  const refusal = (reason: RefusalReason): Answer<NodeOptions> => ({
+    ok: false,
+    refused: { reason, sentence: "refused.failed" },
+  });
+  const listed: Answer<NodeOptions> = {
+    ok: true,
+    value: { options: [{ value: "sp-work", label: "Work" }] },
+  };
+  /** Reads the spaces with `answers` given in turn (the last one repeated); counts the asks. */
+  function reading(answers: Answer<NodeOptions>[]) {
+    let asks = 0;
+    const shown: Answer<NodeOptions>[] = [];
+    const stop = readSpaces(
+      () => Promise.resolve(answers[Math.min(asks++, answers.length - 1)] as Answer<NodeOptions>),
+      (answer) => shown.push(answer),
+      2_000,
+    );
+    return { asks: () => asks, shown, stop };
+  }
+
+  it.each(["down", "not-paired", "unreachable", "unavailable", "failed"] as const)(
+    "%s is shown once and not asked again",
+    async (reason) => {
+      vi.useFakeTimers();
+      const read = reading([refusal(reason)]);
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(read.asks()).toBe(1);
+      expect(read.shown).toEqual([refusal(reason)]);
+      read.stop();
+    },
+  );
+
+  it("restarting is asked again every 2 s until it is answered, then not again", async () => {
+    vi.useFakeTimers();
+    const read = reading([refusal("restarting"), refusal("restarting"), listed]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(read.asks()).toBe(1);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(read.asks()).toBe(2);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(read.asks()).toBe(3);
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(read.asks()).toBe(3);
+    expect(read.shown).toEqual([refusal("restarting"), refusal("restarting"), listed]);
+    read.stop();
+  });
+
+  it("stopped, it asks no more and shows nothing more", async () => {
+    vi.useFakeTimers();
+    const read = reading([refusal("restarting")]);
+    await vi.advanceTimersByTimeAsync(0);
+    read.stop();
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(read.asks()).toBe(1);
+    expect(read.shown).toHaveLength(1);
   });
 });
 
