@@ -62,3 +62,20 @@ export interface WatchedProcess {
  * watch at once (the process exited, or its owner closed it), with nothing left scheduled.
  */
 export type ResourceWatchdog = (target: WatchedProcess) => Cancel;
+
+/** A node process the runtime started, as recorded for after a crash of the runtime. */
+export interface NodeRecord {
+  readonly pid: number;
+  readonly identity: ProcessIdentity;
+}
+
+/**
+ * Where the runtime keeps its node processes, so the shell can stop those a crashed runtime
+ * left behind before it starts the next one (the old helper's run-state records).
+ */
+export interface NodeRecordStore {
+  /** Every record; none when there is no file. A record that is not one is left out. */
+  read(): readonly NodeRecord[];
+  /** Replace every record, whole or not at all. */
+  write(records: readonly NodeRecord[]): void;
+}

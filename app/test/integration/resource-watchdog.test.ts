@@ -4,7 +4,14 @@
 // breaker, with a notice to the person; kept over it, it is stopped until the breaker trips.
 // Windows is not measured, so there is nothing to see there.
 
+import { spawn, type ChildProcess } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+
+import { JsonNodeRecords } from "../../src/adapters/process/node-records";
+import { recordingWatchdog, stopLeftNodes } from "../../src/application/left-nodes";
 
 import { processTreeFor, type ProcessTree } from "../../src/adapters/process/process-tree";
 import { resourceProbeFor } from "../../src/adapters/process/resource-probe";
@@ -13,6 +20,7 @@ import { resourceWatchdog } from "../../src/application/resource-watch";
 import { DEFAULT_LIMITS } from "../../src/domain/supervision/resources";
 import type { NodeProcess } from "../../src/ports/node-process";
 import { alive, startRaw, waitFor, type RawNode } from "../fixtures/raw-node/fixture";
+import { RecordingLogger } from "../fakes/children";
 
 const started: NodeProcess[] = [];
 
@@ -112,3 +120,68 @@ describe.skipIf(process.platform === "win32")("the resource watchdog", () => {
     expect(raw.node.pid).toBeNull();
   }, 40_000);
 });
+
+describe.skipIf(process.platform === "win32")(
+  "node processes a crashed runtime left behind",
+  () => {
+    /** A process leading its own group, as a node process does; `stubborn` ignores SIGTERM. */
+    function leftBehind(stubborn: boolean): { child: ChildProcess; gone: Promise<void> } {
+      const script = stubborn ? 'trap "" TERM; while :; do sleep 1; done' : "exec sleep 300";
+      const child = spawn("/bin/sh", ["-c", script], { detached: true, stdio: "ignore" });
+      const gone = new Promise<void>((resolve) => {
+        child.on("exit", () => {
+          resolve();
+        });
+      });
+      return { child, gone };
+    }
+
+    it("are recorded by the runtime, and stopped by the shell before the next one: politely, then killed", async () => {
+      const userDir = fs.mkdtempSync(path.join(os.tmpdir(), "reload-left-"));
+      const probe = resourceProbeFor(process.platform);
+      const polite = leftBehind(false);
+      const stubborn = leftBehind(true);
+      const pids = [polite.child.pid as number, stubborn.child.pid as number];
+      // The runtime's side: each node process recorded with its identity while it is watched.
+      const watchdog = recordingWatchdog(() => () => undefined, {
+        probe,
+        store: new JsonNodeRecords(userDir),
+        log: () => undefined,
+      });
+      for (const pid of pids) {
+        watchdog({
+          pid,
+          limits: DEFAULT_LIMITS,
+          stop: () => undefined,
+          kill: () => undefined,
+          current: () => true,
+          stopped: () => undefined,
+        });
+      }
+      await waitFor("both recorded", () => new JsonNodeRecords(userDir).read().length === 2);
+      // The runtime crashed (its watches never ended); the shell reads the file before a fork.
+      const signals: string[] = [];
+      const logger = new RecordingLogger();
+      await stopLeftNodes({
+        store: new JsonNodeRecords(userDir),
+        probe,
+        signal: (pid, signal) => {
+          signals.push(`${signal} ${String(pid)}`);
+          process.kill(pid, signal);
+        },
+        clock: systemClock,
+        logger,
+        waitMs: 1_000,
+      });
+      await Promise.all([polite.gone, stubborn.gone]);
+      const [quiet, hard] = pids.map((pid) => String(pid)) as [string, string];
+      // Both asked first, in the order they were recorded; then only the stubborn one killed.
+      expect(signals.slice(0, 2).sort()).toEqual([`SIGTERM -${quiet}`, `SIGTERM -${hard}`].sort());
+      expect(signals.slice(2)).toEqual([`SIGKILL -${hard}`]);
+      expect(pids.some(alive)).toBe(false);
+      expect(new JsonNodeRecords(userDir).read()).toEqual([]);
+      expect(logger.lines[0]).toMatch(/^WARN stopping 2 node process\(es\) the last runtime left/);
+      fs.rmSync(userDir, { recursive: true, force: true });
+    });
+  },
+);

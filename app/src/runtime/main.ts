@@ -34,6 +34,7 @@ import { minimalEnvironment, resolveCommand } from "../adapters/process/command"
 import { DEFAULT_NODE_PROCESS, nodeProcessLauncher } from "../adapters/process/node-process";
 import { processTreeFor } from "../adapters/process/process-tree";
 import { resourceProbeFor } from "../adapters/process/resource-probe";
+import { JsonNodeRecords } from "../adapters/process/node-records";
 import { SystemRuntimeLocator } from "../adapters/process/runtime-locator";
 import { AjvSchemaValidator } from "../adapters/schema/ajv-validator";
 import { openSqliteJournal, type SqliteJournal } from "../adapters/sqlite/journal";
@@ -56,11 +57,8 @@ import { loadNodeTypes, unregisteredNames } from "../application/load-node-types
 import { watchParent } from "../application/parent-watchdog";
 import { NodeOptions } from "../application/node-options";
 import { PeerCaller, receiveKeys } from "../application/peer-link";
-import {
-  DEFAULT_WATCH_PACE,
-  readPersonalLimits,
-  resourceWatchdog,
-} from "../application/resource-watch";
+import { runtimeWatchdog } from "../application/left-nodes";
+import { readPersonalLimits } from "../application/resource-watch";
 import {
   redactingShellLink,
   serveShell,
@@ -270,13 +268,14 @@ function generateNodeTypes(
         logger,
         notifier,
         tree: processTreeFor(process.platform),
-        // The resource watchdog of every node process (plan 0031 group A).
-        watchdog: resourceWatchdog({
+        // The resource watchdog of every node process (plan 0031 group A), each recorded for the
+        // shell to stop should this runtime crash (application/left-nodes.ts).
+        watchdog: runtimeWatchdog({
           probe: resourceProbeFor(process.platform, undefined, undefined, (message) => {
             logger.warn(message);
           }),
+          store: new JsonNodeRecords(config.userDir),
           clock: monotonicClock,
-          pace: DEFAULT_WATCH_PACE,
           log: (level, message) => {
             logger[level](message);
           },

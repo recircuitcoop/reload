@@ -14,7 +14,12 @@ export const TEST_PORT = 18_800;
 
 export function supervised(
   behaviour: Behaviour,
-  options: { child?: ChildName; settings?: SupervisionSettings; credentialSecret?: string } = {},
+  options: {
+    child?: ChildName;
+    settings?: SupervisionSettings;
+    credentialSecret?: string;
+    beforeFork?: () => Promise<void>;
+  } = {},
 ) {
   const clock = new FakeClock();
   const launcher = new FakeLauncher(clock, behaviour);
@@ -39,6 +44,7 @@ export function supervised(
     logger,
     notifier,
     newId: () => `rid-${String(++ids)}`,
+    ...(options.beforeFork === undefined ? {} : { beforeFork: options.beforeFork }),
   });
   supervisor.onStatus((status) => statuses.push(status));
   const states = (): string[] => statuses.map((status) => status.state);

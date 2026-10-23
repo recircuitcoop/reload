@@ -63,6 +63,12 @@ export interface SupervisorDeps {
   readonly notifier: Notifier;
   /** A fresh call id (a UUID in the app). */
   readonly newId: () => string;
+  /**
+   * Run before every fork, which waits for it: the runtime's node processes a crashed
+   * generation left behind are stopped here (application/left-nodes.ts). A failure is logged,
+   * and the fork goes ahead.
+   */
+  readonly beforeFork?: () => Promise<void>;
 }
 
 export class Supervisor {
@@ -268,7 +274,26 @@ export class Supervisor {
 
   // ── the child's lifecycle ──────────────────────────────────────────────────────────────
 
+  /** Fork the next generation, once what must come first (`beforeFork`) is done. */
   #fork(): void {
+    const before = this.#deps.beforeFork;
+    if (before === undefined) {
+      this.#forkNow();
+      return;
+    }
+    void before()
+      .catch((error: unknown) => {
+        this.#deps.logger.error(`before starting the ${this.#deps.child}: ${String(error)}`);
+      })
+      .then(() => {
+        // A quit that came meanwhile has already settled, with no child to stop.
+        if (!this.#quitting) {
+          this.#forkNow();
+        }
+      });
+  }
+
+  #forkNow(): void {
     this.#generation += 1;
     this.#pid = null;
     this.#port = null;

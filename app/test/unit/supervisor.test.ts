@@ -20,6 +20,9 @@ describe("the supervised children", () => {
   });
 });
 
+/** Every promise already settled has run its callbacks. */
+const settle = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
+
 const inits = (posted: ShellMessage[]) =>
   posted.flatMap((message) => (message.t === "init" ? [message.config] : []));
 
@@ -472,5 +475,62 @@ describe("the watchdog's last stop over a resource limit (plan 0031)", () => {
     clock.advance(10);
     await stopped;
     expect(told).toBe(2);
+  });
+});
+
+describe("before every fork", () => {
+  it("stops what a crashed generation left before every fork, and forks only once that is done", async () => {
+    const order: string[] = [];
+    let cleared: () => void = () => undefined;
+    const { supervisor, launcher, clock } = supervised(obedient, {
+      beforeFork: () => {
+        order.push(`clear before fork ${String(launcher.children.length + 1)}`);
+        return new Promise((resolve) => {
+          cleared = resolve;
+        });
+      },
+    });
+    supervisor.start();
+    expect(launcher.children).toHaveLength(0);
+    cleared();
+    await settle();
+    expect(launcher.children).toHaveLength(1);
+    clock.advance(1);
+    launcher.current.exit(1); // the runtime crashed
+    clock.advance(251);
+    // The backoff has run out, but the next runtime waits until the leftovers are stopped.
+    expect(launcher.children).toHaveLength(1);
+    cleared();
+    await settle();
+    expect(launcher.children).toHaveLength(2);
+    expect(order).toEqual(["clear before fork 1", "clear before fork 2"]);
+  });
+
+  it("forks even when stopping the leftovers failed, and says so", async () => {
+    const { supervisor, launcher, logger } = supervised(obedient, {
+      beforeFork: () => Promise.reject(new Error("the process table could not be read")),
+    });
+    supervisor.start();
+    await settle();
+    expect(launcher.children).toHaveLength(1);
+    expect(logger.lines).toContain(
+      "ERROR before starting the runtime: Error: the process table could not be read",
+    );
+  });
+
+  it("forks nothing when a quit comes while the leftovers are being stopped", async () => {
+    let cleared: () => void = () => undefined;
+    const { supervisor, launcher } = supervised(obedient, {
+      beforeFork: () =>
+        new Promise((resolve) => {
+          cleared = resolve;
+        }),
+    });
+    supervisor.start();
+    await supervisor.stop();
+    cleared();
+    await settle();
+    expect(launcher.children).toEqual([]);
+    expect(supervisor.status().state).toBe("stopped");
   });
 });

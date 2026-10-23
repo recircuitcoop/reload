@@ -107,6 +107,9 @@ export default defineConfig({
             "src/application/managed-watch.ts",
             "src/adapters/process/resource-guard.ts",
             "src/adapters/process/resource-probe.ts",
+            // Node processes a crashed runtime left: signalled by a file read back as untrusted.
+            "src/application/left-nodes.ts",
+            "src/adapters/process/node-records.ts",
             // Plan 0031: the heartbeat of plugins and the MCP child, and what a node is told.
             "src/application/heartbeat.ts",
             "src/adapters/process/node-heartbeat.ts",

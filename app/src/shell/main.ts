@@ -74,6 +74,8 @@ import { ElectronUpdaterInstaller } from "../adapters/update/electron-updater-in
 import { AnytypeApp } from "../application/anytype-app";
 import { watchManaged } from "../application/managed-watch";
 import { resourceProbeFor } from "../adapters/process/resource-probe";
+import { JsonNodeRecords } from "../adapters/process/node-records";
+import { stopLeftNodes } from "../application/left-nodes";
 import { OneLog } from "../application/one-log";
 import { linkPeers } from "../application/peer-link";
 import { credentialSecretOf, openSecretStore } from "../application/secrets";
@@ -129,7 +131,6 @@ const firstStart = firstStartIn(app, e2eHooks, process.env, rewriteLegacyJournal
 if (firstStart.problem !== null) app.exit(1);
 // The gate runs with hidden windows (§6, e2e stage), so a run never steals focus.
 const hiddenWindows = process.env["RELOAD_HIDDEN_WINDOWS"] === "1";
-
 // The app pages and the pop-outs are served by the shell on schemes of its own (§2.2), which must be privileged before Electron is ready.
 registerSchemes(protocol);
 /** Where what ships with the app lives: this file is bundled to app/dist/shell/main.cjs. */
@@ -147,7 +148,6 @@ const RUNTIMES_DIR = app.isPackaged ? path.join(process.resourcesPath, RUNTIMES_
 if (process.env["RELOAD_MOCK_KEYCHAIN"] === "1") {
   app.commandLine.appendSwitch("use-mock-keychain");
 }
-
 // ── the one log (WI-0018-04): the shell is its only writer ──────────────────────────────
 // A value registered as a secret and then printed by every process, so the e2e gate and the `log` machine proof can show it never reaches the file (plan 0018 §5.4). Unset ordinarily.
 const logCanary = process.env[LOG_CANARY_VARIABLE];
@@ -340,6 +340,9 @@ async function start(): Promise<DesktopWired["notices"] | null> {
     },
   );
   const given = { home: os.homedir(), env: process.env, runtimesDir: RUNTIMES_DIR, e2eHooks };
+  const probe = resourceProbeFor(process.platform, undefined, undefined, logger.warn.bind(logger));
+  const left = { probe, store: new JsonNodeRecords(userDir), signal: process.kill.bind(process) };
+  const beforeFork = () => stopLeftNodes({ ...left, clock: monotonicClock, logger });
   for (const child of CHILD_NAMES) {
     const fork = forkSpecFor(child, __dirname, given);
     childOf.set(fork, child);
@@ -357,12 +360,13 @@ async function start(): Promise<DesktopWired["notices"] | null> {
       logger,
       notifier: notices,
       newId: randomUUID,
+      ...(child === "runtime" ? { beforeFork } : {}), // what a crashed runtime left is stopped first
     });
     supervisors.set(child, supervisor);
   }
   wireChildCalls(ipcMain, supervisors, toPage);
   watchManaged({
-    probe: resourceProbeFor(process.platform, undefined, undefined, logger.warn.bind(logger)),
+    probe,
     settings: new JsonSettingsStore(path.join(userDir, "shell-settings.json")),
     ...{ clock: monotonicClock, logger, notifier: notices, signal: process.kill.bind(process) },
     ...{ children: supervisors.values(), anytype: anytypeStarted.then(() => anytypeApp) },
