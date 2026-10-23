@@ -631,8 +631,8 @@ describe("a refused save never keeps a secret", () => {
     };
     const stored = storedRefusal(full, submitted, kept);
     expect(JSON.stringify(stored)).not.toMatch(/hunter/);
-    // A field declaring a secret anywhere is left out whole.
-    expect(stored?.values).toEqual({ label: "x" });
+    // Only the secrets go: a group keeps its other values.
+    expect(stored?.values).toEqual({ label: "x", account: { user: "me" } });
     expect(stored?.problems.map((problem) => problem.value)).toEqual(["x", undefined, undefined]);
     // So the sentence said beside the field and in the notice holds none either.
     expect(notKeptSentence(full, stored?.problems ?? [])).not.toMatch(/hunter/);

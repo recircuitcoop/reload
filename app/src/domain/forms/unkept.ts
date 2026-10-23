@@ -10,7 +10,7 @@
 // Pure: no I/O, no library.
 
 import type { JsonSchema } from "../packages/declaration";
-import { containsSecret, isSecret, isSecretList, propertiesOf } from "./form-model";
+import { containsSecret, isSecret, isSecretList, propertiesOf, withoutSecrets } from "./form-model";
 
 type Fields = Readonly<Record<string, unknown>>;
 
@@ -95,26 +95,40 @@ export function unkeptSecretsOfNode(schema: JsonSchema, node: Fields): string[] 
 }
 
 /**
- * `value` with every value a secret may hold taken out, by `schema`: each property whose schema
- * declares a secret anywhere, in any keyword, is left out whole; so are keys no property names
- * when anything but `properties` declares one. What is left may be kept or shown: it holds no
- * secret, whatever shape a package declared.
+ * `value` with every value a secret may hold taken out, by the type's whole schema: what the
+ * plain schema (form-model.ts withoutSecrets) declares is kept, at every depth, so a group's or
+ * a row's other values stay and only its secrets go; a field holding a secret in a shape the form
+ * cannot strip is left out whole, and so are keys no property names when anything but
+ * `properties` declares a secret. What is left holds no secret, whatever shape a package declared.
  */
 export function withoutSecretValues(schema: JsonSchema, value: unknown): unknown {
-  if (!isRecord(value)) {
-    return containsSecret(schema) ? undefined : value;
+  return strippedTo(withoutSecrets(schema), schema, value);
+}
+
+function strippedTo(plain: JsonSchema, full: JsonSchema, value: unknown): unknown {
+  if (Array.isArray(value)) {
+    const items = plain["items"];
+    const fullItems = full["items"];
+    return isRecord(items) && isRecord(fullItems)
+      ? value.map((item: unknown) => strippedTo(items, fullItems, item))
+      : value;
   }
-  const declared = new Map(propertiesOf(schema));
+  if (!isRecord(value)) {
+    return containsSecret(full) ? undefined : value;
+  }
+  const kept = new Map(propertiesOf(plain));
+  const declared = new Map(propertiesOf(full));
   const elsewhere = containsSecret(
-    Object.fromEntries(Object.entries(schema).filter(([keyword]) => keyword !== "properties")),
+    Object.fromEntries(Object.entries(full).filter(([keyword]) => keyword !== "properties")),
   );
   return Object.fromEntries(
     Object.entries(value).flatMap(([key, inner]): [string, unknown][] => {
-      const property = declared.get(key);
-      if (property === undefined) {
-        return elsewhere ? [] : [[key, inner]];
+      const property = kept.get(key);
+      const fullProperty = declared.get(key);
+      if (property !== undefined && fullProperty !== undefined) {
+        return [[key, strippedTo(property, fullProperty, inner)]];
       }
-      return containsSecret(property) ? [] : [[key, inner]];
+      return fullProperty !== undefined || elsewhere ? [] : [[key, inner]];
     }),
   );
 }
