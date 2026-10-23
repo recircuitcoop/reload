@@ -416,6 +416,8 @@ export function wordPackageRefusal(name: string, refusal: PackageRefusal): strin
     }
     case "shipped":
       return t("packages.shipped", { name });
+    case "required":
+      return t("packages.required", { by: refusal.by });
     default:
       return null;
   }

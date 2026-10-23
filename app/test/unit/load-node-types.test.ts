@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { AjvSchemaValidator } from "../../src/adapters/schema/ajv-validator";
 import { loadNodeTypes, unregisteredNames } from "../../src/application/load-node-types";
-import { RecordingLogger } from "../fakes/children";
+import { RecordingLogger, RecordingNotifier } from "../fakes/children";
 
 const validator = new AjvSchemaValidator();
 
@@ -85,6 +85,93 @@ describe("loadNodeTypes", () => {
     expect(logger.lines).toEqual([
       "ERROR node package alpha (/packages/alpha) is refused and not loaded: version: must be " +
         "string; types: must NOT have fewer than 1 items",
+    ]);
+  });
+});
+
+// A package that requires another (spec 2.1.5; the old resolver's holds, test_host_children.py,
+// test_addons_cli.py, test_enable_switch.py).
+describe("a package that requires another", () => {
+  const packagesOf = (loaded: ReturnType<typeof loadNodeTypes>) => [
+    ...new Set(loaded.map((l) => l.declaration.package)),
+  ];
+
+  it("is held back while the one it requires is off, loads none of its types, and says why once", () => {
+    const logger = new RecordingLogger();
+    const notifier = new RecordingNotifier();
+    const loaded = loadNodeTypes(
+      [
+        declared("alpha"),
+        declared("beta"),
+        declared("gamma"),
+        declared("delta", { requires: ["beta"] }),
+      ],
+      validator,
+      logger,
+      ["beta"],
+      notifier,
+    );
+    // Never spawned: none of delta's types is there to deploy. beta itself is not held back.
+    expect(packagesOf(loaded)).toEqual(["alpha", "gamma"]);
+    expect(logger.lines).toContain(
+      "WARN held back node package delta: it requires beta, which is off; its types are not loaded",
+    );
+    expect(notifier.notices).toEqual([
+      { kind: "package-held-back", subject: "delta", detail: "requires beta, which is off" },
+    ]);
+    expect(notifier.cleared).toEqual(["package-held-back alpha", "package-held-back gamma"]);
+  });
+
+  it("is held back for one not installed, and so is what requires it in turn, each said in the same shape", () => {
+    const logger = new RecordingLogger();
+    const notifier = new RecordingNotifier();
+    const loaded = loadNodeTypes(
+      [
+        declared("lonely", { requires: ["absent"] }),
+        declared("needy", { requires: ["lonely"] }),
+        declared("alpha"),
+      ],
+      validator,
+      logger,
+      [],
+      notifier,
+    );
+    expect(packagesOf(loaded)).toEqual(["alpha"]);
+    expect(notifier.notices.map((notice) => [notice.subject, notice.detail])).toEqual([
+      ["lonely", "requires absent, which is not installed"],
+      ["needy", "requires lonely, which is held back"],
+    ]);
+  });
+
+  it("loads once what it requires loads, and its notice is withdrawn", () => {
+    const notifier = new RecordingNotifier();
+    const loaded = loadNodeTypes(
+      [declared("beta"), declared("delta", { requires: ["beta"] })],
+      validator,
+      new RecordingLogger(),
+      [],
+      notifier,
+    );
+    expect(packagesOf(loaded)).toEqual(["beta", "delta"]);
+    expect(notifier.cleared).toContain("package-held-back delta");
+  });
+
+  it("is refused when it requires itself, or names a package that is no package name", () => {
+    const logger = new RecordingLogger();
+    expect(
+      loadNodeTypes(
+        [
+          declared("alpha", { requires: ["alpha"] }),
+          declared("beta", { requires: ["Not A Name"] }),
+        ],
+        validator,
+        logger,
+      ),
+    ).toEqual([]);
+    expect(logger.lines).toEqual([
+      "ERROR node package alpha (/packages/alpha) is refused and not loaded: requires: a package " +
+        "cannot require itself",
+      expect.stringMatching(/^ERROR node package beta .*requires\/0: must match pattern/),
     ]);
   });
 });

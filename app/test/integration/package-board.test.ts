@@ -50,6 +50,8 @@ let stopping: () => void;
 /** How long the fake restart took; null: the runtime was not running to restart. */
 let took: number | null;
 let types: readonly string[] | null;
+/** What each package requires, as the shell reads it from the declarations (spec 2.1.5). */
+let requiring: { package: string; requires: string[] }[];
 
 beforeEach(() => {
   base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-board-")));
@@ -65,6 +67,7 @@ beforeEach(() => {
   stopping = () => undefined;
   took = 100;
   types = [];
+  requiring = [];
 });
 
 afterEach(() => {
@@ -259,6 +262,7 @@ function setUp(shipped: { name: string; version: string; folder: string }[] = []
     remover,
     settings,
     loadedTypes: () => Promise.resolve(types),
+    requiring: () => requiring,
     restartRuntime,
     one,
     shippedManifest: () => manifest,
@@ -907,5 +911,61 @@ describe("per-package update controls: a mode from the page, Off, and Update all
     // Nothing newer: Update all is done, and changes nothing.
     expect(await board.updateAll()).toEqual({ ok: true });
     expect(restarts).toHaveLength(2);
+  });
+});
+
+// A package that requires another (spec 2.1.5; the old resolver's `requires`,
+// test_addons_remove.py, test_plugin_page.py, test_enable_switch.py).
+describe("a package another one requires", () => {
+  it("is refused for removal and unregistering by name, nothing removed nor restarted, and drawn not removable", async () => {
+    const { board } = setUp();
+    await board.start();
+    await board.installFolder(writeFolder("monty", "0.1.0"));
+    await board.installFolder(writeFolder("whodunnit", "0.1.0"));
+    types = ["reload-monty-ping", "reload-whodunnit-ping"];
+    requiring = [
+      { package: "monty", requires: [] },
+      { package: "whodunnit", requires: ["monty"] },
+    ];
+    restarts.length = 0;
+
+    const refusal = { reason: "required", by: "whodunnit requires monty" };
+    expect(await board.remove("monty", [])).toEqual({ ok: false, refusal });
+    expect(await board.unregister("monty", [])).toEqual({ ok: false, refusal });
+    expect(restarts).toEqual([]);
+    const listed = await board.board();
+    expect(row(listed, "monty").installation?.state).toBe("installed");
+    expect(row(listed, "monty").requiredBy).toBe("whodunnit requires monty");
+    // Asked before the control is drawn: monty's Remove and Unregister are shown disabled.
+    expect(rowActions(row(listed, "monty"), new Date(now)).disabled).toEqual([
+      "unregister",
+      "remove",
+    ]);
+    expect(rowActions(row(listed, "whodunnit"), new Date(now)).enabled).toContain("remove");
+
+    // Once what requires it is off, it goes.
+    expect(await board.unregister("whodunnit", [])).toEqual({ ok: true });
+    expect(await board.remove("monty", [])).toEqual({ ok: true });
+  });
+
+  it("says why one is held back, in the runtime's words, and holds back nothing it requires", async () => {
+    const { board } = setUp();
+    await board.start();
+    await board.installFolder(writeFolder("beta", "0.1.0"));
+    await board.installFolder(writeFolder("delta", "0.1.0"));
+    requiring = [
+      { package: "beta", requires: [] },
+      { package: "delta", requires: ["beta"] },
+    ];
+    types = ["reload-beta-ping", "reload-delta-ping"];
+    expect(row(await board.board(), "delta").heldBack).toBeUndefined();
+
+    // Off by hand: Reload itself refuses to turn off what delta requires.
+    expect(await board.unregister("beta", [])).toMatchObject({ ok: false });
+    settings.writePackages({ ...(settings.readPackages() as object), unregistered: ["beta"] });
+    types = [];
+    const listed = await board.board();
+    expect(row(listed, "delta").heldBack).toBe("requires beta, which is off");
+    expect(row(listed, "beta").heldBack).toBeUndefined();
   });
 });

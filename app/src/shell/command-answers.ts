@@ -12,6 +12,7 @@ import type { ChildName, ChildStatus } from "../domain/supervision/child-state";
 import type { NodeRow } from "../application/instance-readiness";
 import type { Logger } from "../ports/logger";
 import type { Notice } from "../domain/notices/notices";
+import { unregisteredOf } from "../domain/packages/versions";
 import type { Notifier } from "../ports/notifier";
 import {
   isQuestion,
@@ -310,6 +311,17 @@ export function removeStaleReplies(dir: string, now: number): void {
   }
 }
 
+/** The packages the person unregistered (plan 0022 §F, D6), as the settings file lists them. */
+function offPackages(dir: string): string[] {
+  try {
+    const file = fs.readFileSync(path.join(dir, "shell-settings.json"), "utf8");
+    const settings = JSON.parse(file) as { packages?: unknown } | null;
+    return unregisteredOf(settings?.packages);
+  } catch {
+    return []; // none, or not readable: the window says what is wrong with it
+  }
+}
+
 const childLines = (supervisors: Running["supervisors"]) =>
   [...supervisors.values()]
     .map((supervisor): ChildStatus => supervisor.status())
@@ -334,6 +346,10 @@ export function statusText(deps: Omit<AnswerDeps, "quit" | "logger" | "replies">
   }
   const anytype = running.anytype.state;
   lines.push(`  Anytype: ${anytype === null ? "starting" : ANYTYPE_WORDS[anytype]}`);
+  // Off, held back (its notice) and stopped for good (its node's) are three words, never one.
+  for (const name of offPackages(app.getPath("userData"))) {
+    lines.push(`  ${name}: off; Register it in Configuration › General to load its nodes`);
+  }
   // A child stopped for good is said on its own line above: its notice would say it twice.
   const shown = new Set<string>(childLines(running.supervisors).map((status) => status.child));
   const said = (notice: Notice) => notice.kind === "child-stopped" && shown.has(notice.subject);

@@ -1122,3 +1122,43 @@ describe("reload --list and the package verbs", () => {
     });
   });
 });
+
+// The old `helper status` (test_enable_switch.py): a package turned off, one held back for it,
+// and a node stopped for good, one line each and never one state printed as another.
+describe("reload --status and the packages", () => {
+  it("says off, held back and stopped in three different words", async () => {
+    fs.writeFileSync(
+      path.join(userData, "shell-settings.json"),
+      JSON.stringify({ packages: { unregistered: ["switched_off"] } }),
+    );
+    const board = new NoticeBoard({
+      deliver: () => undefined,
+      store: new JsonNoticeFile(path.join(userData, NOTICES_FILENAME)),
+      logger: new RecordingLogger(),
+    });
+    board.raise({
+      kind: "package-held-back",
+      subject: "incomplete",
+      detail: "requires switched_off, which is off",
+    });
+    board.raise({
+      kind: "node-stopped",
+      subject: "given_up_on",
+      detail: "It exited with code 1 five times in ten minutes",
+    });
+    const { answer } = deps();
+    put("status");
+    takeQuestions(userData, answer, Date.now());
+    const lines = (await replyFor()).text.split("\n");
+    expect(lines).toContain(
+      "  switched_off: off; Register it in Configuration › General to load its nodes",
+    );
+    expect(lines).toContain(
+      "  incomplete is held back — It requires switched_off, which is off. " +
+        "None of its nodes run until that changes.",
+    );
+    expect(lines.find((line) => line.includes("given_up_on"))).toMatch(
+      /stopped .*exited with code 1 five times/,
+    );
+  });
+});

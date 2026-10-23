@@ -109,10 +109,20 @@ const UPDATE_PILL: Record<NonNullable<Pkg["update"]>["state"], StatusPillState> 
 function facetsOf(pkg: Pkg, now: Date): PackageFacet[] {
   const facets: PackageFacet[] = [];
   if (pkg.registration !== null) {
+    // Held back for a package it requires, or kept for one that requires it (spec 2.1.5).
+    const why =
+      pkg.heldBack !== undefined
+        ? { text: t("packages.heldBack", { why: pkg.heldBack }), testid: "held-back" }
+        : pkg.requiredBy !== undefined
+          ? { text: t("packages.requiredBy", { by: pkg.requiredBy }), testid: "required-by" }
+          : null;
     facets.push({
       state: pkg.registration.state === "registered" ? "done" : "off",
       label: wordRegistration(pkg.registration),
       checked: wordChecked(pkg.registration.verifiedAt, now),
+      ...(why === null
+        ? {}
+        : { reason: { text: why.text, testid: `packages-row-${pkg.name}-${why.testid}` } }),
     });
   }
   if (pkg.installation !== null) {

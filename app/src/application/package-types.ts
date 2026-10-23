@@ -60,10 +60,16 @@ export class PackageTypes {
       };
     }
     const read = this.#deps.packages().find((entry) => entry.name === name);
+    // Judged with every package, as at the start: what it requires decides whether it loads.
     const loaded =
-      read === undefined || this.#deps.unregistered().includes(name)
+      read === undefined
         ? []
-        : loadNodeTypes([read], this.#deps.validator, logger);
+        : loadNodeTypes(
+            this.#deps.packages(),
+            this.#deps.validator,
+            logger,
+            this.#deps.unregistered(),
+          ).filter((entry) => entry.declaration.package === name);
     for (const [type, entry] of [...types]) {
       if (entry.declaration.package === name) {
         types.delete(type);

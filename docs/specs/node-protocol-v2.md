@@ -16,19 +16,20 @@ The key words MUST, MUST NOT, REQUIRED, SHOULD, SHOULD NOT and MAY are used as i
 
 Vocabulary, as in plan 0017:
 
-| Term | Meaning |
-|---|---|
-| **event** | A message travelling along a wire in a flow. Its type is a versioned name. |
-| **source** | A type that starts runs by emitting events. It normally has no input (but see `input`, section 2.4). |
-| **node** | A type that takes an event in, does work, and emits events. A sink is a node with no outputs. |
-| **view** | A type whose result is shown to the person in the Reload app: an **action** view (the flow waits) or a **snapshot** view (it records and passes on). |
-| **flow** | A graph of sources, nodes and views, drawn on the canvas. |
-| **node package** | The installable unit that declares one or more types. |
-| **runtime** | The Reload process that embeds Node-RED, runs node processes, and keeps the journal. |
-| **shell** | The Electron main process: windows, lock, quit, notifications, and supervision of the runtime. |
-| **instance** | One node of a type placed on the canvas. There is one process per instance. |
+| Term             | Meaning                                                                                                                                              |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **event**        | A message travelling along a wire in a flow. Its type is a versioned name.                                                                           |
+| **source**       | A type that starts runs by emitting events. It normally has no input (but see `input`, section 2.4).                                                 |
+| **node**         | A type that takes an event in, does work, and emits events. A sink is a node with no outputs.                                                        |
+| **view**         | A type whose result is shown to the person in the Reload app: an **action** view (the flow waits) or a **snapshot** view (it records and passes on). |
+| **flow**         | A graph of sources, nodes and views, drawn on the canvas.                                                                                            |
+| **node package** | The installable unit that declares one or more types.                                                                                                |
+| **runtime**      | The Reload process that embeds Node-RED, runs node processes, and keeps the journal.                                                                 |
+| **shell**        | The Electron main process: windows, lock, quit, notifications, and supervision of the runtime.                                                       |
+| **instance**     | One node of a type placed on the canvas. There is one process per instance.                                                                          |
 
 Every requirement is one of two kinds:
+
 - **PROVEN** by the slice 01 spike on macOS arm64, with Electron 44.4.5, Node-RED 5.0.7 and
   Python 3.13 (see docs/arch_pivot.md, criteria P1–P11);
 - **unproven — slice 03 must prove**, marked in place as **[UNPROVEN]**.
@@ -72,6 +73,7 @@ package authors.
    - **Revision 2.1** adds, every one of them optional: `notes` and `results` on `done` (4.2.1),
      `in`, `progress`, `eta_s` and `phase` on `status` (4.2.2), and the `reload` annotation on
      config schema properties (2.4.1).
+   - **Revision 2.2** adds `requires` on the declaration (2.1.5), optional.
 4. Version 1 (the pre-0017 plugin contract, `{kind, payload}`, fire-and-forget) is not supported.
    There is no bridge; plan 0017's cutover converts packages in one wave.
 
@@ -90,15 +92,22 @@ package authors.
 5. `version` is the one exact version the package is: numbers joined by dots, optionally a
    pre-release after `-` and build metadata after `+` (`1.4.0`, `2.0.0-rc.1`). A range, a tag
    such as `latest`, `*` or an empty string MUST be refused, quoting it.
+6. `requires` (revision 2.2, MAY) lists the names of other packages this one needs, each once
+   and never its own. A package MUST NOT be loaded while one it requires is not installed, is
+   unregistered, or is held back itself: the runtime MUST hold it back, load none of its types,
+   and say why in one shape, `requires <name>, which is not installed` (`… which is off`,
+   `… which is held back`, `… which cannot be loaded`). A package that another, registered one
+   requires MUST NOT be removed or unregistered: the refusal names the package that requires
+   it. A runtime of revision 2.0 or 2.1 ignores the field and loads the package regardless.
 
 ### 2.2 Types
 
-| `kind` | Inputs | Outputs | Notes |
-|---|---|---|---|
-| `source` | 0, or 1 if `input: true` | one per declared event type | Emits spontaneously; every emission starts a new run. |
-| `node` | 1 | zero or more, one per event type | Zero outputs makes it a sink. |
-| `view` with `view: "action"` | 1 | one per event type | The flow waits at it (section 8). |
-| `view` with `view: "snapshot"` | 1 | the pass-through outputs, then one per action | Records state; its actions start new runs (section 8). |
+| `kind`                         | Inputs                   | Outputs                                       | Notes                                                  |
+| ------------------------------ | ------------------------ | --------------------------------------------- | ------------------------------------------------------ |
+| `source`                       | 0, or 1 if `input: true` | one per declared event type                   | Emits spontaneously; every emission starts a new run.  |
+| `node`                         | 1                        | zero or more, one per event type              | Zero outputs makes it a sink.                          |
+| `view` with `view: "action"`   | 1                        | one per event type                            | The flow waits at it (section 8).                      |
+| `view` with `view: "snapshot"` | 1                        | the pass-through outputs, then one per action | Records state; its actions start new runs (section 8). |
 
 Output ports are numbered in declaration order: first `outputs[]`, then, for snapshot views,
 `actions[]`. The runtime MUST map ports by that order. A node process refers to ports by name,
@@ -107,7 +116,7 @@ never by number.
 ### 2.3 Commands and environments
 
 1. `command` is an argv array. It MAY be given per OS, as `{"darwin": [...], "win32": [...],
-   "linux": [...], "default": [...]}`; a bare array means all platforms.
+"linux": [...], "default": [...]}`; a bare array means all platforms.
    - **[UNPROVEN]** Only darwin was exercised.
 2. Placeholders the runtime MUST substitute in every argv element:
    - `{python}`: the Python interpreter of the package's environment;
@@ -115,6 +124,7 @@ never by number.
    - `{package}`: the absolute, real (unpacked) directory of the package.
 
    A literal `{` MUST be written `{{`.
+
 3. `environment` declares how the package is installed and run:
    - `{"kind": "uv-python", "python": "3.13"}`;
    - `{"kind": "node", "node": ">=22"}`;
@@ -134,6 +144,7 @@ never by number.
    The environment is built in staging and swapped in only once complete. **[UNPROVEN]** Built
    and tested on darwin only, with the system uv and Python 3.13 standing in for the bundled
    ones (WI-0018-23).
+
 4. The working directory of a node process MUST be `{package}`. Paths inside an app archive MUST
    be rewritten to their unpacked twin (proven for `app.asar` → `app.asar.unpacked`).
 5. **The package archive.** A package is published as a `.tgz` of its files plus `files.json`
@@ -146,25 +157,25 @@ never by number.
 
 ### 2.4 Type fields
 
-| Field | Applies to | Required | Meaning |
-|---|---|---|---|
-| `id` | all | MUST | See 2.1. |
-| `kind` | all | MUST | `source`, `node` or `view`. |
-| `view` | view | MUST for views | `action` or `snapshot`. |
-| `label` | all | MUST | Palette label, 1 to 60 characters. |
-| `description` | all | SHOULD | Help text shown in the editor. |
-| `icon` | all | MAY | A Node-RED icon name, for example `font-awesome/fa-users` or `file.svg`. |
-| `command` | all | MUST | See 2.3. |
-| `config` | all | MUST | A JSON Schema 2020-12 object schema for the instance configuration. Properties marked `"writeOnly": true` or `"x-secret": true` are credentials (2.5). |
-| `outputs` | all | MUST (it may be empty for a sink) | An array of `{port, event}`: `port` matches `^[a-z][a-z0-9_]{0,39}$` and is unique within the type; `event` is an event type name (5.2). |
-| `actions` | snapshot views | MAY | An array of `{id, label, event, form?}`: `id` is the port name; `form` is an optional JSON Schema for values asked for when the action is pressed. |
-| `input` | sources | MAY | `true`: the source gets one input. A message on it is validated against `payload` and emitted as a new run (9.5). |
-| `event`, `payload` | sources with one output | MAY | The single event type and its payload JSON Schema. REQUIRED for created event types. |
-| `answer` | views | MAY | A JSON Schema 2020-12 for what the view sends back: an action view's submission, and the values of a snapshot view's action press. The runtime judges every answer by it, after the bounds of 8.5.7. Without it, an answer must have the default shape of 8.5.7. A dismissal (8.2.2) is never judged by it. |
-| `props` | action views | MAY | A JSON Schema 2020-12 for the input an action view hands its own web component, `content.component.props` (8.1.3). The runtime judges props at present, by the bounds of 8.5.7 and then by this schema (8.1.5). Without it, props are judged by the bounds only. A development build's **Preview a view…** draws the type without a flow: the element `<package>-<id>` (underscores as hyphens), handed the first of this schema's `examples` as its props (`{}` without one); the answer is logged, never sent. |
-| `reload` | all | MAY | How Reload supervises the type's processes (2.4.2). |
-| `window` | views | via `config` | Views SHOULD declare a config property `window` with enum `["inline", "popout"]`, so that each instance chooses (8.5). |
-| `reload` | all | MAY | How Reload watches the type's process: `limits` (2.4.2). Every key is optional, and an unknown key is refused. |
+| Field              | Applies to              | Required                          | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ------------------ | ----------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`               | all                     | MUST                              | See 2.1.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `kind`             | all                     | MUST                              | `source`, `node` or `view`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| `view`             | view                    | MUST for views                    | `action` or `snapshot`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `label`            | all                     | MUST                              | Palette label, 1 to 60 characters.                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `description`      | all                     | SHOULD                            | Help text shown in the editor.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `icon`             | all                     | MAY                               | A Node-RED icon name, for example `font-awesome/fa-users` or `file.svg`.                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `command`          | all                     | MUST                              | See 2.3.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `config`           | all                     | MUST                              | A JSON Schema 2020-12 object schema for the instance configuration. Properties marked `"writeOnly": true` or `"x-secret": true` are credentials (2.5).                                                                                                                                                                                                                                                                                                                                                           |
+| `outputs`          | all                     | MUST (it may be empty for a sink) | An array of `{port, event}`: `port` matches `^[a-z][a-z0-9_]{0,39}$` and is unique within the type; `event` is an event type name (5.2).                                                                                                                                                                                                                                                                                                                                                                         |
+| `actions`          | snapshot views          | MAY                               | An array of `{id, label, event, form?}`: `id` is the port name; `form` is an optional JSON Schema for values asked for when the action is pressed.                                                                                                                                                                                                                                                                                                                                                               |
+| `input`            | sources                 | MAY                               | `true`: the source gets one input. A message on it is validated against `payload` and emitted as a new run (9.5).                                                                                                                                                                                                                                                                                                                                                                                                |
+| `event`, `payload` | sources with one output | MAY                               | The single event type and its payload JSON Schema. REQUIRED for created event types.                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `answer`           | views                   | MAY                               | A JSON Schema 2020-12 for what the view sends back: an action view's submission, and the values of a snapshot view's action press. The runtime judges every answer by it, after the bounds of 8.5.7. Without it, an answer must have the default shape of 8.5.7. A dismissal (8.2.2) is never judged by it.                                                                                                                                                                                                      |
+| `props`            | action views            | MAY                               | A JSON Schema 2020-12 for the input an action view hands its own web component, `content.component.props` (8.1.3). The runtime judges props at present, by the bounds of 8.5.7 and then by this schema (8.1.5). Without it, props are judged by the bounds only. A development build's **Preview a view…** draws the type without a flow: the element `<package>-<id>` (underscores as hyphens), handed the first of this schema's `examples` as its props (`{}` without one); the answer is logged, never sent. |
+| `reload`           | all                     | MAY                               | How Reload supervises the type's processes (2.4.2).                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `window`           | views                   | via `config`                      | Views SHOULD declare a config property `window` with enum `["inline", "popout"]`, so that each instance chooses (8.5).                                                                                                                                                                                                                                                                                                                                                                                           |
+| `reload`           | all                     | MAY                               | How Reload watches the type's process: `limits` (2.4.2). Every key is optional, and an unknown key is refused.                                                                                                                                                                                                                                                                                                                                                                                                   |
 
 Types MUST NOT declare an output port named after a Node-RED internal (`_msgid`, `topic`).
 
@@ -176,10 +187,10 @@ values validate, and the stored value stays what the property's own schema says 
 both keys below). Two keys declare options the editor and Setup offer for a `type: "string"`
 property, resolved by Reload, never by the node:
 
-| Key | Value | The options are |
-|---|---|---|
-| `spaces` | `true` | the spaces of the paired Anytype |
-| `types` | `{"of": "<property>"}` | the types of the space chosen in the sibling property that `of` names |
+| Key      | Value                  | The options are                                                       |
+| -------- | ---------------------- | --------------------------------------------------------------------- |
+| `spaces` | `true`                 | the spaces of the paired Anytype                                      |
+| `types`  | `{"of": "<property>"}` | the types of the space chosen in the sibling property that `of` names |
 
 A third key, `advanced` (`true`), says where a property is shown, not what it offers: the
 first-run Setup never shows it, and the editor draws it under an **Advanced** disclosure, closed
@@ -230,11 +241,11 @@ it is closed, as the old manifest's `stability` section was: a key it does not d
 `reload` or in `heartbeat`, refuses the declaration and names the key, so a misspelt setting is
 never silently ignored.
 
-| Key | Value | Meaning |
-|---|---|---|
-| `heartbeat` | `{"interval_s": number, "stale_after_s"?: number}`, each from 1 s to a day (86400 s), and `stale_after_s` no shorter than `interval_s` | The type promises to answer `ping` (4.1). The runtime pings each of its processes every `interval_s` after `ready`, and records a beat only for a `pong` that comes back before the next ping is due. A process that shows no progress (4.2 `pong`) for `stale_after_s` (default: three intervals) while it is running is stuck, judged within one interval of that window: the runtime logs it and tells the person once per episode, and signals nothing then. It stops the process when its restart backoff has run out (250 ms × the stuck restarts in a row, at most 5 s) and starts the next one at once; the stop counts toward the crash-loop limit (6.5). A long step stays legal while it sends `status` or `progress`. A pass that runs long after it was due (the machine slept) starts the window again rather than reading the gap as silence. Without `heartbeat`, a process is never judged stuck. |
-| `restartable` | boolean, default `true` | `false`: a process that exits unexpectedly is never started again, for example because starting it twice would repeat a side effect. The instance is stopped as at the crash-loop limit (6.5): its open inputs fail, and the person is told once. A redeploy creates it again. |
-| `limits` | object | Its own resource limits, as below. |
+| Key           | Value                                                                                                                                  | Meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `heartbeat`   | `{"interval_s": number, "stale_after_s"?: number}`, each from 1 s to a day (86400 s), and `stale_after_s` no shorter than `interval_s` | The type promises to answer `ping` (4.1). The runtime pings each of its processes every `interval_s` after `ready`, and records a beat only for a `pong` that comes back before the next ping is due. A process that shows no progress (4.2 `pong`) for `stale_after_s` (default: three intervals) while it is running is stuck, judged within one interval of that window: the runtime logs it and tells the person once per episode, and signals nothing then. It stops the process when its restart backoff has run out (250 ms × the stuck restarts in a row, at most 5 s) and starts the next one at once; the stop counts toward the crash-loop limit (6.5). A long step stays legal while it sends `status` or `progress`. A pass that runs long after it was due (the machine slept) starts the window again rather than reading the gap as silence. Without `heartbeat`, a process is never judged stuck. |
+| `restartable` | boolean, default `true`                                                                                                                | `false`: a process that exits unexpectedly is never started again, for example because starting it twice would repeat a side effect. The instance is stopped as at the crash-loop limit (6.5): its open inputs fail, and the person is told once. A redeploy creates it again.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `limits`      | object                                                                                                                                 | Its own resource limits, as below.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
 **Resource limits (plan 0031).** The runtime watches every node process, and the shell watches the runtime, the services process
 and an Anytype app it started itself, against limits on memory, CPU over a window, open files and
@@ -273,17 +284,17 @@ A type MAY set its own limits in `reload.limits`:
 
 1. The editor form for a type MUST be generated from `config`:
 
-   | Schema | Form control |
-   |---|---|
-   | `type: string` | text input (`reload.multiline`: several lines; `reload.path`: with Browse…) |
-   | `number` or `integer` | number input, carrying `minimum`, `maximum` and `multipleOf` |
-   | `boolean` | checkbox |
-   | `enum` | select |
-   | `array` whose `items` are an `enum` | one checkbox per option |
-   | `array` of any other single value | a list: one control of the element per value, added and removed |
-   | `object` | its properties, as a group |
-   | `array` of objects | a table: one row of its properties per element |
-   | a secret | password input |
+   | Schema                              | Form control                                                                |
+   | ----------------------------------- | --------------------------------------------------------------------------- |
+   | `type: string`                      | text input (`reload.multiline`: several lines; `reload.path`: with Browse…) |
+   | `number` or `integer`               | number input, carrying `minimum`, `maximum` and `multipleOf`                |
+   | `boolean`                           | checkbox                                                                    |
+   | `enum`                              | select                                                                      |
+   | `array` whose `items` are an `enum` | one checkbox per option                                                     |
+   | `array` of any other single value   | a list: one control of the element per value, added and removed             |
+   | `object`                            | its properties, as a group                                                  |
+   | `array` of objects                  | a table: one row of its properties per element                              |
+   | a secret                            | password input                                                              |
 
    `title` gives the label, `description` a tip, and `default` the default value. A `readOnly`
    property is shown and never typed over. An array of `enum` items is a list of selects, in its
@@ -318,6 +329,7 @@ A type MAY set its own limits in `reload.limits`:
    with no `items`; a list of lists or of tables (a list of secrets at any depth excepted); a
    table whose row has no properties or no `title` (the noun of its **Add** button); and, in the
    declaration's text, a key repeated in one object, which JSON would silently drop.
+
 2. Secret properties MUST become Node-RED credentials, stored encrypted in `flows_cred.json` with
    the runtime's credential secret. They MUST NOT appear in `flows.json`. A secret inside a nested
    object is a credential named by its path (`"account.token"`), drawn in its group and delivered
@@ -345,6 +357,11 @@ A type MAY set its own limits in `reload.limits`:
     "protocol": { "const": 2 },
     "package": { "type": "string", "pattern": "^[a-z][a-z0-9_]{1,39}$" },
     "version": { "type": "string" },
+    "requires": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]{1,39}$" },
+      "uniqueItems": true
+    },
     "environment": {
       "type": "object",
       "required": ["kind"],
@@ -388,7 +405,10 @@ A type MAY set its own limits in `reload.limits`:
     "configProperty": {
       "properties": {
         "reload": { "$ref": "#/$defs/reload" },
-        "properties": { "type": "object", "additionalProperties": { "$ref": "#/$defs/configProperty" } },
+        "properties": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/configProperty" }
+        },
         "items": { "$ref": "#/$defs/configProperty" }
       },
       "if": {
@@ -440,7 +460,10 @@ A type MAY set its own limits in `reload.limits`:
       ],
       "not": { "required": ["spaces", "types"] }
     },
-    "eventName": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_]*)+\\.v[1-9][0-9]*$" },
+    "eventName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*(\\.[a-z][a-z0-9_]*)+\\.v[1-9][0-9]*$"
+    },
     "output": {
       "type": "object",
       "required": ["port", "event"],
@@ -509,11 +532,26 @@ A type MAY set its own limits in `reload.limits`:
         "reload": { "$ref": "#/$defs/typeReload" }
       },
       "allOf": [
-        { "if": { "properties": { "kind": { "const": "view" } } }, "then": { "required": ["view"] } },
-        { "if": { "required": ["actions"] }, "then": { "properties": { "kind": { "const": "view" }, "view": { "const": "snapshot" } } } },
-        { "if": { "required": ["input"] }, "then": { "properties": { "kind": { "const": "source" } } } },
-        { "if": { "required": ["answer"] }, "then": { "properties": { "kind": { "const": "view" } } } },
-        { "if": { "required": ["props"] }, "then": { "properties": { "kind": { "const": "view" }, "view": { "const": "action" } } } }
+        {
+          "if": { "properties": { "kind": { "const": "view" } } },
+          "then": { "required": ["view"] }
+        },
+        {
+          "if": { "required": ["actions"] },
+          "then": { "properties": { "kind": { "const": "view" }, "view": { "const": "snapshot" } } }
+        },
+        {
+          "if": { "required": ["input"] },
+          "then": { "properties": { "kind": { "const": "source" } } }
+        },
+        {
+          "if": { "required": ["answer"] },
+          "then": { "properties": { "kind": { "const": "view" } } }
+        },
+        {
+          "if": { "required": ["props"] },
+          "then": { "properties": { "kind": { "const": "view" }, "view": { "const": "action" } } }
+        }
       ]
     }
   }
@@ -583,45 +621,54 @@ A type MAY set its own limits in `reload.limits`:
 ## 4. Frames
 
 Every frame is a JSON object with a string field `t`.
+
 - Input ids (`id`, `in`) are opaque strings, UUIDs in practice, assigned by the runtime.
 - A node MUST NOT invent an input id.
 - A node MUST NOT reuse an id after `done`/`error`.
 
 ### 4.1 Runtime → node
 
-| `t` | Fields | When | The node MUST |
-|---|---|---|---|
-| `start` | `protocol` (2), `node: {id, type, name}`, `config` (object), `credentials` (object of strings), `data_dir` (string) | Exactly once, as the FIRST line. | Read it before any other frame. It MAY write to `data_dir`, a private folder per instance that persists across restarts. It MUST NOT log `credentials`. |
-| `input` | `id`, `event: {type, data, run}` | For each event arriving at the instance. It may be a re-send (7.3). | Eventually answer with exactly one `done` or `error` for `id` (awaiting views: after an `action`). It MAY emit outputs for `id` before that. It MUST treat a re-sent `id` as the same work, which SHOULD be idempotent. With `reload.heartbeat` declared (2.4.2), a step longer than the stale window MUST send `status` or `progress` within each window, or it is judged stuck. |
-| `cancel` | `in` | The person cancelled that input (proven: Jobs page). | Stop the work as soon as practical, and answer `error {in, message}`. A queued input is cancelled before it starts ("cancelled before it started"). An unknown `in` is ignored. |
-| `action` | `in`, `values` (object) | Action views only: the person submitted, or dismissed. | Submitted: emit on an output with `in`, then `done`. Dismissed (`values.__dismiss__ === true`): `error {in, "dismissed by the person"}`. |
-| `trigger` | `action` (port id), `snapshot: {id, state}`, `values` | Snapshot views only: an action was pressed. | Emit on the port named `action` WITHOUT `in` (a new run), carrying the snapshot state and `values`. |
-| `fire` | `data` (object, already validated) | Created event sources: the person fired the event from the app. | Emit on its one port without `in`. |
-| `close` | — | On redeploy, removal, quit or runtime restart. | Stop its work, send `closed`, and exit with code 0. Deadline: 5 s (6.3). |
-| `ping` | `id` | Only to a type that declares `reload.heartbeat` (2.4.2), once per interval after `ready`. | Answer `pong` with the same `id`, whatever its handlers are doing, never held by them. A health check, when the node has one, runs on its own thread (or, in JavaScript, its own promise) bounded by 0.5 s, never on the loop that reads frames; one check at a time, and a ping that comes while one still runs is answered `healthy: false`. A node whose type declares no heartbeat MAY ignore it. |
+| `t`       | Fields                                                                                                              | When                                                                                      | The node MUST                                                                                                                                                                                                                                                                                                                                                                                         |
+| --------- | ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `start`   | `protocol` (2), `node: {id, type, name}`, `config` (object), `credentials` (object of strings), `data_dir` (string) | Exactly once, as the FIRST line.                                                          | Read it before any other frame. It MAY write to `data_dir`, a private folder per instance that persists across restarts. It MUST NOT log `credentials`.                                                                                                                                                                                                                                               |
+| `input`   | `id`, `event: {type, data, run}`                                                                                    | For each event arriving at the instance. It may be a re-send (7.3).                       | Eventually answer with exactly one `done` or `error` for `id` (awaiting views: after an `action`). It MAY emit outputs for `id` before that. It MUST treat a re-sent `id` as the same work, which SHOULD be idempotent. With `reload.heartbeat` declared (2.4.2), a step longer than the stale window MUST send `status` or `progress` within each window, or it is judged stuck.                     |
+| `cancel`  | `in`                                                                                                                | The person cancelled that input (proven: Jobs page).                                      | Stop the work as soon as practical, and answer `error {in, message}`. A queued input is cancelled before it starts ("cancelled before it started"). An unknown `in` is ignored.                                                                                                                                                                                                                       |
+| `action`  | `in`, `values` (object)                                                                                             | Action views only: the person submitted, or dismissed.                                    | Submitted: emit on an output with `in`, then `done`. Dismissed (`values.__dismiss__ === true`): `error {in, "dismissed by the person"}`.                                                                                                                                                                                                                                                              |
+| `trigger` | `action` (port id), `snapshot: {id, state}`, `values`                                                               | Snapshot views only: an action was pressed.                                               | Emit on the port named `action` WITHOUT `in` (a new run), carrying the snapshot state and `values`.                                                                                                                                                                                                                                                                                                   |
+| `fire`    | `data` (object, already validated)                                                                                  | Created event sources: the person fired the event from the app.                           | Emit on its one port without `in`.                                                                                                                                                                                                                                                                                                                                                                    |
+| `close`   | —                                                                                                                   | On redeploy, removal, quit or runtime restart.                                            | Stop its work, send `closed`, and exit with code 0. Deadline: 5 s (6.3).                                                                                                                                                                                                                                                                                                                              |
+| `ping`    | `id`                                                                                                                | Only to a type that declares `reload.heartbeat` (2.4.2), once per interval after `ready`. | Answer `pong` with the same `id`, whatever its handlers are doing, never held by them. A health check, when the node has one, runs on its own thread (or, in JavaScript, its own promise) bounded by 0.5 s, never on the loop that reads frames; one check at a time, and a ping that comes while one still runs is answered `healthy: false`. A node whose type declares no heartbeat MAY ignore it. |
 
 ### 4.2 Node → runtime
 
-| `t` | Fields | When | The runtime MUST |
-|---|---|---|---|
-| `ready` | — | Once, after `start` is handled. | Set the status to "ready", or "watching" for sources, unless a `status` already arrived. **[UNPROVEN]** A start deadline: the runtime SHOULD fail the instance if `ready` has not come within 30 s. |
-| `status` | `text`, `fill` (red, green, yellow, blue or grey), `shape` (ring or dot); 2.1: optional `in`, `progress`, `eta_s`, `phase` (4.2.2) | At any time. | Call `node.status()` and show it on the Jobs page. With `in`, also update that input's step (4.2.2). |
-| `log` | `level` (debug, info, warn or error), `msg` | At any time. | Write it to the one log, redacted. A `warn` MAY also go to `node.warn`. |
-| `emit` | `port`, `data`, optional `in` | See 5.4. | Refuse an undeclared port (log it and drop it). Refuse an unknown `in` (log it and drop it). Otherwise send per 5.4. |
-| `done` | `in`; 2.1: optional `notes`, `results` (4.2.1) | The input's work is finished. | Call `done()`, clear the journal entry, and mark the job done. The Complete node fires. Hand `notes` and `results` to that input's run (4.2.1). |
-| `error` | `message`, optional `in`; optional `error_type`, `file`, `line` (where an exception was thrown: its class's name, its file relative to the package's folder, its line) | The input's work failed. | With `in`: `done(new Error(message))`, clear the journal entry; the Catch node fires. Without `in`: log it and `node.error(message)` (no Catch). `error_type`, `file` and `line` are read only for the app's usage signals (plan 0029), and only when well formed; they are not in the §4.5 schema, so a node that sends them malformed still fails its input as it asked. Both SDKs add them when a handler throws. |
-| `present` | `in`, `content` | Action views: show this to the person. | Set the journal entry to `awaiting` with `content`, and apply section 8. |
-| `snapshot` | `content`, `state`, optional `in` | Snapshot views: record this. | Store the snapshot with the type's actions, the instance id and the time. |
-| `closed` | — | In answer to `close`. | Stop waiting for the acknowledgement. |
-| `pong` | `id`, optional `healthy` (boolean), optional `progress` (number) | In answer to `ping`. `healthy` is the node's own health check's answer: `false` when the check said so, failed or took too long; absent when the node has no check. `progress` is when, on the node's own clock, it last did real work: an SDK moves it with every frame a handler sends but `log`, and keeps it at "now" while no input is in flight (an idle node is not wedged). | Record a heartbeat for the process (2.4.2), whatever `healthy` says. Its progress is `progress` when sent, else the answer itself; only a value that MOVES is progress, so a node whose frame loop answers while a handler is wedged is judged stuck. Carry `healthy` as it is: when it turns `false`, log it and tell the person once that the node says it is not working; when it turns `true` again, withdraw that notice. Absent changes nothing. A `pong` for an `id` it did not send is ignored. |
+| `t`        | Fields                                                                                                                                                                 | When                                                                                                                                                                                                                                                                                                                                                                                | The runtime MUST                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ready`    | —                                                                                                                                                                      | Once, after `start` is handled.                                                                                                                                                                                                                                                                                                                                                     | Set the status to "ready", or "watching" for sources, unless a `status` already arrived. **[UNPROVEN]** A start deadline: the runtime SHOULD fail the instance if `ready` has not come within 30 s.                                                                                                                                                                                                                                                                                                     |
+| `status`   | `text`, `fill` (red, green, yellow, blue or grey), `shape` (ring or dot); 2.1: optional `in`, `progress`, `eta_s`, `phase` (4.2.2)                                     | At any time.                                                                                                                                                                                                                                                                                                                                                                        | Call `node.status()` and show it on the Jobs page. With `in`, also update that input's step (4.2.2).                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `log`      | `level` (debug, info, warn or error), `msg`                                                                                                                            | At any time.                                                                                                                                                                                                                                                                                                                                                                        | Write it to the one log, redacted. A `warn` MAY also go to `node.warn`.                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `emit`     | `port`, `data`, optional `in`                                                                                                                                          | See 5.4.                                                                                                                                                                                                                                                                                                                                                                            | Refuse an undeclared port (log it and drop it). Refuse an unknown `in` (log it and drop it). Otherwise send per 5.4.                                                                                                                                                                                                                                                                                                                                                                                    |
+| `done`     | `in`; 2.1: optional `notes`, `results` (4.2.1)                                                                                                                         | The input's work is finished.                                                                                                                                                                                                                                                                                                                                                       | Call `done()`, clear the journal entry, and mark the job done. The Complete node fires. Hand `notes` and `results` to that input's run (4.2.1).                                                                                                                                                                                                                                                                                                                                                         |
+| `error`    | `message`, optional `in`; optional `error_type`, `file`, `line` (where an exception was thrown: its class's name, its file relative to the package's folder, its line) | The input's work failed.                                                                                                                                                                                                                                                                                                                                                            | With `in`: `done(new Error(message))`, clear the journal entry; the Catch node fires. Without `in`: log it and `node.error(message)` (no Catch). `error_type`, `file` and `line` are read only for the app's usage signals (plan 0029), and only when well formed; they are not in the §4.5 schema, so a node that sends them malformed still fails its input as it asked. Both SDKs add them when a handler throws.                                                                                    |
+| `present`  | `in`, `content`                                                                                                                                                        | Action views: show this to the person.                                                                                                                                                                                                                                                                                                                                              | Set the journal entry to `awaiting` with `content`, and apply section 8.                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `snapshot` | `content`, `state`, optional `in`                                                                                                                                      | Snapshot views: record this.                                                                                                                                                                                                                                                                                                                                                        | Store the snapshot with the type's actions, the instance id and the time.                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| `closed`   | —                                                                                                                                                                      | In answer to `close`.                                                                                                                                                                                                                                                                                                                                                               | Stop waiting for the acknowledgement.                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `pong`     | `id`, optional `healthy` (boolean), optional `progress` (number)                                                                                                       | In answer to `ping`. `healthy` is the node's own health check's answer: `false` when the check said so, failed or took too long; absent when the node has no check. `progress` is when, on the node's own clock, it last did real work: an SDK moves it with every frame a handler sends but `log`, and keeps it at "now" while no input is in flight (an idle node is not wedged). | Record a heartbeat for the process (2.4.2), whatever `healthy` says. Its progress is `progress` when sent, else the answer itself; only a value that MOVES is progress, so a node whose frame loop answers while a handler is wedged is judged stuck. Carry `healthy` as it is: when it turns `false`, log it and tell the person once that the node says it is not working; when it turns `true` again, withdraw that notice. Absent changes nothing. A `pong` for an `id` it did not send is ignored. |
 
 #### 4.2.1 Notes and results on `done` (revision 2.1)
 
 ```json
-{"t": "done", "in": "…",
- "notes": [{"level": "warning", "text": "2 speakers could not be named"}],
- "results": [{"kind": "anytype", "text": "Meeting notes → Renaissance",
-              "anytype": {"spaceId": "…", "objectId": "…"}}]}
+{
+  "t": "done",
+  "in": "…",
+  "notes": [{ "level": "warning", "text": "2 speakers could not be named" }],
+  "results": [
+    {
+      "kind": "anytype",
+      "text": "Meeting notes → Renaissance",
+      "anytype": { "spaceId": "…", "objectId": "…" }
+    }
+  ]
+}
 ```
 
 1. `notes` is a list of `{level, text}`: `level` is `note` or `warning`. A warning is a line on a
@@ -640,8 +687,13 @@ Every frame is a JSON object with a string field `t`.
 #### 4.2.2 Progress on `status` (revision 2.1)
 
 ```json
-{"t": "status", "text": "in Renaissance", "in": "…",
- "progress": {"done": 2, "total": 3}, "eta_s": 120}
+{
+  "t": "status",
+  "text": "in Renaissance",
+  "in": "…",
+  "progress": { "done": 2, "total": 3 },
+  "eta_s": 120
+}
 ```
 
 1. Without `in`, a `status` is the node's badge, as in 2.0.
@@ -669,13 +721,13 @@ Every frame is a JSON object with a string field `t`.
 
 ### 4.4 Timeouts
 
-| Deadline | Value | Status |
-|---|---|---|
-| `close` → `closed` and exit | 5 s, then SIGKILL | proven |
-| Work on an input | NONE; an input may take hours (proven: 644 s with progress, then cancelled). A type that declares `reload.heartbeat` (2.4.2) must send `status` or `progress` at least once per stale window during a long step, or it is judged stuck | proven |
-| An action view waiting | NONE; it survives restarts | proven |
-| `start` → `ready` | 30 s | **[UNPROVEN]** |
-| A runtime `stop` for quit | 10 s, then the shell kills the runtime | proven as code, not exercised |
+| Deadline                    | Value                                                                                                                                                                                                                                  | Status                        |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| `close` → `closed` and exit | 5 s, then SIGKILL                                                                                                                                                                                                                      | proven                        |
+| Work on an input            | NONE; an input may take hours (proven: 644 s with progress, then cancelled). A type that declares `reload.heartbeat` (2.4.2) must send `status` or `progress` at least once per stale window during a long step, or it is judged stuck | proven                        |
+| An action view waiting      | NONE; it survives restarts                                                                                                                                                                                                             | proven                        |
+| `start` → `ready`           | 30 s                                                                                                                                                                                                                                   | **[UNPROVEN]**                |
+| A runtime `stop` for quit   | 10 s, then the shell kills the runtime                                                                                                                                                                                                 | proven as code, not exercised |
 
 ### 4.5 JSON Schemas for the frames
 
@@ -697,7 +749,11 @@ The schemas state the shape a frame has once the runtime has applied the revisio
         "node": {
           "type": "object",
           "required": ["id", "type"],
-          "properties": { "id": { "type": "string" }, "type": { "type": "string" }, "name": { "type": "string" } }
+          "properties": {
+            "id": { "type": "string" },
+            "type": { "type": "string" },
+            "name": { "type": "string" }
+          }
         },
         "config": { "type": "object" },
         "credentials": { "type": "object", "additionalProperties": { "type": "string" } },
@@ -717,19 +773,39 @@ The schemas state the shape a frame has once the runtime has applied the revisio
         }
       }
     },
-    "cancel": { "type": "object", "required": ["t", "in"], "properties": { "t": { "const": "cancel" }, "in": { "$ref": "#/$defs/id" } } },
-    "action": { "type": "object", "required": ["t", "in", "values"], "properties": { "t": { "const": "action" }, "in": { "$ref": "#/$defs/id" }, "values": { "type": "object" } } },
+    "cancel": {
+      "type": "object",
+      "required": ["t", "in"],
+      "properties": { "t": { "const": "cancel" }, "in": { "$ref": "#/$defs/id" } }
+    },
+    "action": {
+      "type": "object",
+      "required": ["t", "in", "values"],
+      "properties": {
+        "t": { "const": "action" },
+        "in": { "$ref": "#/$defs/id" },
+        "values": { "type": "object" }
+      }
+    },
     "trigger": {
       "type": "object",
       "required": ["t", "action", "snapshot", "values"],
       "properties": {
         "t": { "const": "trigger" },
         "action": { "type": "string" },
-        "snapshot": { "type": "object", "required": ["id"], "properties": { "id": { "type": "string" }, "state": {} } },
+        "snapshot": {
+          "type": "object",
+          "required": ["id"],
+          "properties": { "id": { "type": "string" }, "state": {} }
+        },
         "values": { "type": "object" }
       }
     },
-    "fire": { "type": "object", "required": ["t", "data"], "properties": { "t": { "const": "fire" }, "data": { "type": "object" } } },
+    "fire": {
+      "type": "object",
+      "required": ["t", "data"],
+      "properties": { "t": { "const": "fire" }, "data": { "type": "object" } }
+    },
     "close": { "type": "object", "required": ["t"], "properties": { "t": { "const": "close" } } },
     "ping": {
       "type": "object",
@@ -754,17 +830,29 @@ The schemas state the shape a frame has once the runtime has applied the revisio
     "progress": {
       "type": "object",
       "required": ["done", "total"],
-      "properties": { "done": { "type": "integer", "minimum": 0 }, "total": { "type": "integer", "minimum": 0 } }
+      "properties": {
+        "done": { "type": "integer", "minimum": 0 },
+        "total": { "type": "integer", "minimum": 0 }
+      }
     },
     "log": {
       "type": "object",
       "required": ["t", "msg"],
-      "properties": { "t": { "const": "log" }, "level": { "enum": ["debug", "info", "warn", "error"] }, "msg": { "type": "string" } }
+      "properties": {
+        "t": { "const": "log" },
+        "level": { "enum": ["debug", "info", "warn", "error"] },
+        "msg": { "type": "string" }
+      }
     },
     "emit": {
       "type": "object",
       "required": ["t", "port", "data"],
-      "properties": { "t": { "const": "emit" }, "port": { "type": "string" }, "data": {}, "in": { "$ref": "#/$defs/id" } }
+      "properties": {
+        "t": { "const": "emit" },
+        "port": { "type": "string" },
+        "data": {},
+        "in": { "$ref": "#/$defs/id" }
+      }
     },
     "done": {
       "type": "object",
@@ -779,7 +867,10 @@ The schemas state the shape a frame has once the runtime has applied the revisio
     "note": {
       "type": "object",
       "required": ["level", "text"],
-      "properties": { "level": { "enum": ["note", "warning"] }, "text": { "type": "string", "maxLength": 200 } }
+      "properties": {
+        "level": { "enum": ["note", "warning"] },
+        "text": { "type": "string", "maxLength": 200 }
+      }
     },
     "result": {
       "type": "object",
@@ -790,7 +881,10 @@ The schemas state the shape a frame has once the runtime has applied the revisio
         "anytype": {
           "type": "object",
           "required": ["spaceId", "objectId"],
-          "properties": { "spaceId": { "type": "string", "minLength": 1 }, "objectId": { "type": "string", "minLength": 1 } }
+          "properties": {
+            "spaceId": { "type": "string", "minLength": 1 },
+            "objectId": { "type": "string", "minLength": 1 }
+          }
         },
         "folder": { "type": "string", "minLength": 1 },
         "due": { "type": "string", "minLength": 1 }
@@ -799,17 +893,30 @@ The schemas state the shape a frame has once the runtime has applied the revisio
     "error": {
       "type": "object",
       "required": ["t", "message"],
-      "properties": { "t": { "const": "error" }, "message": { "type": "string", "maxLength": 2000 }, "in": { "$ref": "#/$defs/id" } }
+      "properties": {
+        "t": { "const": "error" },
+        "message": { "type": "string", "maxLength": 2000 },
+        "in": { "$ref": "#/$defs/id" }
+      }
     },
     "present": {
       "type": "object",
       "required": ["t", "in", "content"],
-      "properties": { "t": { "const": "present" }, "in": { "$ref": "#/$defs/id" }, "content": { "$ref": "#/$defs/viewContent" } }
+      "properties": {
+        "t": { "const": "present" },
+        "in": { "$ref": "#/$defs/id" },
+        "content": { "$ref": "#/$defs/viewContent" }
+      }
     },
     "snapshot": {
       "type": "object",
       "required": ["t", "content", "state"],
-      "properties": { "t": { "const": "snapshot" }, "content": { "$ref": "#/$defs/viewContent" }, "state": {}, "in": { "$ref": "#/$defs/id" } }
+      "properties": {
+        "t": { "const": "snapshot" },
+        "content": { "$ref": "#/$defs/viewContent" },
+        "state": {},
+        "in": { "$ref": "#/$defs/id" }
+      }
     },
     "closed": { "type": "object", "required": ["t"], "properties": { "t": { "const": "closed" } } },
     "pong": {
@@ -827,10 +934,17 @@ The schemas state the shape a frame has once the runtime has applied the revisio
       "properties": {
         "title": { "type": "string", "maxLength": 200 },
         "text": { "type": "string", "maxLength": 20000 },
-        "fields": { "type": "object", "additionalProperties": { "type": ["string", "number", "boolean", "null"] } },
+        "fields": {
+          "type": "object",
+          "additionalProperties": { "type": ["string", "number", "boolean", "null"] }
+        },
         "form": { "type": "object" },
-        "media": { "description": "Not constrained here: a malformed item is skipped by the renderer, never a reason to refuse the frame. One item or a list: {type: \"image\", src, alt?} or {kind: \"audio\", src, label?} (8.1.3, 8.1.4)." },
-        "component": { "description": "Not constrained here: {element, props?}, the view's own package's web component and the input it is handed. The runtime judges props at present (8.1.5): props it refuses fail the step, never the frame." }
+        "media": {
+          "description": "Not constrained here: a malformed item is skipped by the renderer, never a reason to refuse the frame. One item or a list: {type: \"image\", src, alt?} or {kind: \"audio\", src, label?} (8.1.3, 8.1.4)."
+        },
+        "component": {
+          "description": "Not constrained here: {element, props?}, the view's own package's web component and the input it is handed. The runtime judges props at present (8.1.5): props it refuses fail the step, never the frame."
+        }
       }
     }
   }
@@ -843,14 +957,14 @@ The schemas state the shape a frame has once the runtime has applied the revisio
 
 When the runtime sends an event to the next node on a wire, the Node-RED `msg` MUST be:
 
-| Field | Value |
-|---|---|
-| `msg.payload` | the event data (`emit.data`) |
-| `msg.topic` | the event type name |
-| `msg.reload.event` | the CloudEvents-shaped envelope (5.3) |
-| `msg.reload.run` | the run id (5.5) |
-| `msg.reload.cause` | the input id that caused this output, when there is one |
-| `msg._msgid` | Node-RED's id. It MUST be kept for outputs caused by an input (the runtime sends a clone of the input message through that input's `send`), and is new for a new run. |
+| Field              | Value                                                                                                                                                                 |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `msg.payload`      | the event data (`emit.data`)                                                                                                                                          |
+| `msg.topic`        | the event type name                                                                                                                                                   |
+| `msg.reload.event` | the CloudEvents-shaped envelope (5.3)                                                                                                                                 |
+| `msg.reload.run`   | the run id (5.5)                                                                                                                                                      |
+| `msg.reload.cause` | the input id that caused this output, when there is one                                                                                                               |
+| `msg._msgid`       | Node-RED's id. It MUST be kept for outputs caused by an input (the runtime sends a clone of the input message through that input's `send`), and is new for a new run. |
 
 ### 5.2 Event type names
 
@@ -945,19 +1059,21 @@ When the runtime sends an event to the next node on a wire, the Node-RED `msg` M
 
    It MUST clear the entry on `done` or `error`. (The spike wrote a JSON file, replaced
    atomically.) **[UNPROVEN]** An append-only log or SQLite for volume.
+
 2. **Replay.** When an instance starts, after Node-RED's `flows:started`, the runtime MUST re-send
    each journal entry of that instance through `node.receive`, keeping the original input id.
 3. **Attempts.** `attempts` starts at 1. On replay:
 
-   | Why the step was interrupted | Replay |
-   |---|---|
+   | Why the step was interrupted                                                                                                                                                 | Replay                                                                                                      |
+   | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
    | **Planned**: the runtime was stopped for a node-type change (`stop` reason `types`), or the instance was closed by a redeploy (a close that is neither a quit nor a removal) | The entry was marked `planned: true, plannedBy`. It MUST be re-sent WITHOUT counting, and the flag cleared. |
-   | **Crash**: the runtime or node process died; no close ran | The attempt IS counted. |
-   | **Quit**: `stop` reason `quit` | The attempt IS counted (the owner's P4 rule). |
+   | **Crash**: the runtime or node process died; no close ran                                                                                                                    | The attempt IS counted.                                                                                     |
+   | **Quit**: `stop` reason `quit`                                                                                                                                               | The attempt IS counted (the owner's P4 rule).                                                               |
 
    With a counted attempt, the maximum is 2 (the first send plus one retry): a step with
    `attempts >= 2` MUST fail with `done(err)` ("not done after 2 attempts") so the Catch node sees
    it, and its entry MUST be cleared. Otherwise `attempts` is incremented and the step re-sent.
+
 4. **Awaiting views never count.** An entry in state `awaiting` is re-sent on every start, any
    number of times, with no attempt counted. Waiting may take days.
 5. **Removal** drops entries (6.7).
@@ -991,18 +1107,19 @@ When the runtime sends an event to the next node on a wire, the Node-RED `msg` M
      again (proven P10e).
 3. `content` is rendered generically by the app:
 
-   | Field | Rendered as |
-   |---|---|
-   | `title` | a heading |
-   | `text` | preformatted text |
-   | `fields` | a key → value table |
-   | `form` | JSON Schema properties, as inputs |
-   | `table` | `{columns, rows}` as a table |
-   | `media` | one item or a list of items: `{type: "image", src, alt?}`, an image from a `data:image/(png\|jpeg\|gif\|webp)` URI or a `.png`/`.svg` file of the view page's own origin; `{kind: "audio", src, label?}`, a **Listen** control for a `data:audio/(mpeg\|ogg\|wav\|webm)` URI or a `.mp3`/`.ogg`/`.wav` file of the view's package (plan 0020). A package file is served only to the package's own pop-out (8.5.3), so only there is a file sample a Listen control; inline (Inbox, Snapshots) and in a component-less pop-out it is drawn as the sentence "This sample plays in the view's own window.", never as a button that cannot play. A `data:` sample is a Listen control everywhere. Images are unchanged: a package-file image, too, shows only in the package's own pop-out |
-   | `anytype` | `{objectId, spaceId, name?}` as a link that Anytype opens |
-   | `component` | `{element, props?}`: the view's OWN package's web component, in the pop-out sandbox (8.5.3), handed `props` (any JSON object; `{}` when absent) through the view it gets from `get()`. A `form` beside it is its fallback, drawn only when the widget can't be (8.5.6). A view with `component` is drawn in its pop-out only, whatever its `window` (8.5.1) |
+   | Field       | Rendered as                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+   | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | `title`     | a heading                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+   | `text`      | preformatted text                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+   | `fields`    | a key → value table                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+   | `form`      | JSON Schema properties, as inputs                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+   | `table`     | `{columns, rows}` as a table                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+   | `media`     | one item or a list of items: `{type: "image", src, alt?}`, an image from a `data:image/(png\|jpeg\|gif\|webp)` URI or a `.png`/`.svg` file of the view page's own origin; `{kind: "audio", src, label?}`, a **Listen** control for a `data:audio/(mpeg\|ogg\|wav\|webm)` URI or a `.mp3`/`.ogg`/`.wav` file of the view's package (plan 0020). A package file is served only to the package's own pop-out (8.5.3), so only there is a file sample a Listen control; inline (Inbox, Snapshots) and in a component-less pop-out it is drawn as the sentence "This sample plays in the view's own window.", never as a button that cannot play. A `data:` sample is a Listen control everywhere. Images are unchanged: a package-file image, too, shows only in the package's own pop-out |
+   | `anytype`   | `{objectId, spaceId, name?}` as a link that Anytype opens                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+   | `component` | `{element, props?}`: the view's OWN package's web component, in the pop-out sandbox (8.5.3), handed `props` (any JSON object; `{}` when absent) through the view it gets from `get()`. A `form` beside it is its fallback, drawn only when the widget can't be (8.5.6). A view with `component` is drawn in its pop-out only, whatever its `window` (8.5.1)                                                                                                                                                                                                                                                                                                                                                                                                                            |
 
    (Proven by WI-0018-11's e2e, `app/test/e2e/app-pages.e2e.ts`.)
+
 4. **Audio.** An audio item is drawn as a Listen control: a Secondary button with the `play` icon
    and the item's `label` (default "Listen"). Pressing it plays the sample once from the start,
    and the button reads "Listening…" while it plays; pressing it again stops it. There is no
@@ -1058,6 +1175,7 @@ When the runtime sends an event to the next node on a wire, the Node-RED `msg` M
    - the type's declared `actions`.
 
    A snapshot is not live: it is what the flow produced at that moment.
+
 2. A snapshot view SHOULD also emit on its pass-through output and send `done`.
 3. **Pressing an action** makes the runtime send `trigger {action, snapshot: {id, state}, values}`
    to the CURRENT process of the instance that took the snapshot. The node emits on port `action`
@@ -1068,11 +1186,11 @@ When the runtime sends an event to the next node on a wire, the Node-RED `msg` M
 When a snapshot is opened, and again when an action is pressed, the runtime MUST judge each action
 against the flow as it is NOW. It MUST refuse a press with a reason, never drop it silently.
 
-| Condition | Reason (proven wording) | HTTP |
-|---|---|---|
-| the instance is no longer in the deployed flow | "The view that took this snapshot is no longer in the flow." | 409 |
-| the action's port is wired to nothing | `Nothing is wired to the "<label>" output.` | 409 |
-| the runtime is restarting or down | "the Reload runtime is restarting; try again in a moment" | 409 |
+| Condition                                      | Reason (proven wording)                                      | HTTP |
+| ---------------------------------------------- | ------------------------------------------------------------ | ---- |
+| the instance is no longer in the deployed flow | "The view that took this snapshot is no longer in the flow." | 409  |
+| the action's port is wired to nothing          | `Nothing is wired to the "<label>" output.`                  | 409  |
+| the runtime is restarting or down              | "the Reload runtime is restarting; try again in a moment"    | 409  |
 
 ### 8.5 Pop-outs (the security contract is INTERNAL; the `window` option is for authors)
 
@@ -1080,7 +1198,7 @@ against the flow as it is NOW. It MUST refuse a press with a reason, never drop 
    first presentation. A snapshot opens in a pop-out only when the person asks for it.
    - **A widget is pop-up only.** An action view whose content has `component` is presented as
      `popout` whatever its instance's `window`: it opens its pop-out on its first presentation,
-     and it is never drawn inline. Its Inbox row says "**Waiting for you:** *title*" with
+     and it is never drawn inline. Its Inbox row says "**Waiting for you:** _title_" with
      **Answer**, which opens the pop-out.
 2. Several pop-outs MAY be open at once, one per pending view or snapshot. They are independent,
    and a second open of the same one focuses the existing window.
@@ -1099,6 +1217,7 @@ against the flow as it is NOW. It MUST refuse a press with a reason, never drop 
    allows both.
 
    (Proven: a page served by the runtime can hang half-loaded when the runtime restarts.)
+
 4. **webPreferences** MUST be exactly (proven, read back from the live window):
    - `contextIsolation: true`;
    - `nodeIntegration: false`, `nodeIntegrationInSubFrames: false`, `nodeIntegrationInWorker: false`;
@@ -1108,6 +1227,7 @@ against the flow as it is NOW. It MUST refuse a press with a reason, never drop 
    - `preload` set to the view bridge.
 
    Navigation MUST be prevented, and new windows denied.
+
 5. **CSP**, sent as a response header:
 
    ```
@@ -1139,12 +1259,13 @@ against the flow as it is NOW. It MUST refuse a press with a reason, never drop 
    (its constructor or `connectedCallback`), or the page is not its package's own, the page
    takes the widget out and draws the view's `form` in its place, answered with Submit and
    Dismiss. With no `form`, it says "This question can't be shown here. Skip this step, or open
-   it again after updating *package*." and offers **Skip this step** only. Once the widget is
+   it again after updating _package_." and offers **Skip this step** only. Once the widget is
    drawn, nothing falls back. (Proven by C18, `app/test/e2e/app-pages.e2e.ts` "widget views".) **Continue** starts disabled, and `setValid(true)` enables it (C19; `setValid(false)`
    disables it again). Pressing it calls the component's `answer()` and submits what it returns;
    the component never submits by itself. **Later** closes the window and sends nothing (8.2.3).
    **Skip this step** dismisses the view (8.2.2). A component written before 0.4.0, which
    answers with an `reload-submit` event, still submits that way.
+
 7. **What a view sends back** (`submit` values, `action` values) is any JSON object. The RUNTIME
    judges it, once, the same for the pop-out and for the app's own pages; the shell passes it
    on unchanged, refusing before the hop only one over 64 KiB or one that is not plain JSON.
@@ -1169,6 +1290,7 @@ against the flow as it is NOW. It MUST refuse a press with a reason, never drop 
    names the type, the input or snapshot id and the first problem: the bound broken, or ajv's
    first keyword and schema path. It never names a key or a value of the answer. Nothing is
    truncated or dropped.
+
 8. A view page MUST retry `get()` while the runtime is restarting, and say so to the person.
 9. Proven from inside a live pop-out:
    - no `require`, `process` or `module`;
@@ -1237,25 +1359,25 @@ against the flow as it is NOW. It MUST refuse a press with a reason, never drop 
 
    Shell → runtime:
 
-   | `t` | Fields |
-   |---|---|
-   | `init` | `config: {port, userDir, python, packagesDir, appDir, generation, restart: {reason, added[], removed[], requestedAt} \| null, forkedAt}` |
-   | `stop` | `reason: "quit" \| "types" \| "restart"`. The runtime records the reason for 7.3, runs `RED.stop()`, sends `stopped` and exits 0. |
-   | `call` | `rid, op, args`, where `op` is `view.get {id}`, `view.submit {id, values}`, `view.draft {id, values}`, `view.list`, `snapshot.get {id}`, `snapshot.action {id, action, values}`, `snapshot.list`, `job.list`, `job.cancel {id}`, `run.list {flowId, state?, since?, search?, cursor?, limit?}`, `run.get {runId}`, `run.clearDone {flowId}` or `run.undoClear {flowId}` (plan 0022 §C) |
-   | `reply` | `rid, result` |
+   | `t`     | Fields                                                                                                                                                                                                                                                                                                                                                                                 |
+   | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | `init`  | `config: {port, userDir, python, packagesDir, appDir, generation, restart: {reason, added[], removed[], requestedAt} \| null, forkedAt}`                                                                                                                                                                                                                                               |
+   | `stop`  | `reason: "quit" \| "types" \| "restart"`. The runtime records the reason for 7.3, runs `RED.stop()`, sends `stopped` and exits 0.                                                                                                                                                                                                                                                      |
+   | `call`  | `rid, op, args`, where `op` is `view.get {id}`, `view.submit {id, values}`, `view.draft {id, values}`, `view.list`, `snapshot.get {id}`, `snapshot.action {id, action, values}`, `snapshot.list`, `job.list`, `job.cancel {id}`, `run.list {flowId, state?, since?, search?, cursor?, limit?}`, `run.get {runId}`, `run.clearDone {flowId}` or `run.undoClear {flowId}` (plan 0022 §C) |
+   | `reply` | `rid, result`                                                                                                                                                                                                                                                                                                                                                                          |
 
    Runtime → shell:
 
-   | `t` | Fields |
-   |---|---|
-   | `ready` | `pid, generation, types[], restart: {…, ms, registered[[type, bool]]} \| null` |
-   | `failed` | `error` |
-   | `present` | `id, window, first, title` |
-   | `pending` | `count` |
-   | `runs` | `flowId`. A run of that flow changed (started, a step moved, settled, cleared or pruned), once per flow per turn; it replaced `jobs` (plan 0022 §C). The shell also tells the Jobs page, which asks for `job.list` again. |
-   | `restart-request` | `reason, added[], removed[], requestedAt` |
-   | `reply` | `rid, result` |
-   | `stopped` | `reason` |
+   | `t`               | Fields                                                                                                                                                                                                                    |
+   | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | `ready`           | `pid, generation, types[], restart: {…, ms, registered[[type, bool]]} \| null`                                                                                                                                            |
+   | `failed`          | `error`                                                                                                                                                                                                                   |
+   | `present`         | `id, window, first, title`                                                                                                                                                                                                |
+   | `pending`         | `count`                                                                                                                                                                                                                   |
+   | `runs`            | `flowId`. A run of that flow changed (started, a step moved, settled, cleared or pruned), once per flow per turn; it replaced `jobs` (plan 0022 §C). The shell also tells the Jobs page, which asks for `job.list` again. |
+   | `restart-request` | `reason, added[], removed[], requestedAt`                                                                                                                                                                                 |
+   | `reply`           | `rid, result`                                                                                                                                                                                                             |
+   | `stopped`         | `reason`                                                                                                                                                                                                                  |
 
 3. **Timeouts and typed errors.**
    - Every `call` MUST time out after 5 s. (The shell opens a pop-out itself, on a FIRST
@@ -1291,15 +1413,15 @@ against the flow as it is NOW. It MUST refuse a press with a reason, never drop 
    - The shell and the runtime MUST NOT outlive each other (6.6).
 8. **`childState`**, pushed by the shell to the app page:
 
-   | State | Meaning |
-   |---|---|
-   | `starting` | the first fork |
-   | `running` | the runtime is up |
-   | `restarting-planned` | the shell has sent `stop` for a restart |
-   | `restarting` | forking the next generation after a planned stop |
-   | `recovering` | forking after a crash |
-   | `down` | crashed, waiting for the backoff |
-   | `stopped` | quit |
+   | State                | Meaning                                          |
+   | -------------------- | ------------------------------------------------ |
+   | `starting`           | the first fork                                   |
+   | `running`            | the runtime is up                                |
+   | `restarting-planned` | the shell has sent `stop` for a restart          |
+   | `restarting`         | forking the next generation after a planned stop |
+   | `recovering`         | forking after a crash                            |
+   | `down`               | crashed, waiting for the backoff                 |
+   | `stopped`            | quit                                             |
 
 ## 11. Security
 
@@ -1349,6 +1471,7 @@ against the flow as it is NOW. It MUST refuse a press with a reason, never drop 
 ### 12.1 SDK checklist
 
 A node SDK (any language) conforms when it:
+
 - [ ] reads `start` first, and exposes `config`, `credentials`, `data_dir` and `node`;
 - [ ] writes one frame per line, UTF-8, flushed, never interleaved across threads;
 - [ ] writes nothing but frames to stdout, and routes its own logging to stderr or `log` frames;
@@ -1372,23 +1495,23 @@ A node SDK (any language) conforms when it:
 
 The suite runs the SDK's reference node under a harness that plays the runtime.
 
-| # | Test | Passes when |
-|---|---|---|
-| C1 | start / ready | `ready` follows `start` within 30 s; no stdout before `start` is read |
-| C2 | framing | 10,000 frames from 8 threads parse one per line; one 1 MiB frame round-trips |
-| C3 | stdout hygiene | a library `print` / `console.log` inside a handler does not reach stdout (the SDK redirects it) |
-| C4 | input completion | 100 inputs each get exactly one terminal frame; emits carry the right `in` |
-| C5 | undeclared port | the runtime refuses and logs; the SDK SHOULD refuse at the call site |
-| C6 | cancel | a running input ends with `error` "cancelled …"; a queued one with "cancelled before it started" |
-| C7 | close | `closed` is sent and the process exits 0 within 5 s while an input is running |
-| C8 | EOF | closing stdin makes the process exit within 1 s, without a traceback |
-| C9 | unknown frame | a frame `{"t":"future"}` is ignored |
-| C10 | action view | `present`, then `action`, gives `emit {in}` + `done`; `__dismiss__` gives `error` |
-| C11 | snapshot view | `snapshot` + pass-through `emit` + `done`; `trigger` gives `emit` with no `in` on the action port |
-| C12 | fire | `fire` gives `emit` with no `in` |
-| C13 | credentials | a credential value never appears on stdout (outside `start`) or stderr |
-| C14 | replay | a re-sent input id (the same id twice across restarts) is accepted and completes |
-| C15 | runtime-side | journal before send; planned / crash / quit attempt rules; the awaiting view is never counted; removal drops entries; deploy guard; palette lock; pop-out sandbox probes (8.5.9) |
+| #   | Test             | Passes when                                                                                                                                                                      |
+| --- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| C1  | start / ready    | `ready` follows `start` within 30 s; no stdout before `start` is read                                                                                                            |
+| C2  | framing          | 10,000 frames from 8 threads parse one per line; one 1 MiB frame round-trips                                                                                                     |
+| C3  | stdout hygiene   | a library `print` / `console.log` inside a handler does not reach stdout (the SDK redirects it)                                                                                  |
+| C4  | input completion | 100 inputs each get exactly one terminal frame; emits carry the right `in`                                                                                                       |
+| C5  | undeclared port  | the runtime refuses and logs; the SDK SHOULD refuse at the call site                                                                                                             |
+| C6  | cancel           | a running input ends with `error` "cancelled …"; a queued one with "cancelled before it started"                                                                                 |
+| C7  | close            | `closed` is sent and the process exits 0 within 5 s while an input is running                                                                                                    |
+| C8  | EOF              | closing stdin makes the process exit within 1 s, without a traceback                                                                                                             |
+| C9  | unknown frame    | a frame `{"t":"future"}` is ignored                                                                                                                                              |
+| C10 | action view      | `present`, then `action`, gives `emit {in}` + `done`; `__dismiss__` gives `error`                                                                                                |
+| C11 | snapshot view    | `snapshot` + pass-through `emit` + `done`; `trigger` gives `emit` with no `in` on the action port                                                                                |
+| C12 | fire             | `fire` gives `emit` with no `in`                                                                                                                                                 |
+| C13 | credentials      | a credential value never appears on stdout (outside `start`) or stderr                                                                                                           |
+| C14 | replay           | a re-sent input id (the same id twice across restarts) is accepted and completes                                                                                                 |
+| C15 | runtime-side     | journal before send; planned / crash / quit attempt rules; the awaiting view is never counted; removal drops entries; deploy guard; palette lock; pop-out sandbox probes (8.5.9) |
 
 Plan 0021 adds the widget cases. C16 to C19 run in the real sandbox, with the widget kit
 (`app/test/fixtures/widgetkit`), in `app/test/e2e/app-pages.e2e.ts` "widget views", where the
@@ -1396,35 +1519,35 @@ Plan 0021 adds the widget cases. C16 to C19 run in the real sandbox, with the wi
 `app/test/conformance/sdk-views.test.ts`, with a widget written with the TypeScript SDK's
 `defineView`:
 
-| # | Test | Passes when |
-|---|---|---|
+| #   | Test              | Passes when                                                                                                                                                                                                                                                       |
+| --- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | C16 | structured submit | a widget's answer that is not flat (an array, or objects in arrays) passes the bounds and the type's `answer` schema, and reaches the node's `action` frame unchanged; through an SDK, a `present` carrying `component` with `props` hands the widget those props |
-| C17 | schema refusal | an answer the type's `answer` schema refuses reaches no node: the pop-up stays open and says the 8.5.7 sentence, and the view stays `awaiting` |
-| C18 | fallback | a widget whose element is never defined is replaced by the view's `form` after 3 s, which answers; with no `form`, only **Skip this step** is offered |
-| C19 | setValid | **Continue** is disabled while the widget is drawn and has not called `setValid(true)`, and enabled once it has |
+| C17 | schema refusal    | an answer the type's `answer` schema refuses reaches no node: the pop-up stays open and says the 8.5.7 sentence, and the view stays `awaiting`                                                                                                                    |
+| C18 | fallback          | a widget whose element is never defined is replaced by the view's `form` after 3 s, which answers; with no `form`, only **Skip this step** is offered                                                                                                             |
+| C19 | setValid          | **Continue** is disabled while the widget is drawn and has not called `setValid(true)`, and enabled once it has                                                                                                                                                   |
 
 Revision 2.1 (plan 0022 §B) adds:
 
-| # | Test | Passes when |
-|---|---|---|
-| C20 | notes and results | `done` with `notes` and `results` reaches the input's run: notes and warnings split, results kept with their step; over 20 entries or 200 characters are cut and logged, never refused |
-| C21 | progress | `status` with `in` updates only that input's step (text, progress, time left), the badge as before; an unknown `in` updates the badge only |
-| C22 | old shapes | a `done` with only `in`, and a `status` without `in`, mean what they meant in 2.0 |
-| C23 | `reload` | a config schema with `reload.spaces` and `reload.types.of` passes the declaration schema and strict validation, validates values exactly as without it, and its options are read back for the form; a malformed one is refused at the declaration. Resolving the options against Anytype is not part of C23. |
+| #   | Test              | Passes when                                                                                                                                                                                                                                                                                                  |
+| --- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| C20 | notes and results | `done` with `notes` and `results` reaches the input's run: notes and warnings split, results kept with their step; over 20 entries or 200 characters are cut and logged, never refused                                                                                                                       |
+| C21 | progress          | `status` with `in` updates only that input's step (text, progress, time left), the badge as before; an unknown `in` updates the badge only                                                                                                                                                                   |
+| C22 | old shapes        | a `done` with only `in`, and a `status` without `in`, mean what they meant in 2.0                                                                                                                                                                                                                            |
+| C23 | `reload`          | a config schema with `reload.spaces` and `reload.types.of` passes the declaration schema and strict validation, validates values exactly as without it, and its options are read back for the form; a malformed one is refused at the declaration. Resolving the options against Anytype is not part of C23. |
 
 Plan 0020 adds:
 
-| # | Test | Passes when |
-|---|---|---|
+| #   | Test        | Passes when                                                                                                                                                                                                                                        |
+| --- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | C24 | audio media | `present` with `media` holding an image, a labelled `data:audio/…` sample, an unlabelled package-file sample and a 600 KiB sample reaches the runtime intact: the frame decodes, its items are as sent, and the bound (8.1.4) refuses none of them |
 
 Plan 0031 adds:
 
-| # | Test | Passes when |
-|---|---|---|
-| C25 | heartbeat | each `ping` gets one `pong` with its `id`, also while an input is running; on the runtime side, a type that declares `reload.heartbeat` and stops answering is killed, restarted under the usual rules and the person told once, and a type that declares none is never pinged |
-| C26 | health | a node's health check answers in the `pong` as `healthy`, and a check that fails answers `false`; on the runtime side, `healthy: false` tells the person once, without killing anything, and `healthy: true` withdraws it |
-| C27 | progress | each `pong` carries `progress`; it moves while the node is idle and with every frame a handler sends but `log`, and stays still while a handler sends nothing; on the runtime side, a node whose marker stays still for its window while it answers is judged stuck, and one sending `status` or `progress` never is |
+| #   | Test      | Passes when                                                                                                                                                                                                                                                                                                          |
+| --- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| C25 | heartbeat | each `ping` gets one `pong` with its `id`, also while an input is running; on the runtime side, a type that declares `reload.heartbeat` and stops answering is killed, restarted under the usual rules and the person told once, and a type that declares none is never pinged                                       |
+| C26 | health    | a node's health check answers in the `pong` as `healthy`, and a check that fails answers `false`; on the runtime side, `healthy: false` tells the person once, without killing anything, and `healthy: true` withdraws it                                                                                            |
+| C27 | progress  | each `pong` carries `progress`; it moves while the node is idle and with every frame a handler sends but `log`, and stays still while a handler sends nothing; on the runtime side, a node whose marker stays still for its window while it answers is judged stuck, and one sending `status` or `progress` never is |
 
 C15 binds the runtime, not SDKs. Of these, C1, C4 to C8, C10 to C12, C14 and C15 were exercised
 by the spike, by hand and by script. **[UNPROVEN]** C2, C3, C9 and C13 as automated tests, and
@@ -1462,6 +1585,7 @@ class Node:
 ```
 
 The spike's SDK does not yet:
+
 - redirect stray `print` to stderr (C3);
 - enforce the frame size limit;
 - refuse undeclared ports locally.
@@ -1482,7 +1606,11 @@ export interface Handlers {
   input?(id: string, event: { type: string; data: unknown; run?: string }): void | Promise<void>;
   cancel?(id: string): void;
   action?(id: string, values: Record<string, string | number | boolean>): void;
-  trigger?(action: string, snapshot: { id: string; state: unknown }, values: Record<string, unknown>): void;
+  trigger?(
+    action: string,
+    snapshot: { id: string; state: unknown },
+    values: Record<string, unknown>,
+  ): void;
   fire?(data: Record<string, unknown>): void;
   close?(): void | Promise<void>;
 }
@@ -1495,7 +1623,11 @@ export declare function done(
   report?: { notes?: { level: "note" | "warning"; text: string }[]; results?: object[] }, // 2.1
 ): void;
 export declare function progress(
-  inputId: string, done: number, total: number, etaS?: number, text?: string, // 2.1
+  inputId: string,
+  done: number,
+  total: number,
+  etaS?: number,
+  text?: string, // 2.1
 ): void;
 export declare function error(inputId: string | undefined, message: string): void;
 // Fail `inputId` with what was thrown: an `error` frame with its message and `thrownAt(caught)`.
@@ -1507,11 +1639,19 @@ export declare function fail(inputId: string, caught: unknown): void;
 // `line`; with no such frame, only `error_type`; nothing for what is not an Error. A path may hold
 // spaces, and a `file://` URL is decoded. Nothing is cut: the app withholds what does not fit.
 export declare function thrownAt(
-  caught: unknown, root?: string,
+  caught: unknown,
+  root?: string,
 ): { error_type?: string; file?: string; line?: number };
-export declare function status(text: string, fill?: "red" | "green" | "yellow" | "blue" | "grey", shape?: "ring" | "dot"): void;
+export declare function status(
+  text: string,
+  fill?: "red" | "green" | "yellow" | "blue" | "grey",
+  shape?: "ring" | "dot",
+): void;
 export declare function log(msg: string, level?: "debug" | "info" | "warn" | "error"): void;
-export declare function present(inputId: string, content: { title?: string; text?: string; fields?: Record<string, unknown>; form?: object }): void;
+export declare function present(
+  inputId: string,
+  content: { title?: string; text?: string; fields?: Record<string, unknown>; form?: object },
+): void;
 export declare function snapshot(content: object, state: unknown, inputId?: string): void;
 export declare function run(handlers: Handlers): Promise<void>; // resolves after close/EOF
 ```
@@ -1522,6 +1662,7 @@ frame inside the package's folder (never `site-packages`; a frame on another Win
 as outside it).
 
 Implementation notes for the JS SDK:
+
 - use `readline` on `process.stdin` for frames, and `process.stdout.write(JSON.stringify(f) + "\n")`
   for output;
 - redirect `console.log` to stderr;

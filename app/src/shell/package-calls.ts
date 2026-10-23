@@ -110,6 +110,8 @@ export function answerOf(name: string, outcome: BoardOutcome): Answer<null> {
       );
     case "shipped":
       return refused("shipped", "packages.shipped", { params: { name } });
+    case "required":
+      return refused("in-use", "packages.required", { params: { by: refusal.by } });
     case "busy":
       return refused("busy", "packages.busy");
     case "rollback-expired":

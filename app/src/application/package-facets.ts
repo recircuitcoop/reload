@@ -13,6 +13,7 @@ import {
   type PackageUpdate,
   type Registration,
 } from "../domain/packages/states";
+import { heldBack, requiredBy, type Requiring } from "../domain/packages/requires";
 import type { VersionFinding } from "../domain/packages/versions";
 import { UNREAD_BLOCKS } from "../ports/blocked-updates";
 import type { InstalledRecord, PackageRoots } from "../ports/package-roots";
@@ -254,4 +255,31 @@ export function brokenRows(
     publisher: null,
     mode: null,
   }));
+}
+
+/**
+ * Each row with why the runtime holds it back, and who requires it (spec 2.1.5), judged from the
+ * same declarations and settings (`off`, the unregistered) the runtime loads by.
+ */
+export function withRequires<Row extends { readonly package: Package }>(
+  rows: readonly Row[],
+  requiring: readonly Requiring[],
+  off: readonly string[],
+): Row[] {
+  const refused = rows
+    .filter(({ package: pkg }) => pkg.installation?.state === "failed-check")
+    .map(({ package: pkg }) => pkg.name);
+  const held = heldBack(requiring, { off, refused });
+  return rows.map((row) => {
+    const why = held.get(row.package.name);
+    const by = requiredBy(row.package.name, requiring, off);
+    return {
+      ...row,
+      package: {
+        ...row.package,
+        ...(why === undefined ? {} : { heldBack: why }),
+        ...(by === null ? {} : { requiredBy: by }),
+      },
+    };
+  });
 }

@@ -133,6 +133,10 @@ export interface Package {
   readonly registration: Registration | null;
   readonly installation: Installation | null;
   readonly update: PackageUpdate | null;
+  /** Why the runtime holds it back (spec 2.1.5): "requires beta, which is off". */
+  readonly heldBack?: string;
+  /** Who requires it while on (spec 2.1.5): "whodunnit requires monty"; it stays until they go. */
+  readonly requiredBy?: string;
 }
 
 /** One place a package is used: a flow, and the step of that flow made from one of its types. */
@@ -149,6 +153,8 @@ export type Refusal =
       readonly action: "unregister" | "remove";
       readonly uses: readonly StepUse[];
     }
+  /** Another package that is on requires it (spec 2.1.5): `by` names who. */
+  | { readonly reason: "required"; readonly by: string }
   /** It ships with the app: it is never removed. */
   | { readonly reason: "shipped" }
   /** Go back after its seven days, or after no update at all. */
@@ -218,6 +224,9 @@ export function unregister(pkg: Package, uses: readonly StepUse[], at: Date): Ou
   }
   if (pkg.registration?.state === "not-registered") {
     return refused({ reason: "nothing-to-do" });
+  }
+  if (pkg.requiredBy !== undefined) {
+    return refused({ reason: "required", by: pkg.requiredBy });
   }
   if (uses.length > 0) {
     return refused({ reason: "in-use", action: "unregister", uses: distinctUses(uses) });
@@ -295,6 +304,9 @@ export function remove(pkg: Package, uses: readonly StepUse[], at: Date): Outcom
   }
   if (pkg.installation === null || pkg.installation.state === "not-installed") {
     return refused({ reason: "not-installed" });
+  }
+  if (pkg.requiredBy !== undefined) {
+    return refused({ reason: "required", by: pkg.requiredBy });
   }
   if (uses.length > 0) {
     return refused({ reason: "in-use", action: "remove", uses: distinctUses(uses) });
@@ -431,7 +443,8 @@ export interface RowActions {
  * One action per facet, in the row's order (Register/Unregister, Install/Remove, then Update or
  * Check for changes or Go back). An unverified facet offers nothing; a busy package offers
  * nothing new; Unregister and Remove stay enabled while used, so pressing them gives the
- * refusal that names every use. A package that failed its check is removed or installed again
+ * refusal that names every use; while a package that is on requires it, they are drawn disabled
+ * (spec 2.1.5). A package that failed its check is removed or installed again
  * from where it came from; a shipped one offers neither (reinstalling Reload restores it). A
  * folder is asked with Check for changes, never updated, and not while it cannot be read.
  */
@@ -443,10 +456,12 @@ export function rowActions(pkg: Package, now: Date): RowActions {
   };
   const busy = isBusy(pkg);
   const installed = isInstalled(pkg);
+  // Drawn not removable while another requires it: asked before the button, not after it.
+  const required = pkg.requiredBy !== undefined;
 
   if (pkg.registration !== null) {
     if (pkg.registration.state === "registered") {
-      offer("unregister", !busy);
+      offer("unregister", !busy && !required);
     } else {
       offer("register", !busy && installed);
     }
@@ -454,7 +469,7 @@ export function rowActions(pkg: Package, now: Date): RowActions {
 
   if (pkg.installation !== null) {
     if (installed) {
-      offer("remove", !busy && !pkg.shipped);
+      offer("remove", !busy && !pkg.shipped && !required);
     } else if (pkg.installation.state === "failed-check") {
       if (!pkg.shipped) {
         offer("remove", !busy);

@@ -28,6 +28,8 @@ import { parseShippedManifest } from "../application/shipped-manifest";
 import { PackageRemover } from "../application/remove-package";
 import type { Supervisor } from "../application/supervisor";
 import { PackageUpdates, type Readiness } from "../application/update-package";
+import { DECLARATION_FILE } from "../domain/packages/archive";
+import { requiresOf, type Requiring } from "../domain/packages/requires";
 import { parsePackagePolicy } from "../domain/packages/versions";
 import type { BlockedUpdates } from "../ports/blocked-updates";
 import type { CatalogueCacheStore } from "../ports/catalogue-cache";
@@ -354,6 +356,7 @@ export function wirePackages(given: ShellPackagesOptions): PackageBoard {
     remover,
     settings: options.settings,
     loadedTypes: () => loadedTypes(options.runtime),
+    requiring: () => requiring(options),
     restartRuntime,
     one,
     now: () => Date.now(),
@@ -361,4 +364,25 @@ export function wirePackages(given: ShellPackagesOptions): PackageBoard {
   });
   void board.start();
   return board;
+}
+
+/**
+ * What every package requires (spec 2.1.5), from its declaration: shipped, and installed in the
+ * live root. A declaration that cannot be read requires nothing here; the runtime refuses it.
+ */
+function requiring(options: ShellPackagesOptions): Requiring[] {
+  const read = (file: string): unknown => {
+    try {
+      return JSON.parse(fs.readFileSync(file, "utf8"));
+    } catch {
+      return null;
+    }
+  };
+  return [
+    ...options.shippedStore.documents().map(({ name, document }) => ({ name, document })),
+    ...options.environment.roots.list().map(({ record, folder }) => ({
+      name: record.package,
+      document: read(path.join(folder.packageDir, DECLARATION_FILE)),
+    })),
+  ].map(({ name, document }) => ({ package: name, requires: requiresOf(document) }));
 }

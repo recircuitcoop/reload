@@ -7,6 +7,11 @@
     "protocol": { "const": 2 },
     "package": { "type": "string", "pattern": "^[a-z][a-z0-9_]{1,39}$" },
     "version": { "type": "string" },
+    "requires": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]{1,39}$" },
+      "uniqueItems": true
+    },
     "environment": {
       "type": "object",
       "required": ["kind"],

@@ -40,6 +40,7 @@ import {
   withRegistration,
   type UpdateMode,
 } from "../domain/packages/versions";
+import type { Requiring } from "../domain/packages/requires";
 import type { Logger } from "../ports/logger";
 import type { InstalledRecord, LivePackage, PackageRoots } from "../ports/package-roots";
 import type { PackageSettingsStore } from "../ports/settings-store";
@@ -66,6 +67,7 @@ import {
   latestAsked,
   leftFacet,
   registrationOf,
+  withRequires,
   type Asked,
 } from "./package-facets";
 import type { PackageRemover } from "./remove-package";
@@ -103,6 +105,8 @@ export interface PackageBoardPorts {
   readonly settings: Pick<PackageSettingsStore, "readPackages" | "writePackages">;
   /** The node types the running runtime generated; null while it is not running to ask. */
   readonly loadedTypes: () => Promise<readonly string[] | null>;
+  /** Every package's `requires`, shipped and installed, as its declaration says (spec 2.1.5). */
+  readonly requiring: () => readonly Requiring[];
   readonly restartRuntime: RestartRuntime;
   readonly one: OneAtATime;
   /** Told each phase of an install as it starts (the `packages` push). */
@@ -273,7 +277,8 @@ export class PackageBoard {
       .filter((offer) => offer.installable && offer.verified && !offer.installed)
       .filter((offer) => offer.shadowedBy === null)
       .map(({ source, id, name, version, summary }) => ({ source, id, name, version, summary }));
-    return { rows, offers };
+    const off = unregisteredOf(this.#ports.settings.readPackages());
+    return { rows: withRequires(rows, this.#ports.requiring(), off), offers };
   }
 
   // ── register / unregister (D6) ─────────────────────────────────────────────────────────

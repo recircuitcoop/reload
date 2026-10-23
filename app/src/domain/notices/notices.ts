@@ -54,6 +54,8 @@ export type NoticeKind =
   | "package-update-refused"
   /** A swap cut short left a package with no live version; its last whole one was put back. */
   | "package-recovered"
+  /** A package that requires another is held back while that one is not loaded (spec 2.1.5). */
+  | "package-held-back"
   /** A newer version of Reload itself is verified and queued to install at quit (WI-0018-24). */
   | "core-update-available"
   /**
@@ -109,6 +111,7 @@ export const NOTICE_KINDS: readonly NoticeKind[] = [
   "package-update-available",
   "package-update-refused",
   "package-recovered",
+  "package-held-back",
   "core-update-available",
   "core-update-waiting",
   "core-update-refused",
@@ -292,6 +295,14 @@ function composeWords(notice: Notice): Message {
         body: sentences(
           detail,
           "An update or a Go back was cut short, so Reload put back the version it had.",
+        ),
+      };
+    case "package-held-back":
+      return {
+        title: `${subject} is held back`,
+        body: sentences(
+          `It ${detail === "" ? "requires a package that is not loaded" : detail}`,
+          "None of its nodes run until that changes.",
         ),
       };
     case "package-update-refused":

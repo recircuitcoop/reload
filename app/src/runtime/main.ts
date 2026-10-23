@@ -58,7 +58,7 @@ import { JournalReplay } from "../application/journal-replay";
 import { isRunActionOp, RunActions } from "../application/run-actions";
 import { isRunOp, RunService } from "../application/runs";
 import type { JournalStore } from "../ports/journal-store";
-import { loadNodeTypes, unregisteredNames } from "../application/load-node-types";
+import { loadNodeTypes, typesByName, unregisteredNames } from "../application/load-node-types";
 import { PackageTypes } from "../application/package-types";
 import { watchParent } from "../application/parent-watchdog";
 import { NodeOptions } from "../application/node-options";
@@ -84,7 +84,7 @@ import {
   userEventTypes,
 } from "../domain/events/event-types";
 import type { CloseReason } from "../domain/journal/entry";
-import { nodeTypeName, type LoadedType } from "../domain/packages/declaration";
+import type { LoadedType } from "../domain/packages/declaration";
 import { SecretRegistry } from "../domain/redaction/registry";
 
 // Every record goes to the shell, the one log writer, as a JSON line on stdout (WI-0018-04).
@@ -236,19 +236,18 @@ function generateNodeTypes(
   // Plan 0022 §F (D6): an unregistered package's types are not loaded; its files stay.
   const settings = new JsonSettingsStore(path.join(config.userDir, "shell-settings.json"));
   const unregistered = unregisteredNames(() => settings.readPackages(), logger);
-  const loaded = [...loadNodeTypes(stored, validator, logger, unregistered), ...created.types];
+  // The person hears of a stopped node, a refused key, and a held back package through the shell.
+  const notifier = shellNotifier(link);
+  const loaded = [
+    ...loadNodeTypes(stored, validator, logger, unregistered, notifier),
+    ...created.types,
+  ];
   // An installed uv-python package's `{python}` is its own environment's (WI-0018-16).
   const ownPython = new Map(
     stored.flatMap((entry) => (entry.python === undefined ? [] : [[entry.name, entry.python]])),
   );
-  const types = new Map<string, LoadedType>(
-    loaded.map((entry) => [nodeTypeName(entry.declaration.package, entry.type.id), entry]),
-  );
-  packageOfType = (type) => types.get(type)?.declaration.package;
-  flowNodeType = (type) => {
-    const entry = types.get(type);
-    return entry === undefined ? undefined : flowNodeTypeOf(entry);
-  };
+  const { types, ...byName } = typesByName(loaded);
+  ({ packageOfType, flowNodeType } = byName);
   const written = generateTypes(loaded, generatedDir, fs.readFileSync(EDITOR_FORMS, "utf8"));
   logger.info(`generated ${String(written.length)} node types: ${written.join(", ") || "none"}`);
   // A package no deployed flow uses is updated without a restart (plan 0032 group 21).
@@ -266,8 +265,6 @@ function generateNodeTypes(
     },
     logger,
   });
-  // The person hears of a stopped node, and of a refused key, through the shell (WI-0018-21).
-  const notifier = shellNotifier(link);
   // An Anytype key that Anytype refuses is said once, whichever instance meets it (§4.2).
   const launcher = noticeAnytypeRefusals(
     readiness.wrap(
