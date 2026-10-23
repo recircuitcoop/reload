@@ -322,7 +322,8 @@ test("a signed package from the catalogue: refused tampered, installed, in the c
     expect(
       fs
         .readdirSync(path.join(userData, "node-red", "generated"))
-        .filter((file) => file.startsWith("reload-probekit-")),
+        // Its module (reload-probekit/), and any loose file an older build wrote.
+        .filter((file) => file === "reload-probekit" || file.startsWith("reload-probekit-")),
     ).toEqual([]);
     await expect(palette(await openCanvas(window, "tab1"), PROBE)).toHaveCount(0, {
       timeout: 15_000,
