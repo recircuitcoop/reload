@@ -49,8 +49,11 @@ interface FsGuard {
   ) => void;
 }
 const fsGuard = createRequire(import.meta.url)("./home-guard-fs.cjs") as FsGuard;
-const CHILD_GUARD = fileURLToPath(new URL("./home-guard-child.cjs", import.meta.url));
-const PYTHON_GUARD = fileURLToPath(new URL("./home-guard-python", import.meta.url));
+// From the module's own path, not a URL object: a test running in a DOM environment
+// (happy-dom) replaces the global URL with one fileURLToPath does not take.
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const CHILD_GUARD = path.join(HERE, "home-guard-child.cjs");
+const PYTHON_GUARD = path.join(HERE, "home-guard-python");
 
 /** The variables the guard adds to every child's environment, for a test that lists them. */
 export const GUARD_VARIABLES: readonly string[] = [

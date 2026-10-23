@@ -277,20 +277,21 @@ export { describedProblems } from "./problems";
  * rows, and a list of secrets: what `config` holds (spec 2.5.2). None of them reaches the plain
  * flows or the node's config.
  */
-export function withoutSecrets(schema: JsonSchema): JsonSchema {
+export function withoutSecrets(schema: JsonSchema, root: JsonSchema = schema): JsonSchema {
   const kept = propertiesOf(schema)
     .filter(([, property]) => !isSecret(property))
     .flatMap(([key, property]): [string, JsonSchema][] => {
       const items = itemsOf(property);
       let plain = property;
       if (typeOf(property) === "object") {
-        plain = withoutSecrets(property);
+        plain = withoutSecrets(property, root);
       } else if (typeOf(property) === "array" && items !== null && !isSecretList(property)) {
-        plain = { ...property, items: typeOf(items) === "object" ? withoutSecrets(items) : items };
+        const rows = typeOf(items) === "object" ? withoutSecrets(items, root) : items;
+        plain = { ...property, items: rows };
       }
       // A secret left anywhere in it, in a shape the form cannot strip, keeps the whole field
       // out of the plain node properties (the declaration refuses such shapes; this is the net).
-      return containsSecret(plain) ? [] : [[key, plain]];
+      return containsSecret(plain, root) ? [] : [[key, plain]];
     });
   const keys = new Set(kept.map(([key]) => key));
   const result: Record<string, unknown> = { ...schema, properties: Object.fromEntries(kept) };
@@ -303,14 +304,42 @@ export function withoutSecrets(schema: JsonSchema): JsonSchema {
 }
 
 /** Whether a secret is declared anywhere in `schema`, in any keyword, at any depth. */
-export function containsSecret(schema: unknown): boolean {
+export function containsSecret(
+  schema: unknown,
+  root: unknown = schema,
+  seen: Set<unknown> = new Set(),
+): boolean {
+  if (seen.has(schema)) {
+    return false;
+  }
+  seen.add(schema);
   if (Array.isArray(schema)) {
-    return schema.some((each) => containsSecret(each));
+    return schema.some((each) => containsSecret(each, root, seen));
   }
   if (!isRecord(schema)) {
     return false;
   }
-  return isSecret(schema) || Object.values(schema).some((inner) => containsSecret(inner));
+  // A `$ref` into the same config is followed: what it names is part of this field.
+  const ref = schema["$ref"];
+  const named = typeof ref === "string" ? atPointer(root, ref) : undefined;
+  return (
+    isSecret(schema) ||
+    (named !== undefined && containsSecret(named, root, seen)) ||
+    Object.values(schema).some((inner) => containsSecret(inner, root, seen))
+  );
+}
+
+/** The subschema a local `$ref` ("#/$defs/token") names in `root`; undefined for any other. */
+function atPointer(root: unknown, ref: string): unknown {
+  if (!ref.startsWith("#")) {
+    return undefined;
+  }
+  let at: unknown = root;
+  for (const raw of ref.slice(1).split("/").slice(1)) {
+    const segment = raw.replaceAll("~1", "/").replaceAll("~0", "~");
+    at = isRecord(at) ? at[segment] : Array.isArray(at) ? at[Number(segment)] : undefined;
+  }
+  return at;
 }
 
 /**

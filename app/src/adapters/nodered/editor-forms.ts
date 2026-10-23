@@ -577,6 +577,11 @@ declare global {
 }
 
 window.ReloadForms = { define, validate, prepare, save, close, browsed };
+// One type whose form cannot be built never costs the types after it: each is defined alone.
 for (const [type, schema] of window.ReloadFormsPending ?? []) {
-  define(type, schema);
+  try {
+    define(type, schema);
+  } catch (error) {
+    console.error(`Reload: the form of ${type} could not be built: ${String(error)}`);
+  }
 }

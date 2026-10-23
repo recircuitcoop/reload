@@ -210,9 +210,16 @@ const UNDRAWN = [
   "contains",
   "unevaluatedItems",
   "additionalItems",
+  "contentSchema",
 ];
 /** Keywords holding a map of subschemas the form never draws as fields of their own. */
-const UNDRAWN_MAPS = ["patternProperties", "dependentSchemas", "$defs", "definitions"];
+const UNDRAWN_MAPS = [
+  "patternProperties",
+  "dependentSchemas",
+  "dependencies",
+  "$defs",
+  "definitions",
+];
 
 /**
  * The schema pointers of every secret the forms cannot keep or refuse by its shape: one reached
@@ -253,6 +260,56 @@ function unsupportedSecrets(schema: unknown, path = "", supported = true): strin
 }
 
 /**
+ * The schema pointers of every `$ref` the form's compiler cannot resolve: the form compiles the
+ * config with its secrets taken out, so a reference may only name the config itself ("#") or an
+ * entry of its `$defs` or `definitions` that exists; one into `properties`, outside the config,
+ * missing, or a `$dynamicRef`/`$recursiveRef` would leave the form without its schema.
+ */
+function unresolvableRefs(root: unknown, schema: unknown = root, path = ""): string[] {
+  if (Array.isArray(schema)) {
+    return schema.flatMap((each, index) =>
+      unresolvableRefs(root, each, `${path}/${String(index)}`),
+    );
+  }
+  if (!isRecord(schema)) {
+    return [];
+  }
+  const here: string[] = [];
+  const ref = schema["$ref"];
+  if (typeof ref === "string" && !resolvesInDefs(root, ref)) {
+    here.push(`${path}/$ref`);
+  }
+  for (const dynamic of ["$dynamicRef", "$recursiveRef"]) {
+    if (dynamic in schema) {
+      here.push(`${path}/${dynamic}`);
+    }
+  }
+  return [
+    ...here,
+    ...Object.entries(schema).flatMap(([key, inner]) =>
+      // A `const`, `enum`, `default` or `examples` holds values, not schemas.
+      ["const", "enum", "default", "examples"].includes(key)
+        ? []
+        : unresolvableRefs(root, inner, `${path}/${key}`),
+    ),
+  ];
+}
+
+/** Whether `ref` is "#" or names an existing entry of the root's `$defs` or `definitions`. */
+function resolvesInDefs(root: unknown, ref: string): boolean {
+  if (ref === "#") {
+    return true;
+  }
+  const found = /^#\/(\$defs|definitions)\/([^/]+)$/.exec(ref);
+  if (found === null || !isRecord(root)) {
+    return false;
+  }
+  const defs = root[found[1] as string];
+  const name = (found[2] as string).replaceAll("~1", "/").replaceAll("~0", "~");
+  return isRecord(defs) && isRecord(defs[name]);
+}
+
+/**
  * The config's property names that hold a dot, by their path ("account.a.b"): a secret's
  * credential is named by its path through the groups ("account.token"), so a dotted name would
  * share one credential with a group's property and be judged in the wrong place.
@@ -285,6 +342,12 @@ function beyondTheSchema(declaration: Declaration): string[] {
       problems.push(
         `${at}/config: ${JSON.stringify(dotted)} holds a dot, which a property name may not: ` +
           "a secret is named by its path through the groups",
+      );
+    }
+    for (const ref of unresolvableRefs(type.config)) {
+      problems.push(
+        `${at}/config${ref}: the form cannot resolve this reference; ` +
+          "name an entry of the config's own $defs instead",
       );
     }
     for (const secret of unsupportedSecrets(type.config)) {

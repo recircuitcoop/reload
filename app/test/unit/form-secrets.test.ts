@@ -361,6 +361,67 @@ describe("a secret that cannot be a credential", () => {
     expect(problemsOf(known)).toEqual([]);
   });
 
+  it("a $ref the form cannot resolve is refused at install, naming its path", () => {
+    const secret = { type: "string", writeOnly: true };
+    const config = {
+      type: "object",
+      $defs: { token: secret, name: { type: "string" } },
+      properties: {
+        direct: secret,
+        into: { $ref: "#/properties/direct" },
+        missing: { $ref: "#/$defs/nothing" },
+        outside: { $ref: "https://example.org/schema.json" },
+        dynamic: { $dynamicRef: "#meta" },
+        fine: { $ref: "#/$defs/name" },
+        self: { type: "array", items: { $ref: "#" } },
+        constant: { const: { $ref: "not a schema" } },
+      },
+    };
+    const refs = problemsOf(config).filter((problem) => problem.includes("cannot resolve"));
+    expect(refs.map((problem) => problem.slice(0, problem.indexOf(":")))).toEqual([
+      "types/0/config/properties/into/$ref",
+      "types/0/config/properties/missing/$ref",
+      "types/0/config/properties/outside/$ref",
+      "types/0/config/properties/dynamic/$dynamicRef",
+    ]);
+  });
+
+  it("a secret under draft-07 dependencies or a contentSchema is refused at install", () => {
+    const secret = { type: "string", writeOnly: true };
+    const config = {
+      type: "object",
+      properties: {
+        a: { type: "object", dependencies: { b: { properties: { c: secret } } } },
+        d: { type: "string", contentSchema: secret },
+      },
+    };
+    const paths = problemsOf(config).map((problem) => problem.slice(0, problem.indexOf(":")));
+    expect(paths).toEqual([
+      "types/0/config/properties/a/dependencies/b/properties/c",
+      "types/0/config/properties/d/contentSchema",
+    ]);
+  });
+
+  it("a secret a $ref names is found through it, and kept out of plain values", () => {
+    const config: JsonSchema = {
+      type: "object",
+      $defs: { token: { type: "string", writeOnly: true }, loop: { $ref: "#/$defs/loop" } },
+      properties: {
+        token: { $ref: "#/$defs/token" },
+        looped: { $ref: "#/$defs/loop" },
+        label: { type: "string" },
+      },
+    };
+    expect(Object.keys(withoutSecrets(config)["properties"] as object)).toEqual([
+      "looped",
+      "label",
+    ]);
+    expect(withoutSecretValues(config, { token: "hunter2", label: "l", looped: 1 })).toEqual({
+      label: "l",
+      looped: 1,
+    });
+  });
+
   it("a default that holds a secret's value is refused, as it would be written into the flows", () => {
     const config = {
       properties: {

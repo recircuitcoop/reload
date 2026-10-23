@@ -102,31 +102,37 @@ export function unkeptSecretsOfNode(schema: JsonSchema, node: Fields): string[] 
  * `properties` declares a secret. What is left holds no secret, whatever shape a package declared.
  */
 export function withoutSecretValues(schema: JsonSchema, value: unknown): unknown {
-  return strippedTo(withoutSecrets(schema), schema, value);
+  return strippedTo(withoutSecrets(schema), schema, value, schema);
 }
 
-function strippedTo(plain: JsonSchema, full: JsonSchema, value: unknown): unknown {
+function strippedTo(
+  plain: JsonSchema,
+  full: JsonSchema,
+  value: unknown,
+  root: JsonSchema,
+): unknown {
   if (Array.isArray(value)) {
     const items = plain["items"];
     const fullItems = full["items"];
     return isRecord(items) && isRecord(fullItems)
-      ? value.map((item: unknown) => strippedTo(items, fullItems, item))
+      ? value.map((item: unknown) => strippedTo(items, fullItems, item, root))
       : value;
   }
   if (!isRecord(value)) {
-    return containsSecret(full) ? undefined : value;
+    return containsSecret(full, root) ? undefined : value;
   }
   const kept = new Map(propertiesOf(plain));
   const declared = new Map(propertiesOf(full));
   const elsewhere = containsSecret(
     Object.fromEntries(Object.entries(full).filter(([keyword]) => keyword !== "properties")),
+    root,
   );
   return Object.fromEntries(
     Object.entries(value).flatMap(([key, inner]): [string, unknown][] => {
       const property = kept.get(key);
       const fullProperty = declared.get(key);
       if (property !== undefined && fullProperty !== undefined) {
-        return [[key, strippedTo(property, fullProperty, inner)]];
+        return [[key, strippedTo(property, fullProperty, inner, root)]];
       }
       return fullProperty !== undefined || elsewhere ? [] : [[key, inner]];
     }),
