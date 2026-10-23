@@ -262,11 +262,31 @@ describe("the direct channel's calls", () => {
     expect(logger.lines).toEqual([]);
   });
 
-  it("answers a call itself before any end, after its end is replaced, and once it waited too long", async () => {
+  it("holds a call made before any end until one arrives, and answers it itself once it waited too long", async () => {
     const clock = new FakeClock();
     const caller = new PeerCaller({ clock, timeoutMs: 30_000 });
-    expect(await caller.call("anytype.spaces", {})).toMatchObject({ ok: false });
+    const [runtimeEnd, servicesEnd] = channel();
+    answerPeerCalls(
+      servicesEnd,
+      () => Promise.resolve({ ok: true, value: SPACES }),
+      new RecordingLogger(),
+    );
+    const early = caller.call("anytype.spaces", {});
+    caller.connect(runtimeEnd);
+    expect(await early).toEqual({ ok: true, value: SPACES });
 
+    const unlinked = new PeerCaller({ clock, timeoutMs: 30_000 });
+    const never = unlinked.call("anytype.spaces", {});
+    clock.advance(30_000);
+    expect(await never).toEqual({
+      ok: false,
+      error: "the services process did not answer anytype.spaces within 30 s",
+    });
+  });
+
+  it("answers a call itself after its end is replaced, and once it waited too long", async () => {
+    const clock = new FakeClock();
+    const caller = new PeerCaller({ clock, timeoutMs: 30_000 });
     const [silent] = channel();
     caller.connect(silent);
     const waiting = caller.call("anytype.spaces", {});
