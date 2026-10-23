@@ -373,12 +373,21 @@ export class UpdateCheck {
   schedule(firstMs: number): void {
     const { clock } = this.#ports.session;
     const tick = (): void => {
-      void this.check().then((outcome) => {
-        if (!outcome.ok) {
-          this.#ports.report.logger.warn(`update check: ${outcome.error}`);
-        }
-        this.#cancelSchedule = clock.after(24 * 60 * 60 * 1000, tick);
-      });
+      void this.check()
+        .then(
+          (outcome) => {
+            if (!outcome.ok) {
+              this.#ports.report.logger.warn(`update check: ${outcome.error}`);
+            }
+          },
+          (error: unknown) => {
+            // A check that threw is said, and the next day's check still comes.
+            this.#ports.report.logger.warn(`update check failed: ${reasonOf(error)}`);
+          },
+        )
+        .then(() => {
+          this.#cancelSchedule = clock.after(24 * 60 * 60 * 1000, tick);
+        });
     };
     this.#cancelSchedule = clock.after(firstMs, tick);
   }

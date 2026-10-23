@@ -45,6 +45,27 @@ describe("UpdateCheck.schedule", () => {
     expect(spy).toHaveBeenCalledTimes(2);
   });
 
+  it("a check that rejects is logged, and the next day's check still comes", async () => {
+    const clock = new FakeClock();
+    const given = ports(clock);
+    const check = new UpdateCheck(given);
+    const spy = vi.spyOn(check, "check").mockRejectedValue(new Error("the disk is gone"));
+    check.schedule(60_000);
+    clock.advance(60_000);
+    for (let tick = 0; tick < 4; tick++) {
+      await Promise.resolve();
+    }
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(clock.pending).toBe(1);
+    expect((given.report.logger as RecordingLogger).lines.join("\n")).toContain(
+      "update check failed: the disk is gone",
+    );
+    clock.advance(24 * 60 * 60 * 1000);
+    await Promise.resolve();
+    expect(spy).toHaveBeenCalledTimes(2);
+    check.stop();
+  });
+
   it("installAtQuit is a no-op before any check has staged an update", () => {
     const check = new UpdateCheck(ports(new FakeClock()));
     expect(() => {

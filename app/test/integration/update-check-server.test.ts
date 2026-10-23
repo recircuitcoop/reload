@@ -188,9 +188,10 @@ describe("the self-update check over real HTTPS", () => {
     });
     expect(asked).toEqual(["/latest-mac.yml", "/latest-mac.yml.minisig", `/${fileName}`]);
     expect(selfUpdater.checked).toBe(1);
-    expect(notifier.notices).toContainEqual(
-      expect.objectContaining({ kind: "core-update-available", version: "1.2.3" }),
-    );
+    // Raised exactly once, with the staged version.
+    expect(notifier.notices.filter((notice) => notice.kind === "core-update-available")).toEqual([
+      { kind: "core-update-available", subject: "Reload", version: "1.2.3" },
+    ]);
 
     check.installAtQuit();
     expect(selfUpdater.installed).toBe(1);
