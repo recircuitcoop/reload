@@ -20,6 +20,8 @@ export default defineConfig({
           name: "integration",
           include: ["test/integration/**/*.test.ts"],
           setupFiles: [HOME_GUARD],
+          // folder-source.test.ts's watching tests, all at once: each mostly waits.
+          maxConcurrency: 16,
         },
       },
       {

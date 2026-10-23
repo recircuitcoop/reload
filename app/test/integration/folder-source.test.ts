@@ -8,7 +8,7 @@ import { randomUUID } from "node:crypto";
 import fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, type TestContext } from "vitest";
 
 import { minimalEnvironment } from "../../src/adapters/process/command";
 import { DEFAULT_NODE_PROCESS, nodeProcessLauncher } from "../../src/adapters/process/node-process";
@@ -66,12 +66,6 @@ afterAll(() => {
   fs.rmSync(scratch, { recursive: true, force: true });
 });
 
-const running: NodeProcess[] = [];
-
-afterEach(async () => {
-  await Promise.all(running.splice(0).map((node) => node.close("removed")));
-});
-
 interface Watching {
   readonly node: NodeProcess;
   readonly host: RecordingHost;
@@ -87,8 +81,12 @@ interface Created {
   body?: string;
 }
 
-/** Start one instance of `reload-reload_folder-watch`, as the runtime starts a source. */
+/**
+ * Start one instance of `reload-reload_folder-watch`, as the runtime starts a source. It is
+ * closed when its own test finishes: the tests run concurrently, so no shared hook may close it.
+ */
 async function watch(
+  finished: TestContext["onTestFinished"],
   config: Record<string, unknown> = {},
   same?: { folder: string; dataDir: string },
 ): Promise<Watching> {
@@ -125,7 +123,7 @@ async function watch(
     settings: DEFAULT_NODE_PROCESS,
   });
   const node = launcher.start(spec, host);
-  running.push(node);
+  finished(() => node.close("removed"));
   await waitFor("the first scan", () => host.statuses.some(scannedStatus), 10_000);
   return { node, host, folder, dataDir };
 }
@@ -176,12 +174,16 @@ describe("packages/reload_folder: the declaration and how it ships", () => {
   });
 });
 
-describe("packages/reload_folder: watching one folder", { timeout: 30_000 }, () => {
-  it("says watching as a green dot only once its first scan is done: a file dropped then is passed on, one there before is not", async () => {
+// Concurrent: each test watches folders of its own, and most of its time is the source's fixed
+// quiet period, waited out in parallel instead of one test after another.
+describe.concurrent("packages/reload_folder: watching one folder", { timeout: 30_000 }, () => {
+  it("says watching as a green dot only once its first scan is done: a file dropped then is passed on, one there before is not", async ({
+    onTestFinished,
+  }) => {
     const folder = fs.mkdtempSync(path.join(scratch, "watched-"));
     const dataDir = fs.mkdtempSync(path.join(scratch, "data-"));
     fs.writeFileSync(path.join(folder, "before.txt"), "there first");
-    const watching = await watch({}, { folder, dataDir });
+    const watching = await watch(onTestFinished, {}, { folder, dataDir });
     // The ring the runtime shows on `ready` comes first; the dot is the node's own, after a scan.
     const statuses = watching.host.statuses;
     const firstDot = statuses.findIndex(isWatching);
@@ -194,8 +196,10 @@ describe("packages/reload_folder: watching one folder", { timeout: 30_000 }, () 
     expect(names(watching)).toEqual(["sample.wav"]);
   });
 
-  it("emits one created event per new file, a new run each, with its name, path, size, time and text", async () => {
-    const watching = await watch();
+  it("emits one created event per new file, a new run each, with its name, path, size, time and text", async ({
+    onTestFinished,
+  }) => {
+    const watching = await watch(onTestFinished);
     fs.writeFileSync(path.join(watching.folder, "note.md"), "# Hello\n");
     await waitFor("the emit", () => watching.host.sent.length === 1, 10_000);
     await pause(SETTLED_MS);
@@ -218,8 +222,10 @@ describe("packages/reload_folder: watching one folder", { timeout: 30_000 }, () 
   // 200 KB of 0x01: valid UTF-8 under MAX_BODY_BYTES, but a JSON string escapes each byte to six
   // (\u0001), so its text would make a 1.2 MB frame, over the SDK's 1 MiB. Before the fit check
   // the emit threw and stopped the scan, and all three files were recorded as passed on: lost.
-  it("passes on a file whose text would not fit in a frame by path, and the files beside it", async () => {
-    const watching = await watch();
+  it("passes on a file whose text would not fit in a frame by path, and the files beside it", async ({
+    onTestFinished,
+  }) => {
+    const watching = await watch(onTestFinished);
     fs.writeFileSync(path.join(watching.folder, "a.txt"), Buffer.alloc(200 * 1024, 1));
     fs.writeFileSync(path.join(watching.folder, "b.txt"), "B");
     fs.writeFileSync(path.join(watching.folder, "c.txt"), "C");
@@ -242,8 +248,10 @@ describe("packages/reload_folder: watching one folder", { timeout: 30_000 }, () 
     ).toEqual(["a.txt", "b.txt", "c.txt"]);
   });
 
-  it("ignores a partial write: a file still growing is passed on once, whole, after it went quiet", async () => {
-    const watching = await watch();
+  it("ignores a partial write: a file still growing is passed on once, whole, after it went quiet", async ({
+    onTestFinished,
+  }) => {
+    const watching = await watch(onTestFinished);
     const file = path.join(watching.folder, "recording.m4a");
     // Six writes, each well inside the quiet period: never passed on while it grows.
     for (let chunk = 0; chunk < 6; chunk += 1) {
@@ -260,8 +268,10 @@ describe("packages/reload_folder: watching one folder", { timeout: 30_000 }, () 
     expect(created(watching)[0]).not.toHaveProperty("body");
   });
 
-  it("never passes on a download or temporary name, a hidden file or a folder; the finished name is passed on", async () => {
-    const watching = await watch();
+  it("never passes on a download or temporary name, a hidden file or a folder; the finished name is passed on", async ({
+    onTestFinished,
+  }) => {
+    const watching = await watch(onTestFinished);
     const partials = [
       "clip.m4a.part",
       "page.crdownload",
@@ -286,10 +296,16 @@ describe("packages/reload_folder: watching one folder", { timeout: 30_000 }, () 
     expect(names(watching)).toEqual(["clip.m4a"]);
   });
 
-  it("leaves the files already there the first time it starts alone, and passes on what comes after", async () => {
+  it("leaves the files already there the first time it starts alone, and passes on what comes after", async ({
+    onTestFinished,
+  }) => {
     const folder = fs.mkdtempSync(path.join(scratch, "existing-"));
     fs.writeFileSync(path.join(folder, "old.txt"), "old");
-    const leaving = await watch({}, { folder, dataDir: fs.mkdtempSync(path.join(scratch, "d-")) });
+    const leaving = await watch(
+      onTestFinished,
+      {},
+      { folder, dataDir: fs.mkdtempSync(path.join(scratch, "d-")) },
+    );
     await pause(SETTLED_MS);
     expect(leaving.host.sent).toEqual([]);
     fs.writeFileSync(path.join(folder, "new.txt"), "new");
@@ -298,8 +314,10 @@ describe("packages/reload_folder: watching one folder", { timeout: 30_000 }, () 
     expect(names(leaving)).toEqual(["new.txt"]);
   });
 
-  it("remembers what it passed on across a restart: only what arrived meanwhile, and a name put back, is new", async () => {
-    const first = await watch();
+  it("remembers what it passed on across a restart: only what arrived meanwhile, and a name put back, is new", async ({
+    onTestFinished,
+  }) => {
+    const first = await watch(onTestFinished);
     fs.writeFileSync(path.join(first.folder, "one.txt"), "1");
     fs.writeFileSync(path.join(first.folder, "two.txt"), "2");
     await waitFor("two emits", () => first.host.sent.length === 2, 10_000);
@@ -313,7 +331,11 @@ describe("packages/reload_folder: watching one folder", { timeout: 30_000 }, () 
 
     // While stopped, one arrives; after the restart, one is removed and put back.
     fs.writeFileSync(path.join(first.folder, "three.txt"), "3");
-    const second = await watch({}, { folder: first.folder, dataDir: first.dataDir });
+    const second = await watch(
+      onTestFinished,
+      {},
+      { folder: first.folder, dataDir: first.dataDir },
+    );
     await waitFor("the emit", () => second.host.sent.length === 1, 10_000);
     fs.rmSync(path.join(first.folder, "one.txt"));
     await pause(SETTLED_MS);
@@ -323,9 +345,15 @@ describe("packages/reload_folder: watching one folder", { timeout: 30_000 }, () 
     expect(names(second)).toEqual(["three.txt", "one.txt"]);
   });
 
-  it("says a folder that is not there, and passes on its files once it is", async () => {
+  it("says a folder that is not there, and passes on its files once it is", async ({
+    onTestFinished,
+  }) => {
     const folder = path.join(scratch, `later-${randomUUID().slice(0, 8)}`);
-    const watching = await watch({}, { folder, dataDir: fs.mkdtempSync(path.join(scratch, "d-")) });
+    const watching = await watch(
+      onTestFinished,
+      {},
+      { folder, dataDir: fs.mkdtempSync(path.join(scratch, "d-")) },
+    );
     expect(watching.host.statuses.find(scannedStatus)).toEqual({
       text: "the folder is not there",
       fill: "red",
@@ -341,8 +369,10 @@ describe("packages/reload_folder: watching one folder", { timeout: 30_000 }, () 
   // The debounce, with a quiet period well above the 500 ms scan: a file is not passed on until
   // QUIET_MS has passed since it LAST changed, and is passed on after. With the settle check in
   // watcher.ts removed, the file goes out on its second sighting, about 500 ms in, and this fails.
-  it("waits the quiet period after the last change before passing a file on, and passes it on after", async () => {
-    const watching = await watch();
+  it("waits the quiet period after the last change before passing a file on, and passes it on after", async ({
+    onTestFinished,
+  }) => {
+    const watching = await watch(onTestFinished);
     const file = path.join(watching.folder, "slow.txt");
     const firstWrite = Date.now();
     fs.writeFileSync(file, "part one");
@@ -363,11 +393,14 @@ describe("packages/reload_folder: watching one folder", { timeout: 30_000 }, () 
 
   // Never lost: with a data folder it cannot write in, the file is still passed on, once; the
   // status stays red until the record can be written, and then the record holds it.
-  it("passes a file on once even while it cannot write down what it passed on, red until it can", async () => {
+  it("passes a file on once even while it cannot write down what it passed on, red until it can", async ({
+    onTestFinished,
+  }) => {
     const dataDir = fs.mkdtempSync(path.join(scratch, "locked-"));
     fs.chmodSync(dataDir, 0o500);
     try {
       const watching = await watch(
+        onTestFinished,
         {},
         { folder: fs.mkdtempSync(path.join(scratch, "w-")), dataDir },
       );
@@ -397,8 +430,10 @@ describe("packages/reload_folder: watching one folder", { timeout: 30_000 }, () 
 
   // A recorder reuses names: REC001 passed on Monday, the source stopped, the file deleted and a
   // new REC001 recorded. Without comparing the remembered size and time, it is never passed on.
-  it("passes on a file put back under a name it remembers while it was stopped", async () => {
-    const first = await watch();
+  it("passes on a file put back under a name it remembers while it was stopped", async ({
+    onTestFinished,
+  }) => {
+    const first = await watch(onTestFinished);
     const file = path.join(first.folder, "REC001.txt");
     fs.writeFileSync(file, "monday");
     await waitFor("the emit", () => first.host.sent.length === 1, 10_000);
@@ -408,7 +443,11 @@ describe("packages/reload_folder: watching one folder", { timeout: 30_000 }, () 
     fs.writeFileSync(file, "tuesday, longer");
     const later = new Date(Date.now() + 60_000);
     fs.utimesSync(file, later, later);
-    const second = await watch({}, { folder: first.folder, dataDir: first.dataDir });
+    const second = await watch(
+      onTestFinished,
+      {},
+      { folder: first.folder, dataDir: first.dataDir },
+    );
     await waitFor("the emit", () => second.host.sent.length === 1, 10_000);
     await pause(SETTLED_MS);
     expect(created(second)).toEqual([
@@ -416,8 +455,10 @@ describe("packages/reload_folder: watching one folder", { timeout: 30_000 }, () 
     ]);
   });
 
-  it("passes on a file replaced under the same name while it runs, once", async () => {
-    const watching = await watch();
+  it("passes on a file replaced under the same name while it runs, once", async ({
+    onTestFinished,
+  }) => {
+    const watching = await watch(onTestFinished);
     const file = path.join(watching.folder, "REC002.txt");
     fs.writeFileSync(file, "first take");
     await waitFor("the emit", () => watching.host.sent.length === 1, 10_000);
@@ -431,8 +472,10 @@ describe("packages/reload_folder: watching one folder", { timeout: 30_000 }, () 
     ]);
   });
 
-  it("says a folder it cannot read, red, and is back to watching once it can", async () => {
-    const watching = await watch();
+  it("says a folder it cannot read, red, and is back to watching once it can", async ({
+    onTestFinished,
+  }) => {
+    const watching = await watch(onTestFinished);
     fs.chmodSync(watching.folder, 0o300);
     try {
       await waitFor("red", () =>
@@ -457,8 +500,10 @@ describe("packages/reload_folder: watching one folder", { timeout: 30_000 }, () 
 
   // Names listable but entries not (0o600): the old lstat swallowed every error as "gone",
   // forgot every remembered name, wrote an empty record and passed old.txt on again later.
-  it("takes a folder whose entries it cannot look at for unreadable, never for empty", async () => {
-    const watching = await watch();
+  it("takes a folder whose entries it cannot look at for unreadable, never for empty", async ({
+    onTestFinished,
+  }) => {
+    const watching = await watch(onTestFinished);
     fs.writeFileSync(path.join(watching.folder, "old.txt"), "old");
     await waitFor("the emit", () => watching.host.sent.length === 1, 10_000);
     const record = path.join(watching.dataDir, "seen.json");
@@ -484,10 +529,12 @@ describe("packages/reload_folder: watching one folder", { timeout: 30_000 }, () 
     expect(names(watching)).toEqual(["old.txt"]);
   });
 
-  it("never follows a symbolic link, to a file or a folder outside the one it watches", async () => {
+  it("never follows a symbolic link, to a file or a folder outside the one it watches", async ({
+    onTestFinished,
+  }) => {
     const outside = fs.mkdtempSync(path.join(scratch, "outside-"));
     fs.writeFileSync(path.join(outside, "secret.txt"), "outside the folder");
-    const watching = await watch();
+    const watching = await watch(onTestFinished);
     fs.symlinkSync(path.join(outside, "secret.txt"), path.join(watching.folder, "link.txt"));
     fs.symlinkSync(outside, path.join(watching.folder, "linked-folder"));
     await pause(SETTLED_MS);
