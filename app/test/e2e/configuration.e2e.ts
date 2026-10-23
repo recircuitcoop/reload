@@ -207,8 +207,16 @@ test("(a) a flow's row: switch, Last run, health, Edit, Run history and the ⋯ 
     }, saved);
     await renamed.getByTestId("flow-more").click();
     await renamed.getByTestId("flows-menu-export").click();
-    await expect.poll(() => fs.existsSync(saved)).toBe(true);
-    expect((JSON.parse(fs.readFileSync(saved, "utf8")) as { id: string }[])[0]?.id).toBe(FLOW);
+    // Polled until the whole file is there: the save can be seen while it is still being written.
+    await expect
+      .poll(() => {
+        try {
+          return (JSON.parse(fs.readFileSync(saved, "utf8")) as { id: string }[])[0]?.id;
+        } catch {
+          return undefined;
+        }
+      })
+      .toBe(FLOW);
 
     await quit(app);
   } finally {

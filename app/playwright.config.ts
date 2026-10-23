@@ -7,9 +7,11 @@ export default defineConfig({
   testDir: "test/e2e",
   testMatch: "**/*.e2e.ts",
   grepInvert: /@machine/,
-  // One Electron at a time: the specs count processes, and two apps would count each other.
-  workers: 1,
-  fullyParallel: false,
+  // Every test runs its own app on its own scratch home, userData and ports (app-harness.ts),
+  // and counts only the processes naming its own userData, so tests run side by side. Four:
+  // more apps at once load the machine until the specs' own waits run out (6 and 8 flaked).
+  workers: 4,
+  fullyParallel: true,
   timeout: 60_000,
   forbidOnly: true,
   // The JSON report is what the parity stage checks ported ids against (plan 0018 §5.3).
