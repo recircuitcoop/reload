@@ -391,6 +391,33 @@ describe("keepBrokenFlowFiles", () => {
     expect(keepBrokenFlowFiles(dir, [FLOWS], NOW, false)).toEqual([]);
   });
 
+  it("offers a missing file's backup as the way back only when it loads", () => {
+    write(`.${FLOWS}.backup`, "[{");
+    write(`.${CREDS}.backup`, "[1]");
+    const [flows, creds] = keepBrokenFlowFiles(dir, FLOW_FILES, NOW, false);
+    const backup = path.join(dir, `.${FLOWS}.backup`);
+    expect(flows).toMatchObject({
+      problem: `is missing, and its backup ${backup} isn't valid JSON`,
+      backup: null,
+      keptBackup: true,
+    });
+    const sentence = refusedFlowFileSentence({ ...(flows as BrokenFlowFile), state: "not-loaded" });
+    expect(sentence).not.toContain("copy the backup to");
+    expect(sentence).toContain(
+      "To get them back, fix the backup, then quit Reload, copy it to flows.json, and start " +
+        "Reload again. To start without them, quit Reload, move the backup out of its folder",
+    );
+    expect(refusedFlowFileTitle({ ...(flows as BrokenFlowFile), state: "not-loaded" })).toBe(
+      "Reload didn't find your flows",
+    );
+    const credSentence = refusedFlowFileSentence({
+      ...(creds as BrokenFlowFile),
+      state: "not-loaded",
+    });
+    expect(credSentence).not.toMatch(/copy the backup to|fix the backup/);
+    expect(credSentence).toContain("To start without them");
+  });
+
   it("refuses a file emptied while running when its backup holds anything, but not at the start", () => {
     write(FLOWS, "");
     write(`.${FLOWS}.backup`, "[]");

@@ -167,7 +167,15 @@ function missingOrEmpty(
   }
   const kept = { safeCopy: keepCopy(file, bytes, now), keptBackup: true };
   if (missing) {
-    return { file, problem: MISSING, backup: backupOf(file), loadsChanged: false, ...kept };
+    // The backup is offered as the way back only when Node-RED can load it.
+    const broken = flowFileProblem(name, bytes);
+    return {
+      file,
+      problem: broken === null ? MISSING : `${MISSING}, and its backup ${backupOf(file)} ${broken}`,
+      backup: broken === null ? backupOf(file) : null,
+      loadsChanged: false,
+      ...kept,
+    };
   }
   if (running) {
     return { file, problem: EMPTY, backup: goodBackup(file), loadsChanged: false, ...kept };

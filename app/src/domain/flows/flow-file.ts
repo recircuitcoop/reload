@@ -115,7 +115,7 @@ const isCredentials = (file: string): boolean => baseName(file) === "flows_cred.
 
 /** The title of what the person is told about one refused file. */
 export function refusedFlowFileTitle(refused: RefusedFlowFile): string {
-  if (refused.problem === MISSING) {
+  if (refused.problem.startsWith(MISSING)) {
     return isCredentials(refused.file)
       ? "Reload didn't find your flows' passwords"
       : "Reload didn't find your flows";
@@ -154,6 +154,19 @@ export function refusedFlowFileSentence(refused: RefusedFlowFile): string {
   const startOver =
     `quit Reload, move ${name} out of its folder, start Reload again, and enter the ` +
     "passwords in your flows again.";
+  if (problem.startsWith(MISSING) && backup === null) {
+    // The backup is damaged too: copying it back would only be refused again.
+    const what = credentials ? "the passwords and tokens your flows use" : "your flows";
+    const fix = credentials
+      ? ""
+      : `To get them back, fix the backup, then quit Reload, copy it to ${name}, and start ` +
+        "Reload again. ";
+    return (
+      `${file} ${problem}, so Reload started without ${what}, and won't save: a save would ` +
+      `replace that backup. ${kept} ${fix}To start without them, quit Reload, move the backup ` +
+      "out of its folder, and start Reload again."
+    );
+  }
   if (problem === MISSING && backup !== null) {
     const what = credentials ? "the passwords and tokens your flows use" : "your flows";
     return (
