@@ -3,7 +3,7 @@ type: plan
 title: The features retired without the owner
 status: APPROVED
 created: 2026-10-22
-updated: 2026-10-22
+updated: 2026-10-23
 ---
 
 # 0032 — The features retired without the owner
@@ -55,7 +55,8 @@ every ledger row against its old test, the other checks behaviour under failure.
    after a runtime crash), 34 (a kill sent to a pid after exit), 35 (the login item left
    registered), 36 (update notices that are not true), 40 (unproven: no secret in a shown
    reason, and an old package version sees only its own files while closing).
-   Done: 35, 36 and 40 (branch `port/0032-small-safety`).
+   Done: 35, 36 and 40 (branch `port/0032-small-safety`); 32, 33 and 34 (branch
+   `port/0032-wave1-rest`).
 2. **Wave 2, what the person and the plugin author are told:** groups 26 (a broken declaration
    refused at install and pack, naming the field), 27 (the reason beside the field, and empty
    required values caught), 29 (a broken package shown, not hidden), 2, 1 (the controls), 4, 37
@@ -96,6 +97,20 @@ settings.
   two rows of a refusal drawn beside its field). 14 rows.
 - **Group 31** (same branch): a value for a property the type no longer declares is kept by every
   deploy and comes back when declared again. 1 row.
+
+- **Group 32** (branch `port/0032-wave1-rest`): the inputs held for a node at its queue bound
+  are bounded too, by the same number. One more cuts the node off, as the old bus cut off a
+  subscriber that fell behind: what was held and every further input fail with `done(err)`
+  ("queue full: the node is not keeping up"), said in the log and once as a notice, until the
+  node finishes an input again (`adapters/process/input-journal.ts`, spec 7.6). 4 rows.
+- **Group 33** (same branch): the runtime records each node process it starts with its identity
+  (`node-processes.json` in user data, 0600); before every start of the runtime the shell stops
+  each recorded process that is still itself, SIGTERM to its group and SIGKILL after 5 s, and
+  never signals a pid that is someone else's now (`application/left-nodes.ts`). Windows is not
+  measured, so nothing is recorded there. 2 rows.
+- **Group 34** (same branch): after a node process exits, its group is signalled only while a
+  member is left (one `ps` read), and nothing on Windows; the close and ready deadlines signal
+  only a process that has not exited (`adapters/process/process-tree.ts`, `exit-watch.ts`). 1 row.
 
 Each ported row moves to `ported` with the id of the test that proves the old behaviour. Each
 row an audit called `internal` or `equivalent` gets its new evidence in `reason`, and keeps no
