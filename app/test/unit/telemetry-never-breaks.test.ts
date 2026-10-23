@@ -382,6 +382,53 @@ describe("a report queued before reports were last turned off never leaves", () 
     expect(next.count()).toBe(0);
   });
 
+  it("a fence that is not a number, or cannot be read, fences every report found", () => {
+    scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-queue-"));
+    const root = path.join(scratch, "telemetry-queue");
+    const fence = path.join(root, ".fence");
+    for (const spoil of [
+      () => {
+        fs.writeFileSync(fence, "not a number");
+      },
+      () => {
+        fs.rmSync(fence, { force: true });
+        fs.mkdirSync(fence);
+      },
+    ]) {
+      const queue = new DiskReportQueue(root, new RecordingLogger());
+      queue.enqueue("usage", { n: 1 });
+      vi.spyOn(fs, "renameSync").mockImplementationOnce(() => {
+        throw new Error("EPERM: operation not permitted");
+      });
+      queue.purge();
+      // Left behind by a failed delete, then the fence spoiled.
+      fs.writeFileSync(path.join(root, "000000000009-usage.json"), JSON.stringify({ n: 9 }));
+      spoil();
+      expect(new DiskReportQueue(root, new RecordingLogger()).pending()).toEqual([]);
+      fs.rmSync(fence, { recursive: true, force: true });
+    }
+  });
+
+  it("a fence left by a failed move keeps numbering past it, even after a purge of an empty queue", () => {
+    scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-queue-"));
+    const root = path.join(scratch, "telemetry-queue");
+    const first = new DiskReportQueue(root, new RecordingLogger());
+    first.enqueue("usage", { n: 1 });
+    first.enqueue("usage", { n: 2 });
+    vi.spyOn(fs, "renameSync").mockImplementationOnce(() => {
+      throw new Error("EPERM: operation not permitted");
+    });
+    first.purge();
+    // The next launch: off again finds nothing to purge; then a yes and a new report.
+    const next = new DiskReportQueue(root, new RecordingLogger());
+    expect(next.purge()).toBe(0);
+    next.enqueue("usage", { n: 3 });
+    // And the launch after that still sends it.
+    expect(
+      new DiskReportQueue(root, new RecordingLogger()).pending().map((r) => r.payload),
+    ).toEqual([{ n: 3 }]);
+  });
+
   it("a purge that can neither fence nor move the queue throws, and nothing was forgotten", () => {
     scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-queue-"));
     const root = path.join(scratch, "telemetry-queue");

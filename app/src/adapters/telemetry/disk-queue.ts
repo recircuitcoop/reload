@@ -211,9 +211,11 @@ export class DiskReportQueue implements ReportQueue {
         this.#indexed();
         return files.length;
       }
+      // Moved aside with the folder: numbering starts again. Without a move, a fence on disk
+      // stays, and new reports are numbered past it.
+      this.#fence = 0;
     }
     this.#index = [];
-    this.#fence = 0;
     this.#emptyTrash();
     return files.length;
   }
