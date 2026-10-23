@@ -11,11 +11,14 @@
 
 import type { JsonSchema } from "../packages/declaration";
 import {
+  conditionHolds,
   isAdvanced,
   isMultiline,
   pathKind,
   reloadOptions,
+  shownWhen,
   type ReloadOptions,
+  type ShownWhen,
 } from "./reload-keyword";
 import {
   READING_SPACES,
@@ -81,6 +84,8 @@ export interface Field {
   readonly reload?: ReloadOptions;
   /** `reload.advanced` (spec 2.4.1): drawn under Advanced, closed as the form opens. */
   readonly advanced?: true;
+  /** `reload.shown`: drawn only while a sibling holds a value; its own value is kept hidden. */
+  readonly shown?: ShownWhen;
   /** A group's fields, or a table's columns. */
   readonly fields?: readonly Field[];
 }
@@ -247,6 +252,10 @@ function fieldOf(key: string, property: JsonSchema, required: boolean, inRow = f
   if (isAdvanced(property)) {
     field.advanced = true;
   }
+  const shown = shownWhen(property);
+  if (shown !== null) {
+    field.shown = shown;
+  }
   if (control === "group") {
     field.fields = formModel(property, inRow).fields;
   }
@@ -267,6 +276,55 @@ export function formModel(schema: JsonSchema, inRow = false): FormModel {
       fieldOf(key, property, required.has(key), inRow),
     ),
   };
+}
+
+/**
+ * A drawn value as the type of its field, for a condition to compare: a form hands back a
+ * number, a choice or a switch as text. Unset ("" or nothing) is the field's default.
+ */
+function typedOf(field: Field, value: unknown): unknown {
+  if (value === undefined || value === "") {
+    return field.default;
+  }
+  switch (field.control) {
+    case "checkbox":
+      return value === true || value === "true";
+    case "number":
+    case "integer":
+      return typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value))
+        ? Number(value)
+        : value;
+    case "select":
+      return typeof value === "string"
+        ? ((field.options ?? []).find((option) => String(option) === value) ?? value)
+        : value;
+    default:
+      return value;
+  }
+}
+
+/**
+ * The keys of `fields` not drawn for `values` (one object's: the form's top, a group, or one
+ * row): each whose `reload.shown` condition its sibling's value does not meet. The condition
+ * is judged over the whole object at once, so it may name a field declared after it.
+ */
+export function hiddenKeys(
+  fields: readonly Field[],
+  values: Readonly<Record<string, unknown>>,
+): Set<string> {
+  const byKey = new Map(fields.map((field) => [field.key, field]));
+  return new Set(
+    fields
+      .filter((field) => {
+        if (field.shown === undefined) {
+          return false;
+        }
+        const sibling = byKey.get(field.shown.when);
+        const value = sibling === undefined ? undefined : typedOf(sibling, values[sibling.key]);
+        return !conditionHolds(field.shown, value);
+      })
+      .map((field) => field.key),
+  );
 }
 
 // The refusal in the person's words lives in problems.ts; it is part of reading a form.

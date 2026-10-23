@@ -1,11 +1,13 @@
 // The `reload` annotation of a config schema property (spec 2.4.1, plan 0022 §B, decision D9):
 // where a property's options come from, as the form layer needs to know it.
 //
-// Everything Reload-specific about a property lives in its one `reload` object. Five keys
+// Everything Reload-specific about a property lives in its one `reload` object. Seven keys
 // are defined: `{"spaces": true}` (the paired Anytype's spaces), `{"types": {"of": "<p>"}}`
 // (the types of the space chosen in sibling property `p`), `{"advanced": true}` (never shown
 // in Setup, and under Advanced in the editor), `{"multiline": true}` (a text drawn as several
-// lines) and `{"path": "file" | "folder"}` (a text chosen with Browse…). This only reads the
+// lines), `{"path": "file" | "folder"}` (a text chosen with Browse…), `{"unique": true}` (a
+// table's column no two rows may repeat) and `{"shown": {"when": "<p>", "equals": v}}` (drawn
+// only while sibling `p` holds `v`; plan 0032). This only reads the
 // declaration; resolving the options against Anytype is the options route's job (WI-0022-09),
 // not this.
 //
@@ -71,4 +73,31 @@ export function pathKind(property: JsonSchema): "file" | "folder" | null {
   }
   const kind = annotation["path"];
   return kind === "file" || kind === "folder" ? kind : null;
+}
+
+/** When a property is drawn: only while its sibling `when` holds `equals` (`reload.shown`). */
+export interface ShownWhen {
+  readonly when: string;
+  readonly equals: string | number | boolean;
+}
+
+/** A property's `reload.shown`; null when it is always drawn. */
+export function shownWhen(property: JsonSchema): ShownWhen | null {
+  const annotation = property[RELOAD_KEYWORD];
+  const shown = isRecord(annotation) ? annotation["shown"] : undefined;
+  if (!isRecord(shown) || typeof shown["when"] !== "string") {
+    return null;
+  }
+  const equals = shown["equals"];
+  return typeof equals === "string" || typeof equals === "number" || typeof equals === "boolean"
+    ? { when: shown["when"], equals }
+    : null;
+}
+
+/**
+ * Whether a condition holds for the value its sibling holds now (`value`, already of the
+ * sibling's own type). Strictly: a number 1 is not a switch that is on.
+ */
+export function conditionHolds(condition: ShownWhen, value: unknown): boolean {
+  return value === condition.equals;
 }

@@ -19,6 +19,7 @@ import { InlineMessage } from "../components/molecules/InlineMessage";
 import { SetupStep } from "../components/organisms/SetupStep";
 import {
   draftOf,
+  hiddenOf,
   markedParts,
   plainOf,
   problemsByField,
@@ -83,6 +84,8 @@ export function SetupForm(props: SetupFormProps) {
   }, [api, flowId, step.id]);
   const fields = form?.ok === true ? setupFields(form.value.schema) : [];
   const problems = problemsByField(refusal?.problems);
+  // Drawn only while its condition holds; still sent by Continue, so its value is kept.
+  const hidden = hiddenOf(fields, draft);
   const title = markedParts("setup.form.title", { step: step.name });
   const save = () => {
     setRefusal(null);
@@ -112,7 +115,7 @@ export function SetupForm(props: SetupFormProps) {
     >
       <div data-testid="setup-form" data-node={step.id} className="flex flex-col gap-4">
         {fields
-          .filter((field) => !field.advanced)
+          .filter((field) => !field.advanced && !hidden.has(field.key))
           .map((field) => (
             <SetupFormField
               key={field.key}

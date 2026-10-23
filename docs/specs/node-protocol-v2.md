@@ -189,6 +189,15 @@ Two keys say how a `type: "string"` property is typed, and may stand alone (plan
 text input with a **Browse…** button that chooses a file or a folder. The value stays the text.
 Either may annotate an array's `items`, so a list of paths has Browse… on each element.
 
+Two more keys may stand alone (plan 0032). `shown` (`{"when": "<property>", "equals": v}`)
+draws the property only while the sibling property `when` (of the same object: the form's
+top, a group, or one table row) holds `v`, compared strictly, so the number 1 is not a switch
+that is on; a hidden property keeps its value. `when` naming the property itself or anything
+but a sibling, or a `v` the sibling cannot hold, refuses the declaration. `unique` (`true`)
+marks the one column of a table's row whose value no two rows may share: a text (not several
+lines), a number or a choice, never a secret, a list, a group or a table, and never outside a
+table's row; a save refuses each row repeating another's, naming the other.
+
 ```json
 "properties": {
   "space": { "type": "string", "title": "Space", "reload": { "spaces": true } },
@@ -196,8 +205,8 @@ Either may annotate an array's `items`, so a list of paths has Browse… on each
 }
 ```
 
-1. A `reload` MUST declare at least one of `spaces`, `types`, `advanced`, `multiline` and
-   `path`, and never both `spaces` and `types`: an empty object, or both, is refused. A property
+1. A `reload` MUST declare at least one of `spaces`, `types`, `advanced`, `multiline`, `path`,
+   `unique` and `shown`, and never both `spaces` and `types`: an empty object, or both, is refused. A property
    whose `reload` declares `spaces`, `types`, `multiline` or `path` MUST be `"type": "string"`. This holds at every depth the form
    draws: top-level properties, the properties of a nested object, and those of an array's
    `items`. The declaration schema (2.6) refuses each case.

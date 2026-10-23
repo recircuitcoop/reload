@@ -101,6 +101,8 @@ export interface SetupField {
   /** What a path's Browse… chooses; null for any other kind. */
   readonly pathKind: "file" | "folder" | null;
   readonly default: unknown;
+  /** `reload.shown`: drawn only while sibling `when` holds `equals`; its value is kept hidden. */
+  readonly shown?: { readonly when: string; readonly equals: string | number | boolean };
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -188,9 +190,47 @@ export function setupFields(schema: Readonly<Record<string, unknown>>): SetupFie
             ? (property["reload"]["path"] as "file" | "folder")
             : null,
         default: property["default"],
+        ...shownOf(property),
       },
     ];
   });
+}
+
+/** A property's `reload.shown`, as the canvas form reads it (domain/forms/reload-keyword.ts). */
+function shownOf(property: Record<string, unknown>): Pick<SetupField, "shown"> {
+  const annotation = property["reload"];
+  const shown = isRecord(annotation) ? annotation["shown"] : undefined;
+  const equals = isRecord(shown) ? shown["equals"] : undefined;
+  if (!isRecord(shown) || typeof shown["when"] !== "string") {
+    return {};
+  }
+  return typeof equals === "string" || typeof equals === "number" || typeof equals === "boolean"
+    ? { shown: { when: shown["when"], equals } }
+    : {};
+}
+
+/**
+ * The keys Setup does not draw for `draft`: each field whose `reload.shown` its sibling's value
+ * (as Continue would send it, else the sibling's default) does not meet, strictly. A choice is
+ * held as text, so it is met by the option's text.
+ */
+export function hiddenOf(fields: readonly SetupField[], draft: Draft): Set<string> {
+  const values = valuesOf(fields, draft);
+  return new Set(
+    fields
+      .filter(({ shown }) => {
+        if (shown === undefined) {
+          return false;
+        }
+        const sibling = fields.find((field) => field.key === shown.when);
+        const value = values[shown.when] ?? sibling?.default;
+        return sibling?.kind === "enum"
+          ? !(typeof value === "string" || typeof value === "number") ||
+              String(value) !== String(shown.equals)
+          : value !== shown.equals;
+      })
+      .map((field) => field.key),
+  );
 }
 
 /** What a form holds while it is filled: text for every field, a boolean for a switch. */

@@ -475,6 +475,20 @@ function properties(schema: JsonSchema, path: string, context: Context): void {
           `${JSON.stringify(when)} is not a property beside ${JSON.stringify(key)}: a ` +
             "condition names a property of the same group or row",
         );
+      } else {
+        // The value the condition waits for must be one its sibling can hold.
+        const sibling = columns.find(([name]) => name === when)?.[1];
+        const equals = shown["equals"];
+        if (
+          isRecord(sibling) &&
+          valuesJudged(sibling) &&
+          context.judge.check(withDefs(sibling, context.root), equals).length > 0
+        ) {
+          say(
+            `${at}/reload/shown/equals`,
+            `${JSON.stringify(equals)} is not a value ${JSON.stringify(when)} can hold`,
+          );
+        }
       }
     }
     // A table's row is its own: a property in a group of the row is no column of it.

@@ -48,6 +48,7 @@ import {
   addRow,
   dynamicSelect,
   formModel,
+  hiddenKeys,
   moveRow,
   removeRow,
   withoutSecrets,
@@ -55,7 +56,7 @@ import {
 } from "../../domain/forms/form-model";
 import type { JsonSchema } from "../../domain/packages/declaration";
 import { judge, nodeProblems, ownOf, problems, UNKEPT, type Registered } from "./editor-judge";
-import { element, LOADING, showSelect, wireOptions } from "./editor-options";
+import { element, LOADING, rowOf, showSelect, wireOptions } from "./editor-options";
 import {
   isRecord,
   originOf,
@@ -328,6 +329,22 @@ function draw(container: HTMLElement, fields: readonly Field[], values: Values, 
     container.append(advanced);
   }
   wireOptions(container, fields);
+  // A field with `reload.shown` is drawn only while its sibling holds the value it names; it
+  // stays in the form, hidden, so its value is kept (form-model.ts hiddenKeys).
+  if (fields.some((field) => field.shown !== undefined)) {
+    const follow = (): void => {
+      const hidden = hiddenKeys(fields, read(container, fields));
+      for (const field of fields.filter((each) => each.shown !== undefined)) {
+        const row = rowOf(container, field.key);
+        if (row instanceof HTMLElement) {
+          row.hidden = hidden.has(field.key);
+        }
+      }
+    };
+    follow();
+    container.addEventListener("change", follow);
+    container.addEventListener("input", follow);
+  }
 }
 
 /** The button beside a path field. */
