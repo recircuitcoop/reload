@@ -237,12 +237,23 @@ export function processesNaming(marker: string): string[] {
 export function isAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
-    return true;
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ESRCH") {
       return false;
     }
     throw error;
+  }
+  // A process that exited and is not reaped yet (a zombie: its parent is gone and launchd or
+  // init has not collected it) still has its pid, but runs nothing: `reload --quit --force`
+  // rightly takes it for stopped (its identity is gone), so it is not alive here either.
+  if (process.platform === "win32") {
+    return true;
+  }
+  try {
+    const state = execFileSync("/bin/ps", ["-o", "stat=", "-p", String(pid)], { encoding: "utf8" });
+    return !state.trim().startsWith("Z");
+  } catch {
+    return false; // ps found no such process: it went between the two looks
   }
 }
 
