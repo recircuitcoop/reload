@@ -389,8 +389,9 @@ test("(c) delete removes the tab and its runs, and is refused while the canvas i
             touchImport: true,
             notify: false,
           });
-          RED.nodes.dirty(true);
         }
+        // Marked as a person's drop marks it, again if the editor has since been made clean.
+        RED.nodes.dirty(true);
         await new Promise((resolve) => setTimeout(resolve, 300));
         return RED.nodes.dirty();
       });

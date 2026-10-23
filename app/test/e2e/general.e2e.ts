@@ -546,6 +546,8 @@ test("General shows the queued reports in full, Advanced's status details, Recor
 
     // ── Advanced: each child's state, process, port and generation; the endpoint served ─────
     const advanced = general.getByTestId("general-advanced");
+    // The services process starts beside the runtime, and on a loaded machine after it.
+    await waitForRunning(window, "services");
     await expect(section(general, "advanced")).toContainText(STRINGS["general.advanced.line"]);
     const runtimeRow = advanced.getByTestId("general-child-runtime");
     await expect(runtimeRow).toHaveAttribute("data-state", "running");
