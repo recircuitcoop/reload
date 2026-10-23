@@ -64,7 +64,7 @@ describe("a node instance's resource guard", () => {
     const h = harness();
     const limits = { ...DEFAULT_LIMITS, memoryMb: 2048 };
     const guard = new NodeResourceGuard(spec("n1", "", limits), h.deps);
-    guard.spawned(4242, () => true);
+    guard.watch(4242, () => true);
     const [target] = h.handed;
     expect(target?.pid).toBe(4242);
     expect(target?.limits).toEqual(limits);
@@ -72,23 +72,24 @@ describe("a node instance's resource guard", () => {
     target?.stop();
     target?.kill();
     expect(h.signals).toEqual(["SIGTERM 4242", "SIGKILL 4242"]);
-    guard.ended();
+    const cancel = guard.watch(4343, () => true);
+    cancel();
     expect(h.cancelled()).toBe(1);
   });
 
   it("is watched under the documented limits when its spec names none", () => {
     const h = harness();
-    new NodeResourceGuard(spec("n1"), h.deps).spawned(4242, () => true);
+    new NodeResourceGuard(spec("n1"), h.deps).watch(4242, () => true);
     expect(h.handed[0]?.limits).toEqual(DEFAULT_LIMITS);
   });
 
   it("tells the person it started the node again only once the next process has started", () => {
     const h = harness();
     const guard = new NodeResourceGuard(spec("n1", "Summarize"), h.deps);
-    guard.spawned(4242, () => true);
+    guard.watch(4242, () => true);
     h.handed[0]?.stopped("memory 2048 MB, over its limit of 1024 MB, for 70 s");
     expect(h.notifier.notices).toEqual([]);
-    guard.spawned(4343, () => true);
+    guard.watch(4343, () => true);
     expect(h.notifier.notices).toEqual([
       {
         kind: "node-over-limit",
@@ -98,7 +99,7 @@ describe("a node instance's resource guard", () => {
           "so Reload stopped it and started it again",
       },
     ]);
-    guard.spawned(4444, () => true);
+    guard.watch(4444, () => true);
     expect(h.notifier.notices).toHaveLength(1);
   });
 
@@ -106,9 +107,9 @@ describe("a node instance's resource guard", () => {
     const h = harness();
     for (const id of ["n1", "n2"]) {
       const guard = new NodeResourceGuard(spec(id), h.deps);
-      guard.spawned(1, () => true);
+      guard.watch(1, () => true);
       h.handed.at(-1)?.stopped("CPU 150 %, over its limit of 90 %, for 61 s");
-      guard.spawned(2, () => true);
+      guard.watch(2, () => true);
     }
     expect(h.notifier.notices.map((notice) => notice.subject)).toEqual(["n1", "n2"]);
     expect(h.notifier.notices[0]?.detail).toMatch(/^The node raw used CPU 150 %/);
@@ -119,7 +120,7 @@ describe("a node instance's resource guard", () => {
     const guard = new NodeResourceGuard(spec("n1", "Summarize"), h.deps);
     const clock = h.deps.clock as FakeClock;
     for (let stop = 1; stop <= 5; stop += 1) {
-      guard.spawned(1000 + stop, () => true);
+      guard.watch(1000 + stop, () => true);
       expect(guard.restartable).toBe(true);
       h.handed
         .at(-1)
@@ -127,7 +128,7 @@ describe("a node instance's resource guard", () => {
       clock.advance(80_000);
     }
     expect(guard.restartable).toBe(false);
-    expect(guard.stoppedForGood).toBe(
+    expect(guard.stopText({ maxCrashes: 5, windowMs: 120_000 })).toBe(
       "stopped after going over its resource limits 5 times in 10 minutes " +
         "(the last: memory 2005 MB, over its limit of 1024 MB, for 61 s)",
     );
@@ -140,12 +141,12 @@ describe("a node instance's resource guard", () => {
     const h = harness();
     const guard = new NodeResourceGuard(spec("n1"), h.deps);
     const clock = h.deps.clock as FakeClock;
-    guard.spawned(1, () => true);
+    guard.watch(1, () => true);
     h.handed.at(-1)?.stopped("memory 2001 MB, over its limit of 1024 MB, for 61 s");
-    guard.spawned(2, () => true);
+    guard.watch(2, () => true);
     clock.advance(600_001);
     h.handed.at(-1)?.stopped("memory 2002 MB, over its limit of 1024 MB, for 61 s");
-    guard.spawned(3, () => true);
+    guard.watch(3, () => true);
     expect(h.notifier.notices).toHaveLength(2);
     expect(guard.restartable).toBe(true);
   });
@@ -153,10 +154,9 @@ describe("a node instance's resource guard", () => {
   it("watches nothing without a watchdog or a process", () => {
     const unwatched = harness(false);
     const guard = new NodeResourceGuard(spec("n1"), unwatched.deps);
-    guard.spawned(4242, () => true);
-    guard.ended();
+    guard.watch(4242, () => true)();
     const h = harness();
-    new NodeResourceGuard(spec("n1"), h.deps).spawned(undefined, () => true);
+    new NodeResourceGuard(spec("n1"), h.deps).watch(undefined, () => true);
     expect(h.handed).toEqual([]);
   });
 });

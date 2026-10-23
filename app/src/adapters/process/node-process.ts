@@ -263,7 +263,7 @@ class ChildNodeProcess implements NodeProcess {
       log: this.#log.bind(this, "error"),
       exited: this.#onExit.bind(this, child),
     });
-    this.#guard.spawned(child.pid, () => child === this.#child && !this.#closing);
+    this.#timers.push(this.#guard.watch(child.pid, () => child === this.#child && !this.#closing));
 
     this.#host.status({ fill: "grey", shape: "ring", text: "starting" });
     const { identity, config, credentials, dataDir } = this.#spec;
@@ -327,10 +327,7 @@ class ChildNodeProcess implements NodeProcess {
   /** The crash-loop limit: no more processes until the instance is re-created. */
   #stop(): void {
     this.#stopped = true;
-    const { maxCrashes, windowMs } = this.#deps.settings.crashLoop;
-    const text =
-      this.#guard.stoppedForGood ??
-      `stopped after ${String(maxCrashes)} exits in ${String(windowMs / 1000)} s`;
+    const text = this.#guard.stopText(this.#deps.settings.crashLoop);
     this.#log("error", `${text}; no more restarts until it is redeployed`);
     this.#host.status({ fill: "red", shape: "dot", text });
     for (const [id, input] of this.#inputs) {
@@ -585,7 +582,6 @@ class ChildNodeProcess implements NodeProcess {
   }
 
   #cancelTimers(): void {
-    this.#guard.ended();
     for (const cancel of this.#timers.splice(0)) {
       cancel();
     }

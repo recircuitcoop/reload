@@ -11,7 +11,11 @@
 // The person is told once per episode: "started it again" when the next process starts after
 // the first stop in the window, and node-stopped, in the breaker's words, at its limit.
 
-import { CrashLoopBreaker, DEFAULT_INTERVENTIONS } from "../../domain/supervision/breaker";
+import {
+  CrashLoopBreaker,
+  DEFAULT_INTERVENTIONS,
+  type CrashLoopSettings,
+} from "../../domain/supervision/breaker";
 import { DEFAULT_LIMITS } from "../../domain/supervision/resources";
 import type { NodeProcessSpec } from "../../ports/node-process";
 import type { NodeProcessDeps } from "./node-process-settings";
@@ -22,7 +26,6 @@ export class NodeResourceGuard {
   readonly #interventions: CrashLoopBreaker;
   /** Why the last process was stopped, until the next one has started; told once an episode. */
   #stoppedFor: string | null = null;
-  #cancel: (() => void) | null = null;
   /** The words for the instance's end once the stops reached their limit; null before. */
   #forGood: string | null = null;
 
@@ -37,9 +40,11 @@ export class NodeResourceGuard {
     return this.#forGood === null;
   }
 
-  /** Why the instance is not started again, in the crash-loop notice's words; null while it is. */
-  get stoppedForGood(): string | null {
-    return this.#forGood;
+  /** Why the instance is not started again, in the crash-loop notice's words. */
+  stopText({ maxCrashes, windowMs }: CrashLoopSettings): string {
+    return (
+      this.#forGood ?? `stopped after ${String(maxCrashes)} exits in ${String(windowMs / 1000)} s`
+    );
   }
 
   #stopping(why: string): void {
@@ -56,8 +61,11 @@ export class NodeResourceGuard {
     this.#stoppedFor = first ? why : null;
   }
 
-  /** A process of this instance started: watched, and told of if it replaces a stopped one. */
-  spawned(pid: number | undefined, current: () => boolean): void {
+  /**
+   * A process of this instance started: watched, and told of if it replaces a stopped one. The
+   * Cancel ends its watch: the instance cancels it with its own timers, on exit and on close.
+   */
+  watch(pid: number | undefined, current: () => boolean): () => void {
     const { identity } = this.#spec;
     if (this.#stoppedFor !== null && pid !== undefined) {
       const name =
@@ -72,9 +80,9 @@ export class NodeResourceGuard {
     }
     const watchdog = this.#deps.watchdog;
     if (watchdog === undefined || pid === undefined) {
-      return;
+      return () => undefined;
     }
-    this.#cancel = watchdog({
+    return watchdog({
       pid,
       limits: this.#spec.limits ?? DEFAULT_LIMITS,
       stop: () => {
@@ -88,11 +96,5 @@ export class NodeResourceGuard {
         this.#stopping(why);
       },
     });
-  }
-
-  /** The process exited or the instance closed: nothing more is sampled or signalled. */
-  ended(): void {
-    this.#cancel?.();
-    this.#cancel = null;
   }
 }
