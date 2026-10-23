@@ -41,6 +41,9 @@ export class Store<T> {
   #snapshot: Loaded<T> = LOADING;
   #loaded = false;
   #generation = 0;
+  /** The generation of the snapshot drawn now, and the refreshes waiting for a newer one. */
+  #drawn = 0;
+  #waiting: { readonly generation: number; readonly resolve: () => void }[] = [];
 
   constructor(load: () => Promise<Answer<T>>) {
     this.#load = load;
@@ -61,7 +64,10 @@ export class Store<T> {
   /** useSyncExternalStore's getSnapshot (and getServerSnapshot). */
   readonly getSnapshot = (): Loaded<T> => this.#snapshot;
 
-  /** Load again; an answer a newer load overtook is dropped. */
+  /**
+   * Load again; an answer a newer load overtook is dropped. Resolves once its answer, or a newer
+   * one, is drawn: never while a list older than the one it asked for is all there is.
+   */
   async refresh(): Promise<void> {
     const generation = ++this.#generation;
     let answer: Answer<T>;
@@ -76,6 +82,8 @@ export class Store<T> {
           ? { status: "ready", value: answer.value }
           : { status: "refused", refused: answer.refused },
       );
+    } else if (this.#drawn < generation) {
+      await new Promise<void>((resolve) => this.#waiting.push({ generation, resolve }));
     }
   }
 
@@ -95,6 +103,12 @@ export class Store<T> {
 
   #publish(snapshot: Loaded<T>): void {
     this.#snapshot = snapshot;
+    this.#drawn = this.#generation;
+    const ready = this.#waiting.filter((waiter) => waiter.generation <= this.#drawn);
+    this.#waiting = this.#waiting.filter((waiter) => waiter.generation > this.#drawn);
+    for (const waiter of ready) {
+      waiter.resolve();
+    }
     for (const listener of [...this.#listeners]) {
       listener();
     }

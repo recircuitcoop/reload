@@ -18,7 +18,7 @@ import type { Route } from "../routes";
 import { useFlows, useStores } from "../store";
 import { t } from "../strings";
 import { wordDeleteFlow, wordRefusal } from "../words";
-import { BLANK_TEMPLATE, flowRow, withSwitching } from "./flow-rows";
+import { BLANK_TEMPLATE, flowRow, pressSwitch, withSwitching } from "./flow-rows";
 
 const WORDS: FlowsListWords = {
   title: t("nav.flows"),
@@ -97,17 +97,15 @@ export function FlowsScreen({ api, navigate }: FlowsScreenProps) {
       case "on":
       case "off": {
         const on = action === "on";
-        setSwitching((now) => new Map(now).set(flow.id, on));
-        answered(await api.setFlowOn(flow.id, on));
-        // Drawn as asked until the list read after the answer is in, refused or not.
-        await stores.flows.refresh();
-        setSwitching((now) => {
-          const next = new Map(now);
-          if (next.get(flow.id) === on) {
-            next.delete(flow.id);
-          }
-          return next;
-        });
+        await pressSwitch(
+          flow.id,
+          on,
+          {
+            set: async () => answered(await api.setFlowOn(flow.id, on)),
+            reread: () => stores.flows.refresh(),
+          },
+          setSwitching,
+        );
         return;
       }
       case "rename":

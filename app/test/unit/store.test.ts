@@ -113,6 +113,25 @@ describe("a store", () => {
     expect(store.getSnapshot()).toEqual({ status: "ready", value: "pushed" });
   });
 
+  it("ends a load a newer one overtook only once the newer answer is drawn", async () => {
+    const resolvers: ((answer: Answer<string>) => void)[] = [];
+    const store = new Store<string>(
+      () => new Promise<Answer<string>>((resolve) => resolvers.push(resolve)),
+    );
+    let ended = false;
+    const first = store.refresh().then(() => {
+      ended = true;
+    });
+    const second = store.refresh();
+    resolvers[0]?.({ ok: true, value: "old" });
+    await settle();
+    // Its answer was dropped and the newer one is not in: nothing newer than before is drawn.
+    expect(ended).toBe(false);
+    resolvers[1]?.({ ok: true, value: "new" });
+    await Promise.all([first, second]);
+    expect(store.getSnapshot()).toEqual({ status: "ready", value: "new" });
+  });
+
   it("shows a refusal, and a load that throws as a failure", async () => {
     const refused = new Store<string>(() =>
       Promise.resolve({ ok: false, refused: { reason: "down", sentence: "refused.down" } }),

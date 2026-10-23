@@ -10,6 +10,7 @@ import {
   BLANK_TEMPLATE,
   flowRow,
   HEALTH_LOOK,
+  pressSwitch,
   withSwitching,
 } from "../../src/ui/screens/flow-rows";
 import { STRINGS } from "../../src/ui/strings";
@@ -110,6 +111,67 @@ describe("a flow's switch while its press is under way", () => {
     // Nothing pressed, or a press the list already shows: the list's own objects.
     expect(withSwitching(flows, new Map())).toEqual(flows);
     expect(withSwitching(flows, new Map([["b", true]]))[1]).toBe(flows[1]);
+  });
+});
+
+describe("a press on a flow's switch", () => {
+  function drawn() {
+    let now: ReadonlyMap<string, boolean> = new Map();
+    const draw = (update: (was: ReadonlyMap<string, boolean>) => ReadonlyMap<string, boolean>) => {
+      now = update(now);
+    };
+    return { draw, asked: () => [...now] };
+  }
+
+  it("is drawn as asked until the list read after its answer is in", async () => {
+    const d = drawn();
+    let reread: () => void = () => undefined;
+    const pressed = pressSwitch(
+      "a",
+      false,
+      {
+        set: () => Promise.resolve(),
+        reread: () =>
+          new Promise<void>((resolve) => {
+            reread = resolve;
+          }),
+      },
+      d.draw,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(d.asked()).toEqual([["a", false]]);
+    reread();
+    await pressed;
+    expect(d.asked()).toEqual([]);
+  });
+
+  it("is drawn as the list says again when the call fails, and reads nothing", async () => {
+    const d = drawn();
+    let reads = 0;
+    const pressed = pressSwitch(
+      "a",
+      true,
+      {
+        set: () => Promise.reject(new Error("the window lost its shell")),
+        reread: () => {
+          reads += 1;
+          return Promise.resolve();
+        },
+      },
+      d.draw,
+    );
+    await expect(pressed).rejects.toThrow("the window lost its shell");
+    expect(d.asked()).toEqual([]);
+    expect(reads).toBe(0);
+  });
+
+  it("keeps a later press on the same flow drawn when an earlier one ends", async () => {
+    const d = drawn();
+    const calls = { set: () => Promise.resolve(), reread: () => Promise.resolve() };
+    const earlier = pressSwitch("a", false, calls, d.draw);
+    d.draw((now) => new Map(now).set("a", true)); // a later press, still under way
+    await earlier;
+    expect(d.asked()).toEqual([["a", true]]);
   });
 });
 
