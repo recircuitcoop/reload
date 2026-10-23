@@ -408,6 +408,37 @@ describe("the asking process", () => {
     );
   });
 
+  it("quit: gives the shell the quit's own wait to end, not a fixed polite stop", () => {
+    writeRunState([SHELL]);
+    let clock = 0;
+    let asked = false;
+    const printed: string[] = [];
+    const code = ask("quit", {
+      app: { getPath: () => userData },
+      print: (text) => printed.push(text),
+      id: ID,
+      now: () => clock,
+      sleep: (ms) => {
+        clock += ms;
+        const file = questionFile(userData, ID);
+        if (asked || !fs.existsSync(file)) return;
+        asked = true;
+        fs.unlinkSync(file);
+        fs.writeFileSync(replyFile(userData, ID), JSON.stringify({ code: 0, text: "" }));
+      },
+      // The shell stops its children first, under load slowly: it is gone 40 s after it answered.
+      identity: (pid) => {
+        if (pid === ASKER.pid) return ASKER.identity;
+        return pid === 10 && (!asked || clock < 40_000) ? "t0 Reload" : null;
+      },
+      notices: NOTICES_FILENAME,
+      pid: ASKER.pid,
+      executable: EXECUTABLE,
+    });
+    expect(printed.join("")).toBe("  shell stopped (process 10)\nReload is off.\n");
+    expect(code).toBe(0);
+  });
+
   it("quit: says Reload is off once every process it ran is gone, and no run-state is left", () => {
     writeRunState([SHELL, { id: "anytype", pid: 13, identity: "t3 Anytype" }]);
     const alive = new Map([
@@ -690,7 +721,8 @@ describe("the running instance answers", () => {
     put("status");
     take(deps().answer);
     const staged = compose({ kind: "core-update-available", subject: "Reload", version: "9.9.9" });
-    expect((await replyFor()).text.split("\n").slice(-2)).toEqual([
+    // After the shell, its two children and Anytype: the one line it has words for, alone.
+    expect((await replyFor()).text.split("\n").slice(4)).toEqual([
       `  ${staged.title} — ${staged.body}`,
       "",
     ]);
