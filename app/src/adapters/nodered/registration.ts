@@ -26,6 +26,7 @@
 
 import { configOf, credentialsOf, emptyRequired, withCredentials } from "../../domain/forms/coerce";
 import { secretKeys } from "../../domain/forms/form-model";
+import { uniqueClashes } from "../../domain/forms/unique";
 import { unkeptSecretsOfNode } from "../../domain/forms/unkept";
 import { payloadRefusal, USER_EVENTS_PACKAGE } from "../../domain/events/event-types";
 import type { CloseReason } from "../../domain/journal/entry";
@@ -216,8 +217,10 @@ export class TypeRegistration {
     // Validated with its credentials, so a required secret never set is refused too.
     const problems = [
       ...validator.check(schema, withCredentials(config, credentials)),
-      // A required text left empty, or a required table with no rows (coerce.ts).
+      // A required text left empty, or a required table with no rows (coerce.ts), and a row
+      // repeating another's unique value (unique.ts).
       ...emptyRequired(schema, config),
+      ...uniqueClashes(schema, config),
     ];
     // A secret no credential can hold, found in the flow: never handed over (unkept.ts).
     const unkept = unkeptSecretsOfNode(schema, raw).map((path) => ({

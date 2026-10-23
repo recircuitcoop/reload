@@ -42,31 +42,21 @@ import {
   type Problem,
 } from "../../domain/forms/kept-on-save";
 import { originsOf, seedOrigins, seedRecorded } from "../../domain/forms/row-origins";
+import { uniqueClashes } from "../../domain/forms/unique";
 import { RELOAD_ANNOTATION } from "../../domain/forms/reload-keyword";
 import {
   ADVANCED_LABEL,
-  addRow,
   dynamicSelect,
   formModel,
   hiddenKeys,
-  moveRow,
-  removeRow,
   withoutSecrets,
   type Field,
 } from "../../domain/forms/form-model";
 import type { JsonSchema } from "../../domain/packages/declaration";
 import { judge, nodeProblems, ownOf, problems, UNKEPT, type Registered } from "./editor-judge";
 import { element, LOADING, rowOf, showSelect, wireOptions } from "./editor-options";
-import {
-  isRecord,
-  originOf,
-  read,
-  readList,
-  readRows,
-  saveSecrets,
-  SET,
-  typedUnkept,
-} from "./editor-read";
+import { drawTable } from "./editor-table";
+import { isRecord, originOf, read, readList, saveSecrets, SET, typedUnkept } from "./editor-read";
 
 type Values = Record<string, unknown>;
 
@@ -288,7 +278,15 @@ function draw(container: HTMLElement, fields: readonly Field[], values: Values, 
       draw(group, field.fields ?? [], isRecord(value) ? value : {}, path);
       row.append(group);
     } else if (field.control === "table") {
-      row.append(table(field, path, Array.isArray(value) ? (value as Values[]) : []));
+      const rows = Array.isArray(value) ? (value as Values[]) : [];
+      const hooks = {
+        draw,
+        changed: () => {
+          reasons.clear();
+        },
+        reason: reasonBeside,
+      };
+      row.append(drawTable(field, path, rows, hooks, prefix !== ""));
     } else if (field.control === "password") {
       row.append(secret(path));
     } else {
@@ -349,69 +347,6 @@ function draw(container: HTMLElement, fields: readonly Field[], values: Values, 
 
 /** The button beside a path field. */
 const BROWSE_LABEL = "Browse…";
-
-/** A table: one row of the columns per element, and buttons to add, remove and reorder. */
-function table(field: Field, path: string, rows: readonly Values[]): HTMLElement {
-  const columns = field.fields ?? [];
-  const holder = element("div", {
-    class: "reload-table",
-    "data-reload-table": path,
-    "data-testid": `reload-table-${path}`,
-  });
-  const redraw = (next: readonly Values[]): void => {
-    holder.replaceChildren();
-    next.forEach((row, index) => {
-      const rowPath = `${path}.${String(index)}`;
-      const line = element("div", {
-        class: "reload-row",
-        "data-reload-row": rowPath,
-        "data-testid": `reload-row-${rowPath}`,
-      });
-      const origin = originOf.get(row);
-      if (origin !== undefined) {
-        line.setAttribute("data-reload-origin", String(origin));
-      }
-      draw(line, columns, row, rowPath);
-      // A row's own reason (a key its row does not take): on the row, never on a cell.
-      const reason = reasonBeside(rowPath);
-      if (reason !== null) {
-        line.append(reason);
-      }
-      const button = (action: string, text: string, change: () => Values[]): void => {
-        const pressed = element(
-          "button",
-          {
-            type: "button",
-            "data-reload-action": action,
-            "data-testid": `reload-action-${action}`,
-          },
-          text,
-        );
-        pressed.addEventListener("click", () => {
-          reasons.clear();
-          redraw(change());
-        });
-        line.append(pressed);
-      };
-      button("up", "↑", () => moveRow(readRows(holder, columns), index, index - 1));
-      button("down", "↓", () => moveRow(readRows(holder, columns), index, index + 1));
-      button("remove", "Remove", () => removeRow(readRows(holder, columns), index));
-      holder.append(line);
-    });
-    const add = element(
-      "button",
-      { type: "button", "data-reload-action": "add", "data-testid": "reload-action-add" },
-      "Add row",
-    );
-    add.addEventListener("click", () => {
-      reasons.clear();
-      redraw(addRow(readRows(holder, columns), columns));
-    });
-    holder.append(add);
-  };
-  redraw(rows);
-  return holder;
-}
 
 /** The form container of the open edit dialog for `type`. */
 function containerOf(type: string): HTMLElement {
@@ -491,6 +426,8 @@ function save(type: string, node: Values): boolean {
   const check = (value: Values) => [
     ...(entry.validate(value) ? [] : problems(entry.validate)),
     ...emptyRequired(entry.schema, value).filter(({ path }) => /\/\d+(\/|$)/.test(path)),
+    // A row repeating another's unique value is refused, each naming the other (unique.ts).
+    ...uniqueClashes(entry.schema, value),
   ];
   const origins = originsOf(entry.fields, submitted, originOf);
   const kept = keptOnSave(entry.schema, ownOf(entry, node), submitted, check, origins);

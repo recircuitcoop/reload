@@ -13,6 +13,7 @@ import type { JsonSchema } from "../packages/declaration";
 import {
   conditionHolds,
   isAdvanced,
+  isUnique,
   isMultiline,
   pathKind,
   reloadOptions,
@@ -88,6 +89,10 @@ export interface Field {
   readonly shown?: ShownWhen;
   /** A group's fields, or a table's columns. */
   readonly fields?: readonly Field[];
+  /** What a table calls one of its rows (its row's `title`): "Add recorder", "recorder 2". */
+  readonly rowLabel?: string;
+  /** `reload.unique` on a table's column: no two rows may hold the same value in it. */
+  readonly unique?: true;
 }
 
 /**
@@ -260,7 +265,14 @@ function fieldOf(key: string, property: JsonSchema, required: boolean, inRow = f
     field.fields = formModel(property, inRow).fields;
   }
   if (control === "table") {
-    field.fields = formModel(rowSchemaOf(property) as JsonSchema, true).fields;
+    const row = rowSchemaOf(property) as JsonSchema;
+    field.fields = formModel(row, true).fields;
+    if (typeof row["title"] === "string" && row["title"] !== "") {
+      field.rowLabel = row["title"];
+    }
+  }
+  if (isUnique(property)) {
+    field.unique = true;
   }
   return field;
 }

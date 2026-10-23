@@ -379,9 +379,15 @@ test("the form in the real editor: every control, required marked, rows added, r
     const rows = table.getByTestId(/^reload-row-/);
     await table.getByTestId("reload-action-add").dispatchEvent("click");
     await expect(rows).toHaveCount(3);
+    // The added row holds its columns' defaults, so Remove asks first, on the row.
     await table
       .getByTestId("reload-row-volumes.2")
       .getByTestId("reload-action-remove")
+      .dispatchEvent("click");
+    await expect(rows).toHaveCount(3);
+    await table
+      .getByTestId("reload-row-volumes.2")
+      .getByTestId("reload-action-remove-now")
       .dispatchEvent("click");
     await expect(rows).toHaveCount(2);
     await table
@@ -389,7 +395,14 @@ test("the form in the real editor: every control, required marked, rows added, r
       .getByTestId("reload-action-up")
       .dispatchEvent("click");
     await expect(field("volumes.0.name")).toHaveValue("b");
-    // The list column of a row: one more value, typed in.
+    // The list column of a row, behind the row's More (its first three columns are drawn): one
+    // more value, typed in.
+    await expect(form.getByTestId("reload-list-volumes.1.globs")).toBeHidden();
+    await table
+      .getByTestId("reload-row-volumes.1")
+      .getByTestId("reload-action-more")
+      .dispatchEvent("click");
+    await expect(form.getByTestId("reload-list-volumes.1.globs")).toBeVisible();
     await form.getByTestId("reload-item-add-volumes.1.globs").dispatchEvent("click");
     await field("volumes.1.globs.1").fill("*.flac");
     // Browse… chooses a folder with the native dialog, answered here as a person would.
@@ -468,10 +481,10 @@ test("the form in the real editor: every control, required marked, rows added, r
     await frame.locator("#node-dialog-ok").dispatchEvent("click");
     const notice = frame.locator(".red-ui-notification").last();
     await expect(notice).toContainText(
-      'Not saved: Count: must be 1 or more, not "0". Volumes, row 1, Path: must not be empty.',
+      'Not saved: Count: must be 1 or more, not "0". Volumes, Volume 1, Path: must not be empty.',
     );
     await expect(notice).toContainText(
-      "Volumes, row 1, Key: is a secret no credential can hold, so it is not kept.",
+      "Volumes, Volume 1, Key: is a secret no credential can hold, so it is not kept.",
     );
     expect(await read()).toEqual({ ...saved, label: "Kept" });
     // Opened again, once the tray has closed: everything typed, each reason beside its field.

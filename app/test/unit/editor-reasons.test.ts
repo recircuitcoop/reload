@@ -149,6 +149,17 @@ function reasons(form: Element): Record<string, string> {
   );
 }
 
+/** The row at `path` removed with its Remove, answering its question when it asks one. */
+function removed(form: Element, path: string): void {
+  const line = form.querySelector(`[data-reload-row='${path}']`);
+  const press = (action: string) =>
+    [...(line?.children ?? [])]
+      .find((child) => child.getAttribute("data-reload-action") === action)
+      ?.dispatchEvent(new Event("click"));
+  press("remove");
+  line?.querySelector<HTMLButtonElement>("[data-reload-action='remove-now']")?.click();
+}
+
 const field = (form: Element, path: string): HTMLInputElement => {
   const found = form.querySelector<HTMLInputElement>(`[data-reload-field="${path}"]`);
   if (found === null) throw new Error(`no field ${path}`);
@@ -301,11 +312,7 @@ describe("a save of a table with required values", () => {
     const form = opened(TYPE, node);
     field(form, "volumes.1.label").value = "";
     // The third recorder's only take removed: it then holds no take.
-    form
-      .querySelector<HTMLButtonElement>(
-        "[data-reload-row='volumes.2.takes.0'] [data-reload-action='remove']",
-      )
-      ?.click();
+    removed(form, "volumes.2.takes.0");
     forms().save(TYPE, node);
     // Each refused row keeps the row it was drawn from; the others are saved.
     expect(node["volumes"]).toEqual([
@@ -331,11 +338,7 @@ describe("a save of a table with required values", () => {
     expect(forms().validate(TYPE, node, "volumes")).toBe(true);
     // Emptied by a save, the table is saved empty, and the node is held again.
     form = opened(TYPE, node);
-    form
-      .querySelector<HTMLButtonElement>(
-        "[data-reload-row='volumes.0'] > [data-reload-action='remove']",
-      )
-      ?.click();
+    removed(form, "volumes.0");
     forms().save(TYPE, node);
     expect(node["volumes"]).toEqual([]);
     expect(forms().validate(TYPE, node, "volumes")).toContain("is required and holds no recorder");

@@ -114,7 +114,7 @@ function plainMessage(message: string): string {
 /**
  * One problem as "<Title>: <what to do>.", against `schema`, the object its path starts in. The
  * title stands as a label, exactly as written, never inside a sentence; a table's row is
- * "<table title>, row N, <column title>: …".
+ * "<table title>, <row title> N, <column title>: …" ("row" when the row has no title).
  */
 function describedProblem(schema: JsonSchema, path: string, message: string): string {
   if (path === "") {
@@ -131,11 +131,13 @@ function describedProblem(schema: JsonSchema, path: string, message: string): st
   if (row > 0) {
     const table = `/${segments.slice(0, row).join("/")}`;
     const rest = segments.slice(row + 1);
-    const where = `${nameAt(schema, table)}, row ${String(Number(segments[row]) + 1)}`;
+    const rows = rowSchemaOf(propertyAt(schema, table) ?? {}) ?? {};
+    // A row is named by what its package calls it (its row's title), else "row".
+    const noun = typeof rows["title"] === "string" && rows["title"] !== "" ? rows["title"] : "row";
+    const where = `${nameAt(schema, table)}, ${noun} ${String(Number(segments[row]) + 1)}`;
     if (rest.length === 0) {
       return `${where}: ${plainMessage(message)}.`;
     }
-    const rows = rowSchemaOf(propertyAt(schema, table) ?? {}) ?? {};
     return `${where}, ${describedProblem(rows, `/${rest.join("/")}`, message)}`;
   }
   const name = nameAt(schema, path);

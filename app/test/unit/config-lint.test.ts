@@ -7,6 +7,7 @@
 import { describe, expect, it } from "vitest";
 
 import { AjvSchemaValidator } from "../../src/adapters/schema/ajv-validator";
+import { formModel } from "../../src/domain/forms/form-model";
 import { parseDeclaration } from "../../src/domain/packages/declaration";
 import { duplicateKeyProblems, duplicateKeys } from "../../src/domain/packages/duplicate-keys";
 
@@ -366,5 +367,127 @@ describe("a type's config, judged as the form draws it", () => {
       "a~1b: is declared twice in one object, and JSON keeps only the last; give each its own name",
     ]);
     expect(duplicateKeys('[ {}, [], "x", {"a": {"a": 1}} ]')).toEqual([]);
+  });
+});
+
+describe("a table's row noun and unique column", () => {
+  const column = (more: Record<string, unknown>) => ({ title: "Name", ...more });
+  const unique = { reload: { unique: true } };
+
+  it("names its row by its items' title, at every level of three nested tables", () => {
+    const takes = table(
+      { file: text({ title: "File", reload: { path: "file" } }) },
+      { title: "Takes" },
+    );
+    takes.items = { ...takes.items, title: "take" };
+    const recorders = table({ label: text(), takes });
+    recorders.items = { ...recorders.items, title: "recorder" };
+    const libraries = table(
+      { name: text(), recorders },
+      { title: "Libraries", description: "Each library" },
+    );
+    libraries.items = { ...libraries.items, title: "library" };
+    expect(problemsOf({ libraries })).toEqual([]);
+    const [top] = formModel({ properties: { libraries } }).fields;
+    expect(top).toMatchObject({
+      control: "table",
+      label: "Libraries",
+      help: "Each library",
+      required: false,
+      rowLabel: "library",
+    });
+    const middle = top?.fields?.find((field) => field.key === "recorders");
+    expect(middle?.rowLabel).toBe("recorder");
+    const deepest = middle?.fields?.find((field) => field.key === "takes");
+    expect(deepest?.rowLabel).toBe("take");
+    expect(deepest?.fields?.map((field) => [field.key, field.pathKind])).toEqual([
+      ["file", "file"],
+    ]);
+  });
+
+  it("holds one column of every control in a row, each with its own constraints and attributes", () => {
+    const every = {
+      title: text({ description: "What to call it", default: "Zoom H6" }),
+      interval: { type: "number", title: "Interval", minimum: 1, maximum: 60, multipleOf: 5 },
+      quality: { type: "string", title: "Quality", enum: ["low", "high"] },
+      formats: {
+        type: "array",
+        title: "Formats",
+        uniqueItems: true,
+        items: { enum: ["wav", "mp3"] },
+      },
+      root: text({ title: "Root", reload: { path: "folder" } }),
+      extra: { type: "array", title: "Extra", items: { type: "string", reload: { path: "file" } } },
+    };
+    const volumes = { ...table(every), items: { ...table(every).items, required: ["title"] } };
+    expect(problemsOf({ volumes })).toEqual([]);
+    const columns = formModel({ properties: { volumes } }).fields[0]?.fields ?? [];
+    expect(columns.map((field) => field.control)).toEqual([
+      "text",
+      "number",
+      "select",
+      "multiselect",
+      "path",
+      "list",
+    ]);
+    expect(columns[0]).toMatchObject({
+      help: "What to call it",
+      required: true,
+      default: "Zoom H6",
+    });
+    expect(columns[1]).toMatchObject({ min: 1, max: 60, step: 5 });
+    expect(columns[2]?.options).toEqual(["low", "high"]);
+    expect(columns[3]?.options).toEqual(["wav", "mp3"]);
+    expect(columns[4]?.pathKind).toBe("folder");
+    expect(columns[5]?.element?.pathKind).toBe("file");
+  });
+
+  it("accepts unique on a text, a number, a path or a choice column, and on a nested table's own column", () => {
+    for (const marked of [
+      text(unique),
+      { type: "number", title: "N", ...unique },
+      { type: "integer", title: "N", ...unique },
+      text({ reload: { path: "file", unique: true } }),
+      { type: "string", title: "C", enum: ["one", "two"], ...unique },
+    ]) {
+      expect(problemsOf({ volumes: table({ label: marked }) })).toEqual([]);
+    }
+    const takes = table({ file: text({ reload: { path: "file", unique: true } }) });
+    expect(problemsOf({ volumes: table({ label: text(unique), takes }) })).toEqual([]);
+    const [volumes] = formModel({
+      properties: { volumes: table({ label: text(unique), takes }) },
+    }).fields;
+    expect(volumes?.fields?.[0]?.unique).toBe(true);
+    expect(volumes?.fields?.[1]?.fields?.[0]?.unique).toBe(true);
+  });
+
+  it("refuses unique on a column no row can be told apart by, outside a row, or twice in a row, naming each", () => {
+    const refused: [Record<string, unknown>, string][] = [
+      [text({ reload: { multiline: true, unique: true } }), "several lines of text cannot tell one row from another: mark a text, number or choice"],
+      [{ type: "boolean", title: "On", ...unique }, "a yes or no cannot tell one row from another: mark a text, number or choice"],
+      [{ type: "array", title: "F", uniqueItems: true, items: { enum: ["one", "two"] }, ...unique }, "a list or a table cannot tell one row from another: mark a text, number or choice"],
+      [text({ writeOnly: true, ...unique }), "a secret cannot tell one row from another: mark a text, number or choice"],
+      [{ type: "array", title: "T", items: { type: "string" }, ...unique }, "a list or a table cannot tell one row from another: mark a text, number or choice"],
+      [{ ...table({ label: text() }), title: "Takes", ...unique }, "a list or a table cannot tell one row from another: mark a text, number or choice"],
+    ]; // prettier-ignore
+    for (const [marked, message] of refused) {
+      expect(problemsOf({ volumes: table({ label: marked }) })).toEqual([
+        `${AT}/volumes/items/properties/label/reload/unique: ${message}`,
+      ]);
+    }
+    expect(problemsOf({ label: text(unique) })).toEqual([
+      `${AT}/label/reload/unique: only a column of a table's row can be unique among the rows`,
+    ]);
+    expect(problemsOf({ volumes: table({ label: text(unique), volume_uuid: column({ type: "string", ...unique }) }) })).toEqual([
+      `${AT}/volumes/items/properties: "label" and "volume_uuid" are both unique: a row has one`,
+    ]); // prettier-ignore
+  });
+
+  it("refuses a unique marking that is not true or false", () => {
+    for (const marking of ["yes", 1, null]) {
+      expect(
+        problemsOf({ volumes: table({ label: text({ reload: { unique: marking } }) }) }),
+      ).toContain(`${AT}/volumes/items/properties/label/reload/unique: must be boolean`);
+    }
   });
 });

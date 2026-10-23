@@ -7,6 +7,7 @@
 import { health, type FlowHealth } from "../domain/flows/health";
 import { wireOrder, type TabNode } from "../domain/flows/tab";
 import { configOf, emptyRequired, missingSecrets } from "../domain/forms/coerce";
+import { uniqueClashes } from "../domain/forms/unique";
 import { secretKeys, withoutSecrets } from "../domain/forms/form-model";
 import type { LoadedType } from "../domain/packages/declaration";
 import type { Run, RunState } from "../domain/runs/run";
@@ -165,7 +166,12 @@ export async function isSetUp(
 ): Promise<boolean> {
   const config = configOf(type.config, node);
   const plain = withoutSecrets(type.config);
-  if (deps.validator.check(plain, config).length + emptyRequired(plain, config).length > 0) {
+  const judged = [
+    ...deps.validator.check(plain, config),
+    ...emptyRequired(plain, config),
+    ...uniqueClashes(plain, config),
+  ];
+  if (judged.length > 0) {
     return false;
   }
   // `config` never holds a secret: Node-RED keeps them apart, as credentials. A required one is

@@ -101,3 +101,9 @@ export function shownWhen(property: JsonSchema): ShownWhen | null {
 export function conditionHolds(condition: ShownWhen, value: unknown): boolean {
   return value === condition.equals;
 }
+
+/** Whether a table's column declares `reload.unique`: no two rows may share its value. */
+export function isUnique(property: JsonSchema): boolean {
+  const annotation = property[RELOAD_KEYWORD];
+  return isRecord(annotation) && annotation["unique"] === true;
+}
