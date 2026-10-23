@@ -1,12 +1,14 @@
 // The settings and dependencies of a node process (node-process.ts), apart so that file
 // stays under the 600-line limit (plan 0018 §2.3).
 
+import * as fs from "node:fs";
+
 import { DEFAULT_QUEUE, type QueueSettings } from "../../domain/journal/queue";
 import { DEFAULT_CRASH_LOOP, type CrashLoopSettings } from "../../domain/supervision/breaker";
 import type { Clock } from "../../ports/clock";
 import type { JournalStore } from "../../ports/journal-store";
 import type { Logger, SecretSink } from "../../ports/logger";
-import type { HeldInputs } from "../../ports/node-process";
+import type { HeldInputs, NodeProcessSpec } from "../../ports/node-process";
 import type { Notifier } from "../../ports/notifier";
 import type { ResourceWatchdog } from "../../ports/resource-watch";
 import type { NodeCrashSink } from "../../ports/telemetry";
@@ -58,4 +60,20 @@ export interface NodeProcessDeps {
   readonly watchdog?: ResourceWatchdog;
   /** Told which runs have inputs held at the queue bound (plan 0022 §C); absent in most tests. */
   readonly held?: HeldInputs;
+}
+
+/**
+ * Before an instance's first spawn: the process tree's warning, every secret registered so no
+ * line of the node is written unredacted (spec 11.1), and its data directory.
+ */
+export function prepareInstance(spec: NodeProcessSpec, deps: NodeProcessDeps, who: string): void {
+  if (deps.tree.blocked !== null) {
+    deps.logger.warn(`${who} ${deps.tree.blocked}`);
+  }
+  for (const secret of Object.values(spec.credentials)) {
+    if (secret !== "") {
+      deps.secrets.protect(secret);
+    }
+  }
+  fs.mkdirSync(spec.dataDir, { recursive: true });
 }

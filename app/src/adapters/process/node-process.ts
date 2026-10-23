@@ -2,12 +2,10 @@
 // environment in its package directory, `start`, `ready` within 30 s, every frame routed, and
 // `close` → `closed` → exit (killed 5 s after `close`). An unexpected exit fails the `sent`
 // inputs, keeps the `awaiting` ones, and respawns after 1 s until the crash-loop breaker trips
-// (plan 0018 §7). Identity is bound here (spec 11.2): the runtime stamps every envelope field; a
-// process emits only on its declared ports, for its own live input ids. Inputs are journaled
-// before they are sent (spec §7); an action view's timeout fires from its journaled deadline.
+// (plan 0018 §7). The runtime stamps every envelope field, and a process emits only on its own
+// ports and live input ids (spec 11.2); inputs are journaled before they are sent (spec §7).
 
 import { spawn, type ChildProcessWithoutNullStreams as ChildProcess } from "node:child_process";
-import * as fs from "node:fs";
 
 import type { CloseReason } from "../../domain/journal/entry";
 import type { QueueReport } from "../../domain/journal/queue";
@@ -41,7 +39,7 @@ import {
   type RuntimeFrame,
 } from "./codec";
 import { inputJournalFor, type Admitted, type Input, type InputJournal } from "./input-journal";
-import type { NodeProcessDeps } from "./node-process-settings";
+import { prepareInstance, type NodeProcessDeps } from "./node-process-settings";
 import { watchExit } from "./exit-watch";
 import { RefusedPorts } from "./refused-ports";
 import { NodeResourceGuard } from "./resource-guard";
@@ -88,16 +86,7 @@ class ChildNodeProcess implements NodeProcess {
     this.#deadlines = new ViewDeadlines(deps.clock, (inputId) => {
       this.#timedOut(inputId);
     });
-    if (deps.tree.blocked !== null) {
-      deps.logger.warn(`${this.#who} ${deps.tree.blocked}`);
-    }
-    // Registered before the first spawn: no line of this node is written unredacted (spec 11.1).
-    for (const secret of Object.values(spec.credentials)) {
-      if (secret !== "") {
-        deps.secrets.protect(secret);
-      }
-    }
-    fs.mkdirSync(spec.dataDir, { recursive: true });
+    prepareInstance(spec, deps, this.#who);
     // Created again (a redeploy): a crash loop from here on is news again.
     deps.notifier.clear("node-stopped", spec.identity.name || spec.identity.typeId);
     this.#refused = new RefusedPorts(spec, deps.notifier, (message) => {
