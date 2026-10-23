@@ -298,6 +298,10 @@ const CALLS: Record<string, { call: (api: AppApi) => Promise<unknown>; sent: unk
     call: (api) => api.showLog(),
     sent: [IPC.generalCall, { op: "log.show", args: null }],
   },
+  nodeProcesses: {
+    call: (api) => api.nodeProcesses(),
+    sent: [IPC.generalCall, { op: "nodes.list", args: null }],
+  },
   editorPalette: { call: (api) => api.editorPalette(), sent: [IPC.editorPalette] },
   answerQuit: { call: (api) => api.answerQuit("cancel"), sent: [IPC.quitAnswer, "cancel"] },
   launchAtLogin: {

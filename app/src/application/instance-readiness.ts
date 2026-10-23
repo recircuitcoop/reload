@@ -46,6 +46,8 @@ export function enabledNodes(flows: readonly unknown[]): { id: string; type: str
 
 interface Tracked {
   readonly package: string;
+  /** Its name for a person: its name on the canvas, else its type id. */
+  readonly name: string;
   readonly process: NodeProcess;
   /** The last status its host was given; null before the first. */
   status: NodeStatus | null;
@@ -110,6 +112,15 @@ class Closing implements NodeProcess {
   }
 }
 
+/** One node instance, as the window's process list shows it. */
+export interface NodeRow {
+  readonly name: string;
+  readonly package: string;
+  readonly pid: number | null;
+  readonly state: "running" | "starting" | "restarting" | "stopped";
+  readonly why: string | null;
+}
+
 export class InstanceReadiness {
   readonly #running = new Map<string, Tracked>();
 
@@ -127,7 +138,13 @@ export class InstanceReadiness {
           },
         });
         const process = launcher.start(spec, watched);
-        const tracked: Tracked = { package: spec.identity.package, process, status: null };
+        const { name, typeId } = spec.identity;
+        const tracked: Tracked = {
+          package: spec.identity.package,
+          name: name || typeId,
+          process,
+          status: null,
+        };
         statuses.tracked = tracked;
         this.#running.set(id, tracked);
         return new Closing(process, () => {
@@ -169,6 +186,30 @@ export class InstanceReadiness {
    * The `node.status` call: `{nodeId}` in; whether that instance runs in this generation, and the
    * last status it reported (null before its first, and when it is not running).
    */
+  /** `node.status` (one instance's last status) and `nodes.list` (every process, with its state). */
+  call(op: "node.status" | "nodes.list", args: unknown): OpResult {
+    return op === "nodes.list" ? { ok: true, value: this.list() } : this.status(args);
+  }
+
+  /**
+   * Every node instance of this generation as a person reads it (the old window's process list):
+   * running, starting, restarting after an exit, or stopped for good, with why.
+   */
+  list(): NodeRow[] {
+    return [...this.#running.values()].map(({ name, process, ...rest }) => {
+      const stopped = process.stopped ?? null;
+      const state: NodeRow["state"] =
+        stopped !== null
+          ? "stopped"
+          : process.pid === null
+            ? "restarting"
+            : process.ready === true
+              ? "running"
+              : "starting";
+      return { name, package: rest.package, pid: process.pid, state, why: stopped };
+    });
+  }
+
   status(args: unknown): OpResult {
     const nodeId =
       typeof args === "object" && args !== null ? (args as { nodeId?: unknown }).nodeId : null;

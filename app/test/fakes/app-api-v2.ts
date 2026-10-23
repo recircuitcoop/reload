@@ -67,6 +67,7 @@ export const V2_UNUSED: AppApiV2 = {
   setRetention: never,
   showFlowsFile: never,
   logFile: never,
+  nodeProcesses: never,
   showLog: never,
   limits: never,
   setLimits: never,

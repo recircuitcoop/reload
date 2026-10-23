@@ -23,11 +23,12 @@ import type { Answer } from "../ui/answer";
 import {
   RETENTION_CHOICES,
   type LogFile,
+  type NodeProcessRow,
   type LimitValues,
   type Retention,
   type StatusView,
 } from "../ui/general-contract";
-import { guarded, opOf, refused, unknownOp } from "./answer";
+import { fromChild, guarded, opOf, refused, unknownOp } from "./answer";
 import { IPC } from "./ipc";
 import type { PendingQuestions } from "./views";
 
@@ -36,7 +37,7 @@ export interface GeneralCallsDeps {
   /** Every supervised child: the runtime and the services process. */
   readonly children: readonly Pick<Supervisor, "status" | "onStatus">[];
   /** The runtime's supervisor: the banner's Down sentence names its crash-loop limit. */
-  readonly runtime: Pick<Supervisor, "crashLoop">;
+  readonly runtime: Pick<Supervisor, "crashLoop" | "call">;
   readonly services: Pick<Supervisor, "call">;
   readonly pending: PendingQuestions;
   /** The notices current now: a refused flows file is shown in the window too. */
@@ -110,7 +111,9 @@ export function wireGeneralCalls(deps: GeneralCallsDeps): void {
     return guarded(
       op,
       logger,
-      async (): Promise<Answer<StatusView | Retention | LogFile | LimitValues | null>> => {
+      async (): Promise<
+        Answer<StatusView | Retention | LogFile | LimitValues | readonly NodeProcessRow[] | null>
+      > => {
         switch (op) {
           case "status.get":
             await readAnytype();
@@ -141,6 +144,8 @@ export function wireGeneralCalls(deps: GeneralCallsDeps): void {
             }
             deps.log.shell.showItemInFolder(deps.log.file);
             return { ok: true, value: { path: deps.log.file } };
+          case "nodes.list":
+            return fromChild(await deps.runtime.call("nodes.list", null), op, logger);
           case "limits.get":
             return { ok: true, value: limits() };
           case "limits.set": {

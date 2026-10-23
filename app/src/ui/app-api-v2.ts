@@ -28,6 +28,7 @@ import type {
   ChosenFolder,
   ChosenPath,
   LogFile,
+  NodeProcessRow,
   PackagesChanged,
   PackagesView,
   LimitValues,
@@ -209,4 +210,6 @@ export interface AppApiV2 {
   logFile(): Promise<Answer<LogFile>>;
   /** Show the log in the file manager; refused when there is none. */
   showLog(): Promise<Answer<LogFile>>;
+  /** Every node process of the runtime, with its state (General › Advanced). */
+  nodeProcesses(): Promise<Answer<readonly NodeProcessRow[]>>;
 }

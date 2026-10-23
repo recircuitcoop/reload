@@ -897,6 +897,15 @@ describe("AppApi v2 calls, through the shell to its processes", () => {
     expect(h.revealed).toEqual([LOG_FILE]);
   });
 
+  it("the node processes: the runtime's list, each with its state, and a refusal while it is down", async () => {
+    const h = harness();
+    const rows = [{ name: "ping", package: "monty", pid: 7, state: "running", why: null }];
+    h.runtime.answers.set("nodes.list", () => ({ ok: true, value: rows }));
+    expect(await h.api.nodeProcesses()).toEqual({ ok: true, value: rows });
+    h.runtime.answers.set("nodes.list", () => ({ ok: false, error: "the runtime is restarting" }));
+    expect((await h.api.nodeProcesses()).ok).toBe(false);
+  });
+
   it("the log: none could be opened, so there is no place to name and nothing to show", async () => {
     const h = harness({ logFile: null });
     expect(await h.api.logFile()).toEqual({ ok: true, value: { path: null } });

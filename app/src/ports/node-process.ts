@@ -183,6 +183,8 @@ export interface NodeProcess {
    * every instance of its types (WI-0018-17); undefined where a host cannot say.
    */
   readonly ready?: boolean;
+  /** Why it gets no more processes (the crash-loop limit, a type never restarted); else null. */
+  readonly stopped?: string | null;
   /**
    * A message arrived at the instance (Node-RED's `input`). It is journaled, then its `input`
    * frame is written (spec 7.1), unless the queue is at its bound (spec 7.6). A message this

@@ -115,6 +115,7 @@ export function appApiV2Over(ipc: RendererIpc): AppApiV2 {
     showFlowsFile: () => general("flowsFile.show"),
     logFile: () => general("log.get"),
     showLog: () => general("log.show"),
+    nodeProcesses: () => general("nodes.list"),
     limits: () => general("limits.get"),
     setLimits: (limits) => general("limits.set", { limits }),
   };

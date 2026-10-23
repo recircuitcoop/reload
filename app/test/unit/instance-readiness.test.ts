@@ -14,6 +14,7 @@ class FakeProcess implements NodeProcess {
   readonly calls: string[] = [];
   pid: number | null = 7;
   ready = false;
+  stopped: string | null = null;
   #closing: (() => void) | null = null;
   input(): string | null {
     this.calls.push("input");
@@ -266,5 +267,46 @@ describe("an instance's last status (node.status)", () => {
     });
     expect(readiness.status({})).toEqual({ ok: false, error: "node.status takes {nodeId}" });
     expect(readiness.status(null)).toMatchObject({ ok: false });
+  });
+});
+
+describe("the window's list of node processes (nodes.list)", () => {
+  it("lists every process of this generation with its state, and why one stopped for good", () => {
+    const h = launched();
+    h.start("n1", "monty");
+    h.start("n2", "monty");
+    h.start("n3", "whodunnit");
+    h.start("n4", "whodunnit");
+    // The second is left as started: a process that has not sent ready yet.
+    const [running, , restarting, stopped] = h.started as [
+      FakeProcess,
+      FakeProcess,
+      FakeProcess,
+      FakeProcess,
+    ];
+    running.ready = true;
+    restarting.pid = null;
+    stopped.pid = null;
+    stopped.stopped = "the node process is stopped after repeated exits";
+    expect(h.readiness.call("nodes.list", null)).toEqual({
+      ok: true,
+      value: [
+        { name: "ping", package: "monty", pid: 7, state: "running", why: null },
+        { name: "ping", package: "monty", pid: 7, state: "starting", why: null },
+        { name: "ping", package: "whodunnit", pid: null, state: "restarting", why: null },
+        {
+          name: "ping",
+          package: "whodunnit",
+          pid: null,
+          state: "stopped",
+          why: "the node process is stopped after repeated exits",
+        },
+      ],
+    });
+    // node.status still answers as before, through the same call.
+    expect(h.readiness.call("node.status", { nodeId: "n1" })).toMatchObject({
+      ok: true,
+      value: { running: true },
+    });
   });
 });

@@ -21,7 +21,7 @@ import { Field } from "../components/molecules/Field";
 import { KeyValue } from "../components/molecules/KeyValue";
 import { GeneralSection } from "../components/organisms/GeneralSection";
 import { LIMIT_FIELDS, limitErrors, limitsToSave, limitsTyped } from "../general";
-import type { LimitValues } from "../general-contract";
+import type { LimitValues, NodeProcessRow } from "../general-contract";
 import { useChildren } from "../store";
 import { t, type PlainKey } from "../strings";
 
@@ -45,6 +45,43 @@ const CHILD_LABEL: Readonly<Record<ChildStatus["child"], PlainKey>> = {
 /** "4242 · 31011 · 3": the process, the port and the generation, blank where there is none. */
 const processLine = (status: ChildStatus) =>
   [status.pid ?? "–", status.port ?? "–", status.generation].map(String).join(" · ");
+
+/** A node process's state in a pill: running, coming up, coming back, or stopped for good. */
+const NODE_WORD: Readonly<Record<NodeProcessRow["state"], readonly [StatusPillState, PlainKey]>> = {
+  running: ["running", "status.running"],
+  starting: ["waiting", "status.starting"],
+  restarting: ["waiting", "status.restarting"],
+  stopped: ["failed", "status.stopped"],
+};
+
+/** Each of the runtime's node processes with its state and pid, and why one stopped for good. */
+function NodeRows({ rows }: { readonly rows: readonly NodeProcessRow[] }) {
+  return (
+    <div data-testid="general-advanced-nodes" className="flex flex-col">
+      <KeyValue
+        kind="text"
+        label={t("general.advanced.nodes")}
+        value={rows.length === 0 ? t("general.advanced.nodes.none") : ""}
+      />
+      {rows.map((row, index) => {
+        const [look, word] = NODE_WORD[row.state];
+        return (
+          <KeyValue
+            key={`${row.name}-${String(index)}`}
+            kind="pill"
+            label={row.name}
+            value={
+              <span data-testid="general-advanced-node" data-state={row.state}>
+                <StatusPill state={look}>{t(word)}</StatusPill>{" "}
+                {[row.pid ?? "–", row.why ?? ""].filter((part) => part !== "").join(" · ")}
+              </span>
+            }
+          />
+        );
+      })}
+    </div>
+  );
+}
 
 function ChildRows({ status }: { readonly status: ChildStatus }) {
   const [look, word] = CHILD_WORD[status.state];
@@ -79,7 +116,14 @@ export function AdvancedSection({
   const [secrets, setSecrets] = useState<SecretStorageStatus | null>(null);
   const [legacy, setLegacy] = useState<readonly string[]>([]);
   const [log, setLog] = useState<string | null>(null);
+  const [nodes, setNodes] = useState<readonly NodeProcessRow[] | null>(null);
   useEffect(() => {
+    api.nodeProcesses().then(
+      (answer) => {
+        if (answer.ok) setNodes(answer.value);
+      },
+      () => undefined,
+    );
     api.secretStorage().then(setSecrets, () => undefined);
     api.legacyPackages().then(setLegacy, () => undefined);
     api.logFile().then(
@@ -114,6 +158,7 @@ export function AdvancedSection({
         {statuses.map((status) => (
           <ChildRows key={status.child} status={status} />
         ))}
+        {nodes === null ? null : <NodeRows rows={nodes} />}
         {anytype === null ? null : (
           <div data-testid="general-advanced-anytype" data-state={anytype.state}>
             <KeyValue

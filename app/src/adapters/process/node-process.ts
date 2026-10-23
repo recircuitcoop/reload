@@ -74,7 +74,7 @@ class ChildNodeProcess implements NodeProcess {
   #closing = false;
   #closedAck = false;
   /** Why no process starts again (an input's refusal), or null while one may. */
-  #stopped: string | null = null;
+  stopped: string | null = null;
   #timers: Cancel[] = [];
 
   constructor(spec: NodeProcessSpec, host: NodeProcessHost, deps: NodeProcessDeps) {
@@ -113,8 +113,8 @@ class ChildNodeProcess implements NodeProcess {
 
   input(message: InputMessage, delivery: InputDelivery): string | null {
     const replayed = this.#journal.claim(message);
-    if (this.#closing || this.#stopped !== null) {
-      const why = this.#closing ? "the node process is closing" : (this.#stopped ?? "");
+    if (this.#closing || this.stopped !== null) {
+      const why = this.#closing ? "the node process is closing" : (this.stopped ?? "");
       this.#log(
         "warn",
         `refused ${replayed === undefined ? "an input" : `input ${replayed}`}: ${why}`,
@@ -320,7 +320,7 @@ class ChildNodeProcess implements NodeProcess {
 
   /** The crash-loop limit, or a type never restarted: no more processes until re-created. */
   #stop({ text, refusal, notice }: ReturnType<typeof stoppedFor>): void {
-    this.#stopped = refusal;
+    this.stopped = refusal;
     this.#log("error", `${text}; no more restarts until it is redeployed`);
     this.#host.status({ fill: "red", shape: "dot", text });
     for (const [id, input] of this.#inputs) {
@@ -531,7 +531,7 @@ class ChildNodeProcess implements NodeProcess {
     const took = this.#deps.clock.now() - (input.at ?? this.#deps.clock.now());
     this.#deps.steps?.(stepSignal(this.#spec.identity, took, error === undefined, failure));
     // A place under the bound: the oldest held input goes next (spec 7.6).
-    const next = this.#closing || this.#stopped !== null ? undefined : this.#journal.nextHeld();
+    const next = this.#closing || this.stopped !== null ? undefined : this.#journal.nextHeld();
     if (next !== undefined) {
       const admitted = this.#journal.admit(next.message, next.delivery, this.#inputs.size);
       if (admitted !== null) {

@@ -533,9 +533,9 @@ serveShell({
     if (op === "node.options") {
       return nodeOptions.call(args);
     }
-    // One instance's last status, from the processes of this generation.
-    if (op === "node.status") {
-      return Promise.resolve(readiness.status(args));
+    // One instance's last status, and every one's state, from the processes of this generation.
+    if (op === "node.status" || op === "nodes.list") {
+      return Promise.resolve(readiness.call(op, args));
     }
     if (
       views === null ||

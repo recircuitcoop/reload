@@ -368,6 +368,9 @@ export const STRINGS = {
   "general.advanced.legacy.delete": "Delete them", // decided
   "general.advanced.log": "Log file", // decided (plan 0031): where the log is, for support
   "general.advanced.log.show": "Show log", // decided (plan 0031): shows the file in its folder
+  "general.advanced.nodes": "Steps running", // decided: the runtime's node processes, each with its state (the old process list)
+  "general.advanced.nodes.none": "No step is running.", // decided
+  "status.starting": "Starting…", // decided
   ...LIMIT_STRINGS,
   "general.aiApps.host": "Address", // decided: the endpoint's host field (owner, 2026-10-15)
   "general.aiApps.port": "Port", // decided: the endpoint's port field

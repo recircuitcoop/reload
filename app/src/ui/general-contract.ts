@@ -110,6 +110,16 @@ export interface LogFile {
   readonly path: string | null;
 }
 
+/** One node instance of the runtime, as General › Advanced lists it (the old process list). */
+export interface NodeProcessRow {
+  readonly name: string;
+  readonly package: string;
+  readonly pid: number | null;
+  readonly state: "running" | "starting" | "restarting" | "stopped";
+  /** Why it is stopped for good; null otherwise. */
+  readonly why: string | null;
+}
+
 /**
  * The person's own resource limits (plan 0031), in the units the settings file writes them:
  * General › Advanced's "Stability defaults".

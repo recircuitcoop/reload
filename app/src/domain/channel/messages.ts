@@ -131,7 +131,8 @@ export type CallOp =
   | "package.ready"
   | "package.reload"
   /** One instance's last status (Setup waits for the folder source's first scan). */
-  | "node.status";
+  | "node.status"
+  | "nodes.list";
 
 const CALL_OPS: readonly string[] = [
   "view.get",
@@ -178,6 +179,7 @@ const CALL_OPS: readonly string[] = [
   "package.ready",
   "package.reload",
   "node.status",
+  "nodes.list",
 ];
 
 /**
