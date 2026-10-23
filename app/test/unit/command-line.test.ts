@@ -474,6 +474,21 @@ describe("the asking process", () => {
     expect(first.printed).toEqual([cancelled]);
   });
 
+  it("status with an unreadable record and nothing running says so at once, then the notices", () => {
+    fs.writeFileSync(runStateFile(), '[{"id":"shell"}]');
+    const { code, out, taken } = asking();
+    expect(code("status")).toBe(0);
+    expect(out()).toBe(
+      "The run-state file could not be read: record 1 has no valid pid.\n" +
+        `It is ${runStateFile()}. No Reload is running, so \`reload --quit --force\` removes ` +
+        "it once nothing it names runs.\n" +
+        "Nothing was refused, and nothing is held back.\n",
+    );
+    // No question was left for a Reload that is not there, and no wait on one.
+    expect(taken).toEqual([]);
+    expect(fs.readdirSync(userData)).toEqual([RUN_STATE_FILENAME]);
+  });
+
   it("quit with an unreadable record and nothing running says what is wrong, where, and what to do", () => {
     fs.writeFileSync(runStateFile(), '[{"id":"shell"}]');
     const { code, out, taken } = asking({ instance: () => ({ code: 0, text: "" }) });

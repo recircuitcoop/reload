@@ -153,12 +153,17 @@ export function ask(command: Asked, deps: AskDeps): number {
   const dir = deps.app.getPath("userData");
   const runState = path.join(dir, RUN_STATE_FILENAME);
   const records = readRunState(runState);
-  if (typeof records === "string" && command === "quit" && !starting(dir, deps)) {
-    // Nothing holds Reload's lock: the record is all that is wrong, and it is said whole.
-    print(
+  if (typeof records === "string" && !starting(dir, deps)) {
+    // Nothing holds Reload's lock: the record is all that is wrong, said whole and at once, not
+    // after a wait on a Reload that is not there.
+    const where =
       `${records}\nIt is ${runState}. No Reload is running, so ` +
-        "`reload --quit --force` removes it once nothing it names runs.\n",
-    );
+      "`reload --quit --force` removes it once nothing it names runs.\n";
+    if (command === "status") {
+      print(where + noticeLines(path.join(dir, deps.notices)).join("\n") + "\n");
+      return 0;
+    }
+    print(where);
     return 1;
   }
   if (!mayRun(records, deps.identity)) {
