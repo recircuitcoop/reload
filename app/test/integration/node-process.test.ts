@@ -136,7 +136,7 @@ describe("a node process", () => {
     }
     expect(node.host.sent).toEqual([]);
     const told = node.logger.lines.filter((line) =>
-      line.text.includes('refused an emit on undeclared port "nope"'),
+      line.text.includes('event refused: an emit on undeclared port "nope"'),
     );
     expect(told).toHaveLength(1);
     // Drawn on the node itself, as the old window drew a refused kind on its plugin's tab.
@@ -156,6 +156,24 @@ describe("a node process", () => {
     expect(notice === undefined ? null : compose(notice).title).toBe(
       'Reload refused what raw (port "nope") sent',
     );
+  });
+
+  it("records an accepted emit and a refused one differently: other words, another level, the reason", async () => {
+    const node = raw();
+    const [, accepted] = send(node.node, { do: "echo", value: { seconds: 12, label: "Boya" } });
+    await waitFor("done", () => accepted.finished);
+    const [, refused] = send(node.node, { do: "undeclared" });
+    await waitFor("done", () => refused.finished);
+    const emitted = node.logger.lines.filter((line) => line.text.includes("event emitted"));
+    expect(emitted.map((line) => line.level)).toEqual(["info"]);
+    expect(emitted[0]?.text).toMatch(
+      /event emitted: rawnode\.out\.v1 on port "out", fields label, seconds$/,
+    );
+    // The field names, never the values: a payload is the person's content.
+    expect(node.logger.lines.some((line) => line.text.includes("Boya"))).toBe(false);
+    const said = node.logger.lines.filter((line) => line.text.includes("event refused"));
+    expect(said.map((line) => line.level)).toEqual(["error"]);
+    expect(said[0]?.text).toMatch(/which its package does not declare$/);
   });
 
   it("withdraws a refused port's notice once its package declares the port", async () => {

@@ -84,7 +84,7 @@ import { printCanary } from "../application/source-log";
 import { Supervisor } from "../application/supervisor";
 import type { UpdateCheck } from "../application/update-check";
 import { APP_HOST, APP_SCHEME, VIEW_PARTITION } from "../domain/views/popout";
-import { DEFAULT_LEVEL, resolveLevel } from "../domain/logging/record";
+import { chosenLevel } from "../domain/logging/record";
 import { SecretRegistry } from "../domain/redaction/registry";
 import {
   CHILD_NAMES,
@@ -151,14 +151,14 @@ if (process.env["RELOAD_MOCK_KEYCHAIN"] === "1") {
 // ── the one log (WI-0018-04): the shell is its only writer ──────────────────────────────
 // A value registered as a secret and then printed by every process, so the e2e gate and the `log` machine proof can show it never reaches the file (plan 0018 §5.4). Unset ordinarily.
 const logCanary = process.env[LOG_CANARY_VARIABLE];
-let logLevel = DEFAULT_LEVEL;
-let levelProblem: string | null = null;
-try {
-  logLevel = resolveLevel(process.env[LOG_LEVEL_VARIABLE]);
-} catch (error) {
-  // A misspelled verbosity is said in the log, written at the default (logs.py:438-442).
-  levelProblem = (error as Error).message;
-}
+// RELOAD_LOG_LEVEL, else the setting; a misspelled one is said in the log, written at the default (logs.py:438-442).
+const shellSettings = new JsonSettingsStore(
+  path.join(app.getPath("userData"), "shell-settings.json"),
+);
+const { level: logLevel, problem: levelProblem } = chosenLevel(
+  process.env[LOG_LEVEL_VARIABLE],
+  () => shellSettings.readLogLevel(),
+);
 const logFile = RotatingLogFile.open(logFilePath);
 const secretRegistry = new SecretRegistry();
 const oneLog = new OneLog({

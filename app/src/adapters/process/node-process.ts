@@ -99,8 +99,8 @@ class ChildNodeProcess implements NodeProcess {
     });
     // Created again (a redeploy): nothing said about the old instance holds any more.
     clearNodeNotices(deps.notifier, this.#subject);
-    this.#refused = new RefusedPorts(spec, deps.notifier, host, (message) => {
-      this.#log("error", message);
+    this.#refused = new RefusedPorts(spec, deps.notifier, host, (level, message) => {
+      this.#log(level, message);
     });
     this.#spawn();
   }
@@ -440,10 +440,9 @@ class ChildNodeProcess implements NodeProcess {
   }
 
   #onEmit(port: string, data: unknown, inputId: string | undefined): void {
-    const index = this.#spec.ports.findIndex((declared) => declared.port === port);
+    const index = this.#refused.judge(port, data); // recorded, or refused and told
     const declared = this.#spec.ports[index];
     if (declared === undefined) {
-      this.#refused.refuse(port);
       return;
     }
     const input = inputId === undefined ? undefined : this.#inputs.get(inputId);

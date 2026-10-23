@@ -49,4 +49,15 @@ describe("JsonSettingsStore", () => {
     stored({ port: true });
     expect(() => store.readEndpoint()).toThrow("a port (a whole number)");
   });
+
+  it("reads the log's verbosity from logging.level, raw, and no level from a logging that is not one", () => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "reload-settings-"));
+    const file = path.join(dir, "shell-settings.json");
+    const store = new JsonSettingsStore(file);
+    expect(store.readLogLevel()).toBeUndefined();
+    fs.writeFileSync(file, JSON.stringify({ logging: { level: "warning" } }));
+    expect(store.readLogLevel()).toBe("warning");
+    fs.writeFileSync(file, JSON.stringify({ logging: "warning" }));
+    expect(store.readLogLevel()).toBeNull();
+  });
 });

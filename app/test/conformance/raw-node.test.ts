@@ -207,7 +207,7 @@ describe("conformance: the raw node (no SDK)", () => {
     await waitFor("done", () => delivery.finished);
     expect(delivery.outputs).toEqual([]);
     expect(raw.host.sent).toEqual([]);
-    expect(raw.logger.has(/refused an emit on undeclared port "nope"/)).toBe(true);
+    expect(raw.logger.has(/event refused: an emit on undeclared port "nope"/)).toBe(true);
   });
 
   it("C6 cancel: a running input ends with error cancelled …, a queued one cancelled before it started", async () => {

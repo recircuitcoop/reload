@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { forEachLine, LineSplitter, type TextSource } from "../../src/domain/logging/lines";
 import {
+  chosenLevel,
   DEFAULT_LEVEL,
   encodeProtect,
   encodeRecord,
@@ -142,5 +143,37 @@ describe("lines out of chunks", () => {
     listeners["data"]?.("a\n");
     listeners["end"]?.();
     expect(seen).toEqual(["a"]);
+  });
+});
+
+describe("the verbosity", () => {
+  it("is a setting: the settings file's logging.level, unless RELOAD_LOG_LEVEL is set", () => {
+    expect(chosenLevel(undefined, () => "warning")).toEqual({
+      level: LEVELS.WARNING,
+      problem: null,
+    });
+    expect(chosenLevel("error", () => "warning")).toEqual({ level: LEVELS.ERROR, problem: null });
+    expect(chosenLevel(undefined, () => undefined)).toEqual({
+      level: DEFAULT_LEVEL,
+      problem: null,
+    });
+  });
+
+  it("refuses a level nobody has, or a setting it cannot read, by saying so and keeping the default", () => {
+    expect(chosenLevel(undefined, () => "loud")).toEqual({
+      level: DEFAULT_LEVEL,
+      problem:
+        "'loud' is not a logging level; expected one of debug, info, warning, error, critical",
+    });
+    expect(chosenLevel(undefined, () => 3).problem).toBe(
+      "the logging.level setting must be a level's name",
+    );
+    const broken = () => {
+      throw new Error("shell-settings.json is not UTF-8 text");
+    };
+    expect(chosenLevel(undefined, broken)).toEqual({
+      level: DEFAULT_LEVEL,
+      problem: "shell-settings.json is not UTF-8 text",
+    });
   });
 });

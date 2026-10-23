@@ -82,6 +82,13 @@ export class JsonSettingsStore
     };
   }
 
+  /** The log's verbosity, raw: domain/logging judges it. */
+  readLogLevel(): unknown {
+    const logging = this.#read()["logging"];
+    // A logging setting that is not an object is no level at all (null): said, never guessed.
+    return isObject(logging) ? logging["level"] : logging === undefined ? undefined : null;
+  }
+
   writeEndpoint(endpoint: StoredEndpoint): void {
     this.#write("mcp", { ...endpoint });
   }

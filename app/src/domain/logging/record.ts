@@ -52,6 +52,29 @@ export interface LogRecord {
 }
 
 /** One verbosity setting as a level number; an Error naming what was wrong otherwise. */
+/**
+ * The verbosity the log is written at: RELOAD_LOG_LEVEL when it is set, else the settings
+ * file's `logging.level` (the old `[logging] level`), else the default. A level nobody has, or a
+ * setting that cannot be read, is said (`problem`) and the default kept: never a failed start.
+ */
+export function chosenLevel(
+  variable: string | undefined,
+  setting: () => unknown,
+): { readonly level: number; readonly problem: string | null } {
+  try {
+    if (variable !== undefined) {
+      return { level: resolveLevel(variable), problem: null };
+    }
+    const stored = setting();
+    if (stored !== undefined && typeof stored !== "string") {
+      return { level: DEFAULT_LEVEL, problem: "the logging.level setting must be a level's name" };
+    }
+    return { level: resolveLevel(stored), problem: null };
+  } catch (error) {
+    return { level: DEFAULT_LEVEL, problem: (error as Error).message };
+  }
+}
+
 export function resolveLevel(value: string | number | undefined): number {
   if (value === undefined) {
     return DEFAULT_LEVEL;
