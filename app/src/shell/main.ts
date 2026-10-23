@@ -374,10 +374,8 @@ async function start(): Promise<DesktopWired["notices"] | null> {
   watchManaged({
     probe: resourceProbeFor(process.platform, undefined, undefined, logger.warn.bind(logger)),
     settings: new JsonSettingsStore(path.join(userDir, "shell-settings.json")),
-    clock: monotonicClock,
-    logger,
-    notifier: notices,
-    signal: process.kill.bind(process),
+    // One line, for the 600-line limit: the clock, the log, the notices and the signal.
+    ...{ clock: monotonicClock, logger, notifier: notices, signal: process.kill.bind(process) },
     children: supervisors.values(),
     anytype: anytypeStarted.then(() => anytypeApp),
   });
