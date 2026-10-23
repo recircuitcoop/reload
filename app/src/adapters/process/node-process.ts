@@ -1,14 +1,10 @@
-// One node instance's process, speaking protocol v2 (spec §3–§6, §11.2).
-//
-// It spawns the process with a minimal environment in its package directory, sends `start`,
-// waits for `ready` (30 s), routes every frame the process writes, and closes it with
-// `close` → `closed` → exit, killing it 5 s after `close`. An unexpected exit fails the inputs
-// the process held (`sent`), keeps the ones waiting on a person (`awaiting`), and respawns
-// after 1 s until the domain crash-loop breaker trips (plan 0018 §7).
-//
-// Identity is bound here (spec 11.2): the runtime stamps every envelope field; a process emits
-// only on its declared ports, for its own live input ids. Inputs are journaled before they are
-// sent (spec §7); an action view's timeout fires from its journaled deadline.
+// One node instance's process, speaking protocol v2 (spec §3–§6, §11.2): spawned with a minimal
+// environment in its package directory, `start`, `ready` within 30 s, every frame routed, and
+// `close` → `closed` → exit (killed 5 s after `close`). An unexpected exit fails the `sent`
+// inputs, keeps the `awaiting` ones, and respawns after 1 s until the crash-loop breaker trips
+// (plan 0018 §7). Identity is bound here (spec 11.2): the runtime stamps every envelope field; a
+// process emits only on its declared ports, for its own live input ids. Inputs are journaled
+// before they are sent (spec §7); an action view's timeout fires from its journaled deadline.
 
 import { spawn, type ChildProcessWithoutNullStreams as ChildProcess } from "node:child_process";
 import * as fs from "node:fs";
