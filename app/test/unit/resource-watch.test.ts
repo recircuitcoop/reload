@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 import { JsonSettingsStore } from "../../src/adapters/fs/settings-store";
 import {
   DEFAULT_WATCH_PACE,
+  KILL_CHECKS,
   readPersonalLimits,
   resourceWatchdog,
 } from "../../src/application/resource-watch";
@@ -46,9 +47,13 @@ function harness(reading: (pid: number) => ResourceSample | null) {
   const sent: string[] = [];
   /** Fail the read this many reads from now (0: the next one); null: none fails. */
   let failIn: number | null = null;
+  let failingAlways = false;
   const probe: ResourceProbe = (pids, hosts = new Set()) => {
     passes.push([...pids]);
     hostsAsked.push([...hosts]);
+    if (failingAlways) {
+      return Promise.reject(new Error("ps: the process table could not be read"));
+    }
     if (failIn !== null) {
       failIn -= 1;
       if (failIn < 0) {
@@ -115,6 +120,9 @@ function harness(reading: (pid: number) => ResourceSample | null) {
     hostsAsked,
     sleep: (ms: number) => {
       skew += ms;
+    },
+    failEveryRead: () => {
+      failingAlways = true;
     },
     failNextPass: (skip = 0) => {
       failIn = skip;
@@ -268,6 +276,35 @@ describe("the resource watchdog", () => {
     h.clock.advance(EVERY);
     await settle();
     expect(h.signals()).toEqual(["SIGTERM 10", "SIGKILL 10"]);
+  });
+
+  it("gives up a forced kill whose check keeps failing, after a bound, says so once, and kills nothing", async () => {
+    const h = harness(() => HUNGRY);
+    h.watchdog(h.target(10));
+    await h.tick(8);
+    h.failEveryRead();
+    h.clock.advance(STOP);
+    await settle();
+    for (let i = 0; i < KILL_CHECKS + 3; i += 1) {
+      h.clock.advance(EVERY);
+      await settle();
+    }
+    expect(h.signals()).toEqual(["SIGTERM 10"]);
+    expect(
+      h.logger.lines.filter((line) => /could not be checked 5 times/.test(line.text)),
+    ).toHaveLength(1);
+    expect(h.clock.pending).toBe(0);
+  });
+
+  it("sweeps no strays below a process stopped through its own handle (Anytype)", async () => {
+    const h = harness(() => HUNGRY);
+    h.strays.set(10, [{ pid: 41, identity: { started: "started-41", executable: null } }]);
+    h.watchdog({ ...h.target(10), handleOnly: true });
+    await h.tick(8);
+    h.clock.advance(STOP);
+    await settle();
+    expect(h.signals()).toEqual(["SIGTERM 10", "SIGKILL 10"]);
+    expect(h.sent).toEqual([]);
   });
 
   it("starts every grace window again after a gap, so one reading before a sleep is never an hour over", async () => {

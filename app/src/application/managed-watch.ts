@@ -195,6 +195,7 @@ export function watchStartedAnytype(app: WatchedAnytype, deps: ManagedWatchDeps)
     },
     // Its own quit ends it after its grace (adapters/process/desktop-apps.ts); never by pid.
     kill: () => undefined,
+    handleOnly: true,
     current: () => app.startedPid === pid,
     stopped: (why) => {
       deps.notifier.raise({

@@ -91,6 +91,9 @@ export function sameProcess(a: ProcessIdentity, b: ProcessIdentity): boolean {
 const hostsOf = (entries: readonly Entry[]): ReadonlySet<number> =>
   new Set(entries.filter((entry) => entry.target.hostsNodes === true).map((e) => e.target.pid));
 
+/** How many reads in a row before a forced kill may fail before the kill is given up. */
+export const KILL_CHECKS = 5;
+
 /** One watched process, and what the watch knows of it. */
 interface Entry {
   readonly target: WatchedProcess;
@@ -205,7 +208,7 @@ export function resourceWatchdog(deps: WatchDeps): ResourceWatchdog {
   };
 
   /** SIGKILL after the stop timeout, if it is still itself; a failed check tries again later. */
-  const killLater = (entry: Entry, after: number): void => {
+  const killLater = (entry: Entry, after: number, tries = 1): void => {
     entry.kill = deps.clock.after(after, () => {
       entry.kill = null;
       void (async () => {
@@ -217,8 +220,16 @@ export function resourceWatchdog(deps: WatchDeps): ResourceWatchdog {
           log("warn", `process ${String(entry.target.pid)} did not stop when asked; ending it`);
           entry.target.kill();
           drop(entry);
+        } else if (seen === "unknown" && tries < KILL_CHECKS) {
+          killLater(entry, deps.pace.sampleEveryMs, tries + 1);
         } else if (seen === "unknown") {
-          killLater(entry, deps.pace.sampleEveryMs);
+          // The safe direction: a process that cannot be read is never killed by pid.
+          log(
+            "error",
+            `process ${String(entry.target.pid)} could not be checked ${String(KILL_CHECKS)} ` +
+              "times after it was asked to stop; no kill is sent, and it is no longer watched",
+          );
+          drop(entry);
         }
       })();
     });
@@ -237,7 +248,9 @@ export function resourceWatchdog(deps: WatchDeps): ResourceWatchdog {
     log("warn", `process ${String(target.pid)} is over its limits (${why}); stopping it politely`);
     target.stopped(why);
     target.stop();
-    sweep(seen.strays);
+    if (target.handleOnly !== true) {
+      sweep(seen.strays);
+    }
     if (!target.current()) {
       // Ended by its own stop (an Anytype's quit forces it itself): nothing left to kill.
       drop(entry);

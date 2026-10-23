@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import {
   managedWatch,
   watchManaged,
+  watchStartedAnytype,
   type WatchedAnytype,
   type WatchedChild,
 } from "../../src/application/managed-watch";
@@ -17,7 +18,7 @@ import {
   type DeclaredLimits,
   type ResourceSample,
 } from "../../src/domain/supervision/resources";
-import type { ProcessReading } from "../../src/ports/resource-watch";
+import type { ProcessReading, WatchedProcess } from "../../src/ports/resource-watch";
 import { FakeClock } from "../fakes/clock";
 import { RecordingLogger, RecordingNotifier } from "../fixtures/raw-node/fixture";
 
@@ -155,6 +156,21 @@ describe("the shell's managed processes", () => {
       [100, 200, 300],
       [100, 200, 300],
     ]);
+  });
+
+  it("hand an Anytype Reload started to the watchdog as stopped through its own handle only", () => {
+    const handed: WatchedProcess[] = [];
+    watchStartedAnytype(new FakeAnytype(300), {
+      watchdog: (target) => {
+        handed.push(target);
+        return () => undefined;
+      },
+      limits: () => DEFAULT_LIMITS,
+      notifier: new RecordingNotifier(),
+      now: () => 0,
+      kill: () => undefined,
+    });
+    expect(handed[0]).toMatchObject({ pid: 300, handleOnly: true });
   });
 
   it("never watch an adopted Anytype, nor stop it", async () => {

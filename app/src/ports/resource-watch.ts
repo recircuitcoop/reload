@@ -42,6 +42,11 @@ export interface WatchedProcess {
   readonly limits: ResourceLimits;
   /** It starts node processes (the runtime): their trees are not its children. */
   readonly hostsNodes?: boolean;
+  /**
+   * Stopped through Reload's own handle on it (an Anytype Reload started), as the old app did:
+   * only that handle is signalled, and no descendant of it is swept by pid.
+   */
+  readonly handleOnly?: boolean;
   /** Ask it to stop (SIGTERM, or the app's own polite quit). */
   stop(): void;
   /** End it now (SIGKILL); only called while `current` still holds and it is still itself. */
