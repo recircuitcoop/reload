@@ -161,6 +161,8 @@ export class FsPackageRoots implements PackageRoots {
       );
     }
     fs.mkdirSync(this.previous, { recursive: true });
+    // A repair's moved-aside copy from before is stale once this swap runs: never put back over it.
+    removeTree(`${staged}.replaced`);
     return this.#unsealedLive(name, () => {
       const replaced = fs.existsSync(live);
       if (replaced) {

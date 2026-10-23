@@ -416,6 +416,20 @@ describe("the version check", () => {
     });
   });
 
+  it("a full disk under the archive cache leaves that package unchecked, and the schedule going", async () => {
+    const { installer, updates } = await installed("pinger", "0.1.0");
+    publish("pinger", "0.2.0");
+    // ENOSPC-like: the cache folder cannot be made, so neither archive nor verdict is written.
+    fs.writeFileSync(path.join(base, "updates"), "a file where the folder should be");
+    expect(await updates.check()).toMatchObject({ ok: true });
+    expect((await line(installer, updates, "pinger"))?.update).toMatchObject({
+      kind: "unchecked",
+    });
+    fs.rmSync(path.join(base, "updates"));
+    await updates.check();
+    expect((await line(installer, updates, "pinger"))?.update).toMatchObject({ kind: "newer" });
+  });
+
   it("a release that fails to download is checked again next time, and offered once it verifies", async () => {
     const { installer, updates } = await installed("pinger", "0.1.0");
     publish("pinger", "0.2.0");
@@ -996,6 +1010,20 @@ describe("the schedule", () => {
     );
     updates.stop();
     expect(clock.pending).toBe(0);
+  });
+
+  it("a check that throws is logged, and the next one still comes", async () => {
+    const { updates } = await installed("pinger", "0.1.0");
+    writePackages({ check_interval: 600 });
+    updates.check = () => Promise.reject(new Error("ENOSPC: no space left on device"));
+    updates.schedule(0);
+    clock.advance(0);
+    await drive(Promise.resolve());
+    expect(logger.lines).toContainEqual(
+      expect.stringContaining("update check: ENOSPC: no space left on device"),
+    );
+    expect(clock.pending).toBe(1);
+    updates.stop();
   });
 
   it("logs a check the scheduler could not make", async () => {

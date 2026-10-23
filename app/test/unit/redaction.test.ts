@@ -114,6 +114,22 @@ describe("redactStrings: a whole message bound for another process", () => {
     expect(out["clean"]).toEqual(new Uint8Array([0, 255, 7]));
   });
 
+  it("reads a view's bytes through the built-in getters, whatever it shadows", () => {
+    const view = new TextEncoder().encode("the s3cret");
+    Object.defineProperty(view, "byteLength", { value: 0 });
+    Object.defineProperty(view, "buffer", {
+      get(): never {
+        throw new Error("shadowed");
+      },
+    });
+    const bytes = new Uint8Array(new TextEncoder().encode("xx the s3cret").buffer);
+    const data = new DataView(bytes.buffer, 3);
+    Object.defineProperty(data, "byteOffset", { value: 0 });
+    const out = redactStrings({ view, data }, redact) as Record<string, Uint8Array>;
+    expect(new TextDecoder().decode(out["view"])).toBe(`the ${REDACTED}`);
+    expect(new TextDecoder().decode(out["data"])).toBe(`the ${REDACTED}`);
+  });
+
   it("never throws: a cycle is cut, a throwing getter is dropped, a faked Map is walked", () => {
     const cyclic: Record<string, unknown> = { name: "s3cret" };
     cyclic["self"] = cyclic;

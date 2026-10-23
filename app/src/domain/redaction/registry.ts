@@ -168,10 +168,38 @@ function isRealDate(value: object): boolean {
 /** The byteLength getter, which only a real ArrayBuffer answers (its own internal slot). */
 const byteLengthOf = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, "byteLength");
 
+/** The built-in getters a real view answers from its own slots, whatever it shadows. */
+function gettersOf(prototype: object) {
+  return {
+    buffer: Object.getOwnPropertyDescriptor(prototype, "buffer"),
+    byteOffset: Object.getOwnPropertyDescriptor(prototype, "byteOffset"),
+    byteLength: Object.getOwnPropertyDescriptor(prototype, "byteLength"),
+  };
+}
+
+const TYPED_ARRAY = gettersOf(Object.getPrototypeOf(Uint8Array.prototype) as object);
+const DATA_VIEW = gettersOf(DataView.prototype);
+
+/** A real view's own getters: a typed array's, or a DataView's (whose slots differ). */
+function viewGetters(value: ArrayBufferView): typeof TYPED_ARRAY {
+  try {
+    TYPED_ARRAY.byteLength?.get?.call(value);
+    return TYPED_ARRAY;
+  } catch {
+    return DATA_VIEW;
+  }
+}
+
 /** The bytes of a real typed array, DataView or ArrayBuffer; null for anything else. */
 function bytesOf(value: object): Uint8Array | null {
   if (ArrayBuffer.isView(value)) {
-    return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+    // Through the built-in getters: an own property named `buffer` or `byteLength` is ignored.
+    const view = viewGetters(value);
+    return new Uint8Array(
+      view.buffer?.get?.call(value) as ArrayBuffer,
+      view.byteOffset?.get?.call(value) as number,
+      view.byteLength?.get?.call(value) as number,
+    );
   }
   try {
     byteLengthOf?.get?.call(value);

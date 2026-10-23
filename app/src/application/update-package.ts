@@ -186,12 +186,14 @@ export class PackageUpdates {
         next();
         return;
       }
-      void this.check().then((outcome) => {
-        if (!outcome.ok) {
-          this.#ports.logger.warn(`update check: ${outcome.error}`);
-        }
-        next();
-      });
+      void this.check()
+        .catch((error: unknown): PackageOutcome => ({ ok: false, error: reasonOf(error) }))
+        .then((outcome) => {
+          if (!outcome.ok) {
+            this.#ports.logger.warn(`update check: ${outcome.error}`);
+          }
+          next();
+        });
     };
     this.#cancelSchedule = this.#ports.clock.after(firstMs, tick);
   }
@@ -204,7 +206,10 @@ export class PackageUpdates {
 
   /** One package against where it came from, kept as what the last check found for it. */
   async checkOne(record: InstalledRecord): Promise<VersionFinding> {
-    const finding = await this.#judge(record);
+    const finding = await this.#judge(record).catch((error: unknown): VersionFinding => ({
+      kind: "unchecked",
+      reason: reasonOf(error),
+    }));
     this.#found.set(record.package, { finding, installed: record.version });
     return finding;
   }

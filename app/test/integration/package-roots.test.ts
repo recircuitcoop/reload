@@ -345,6 +345,23 @@ describe("FsPackageRoots: recovery at the start (a crash between two renames)", 
     expect(roots.installed("monty")).toBeUndefined();
   });
 
+  it("a swap clears a stale repair copy, so it can never be put back over the last live one", () => {
+    stageComplete("1");
+    roots.swapIn("monty");
+    // A repair's copy of 1 left beside staging from long ago.
+    const stale = path.join(base, "staging", "monty.replaced");
+    fs.cpSync(path.join(base, "packages", "monty"), stale, { recursive: true });
+    stageComplete("2");
+    roots.swapIn("monty");
+    expect(fs.existsSync(stale)).toBe(false);
+    // A later swap cut between its renames: what goes back is 2, the last live one.
+    stageComplete("3");
+    failRenames([2, 3], () => {
+      expect(() => roots.swapIn("monty")).toThrow();
+    });
+    expect(roots.recover()).toEqual([{ name: "monty", version: "2" }]);
+  });
+
   it("puts nothing back when nothing was cut short, or what is left is half-built", () => {
     expect(roots.recover()).toEqual([]);
     fs.mkdirSync(path.join(base, "previous", "monty"), { recursive: true });
