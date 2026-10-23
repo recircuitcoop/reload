@@ -9,6 +9,7 @@ import type { QuitOutcome } from "../application/quit";
 import type { Supervisor } from "../application/supervisor";
 import type { ChildName, ChildStatus } from "../domain/supervision/child-state";
 import type { Logger } from "../ports/logger";
+import type { Notice } from "../domain/notices/notices";
 import type { Notifier } from "../ports/notifier";
 import {
   isQuestion,
@@ -66,7 +67,7 @@ export function unwritable(
         return;
       }
       told = "logged";
-      logger.warn(`Reload could not write its ${subject}: ${why}`);
+      logger.warn(`Reload could not use its ${subject}: ${why}`);
     },
     worked: () => {
       if (told === "raised") {
@@ -89,8 +90,9 @@ export interface AnswerDeps {
   /** The Quit menu's own path: undeployed edits are put to the person first. */
   readonly quit: () => Promise<QuitOutcome>;
   readonly pid: number;
-  /** The answer files, when they cannot be written. */
+  /** The answer files, when they cannot be written; the questions' folder, when unreadable. */
   readonly replies: Unwritable;
+  readonly questions: Unwritable;
   /** Whether the process that asked still runs as itself; rejects when it cannot be checked. */
   readonly askerRuns: (pid: number, identity: string) => Promise<boolean>;
   readonly logger: Logger;
@@ -118,9 +120,12 @@ export function takeQuestions(dir: string, deps: AnswerDeps, now: number): void 
   let names: string[];
   try {
     names = fs.readdirSync(dir);
-  } catch {
+  } catch (error) {
+    // Told once, not on every look (the old helper's unopened socket).
+    deps.questions.failed(error);
     return;
   }
+  deps.questions.worked();
   for (const name of names) {
     const id = QUESTION_NAME.exec(name)?.[1];
     const question = id === undefined ? null : takeQuestion(path.join(dir, name), id, now);
@@ -138,10 +143,18 @@ export function takeQuestions(dir: string, deps: AnswerDeps, now: number): void 
           deps.logger.info(`left \`reload --${question.command}\` unanswered: its asker is gone`);
         }
       },
-      () => {
-        deps.logger.info(
-          `left \`reload --${question.command}\` unanswered: its asker is unchecked`,
-        );
+      (error: unknown) => {
+        // Never a wait on nothing: a status is answered all the same, a quit is refused aloud.
+        if (question.command === "status") {
+          answerQuestion(question, deps);
+          return;
+        }
+        deps.logger.warn("did not answer `reload --quit`: its asker could not be checked");
+        const text =
+          "Reload could not check the process that asked it to quit, so it did not quit: " +
+          `${String(error)}\n`;
+        const file = replyFile(deps.app.getPath("userData"), question.id);
+        writeReply(file, { code: 1, text }, deps.replies);
       },
     );
   }
@@ -275,6 +288,9 @@ export function statusText(deps: Omit<AnswerDeps, "quit" | "logger" | "replies">
   }
   const anytype = running.anytype.state;
   lines.push(`  Anytype: ${anytype === null ? "starting" : ANYTYPE_WORDS[anytype]}`);
-  lines.push(...noticeLines(path.join(app.getPath("userData"), running.notices)));
+  // A child stopped for good is said on its own line above: its notice would say it twice.
+  const shown = new Set<string>(childLines(running.supervisors).map((status) => status.child));
+  const said = (notice: Notice) => notice.kind === "child-stopped" && shown.has(notice.subject);
+  lines.push(...noticeLines(path.join(app.getPath("userData"), running.notices), said));
   return lines.join("\n") + "\n";
 }

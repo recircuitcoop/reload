@@ -59,6 +59,8 @@ function table(entries: Record<number, { identity: string; ignores?: "SIGTERM" |
         clock += ms;
       },
       print: (text) => printed.push(text),
+
+      lockHeld: () => false,
     });
   return { run, signals, printed };
 }
@@ -127,9 +129,47 @@ describe("reload --quit --force", () => {
     const { run, printed } = table({});
     expect(run()).toBe(1);
     expect(printed).toEqual(["Reload is not running.\n"]);
+  });
+
+  it("removes a file it cannot read once nothing it names runs and no Reload holds the lock", () => {
     fs.writeFileSync(file, "{ torn");
+    const { run, signals, printed } = table({});
+    expect(run()).toBe(0);
+    expect(signals).toEqual([]);
+    expect(printed.join("")).toMatch(
+      new RegExp(
+        "^The run-state file could not be read: SyntaxError.*\\n" +
+          `It is ${file.replaceAll("/", "\\/")}\\. Nothing it names runs, so it was removed\\. ` +
+          "Reload is off\\.\\n$",
+      ),
+    );
+    expect(fs.existsSync(file)).toBe(false);
+  });
+
+  it("keeps a file it cannot read while a process it names runs, or a Reload holds the lock", () => {
+    // Unreadable by an unknown field, and still naming a live process: left as it is.
+    write([{ id: "runtime", pid: 11, identity: "t1 Reload runtime", extra: 1 } as RunRecord]);
+    const { run, signals, printed } = table({ 11: { identity: "t1 Reload runtime" } });
     expect(run()).toBe(1);
-    expect(printed[1]).toContain("The run-state file could not be read");
+    expect(signals).toEqual([]);
+    expect(printed.join("")).toBe(
+      "The run-state file could not be read: record 1 has an unknown field, extra.\n" +
+        `It is ${file}. It still names runtime (process 11), which still runs, so it is left ` +
+        "as it is: quit Reload from its window.\n",
+    );
+    fs.writeFileSync(file, "{ torn");
+    const held = forceQuit({
+      file,
+      identity: () => null,
+      signal: () => undefined,
+      now: () => 0,
+      sleep: () => undefined,
+      print: (text) => printed.push(text),
+      lockHeld: () => true,
+    });
+    expect(held).toBe(1);
+    expect(printed.at(-1)).toContain("A Reload holds its lock, so it is left as it is");
+    expect(fs.existsSync(file)).toBe(true);
   });
 
   it(
@@ -153,6 +193,8 @@ describe("reload --quit --force", () => {
         now: Date.now,
         sleep: (ms) => Atomics.wait(waiter, 0, 0, ms),
         print: (text) => printed.push(text),
+
+        lockHeld: () => false,
       });
       await exited;
       expect(code).toBe(0);
@@ -188,11 +230,11 @@ describe("reload --quit --force", () => {
     ];
     for (const [text] of malformed) {
       fs.writeFileSync(file, text);
-      expect(run()).toBe(1);
+      run();
     }
     expect(signals).toEqual([]);
-    expect(printed).toEqual(
-      malformed.map(([, why]) => `The run-state file could not be read: ${why}.\n`),
+    expect(printed.map((text) => text.split("\n")[0])).toEqual(
+      malformed.map(([, why]) => `The run-state file could not be read: ${why}.`),
     );
   });
 
@@ -200,9 +242,9 @@ describe("reload --quit --force", () => {
   const refusal = (record: string) => {
     fs.writeFileSync(file, `[${record}]`);
     const { run, signals, printed } = table({ 1: { identity: "t0 Reload" } });
-    expect(run()).toBe(1);
+    run();
     expect(signals).toEqual([]);
-    return printed.join("");
+    return `${printed.join("").split("\n")[0] ?? ""}\n`;
   };
 
   it("refuses a record whose pid is not a number, by naming the pid", () => {
@@ -256,6 +298,8 @@ describe("reload --quit --force", () => {
       now: () => 0,
       sleep: () => undefined,
       print: (text) => printed.push(text),
+
+      lockHeld: () => false,
     });
     expect(printed.join("")).toBe(
       "runtime (process 11) could not be checked: the process table could not be read: ]0;owned.\n",
@@ -282,6 +326,8 @@ describe("reload --quit --force", () => {
         clock += ms;
       },
       print: (text) => printed.push(text),
+
+      lockHeld: () => false,
     });
     expect(code).toBe(1);
     expect(signals).toEqual([]);
@@ -450,11 +496,13 @@ describe("the shell's run-state", () => {
   it("is a notice once when it cannot be written, however often it fails, and cleared once it is", async () => {
     const missing = path.join(dir, "not-yet");
     const { changed, notifier } = shell(missing);
-    await expect.poll(() => notifier.notices.length).toBe(1);
+    // Its folder is missing, so the questions' folder cannot be read either: told apart.
+    const ours = () => notifier.notices.filter((notice) => notice.subject === "run-state file");
+    await expect.poll(() => ours().length).toBe(1);
     for (let n = 0; n < 5; n += 1) changed();
     // Every write after the first fails the same way, and tells nobody anything new.
     await new Promise((resolve) => setTimeout(resolve, 500));
-    expect(notifier.notices).toEqual([
+    expect(ours()).toEqual([
       {
         kind: "command-line-unwritable",
         subject: "run-state file",
@@ -465,7 +513,7 @@ describe("the shell's run-state", () => {
     changed();
     await expect
       .poll(() => notifier.cleared, { timeout: 10_000 })
-      .toEqual(["command-line-unwritable run-state file"]);
+      .toContain("command-line-unwritable run-state file");
     expect(fs.existsSync(path.join(missing, RUN_STATE_FILENAME))).toBe(true);
   });
 

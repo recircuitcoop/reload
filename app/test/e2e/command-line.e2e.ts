@@ -101,6 +101,28 @@ test("reload --status and --quit act on the running instance from a second proce
   }
 });
 
+test("a command whose reader closed ends with its own exit code, never a hang", async () => {
+  const { scratch, env } = scratchDirectories();
+  try {
+    // `reload --status | grep -q …`: the reader is gone before anything is written.
+    const closed = (flag: string) =>
+      new Promise<number | null>((resolve, reject) => {
+        const second = spawn(ELECTRON_BINARY, [APP, flag], {
+          env,
+          stdio: ["ignore", "pipe", "ignore"],
+        });
+        second.stdout.destroy();
+        second.once("error", reject);
+        second.once("close", resolve);
+      });
+    expect(await closed("--status")).toBe(0);
+    expect(await closed("--log")).toBe(0);
+    expect(await closed("--quit")).toBe(1);
+  } finally {
+    await cleanUp([], scratch);
+  }
+});
+
 test("a stopped Reload survives reload --status and --quit, which say it did not answer", async () => {
   const { scratch, userData, env } = scratchDirectories();
   const apps: ElectronApplication[] = [];

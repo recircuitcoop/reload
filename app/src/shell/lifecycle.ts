@@ -45,7 +45,8 @@ export function runShell(deps: LifecycleDeps): void {
   }
   removeStaleReplies(app.getPath("userData"), Date.now());
   let notices: Notifier | null = null;
-  const replies = unwritable("answer to a terminal command", () => notices, logger);
+  const replies = unwritable("answers to terminal commands", () => notices, logger);
+  const questions = unwritable("questions from terminal commands", () => notices, logger);
   const runState = unwritable("run-state file", () => notices, logger);
   const recorded = recordRunState(deps, runState);
   const stopAnswering = answerQuestions({
@@ -55,6 +56,7 @@ export function runShell(deps: LifecycleDeps): void {
     quit: () => quitFlow.request({ ask: true }),
     pid: process.pid,
     replies,
+    questions,
     askerRuns: async (pid, identity) => (await identityOfLater(pid, process.platform)) === identity,
     logger,
   });
@@ -89,6 +91,7 @@ export function runShell(deps: LifecycleDeps): void {
     (started) => {
       notices = started;
       replies.ready();
+      questions.ready();
       runState.ready();
       recorded.followChildren();
     },

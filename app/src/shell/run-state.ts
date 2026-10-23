@@ -260,6 +260,8 @@ export interface ForceDeps {
   /** Blocks. */
   readonly sleep: (ms: number) => void;
   readonly print: (text: string) => void;
+  /** Whether a Reload holds the single-instance lock (shell/command-line.ts starting). */
+  readonly lockHeld: () => boolean;
 }
 
 type Outcome = "terminated" | "killed" | "forgotten" | "already stopped" | "still running";
@@ -274,9 +276,12 @@ export function forceQuit(deps: ForceDeps): number {
     deps.print(plainText(text));
   };
   const records = readRunState(deps.file);
-  if (records === null || typeof records === "string") {
-    print(`${records ?? "Reload is not running."}\n`);
+  if (records === null) {
+    print("Reload is not running.\n");
     return 1;
+  }
+  if (typeof records === "string") {
+    return clearUnreadable(records, deps, print);
   }
   const lines: string[] = [];
   const survivors: string[] = [];
@@ -308,6 +313,51 @@ export function forceQuit(deps: ForceDeps): number {
 }
 
 /**
+ * A run-state file `--force` cannot read: removed only when no Reload holds the lock and no
+ * process any of its records still names runs (each judged by what it can read of it), and
+ * otherwise kept, saying why. Nothing is ever signalled by a record that is not one.
+ */
+function clearUnreadable(why: string, deps: ForceDeps, print: (text: string) => void): number {
+  const running: string[] = [];
+  for (const record of salvaged(deps.file)) {
+    if (stillRuns(record, deps.identity) !== false) {
+      running.push(`${record.id} (process ${String(record.pid)})`);
+    }
+  }
+  const where = `It is ${deps.file}.`;
+  if (running.length > 0 || deps.lockHeld()) {
+    const holder =
+      running.length > 0
+        ? `It still names ${running.join(", ")}, which still runs`
+        : "A Reload holds its lock";
+    print(`${why}\n${where} ${holder}, so it is left as it is: quit Reload from its window.\n`);
+    return 1;
+  }
+  fs.rmSync(deps.file, { force: true });
+  print(`${why}\n${where} Nothing it names runs, so it was removed. Reload is off.\n`);
+  return 0;
+}
+
+/** What can be read of an unreadable file's records: any entry with a pid and an identity. */
+function salvaged(file: string): RunRecord[] {
+  let document: unknown;
+  try {
+    document = JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(document)) {
+    return [];
+  }
+  return document.flatMap((entry: unknown) => {
+    const { id, pid, identity } = (entry ?? {}) as Record<string, unknown>;
+    return isPid(pid) && typeof identity === "string" && identity !== ""
+      ? [{ id: typeof id === "string" ? id.slice(0, 64) : "process", pid, identity }]
+      : [];
+  });
+}
+
+/**
  * Plain `reload --quit`, once the running instance said it quit: which of the recorded processes
  * are gone, and which are still running or could not be checked (the old quit's "make sure of
  * it", launcher.py:1121). Each is given the time a polite stop is given; nothing is signalled.
@@ -316,13 +366,14 @@ export function forceQuit(deps: ForceDeps): number {
 export function confirmQuit(
   running: readonly RunRecord[],
   deps: Waiting,
+  waits: ReadonlyMap<string, number> = POLITE_MS,
 ): { readonly lines: string[]; readonly off: boolean } {
   const lines: string[] = [];
   const left: string[] = [];
   for (const record of shellFirst(running)) {
     const named = `${record.id} (process ${String(record.pid)})`;
     try {
-      if (goneWithin(record, politeMs(record), deps)) {
+      if (goneWithin(record, waits.get(record.id) ?? DEFAULT_POLITE_MS, deps)) {
         lines.push(`  ${record.id} stopped (process ${String(record.pid)})`);
       } else {
         left.push(`${named} is still running after the quit.`);

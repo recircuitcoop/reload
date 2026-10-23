@@ -153,6 +153,14 @@ export function ask(command: Asked, deps: AskDeps): number {
   const dir = deps.app.getPath("userData");
   const runState = path.join(dir, RUN_STATE_FILENAME);
   const records = readRunState(runState);
+  if (typeof records === "string" && command === "quit" && !starting(dir, deps)) {
+    // Nothing holds Reload's lock: the record is all that is wrong, and it is said whole.
+    print(
+      `${records}\nIt is ${runState}. No Reload is running, so ` +
+        "`reload --quit --force` removes it once nothing it names runs.\n",
+    );
+    return 1;
+  }
   if (!mayRun(records, deps.identity)) {
     if (starting(dir, deps)) {
       // Holding the lock before its first record lands: running, not yet answerable.
@@ -185,7 +193,7 @@ export function ask(command: Asked, deps: AskDeps): number {
   const after = readRunState(runState);
   if (typeof records === "string" && typeof after === "string") {
     print(`Reload quit, but what it ran could not be checked: ${after}\n`);
-    return 0;
+    return 1;
   }
   const watched = [...before];
   for (const record of recordedRunning(after, deps.identity)) {
@@ -193,13 +201,15 @@ export function ask(command: Asked, deps: AskDeps): number {
       watched.push(record);
     }
   }
-  const { lines, off } = confirmQuit(watched, deps);
+  // The shell said it quit, and is given the rest of the quit's own wait to be gone: it stops
+  // its children before it answers, and only then ends.
+  const { lines, off } = confirmQuit(watched, deps, new Map([["shell", WAIT_MS.quit]]));
   if (off) {
     // Everything it recorded is gone: so is the record, even of a shell that ended unclean.
     fs.rmSync(runState, { force: true });
   }
   print(lines.join("\n") + "\n");
-  return 0;
+  return off ? 0 : 1;
 }
 
 /** Whether Reload may be running: its shell's record names a live process, or cannot tell. */
@@ -216,7 +226,7 @@ function mayRun(records: ReturnType<typeof readRunState>, identity: Identity): b
  * folder to `<host>-<pid>` (POSIX), read here, never taken; its pid must still run this
  * executable. shortcut: POSIX only; Windows' lock is a mutex, with plan 0025.
  */
-function starting(dir: string, deps: Pick<AskDeps, "identity" | "executable">): boolean {
+export function starting(dir: string, deps: Pick<AskDeps, "identity" | "executable">): boolean {
   let target: string;
   try {
     target = fs.readlinkSync(path.join(dir, "SingletonLock"));
@@ -359,6 +369,32 @@ export function statusFromFiles(dir: string, deps: Pick<AskDeps, "identity" | "n
 }
 
 /**
+ * Writes to stdout whole, waiting out a full pipe (EAGAIN); once the reader is gone (EPIPE, or
+ * any other failure) it writes nothing more, so the command still ends with its own exit code
+ * (`reload --status | grep -q …`). A throw here would leave Electron hanging on load.
+ */
+export function stdoutWriter(
+  write: (bytes: Uint8Array) => number,
+  sleep: (ms: number) => void,
+): (text: string) => void {
+  let closed = false;
+  return (text) => {
+    let rest: Uint8Array = Buffer.from(text);
+    while (!closed && rest.length > 0) {
+      try {
+        rest = rest.subarray(write(rest));
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "EAGAIN") {
+          sleep(5);
+          continue;
+        }
+        closed = true;
+      }
+    }
+  };
+}
+
+/**
  * main.ts's first act. With a command on the command line, answers it, prints and exits the
  * process here, so nothing else in main.ts runs (no log, no first start, no window); otherwise
  * returns.
@@ -373,20 +409,23 @@ export function runCommandLine(
     return;
   }
   const waiter = new Int32Array(new SharedArrayBuffer(4));
-  const print = (text: string) => fs.writeSync(1, text);
   const sleep = (ms: number) => Atomics.wait(waiter, 0, 0, ms);
+  const print = stdoutWriter((bytes) => fs.writeSync(1, bytes), sleep);
   const identity = (pid: number) => identityOf(pid, process.platform);
   if (command === "log") {
     // Asks nobody, so it answers with nothing running too (logs, cli.py:692).
-    print(logText(files.log));
-    process.exit(0);
+    const log = logText(files.log);
+    print(log.text);
+    process.exit(log.code);
   }
   if (command === "quit" && argv.includes("--force")) {
     // Asks nobody: what is hung cannot answer (cli.py quit --force).
+    const dir = app.getPath("userData");
     process.exit(
       forceQuit({
-        file: path.join(app.getPath("userData"), RUN_STATE_FILENAME),
+        file: path.join(dir, RUN_STATE_FILENAME),
         identity,
+        lockHeld: () => starting(dir, { identity, executable: process.execPath }),
         signal: (pid, signal) => {
           try {
             process.kill(pid, signal);
@@ -415,11 +454,11 @@ export function runCommandLine(
 }
 
 /** The notice file's conditions, in the words the notification uses (cli.py _echo_notices). */
-export function noticeLines(file: string): string[] {
-  const notices = currentNotices(file);
-  if (typeof notices === "string") {
-    return [notices];
-  }
+export function noticeLines(
+  file: string,
+  leaveOut: (notice: Notice) => boolean = () => false,
+): string[] {
+  const notices = currentNotices(file).filter((notice) => !leaveOut(notice));
   if (notices.length === 0) {
     return ["Nothing was refused, and nothing is held back."];
   }
@@ -432,20 +471,19 @@ export function noticeLines(file: string): string[] {
 /**
  * The conditions true now, from the notice file the NoticeBoard rewrites on every change, so
  * each is listed once however often it was raised. A run's notices are news of the moment, not
- * a condition, and are left out. A file that cannot be read is said, not taken for "nothing".
+ * a condition, and are left out. As the old NoticeFile read it (notification.py): a file that
+ * cannot be read, or is not a list, is read as nothing, and an entry this version has no words
+ * for (a newer Reload's) costs it none of the others.
  */
-function currentNotices(file: string): readonly Notice[] | string {
+function currentNotices(file: string): readonly Notice[] {
   let document: unknown;
   try {
     document = JSON.parse(fs.readFileSync(file, "utf8"));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return [];
-    }
-    return `What needs your attention could not be read: ${String(error)}`;
+  } catch {
+    return [];
   }
   if (!Array.isArray(document)) {
-    return "What needs your attention could not be read: the notice file is not a list.";
+    return [];
   }
   return document
     .map((entry: unknown) => (isNotice(entry) ? withoutBlanks(entry) : null))
@@ -464,11 +502,13 @@ const withoutBlanks = (notice: Notice): Notice => ({
  * Where the log is, whether or not it exists yet, and its end (logs, cli.py:692), as plain text:
  * a line the log took from elsewhere never drives the terminal.
  */
-export function logText(file: string): string {
-  return plainText(logLines(file).join("\n") + "\n");
+export function logText(file: string): Reply {
+  const { code, lines } = logLines(file);
+  return { code, text: plainText(lines.join("\n") + "\n") };
 }
 
-function logLines(file: string): string[] {
+/** The lines, and the exit code: 1 only when there is a log and it cannot be read. */
+function logLines(file: string): { code: number; lines: string[] } {
   const lines = [`Log file: ${file}`];
   let text: string;
   try {
@@ -476,10 +516,10 @@ function logLines(file: string): string[] {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
       lines.push(`  it could not be read: ${String(error)}`);
-      return lines;
+      return { code: 1, lines };
     }
     lines.push("  nothing written yet: no Reload process has logged on this machine.");
-    return lines;
+    return { code: 0, lines };
   }
   lines.push(`  ${String(Buffer.byteLength(text))} bytes; the last lines:`);
   lines.push(
@@ -488,5 +528,5 @@ function logLines(file: string): string[] {
       .filter((line) => line !== "")
       .slice(-LOG_TAIL_LINES),
   );
-  return lines;
+  return { code: 0, lines };
 }

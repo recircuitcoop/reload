@@ -27,6 +27,7 @@ import {
   PICKUP_MS,
   questionFile,
   replyFile,
+  stdoutWriter,
   STALE_REPLY_MS,
   WAIT_MS,
   type Asked,
@@ -95,7 +96,8 @@ function deps(overrides: Partial<AnswerDeps> = {}) {
       return Promise.resolve("quit");
     },
     pid: 4000,
-    replies: unwritable("answer to a terminal command", () => null, logger),
+    replies: unwritable("answers to terminal commands", () => null, logger),
+    questions: unwritable("questions from terminal commands", () => null, logger),
     askerRuns: () => Promise.resolve(true),
     logger,
     ...overrides,
@@ -135,6 +137,35 @@ describe("the command line", () => {
     expect(commandOf(["electron", "app", "--log"])).toBe("log");
     expect(commandOf(["electron", "app"])).toBeNull();
     expect(commandOf(["electron", "app", "--inspect"])).toBeNull();
+  });
+
+  it("ends a command whose reader went away with its own exit code, never a throw", () => {
+    const written: string[] = [];
+    let calls = 0;
+    const print = stdoutWriter(
+      (bytes) => {
+        calls += 1;
+        if (calls === 1) throw Object.assign(new Error("full"), { code: "EAGAIN" });
+        if (calls === 2) {
+          // Half of it: the rest is written next.
+          written.push(Buffer.from(bytes.subarray(0, 3)).toString());
+          return 3;
+        }
+        if (calls === 3) {
+          written.push(Buffer.from(bytes).toString());
+          return bytes.length;
+        }
+        throw Object.assign(new Error("write EPIPE"), { code: "EPIPE" });
+      },
+      () => undefined,
+    );
+    print("Reload is up.\n");
+    expect(written.join("")).toBe("Reload is up.\n");
+    expect(() => {
+      print("more\n");
+      print("and more\n");
+    }).not.toThrow();
+    expect(calls).toBe(4);
   });
 
   it("prints plain text: no control character but the newline and the tab", () => {
@@ -342,7 +373,8 @@ describe("the asking process", () => {
         return { code: 0, text: "" };
       },
     });
-    expect(code("quit")).toBe(0);
+    // What did not stop is the one case the command did not do what it promised: exit 1.
+    expect(code("quit")).toBe(1);
     expect(out()).toBe(
       "  shell stopped (process 10)\n" +
         "  runtime stopped (process 11)\n" +
@@ -368,7 +400,7 @@ describe("the asking process", () => {
         return { code: 0, text: "" };
       },
     });
-    expect(code("quit")).toBe(0);
+    expect(code("quit")).toBe(1);
     expect(out()).toBe(
       "  shell stopped (process 10)\n" +
         "  runtime stopped (process 11)\n" +
@@ -400,7 +432,7 @@ describe("the asking process", () => {
     expect(fs.existsSync(runStateFile())).toBe(false);
   });
 
-  it("quit: a cancelled quit is said and checks nothing; an unreadable record is said", () => {
+  it("quit: a cancelled quit is said and checks nothing", () => {
     writeRunState([SHELL]);
     const cancelled = "The quit was cancelled in Reload's window. Reload is still running.\n";
     const first = asking({
@@ -409,10 +441,29 @@ describe("the asking process", () => {
     });
     expect(first.code("quit")).toBe(1);
     expect(first.printed).toEqual([cancelled]);
+  });
+
+  it("quit with an unreadable record and nothing running says what is wrong, where, and what to do", () => {
     fs.writeFileSync(runStateFile(), '[{"id":"shell"}]');
-    const second = asking({ instance: () => ({ code: 0, text: "" }) });
-    expect(second.code("quit")).toBe(0);
-    expect(second.out()).toBe(
+    const { code, out, taken } = asking({ instance: () => ({ code: 0, text: "" }) });
+    expect(code("quit")).toBe(1);
+    expect(out()).toBe(
+      "The run-state file could not be read: record 1 has no valid pid.\n" +
+        `It is ${runStateFile()}. No Reload is running, so \`reload --quit --force\` removes ` +
+        "it once nothing it names runs.\n",
+    );
+    expect(taken).toEqual([]);
+  });
+
+  it("quit with an unreadable record asks a Reload that holds the lock, and says what it could not check", () => {
+    fs.writeFileSync(runStateFile(), '[{"id":"shell"}]');
+    fs.symlinkSync("my-mac.local-4242", path.join(userData, "SingletonLock"));
+    const { code, out } = asking({
+      alive: new Map([[4242, `t8 ${EXECUTABLE}`]]),
+      instance: () => ({ code: 0, text: "" }),
+    });
+    expect(code("quit")).toBe(1);
+    expect(out()).toBe(
       "Reload quit, but what it ran could not be checked: The run-state file could not be " +
         "read: record 1 has no valid pid.\n",
     );
@@ -431,7 +482,7 @@ describe("the asking process", () => {
         return { code: 0, text: "" };
       },
     });
-    expect(code("quit")).toBe(0);
+    expect(code("quit")).toBe(1);
     expect(out()).toBe(
       "shell (process 10) could not be checked: the process table could not be read: ETIMEDOUT.\n",
     );
@@ -445,7 +496,8 @@ describe("reload --log asks nobody", () => {
     const lines = Array.from({ length: LOG_TAIL_LINES + 5 }, (_, n) => `line ${String(n)}`);
     lines.push("a line somebody went looking for");
     fs.writeFileSync(file, `${lines.join("\n")}\n`);
-    const text = logText(file);
+    const { code, text } = logText(file);
+    expect(code).toBe(0);
     expect(text.split("\n")).toEqual([
       `Log file: ${file}`,
       `  ${String(fs.statSync(file).size)} bytes; the last lines:`,
@@ -457,15 +509,25 @@ describe("reload --log asks nobody", () => {
 
   it("names the log's place whether or not anything was written there yet", () => {
     const file = path.join(userData, "Logs", "reload.log");
-    expect(logText(file)).toBe(
-      `Log file: ${file}\n  nothing written yet: no Reload process has logged on this machine.\n`,
-    );
+    expect(logText(file)).toEqual({
+      code: 0,
+      text: `Log file: ${file}\n  nothing written yet: no Reload process has logged on this machine.\n`,
+    });
+  });
+
+  it("exits 1 when there is a log and it cannot be read", () => {
+    // A folder where the log should be: there, and not a file it can read.
+    const file = path.join(userData, "reload.log");
+    fs.mkdirSync(file);
+    const { code, text } = logText(file);
+    expect(code).toBe(1);
+    expect(text).toMatch(new RegExp(`^Log file: ${file}\\n {2}it could not be read: .*EISDIR`));
   });
 
   it("never lets a logged line drive the terminal", () => {
     const file = path.join(userData, "reload.log");
     fs.writeFileSync(file, "a title \u001b]0;owned\u0007 set\n");
-    expect(logText(file).split("\n").at(-2)).toBe("a title ]0;owned set");
+    expect(logText(file).text.split("\n").at(-2)).toBe("a title ]0;owned set");
   });
 });
 
@@ -496,25 +558,37 @@ describe("the running instance answers", () => {
     expect(fs.readdirSync(userData)).toEqual(["elsewhere.json"]);
   });
 
-  it("never answers a question whose asker is gone or cannot be checked, a quit least of all", async () => {
+  it("never acts on a question whose asker is gone", async () => {
     const asked: [number, string][] = [];
     const { answer, quits } = deps({
       askerRuns: (pid, identity) => {
         asked.push([pid, identity]);
-        return asked.length === 1 ? Promise.resolve(false) : Promise.reject(new Error("EPERM"));
+        return Promise.resolve(false);
       },
     });
     put("quit");
     take(answer);
-    put("quit", "f".repeat(32));
-    take(answer);
     await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(asked).toEqual([
-      [ASKER.pid, ASKER.identity],
-      [ASKER.pid, ASKER.identity],
-    ]);
+    expect(asked).toEqual([[ASKER.pid, ASKER.identity]]);
     expect(quits).toEqual([]);
     expect(fs.readdirSync(userData)).toEqual([]);
+  });
+
+  it("answers an asker it cannot check, never leaving it waiting: a status as asked, a quit refused", async () => {
+    const { answer, quits } = deps({ askerRuns: () => Promise.reject(new Error("ps: EPERM")) });
+    put("quit");
+    take(answer);
+    expect(await replyFor()).toEqual({
+      code: 1,
+      text:
+        "Reload could not check the process that asked it to quit, so it did not quit: " +
+        "Error: ps: EPERM\n",
+    });
+    expect(quits).toEqual([]);
+    const other = "e".repeat(32);
+    put("status", other);
+    take(answer);
+    expect((await replyFor(other)).text).toMatch(/^Reload 1\.2\.3 is running \(process 4000\)/);
   });
 
   it("status: what runs, and that nothing was refused, when nothing was", async () => {
@@ -591,11 +665,128 @@ describe("the running instance answers", () => {
     );
   });
 
-  it("status: a notice file it cannot read is said, not taken for nothing", async () => {
-    fs.writeFileSync(path.join(userData, NOTICES_FILENAME), "{ not json");
+  it("status: a notice file that cannot be read is read as nothing", async () => {
+    const nothing = "Nothing was refused, and nothing is held back.\n";
+    const ids = ["1", "2", "3"].map((digit) => digit.repeat(32));
+    const files = ["{ not json", '{"kind": "core-update-available"}', '"a string"'];
+    for (const [index, text] of files.entries()) {
+      fs.writeFileSync(path.join(userData, NOTICES_FILENAME), text);
+      put("status", ids[index]);
+      take(deps().answer);
+      expect(
+        (await replyFor(ids[index])).text.endsWith(
+          `Anytype: opened by you; Reload leaves it running\n${nothing}`,
+        ),
+      ).toBe(true);
+    }
+  });
+
+  it("status: a notice file a newer Reload wrote keeps the lines this one understands", async () => {
+    fs.writeFileSync(
+      path.join(userData, NOTICES_FILENAME),
+      '[{"kind": "something-invented-later", "subject": "monty"}, "not an object", ' +
+        '{"kind": "core-update-available", "subject": "Reload", "version": "9.9.9", "detail": ""}]',
+    );
     put("status");
     take(deps().answer);
-    expect((await replyFor()).text).toContain("What needs your attention could not be read");
+    const staged = compose({ kind: "core-update-available", subject: "Reload", version: "9.9.9" });
+    expect((await replyFor()).text.split("\n").slice(-2)).toEqual([
+      `  ${staged.title} — ${staged.body}`,
+      "",
+    ]);
+  });
+
+  it("status: a child stopped for good is reported once, not again by its notice", async () => {
+    const board = new NoticeBoard({
+      deliver: () => undefined,
+      store: new JsonNoticeFile(path.join(userData, NOTICES_FILENAME)),
+      logger: new RecordingLogger(),
+    });
+    board.raise({ kind: "child-stopped", subject: "runtime", detail: "It stopped 5 times." });
+    const { answer } = deps({
+      running: running({
+        supervisors: new Map([["runtime", child("runtime", null, "down-for-good")]]),
+      }),
+    });
+    put("status");
+    take(answer);
+    const { text } = await replyFor();
+    expect(text.split("runtime")).toHaveLength(2);
+    expect(text.endsWith("Nothing was refused, and nothing is held back.\n")).toBe(true);
+  });
+
+  it("status: every update condition, in the words of its notification", async () => {
+    const conditions: Notice[] = [
+      { kind: "core-update-available", subject: "Reload", version: "1.5.0" },
+      { kind: "core-update-refused", subject: "Reload", detail: "Its signature does not match" },
+      { kind: "core-crash-loop", subject: "Reload", version: "1.4.0" },
+      { kind: "package-update-available", subject: "summarize", version: "2.0.0" },
+      {
+        kind: "package-update-refused",
+        subject: "whodunnit",
+        version: "2.0.0",
+        detail: "The lock does not resolve",
+      },
+    ];
+    new JsonNoticeFile(path.join(userData, NOTICES_FILENAME)).write(conditions);
+    put("status");
+    take(deps().answer);
+    const { text } = await replyFor();
+    for (const notice of conditions) {
+      const { title, body } = compose(notice);
+      expect(text).toContain(`  ${title} — ${body}\n`);
+    }
+    expect(text).toContain("Reload 1.5.0 is ready");
+    expect(text).toContain("summarize 2.0.0 is available");
+    expect(text).toContain("whodunnit 2.0.0 is being held back");
+  });
+
+  it("status: what a node sent on an undeclared port is said once, however often it was refused", async () => {
+    const board = new NoticeBoard({
+      deliver: () => undefined,
+      store: new JsonNoticeFile(path.join(userData, NOTICES_FILENAME)),
+      logger: new RecordingLogger(),
+    });
+    const refused: Notice = {
+      kind: "emit-refused",
+      subject: 'summarize (port "mounted")',
+      detail: "Its package does not declare that port, so what it sent there went nowhere",
+    };
+    for (let n = 0; n < 25; n += 1) board.raise({ ...refused });
+    put("status");
+    take(deps().answer);
+    const { text } = await replyFor();
+    const { title, body } = compose(refused);
+    expect(text.split(`  ${title} — ${body}\n`)).toHaveLength(2);
+    expect(title).toBe('Reload refused what summarize (port "mounted") sent');
+  });
+
+  it("a question folder it cannot read is a notice told once however often it looks, cleared once it can", () => {
+    const notifier = new RecordingNotifier();
+    const questions = unwritable(
+      "questions from terminal commands",
+      () => notifier,
+      new RecordingLogger(),
+    );
+    const answer = deps({ questions }).answer;
+    fs.chmodSync(userData, 0o000);
+    try {
+      for (let n = 0; n < 5; n += 1) takeQuestions(userData, answer, Date.now());
+    } finally {
+      fs.chmodSync(userData, 0o700);
+    }
+    expect(notifier.notices).toEqual([
+      {
+        kind: "command-line-unwritable",
+        subject: "questions from terminal commands",
+        detail: expect.stringContaining("EACCES") as unknown,
+      },
+    ]);
+    expect(compose(notifier.notices[0] as Notice).title).toBe(
+      "Reload could not use its questions from terminal commands",
+    );
+    takeQuestions(userData, answer, Date.now());
+    expect(notifier.cleared).toEqual(["command-line-unwritable questions from terminal commands"]);
   });
 
   it("quit: takes the Quit menu's path, and leaves naming what stopped to the asking process", async () => {
@@ -632,7 +823,7 @@ describe("the running instance answers", () => {
   it("an answer that cannot be written is a notice told once however often it fails, cleared once one is written", async () => {
     const notifier = new RecordingNotifier();
     const logger = new RecordingLogger();
-    const replies = unwritable("answer to a terminal command", () => notifier, logger);
+    const replies = unwritable("answers to terminal commands", () => notifier, logger);
     // The answers' folder is a file: every write fails, and the questions are still read.
     const answers = path.join(userData, "answers");
     fs.writeFileSync(answers, "");
@@ -650,19 +841,19 @@ describe("the running instance answers", () => {
     expect(notifier.notices).toEqual([
       {
         kind: "command-line-unwritable",
-        subject: "answer to a terminal command",
+        subject: "answers to terminal commands",
         detail: expect.stringContaining("ENOTDIR") as unknown,
       },
     ]);
     expect(compose(notifier.notices[0] as Notice).title).toBe(
-      "Reload could not write its answer to a terminal command",
+      "Reload could not use its answers to terminal commands",
     );
     expect(logger.lines.filter((line) => !line.startsWith("INFO answering"))).toEqual([]);
     put("status");
     take(deps({ replies }).answer);
     await expect
       .poll(() => notifier.cleared)
-      .toEqual(["command-line-unwritable answer to a terminal command"]);
+      .toEqual(["command-line-unwritable answers to terminal commands"]);
   });
 
   it("a write that fails before the notices exist is a warning, once, and a notice once they do", () => {
@@ -671,7 +862,7 @@ describe("the running instance answers", () => {
     const trouble = unwritable("run-state file", () => notifier, logger);
     trouble.failed(new Error("EACCES"));
     trouble.failed(new Error("EACCES"));
-    expect(logger.lines).toEqual(["WARN Reload could not write its run-state file: Error: EACCES"]);
+    expect(logger.lines).toEqual(["WARN Reload could not use its run-state file: Error: EACCES"]);
     notifier = new RecordingNotifier();
     trouble.ready();
     trouble.failed(new Error("EACCES"));

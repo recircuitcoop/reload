@@ -52,7 +52,7 @@ export type NoticeKind =
   | "flows-file-damaged"
   /** A node sent on a port its package does not declare: refused, told once (plan 0031 I). */
   | "emit-refused"
-  /** A file `reload --status` or `--quit` reads could not be written (plan 0031 group E). */
+  /** A file `reload --status` or `--quit` uses could not be written or read (plan 0031 E). */
   | "command-line-unwritable"
   /** A run started (plan 0022 §I, ux-writing "Notifications"); stops after five good runs. */
   | "run-started"
@@ -263,7 +263,7 @@ function composeWords(notice: Notice): Message {
       };
     case "command-line-unwritable":
       return {
-        title: `Reload could not write its ${subject}`,
+        title: `Reload could not use its ${subject}`,
         body: sentences(detail, "Commands typed in a terminal may not work until it can."),
       };
     case "run-started":
