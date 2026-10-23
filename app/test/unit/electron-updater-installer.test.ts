@@ -236,5 +236,10 @@ describe("ElectronUpdaterInstaller", () => {
     }).not.toThrow();
     expect(updater.quitAndInstall).toHaveBeenCalledTimes(1);
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("nothing staged"));
+    updater.quitAndInstall.mockImplementation(() => {
+      throw "not an Error"; // eslint-disable-line @typescript-eslint/only-throw-error
+    });
+    updates.quitAndInstall();
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("not an Error"));
   });
 });

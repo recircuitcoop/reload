@@ -138,7 +138,8 @@ function serveStaged(
   handoff: StagedHandoff,
 ): Promise<{ readonly url: string; readonly close: () => void }> {
   const server = http.createServer((request, response) => {
-    const name = decodeURIComponent((request.url ?? "").split("?")[0] ?? "").replace(/^\/+/, "");
+    const { pathname } = new URL(String(request.url), "http://loopback");
+    const name = decodeURIComponent(pathname).replace(/^\/+/, "");
     const body = name.endsWith(".yml")
       ? handoff.metadata
       : name === handoff.fileName
