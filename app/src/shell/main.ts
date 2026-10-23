@@ -256,7 +256,6 @@ async function start(): Promise<DesktopWired["notices"] | null> {
   logger.info(`the runtime's port for this session is ${String(port)}`);
   // Anytype first, as the old helper did (launcher.py:894), so its API is up sooner.
   void anytypeApp.start();
-
   // ── the secret store (WI-0018-06): safeStorage is usable only once Electron is ready ────
   const userDir = app.getPath("userData");
   const secrets = openSecretStore({
@@ -377,7 +376,6 @@ async function start(): Promise<DesktopWired["notices"] | null> {
     supervisors.set(child, supervisor);
   }
   wireChildCalls(ipcMain, supervisors, toPage);
-
   // ── Anytype (WI-0018-18): the services process answers; the page never sees the key ─────
   const services = supervisors.get("services");
   const runtime = supervisors.get("runtime");
