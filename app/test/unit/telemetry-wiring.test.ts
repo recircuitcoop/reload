@@ -578,6 +578,44 @@ describe("the launch's own signals (plan 0029)", () => {
     });
   });
 
+  it("a package installed and removed between two listings is vouched for by its record alone", async () => {
+    const marks = new MemoryMarks();
+    const world = wired("on", TEST_ENV, marks);
+    world.up();
+    // The store's listing read at start never knew it: only the installer's record vouches.
+    const facts = {
+      package: "freshkit",
+      version: "2.0.0",
+      source: "catalogue" as const,
+      signed: true,
+      environment: null,
+    };
+    const record = {
+      package: "freshkit",
+      version: "2.0.0",
+      contentHash: "d".repeat(64),
+      environment: "node" as const,
+      signed: true,
+      sources: { "src/fresh.ts": 12 },
+    };
+    world.telemetry.signal(packageRemoved(facts), record);
+    expect(marks.memory?.vouched?.["freshkit"]).toEqual({
+      nodeTypes: [],
+      held: { "src/fresh.ts": 12 },
+    });
+    world.clock.advance(60_000);
+    await settle();
+    const sent = world.poster.sent.map((request) => request.body).join();
+    expect(sent).toContain('"package":"freshkit"');
+    expect(sent).toContain('"version":"2.0.0"');
+    // An unsigned record of that name: not the package that was vouched for.
+    world.telemetry.signal(packageRemoved({ ...facts, signed: false }), {
+      ...record,
+      signed: false,
+    });
+    expect(marks.memory?.vouched?.["freshkit"]).toBeUndefined();
+  });
+
   it("a signed package replaced by an unsigned one of its name is named by neither at send", async () => {
     const marks = new MemoryMarks();
     let store: readonly ListedPackage[] = PACKAGES;
