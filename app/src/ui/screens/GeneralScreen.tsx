@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type {
   AnytypeStatus,
+  AnytypeTool,
   AppApi,
   LaunchAtLoginStatus,
   McpEndpointStatus,
@@ -330,8 +331,47 @@ function AiAppsSection({
         </Button>
       </div>
       <Message said={said} testId="general-ai-apps-message" />
+      <AnytypeTools api={api} />
       <ChatGptSetup api={api} served={status?.served ?? null} />
     </GeneralSection>
+  );
+}
+
+/** Which Anytype tools AI apps can use: the recorded list, read with Anytype down too. */
+function AnytypeTools({ api }: { readonly api: AppApi }) {
+  const [tools, setTools] = useState<readonly AnytypeTool[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  return (
+    <div className="flex flex-col items-start gap-2">
+      <Button
+        kind="quiet"
+        aria-expanded={tools !== null}
+        data-testid="general-anytype-tools-see"
+        onClick={() => {
+          setFailed(false);
+          if (tools !== null) setTools(null);
+          else
+            api.anytypeTools().then(setTools, () => {
+              setFailed(true);
+            });
+        }}
+      >
+        {tools === null ? t("general.aiApps.tools.see") : t("general.aiApps.tools.hide")}
+      </Button>
+      {tools === null ? null : (
+        <ul data-testid="general-anytype-tools" className="flex flex-wrap gap-1">
+          {tools.map((tool) => (
+            <li key={tool.name}>
+              <Code kind="inline">{tool.name}</Code>
+            </li>
+          ))}
+        </ul>
+      )}
+      <Message
+        said={failed ? { kind: "failed", text: t("refused.failed") } : null}
+        testId="general-anytype-tools-message"
+      />
+    </div>
   );
 }
 

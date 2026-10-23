@@ -105,7 +105,7 @@ import { catalogueSource, wirePackages } from "./packages";
 import { quitQuestion, wireQuit } from "./quit-question";
 import { forkSpecFor, LOG_CANARY_VARIABLE } from "./child-environment";
 import { wireRuntimeCalls } from "./runtime-calls";
-import { wireServiceCalls } from "./service-calls";
+import { wireAnytypeTools, wireServiceCalls } from "./service-calls";
 import { endpointEnv, withShippedSources, wireTelemetry, type ShellTelemetry } from "./telemetry";
 import { releaseUrls, updateSource, wireUpdate } from "./update";
 import { wireViews } from "./views";
@@ -382,6 +382,7 @@ async function start(): Promise<DesktopWired["notices"] | null> {
   wireServiceCalls(ipcMain, services, proxyToken, anytypeStarted, () =>
     telemetry?.reached("anytype_paired"),
   );
+  wireAnytypeTools(ipcMain, parseToolSurface(committedSurface).tools);
   // ── the pages and pop-outs (WI-0018-11): served by the shell, never by the runtime ───────
   serveAppPages(protocol, path.join(APP_DIR, "dist", "ui"));
   const viewSession = session.fromPartition(VIEW_PARTITION);

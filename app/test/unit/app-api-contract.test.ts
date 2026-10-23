@@ -56,6 +56,7 @@ const CALLS: Record<string, { call: (api: AppApi) => Promise<unknown>; sent: unk
     sent: [IPC.mcpEndpointMove, "127.0.0.1", 31011],
   },
   mcpToken: { call: (api) => api.mcpToken(), sent: [IPC.mcpToken] },
+  anytypeTools: { call: (api) => api.anytypeTools(), sent: [IPC.anytypeTools] },
   submitView: {
     call: (api) => api.submitView("v1", { a: 1 }),
     sent: [IPC.viewCall, { op: "view.submit", args: { id: "v1", values: { a: 1 } } }],

@@ -68,3 +68,18 @@ export function wireServiceCalls(
     return value;
   });
 }
+
+/**
+ * Which Anytype tools exist (the old host's anytype_tools(), plan 0032 group 16): the surface
+ * recorded with the app, sorted by name, as plain data. Answered by the shell itself, so it reads
+ * with the MCP child, Anytype or the services process down.
+ */
+export function wireAnytypeTools(
+  ipc: Pick<IpcMain, "handle">,
+  recorded: Readonly<Record<string, string>>,
+): void {
+  const tools = Object.keys(recorded)
+    .sort()
+    .map((name) => ({ name, signature: recorded[name] ?? "" }));
+  ipc.handle(IPC.anytypeTools, () => tools);
+}

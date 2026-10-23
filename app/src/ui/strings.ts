@@ -373,6 +373,9 @@ export const STRINGS = {
   "general.aiApps.port": "Port", // decided: the endpoint's port field
   "general.aiApps.change": "Change", // decided: the one button that moves both
   "general.aiApps.hostRefused": "Only a numeric loopback address can be used, so nothing changed.", // decided
+  // Which Anytype tools exist (plan 0032, group 16): the recorded list, read with Anytype down too.
+  "general.aiApps.tools.see": "See the Anytype tools", // decided
+  "general.aiApps.tools.hide": "Hide the Anytype tools", // decided
   // Set up ChatGPT (WI-0022-30; owner, 2026-10-15: "a process inside the chatgpt application"):
   // the steps in ChatGPT's own Settings, and the two values they ask for, each copied on a press.
   // The token is never drawn: only Copy token puts it on the clipboard.

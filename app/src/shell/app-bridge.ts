@@ -7,6 +7,7 @@ import { appApiV2Over } from "./app-bridge-v2";
 import { IPC } from "./ipc";
 import type {
   AnytypeStatus,
+  AnytypeTool,
   AppApi,
   ChildName,
   ChildStatus,
@@ -46,6 +47,7 @@ export function appApiOver(ipc: RendererIpc): AppApi {
     moveMcpEndpoint: (host: string, port: number) =>
       ipc.invoke(IPC.mcpEndpointMove, host, port) as Promise<McpEndpointStatus>,
     mcpToken: () => ipc.invoke(IPC.mcpToken) as Promise<string>,
+    anytypeTools: () => ipc.invoke(IPC.anytypeTools) as Promise<readonly AnytypeTool[]>,
     submitView: (id, values) =>
       ipc.invoke(IPC.viewCall, { op: "view.submit", args: { id, values } }) as Promise<ViewResult>,
     openView: async (id) => {

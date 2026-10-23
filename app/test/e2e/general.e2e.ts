@@ -13,7 +13,7 @@ import net from "node:net";
 import * as path from "node:path";
 import { expect, test, type ElectronApplication, type Locator } from "@playwright/test";
 import { NOTICE_VERSION } from "../../src/domain/telemetry/reports";
-import { toolSignature } from "../../src/adapters/anytype/tool-surface";
+import { committedToolSurface, toolSignature } from "../../src/adapters/anytype/tool-surface";
 import { ANYTYPE_VERSION, PACKAGE_VERSION } from "../../src/domain/anytype/pins";
 import { STRINGS } from "../../src/ui/strings";
 import {
@@ -550,6 +550,17 @@ test("General shows the queued reports in full, Advanced's status details, Recor
     const window = first.window;
     const runtime = await waitForRunning(window, "runtime");
     const general = await openGeneral(window);
+
+    // ── AI apps: which Anytype tools exist, read with no key, so with no MCP child ──────────
+    const seeTools = general.getByTestId("general-anytype-tools-see");
+    await expect(seeTools).toHaveText(STRINGS["general.aiApps.tools.see"]);
+    await seeTools.click();
+    await expect(general.getByTestId("general-anytype-tools").getByRole("listitem")).toHaveText(
+      Object.keys(committedToolSurface(path.join(APP, "src", "adapters", "anytype")).tools).sort(),
+    );
+    await expect(seeTools).toHaveText(STRINGS["general.aiApps.tools.hide"]);
+    await seeTools.click();
+    await expect(general.getByTestId("general-anytype-tools")).toHaveCount(0);
 
     // ── Reports: the state, the crash caption, and the queued reports in full ───────────────
     await expect(general.getByTestId("general-reports-state")).toHaveText(

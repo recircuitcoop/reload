@@ -8,7 +8,9 @@ import { IPC } from "../../src/shell/ipc";
 import { wireDesktop } from "../../src/shell/desktop";
 import { DeliveredNotices, exposeE2eHooks } from "../../src/shell/e2e-hooks";
 import { quitQuestion, wireQuit } from "../../src/shell/quit-question";
-import { wireServiceCalls } from "../../src/shell/service-calls";
+import { wireAnytypeTools, wireServiceCalls } from "../../src/shell/service-calls";
+import { parseToolSurface } from "../../src/adapters/anytype/tool-surface";
+import committedSurface from "../../src/adapters/anytype/tool_surface.json";
 import { wireViews } from "../../src/shell/views";
 import { RecordingLogger, RecordingNotifier } from "../fakes/children";
 
@@ -167,6 +169,22 @@ describe("wireQuit, wireServiceCalls, wireDesktop and the e2e hooks", () => {
     call(IPC.quitAnswer, "deploy");
     call(IPC.quitAnswer, "nonsense");
     expect(answers).toEqual(["deploy"]);
+  });
+
+  it("which Anytype tools exist reads with no services process and no MCP child, as plain data", () => {
+    const { handle, call } = ipc();
+    // Nothing else is wired: no services process to ask, no MCP child, no key.
+    const recorded = parseToolSurface(committedSurface).tools;
+    wireAnytypeTools({ handle }, recorded);
+    const tools = call(IPC.anytypeTools) as readonly { name: string; signature: string }[];
+    const names = tools.map((tool) => tool.name);
+    expect(names.length).toBeGreaterThan(0);
+    expect(names).toEqual(Object.keys(committedSurface.tools).sort());
+    expect(new Set(names).size).toBe(names.length);
+    expect(tools.every((tool) => /^sha256:[0-9a-f]{64}$/.test(tool.signature))).toBe(true);
+    expect(Object.fromEntries(tools.map((tool) => [tool.name, tool.signature]))).toEqual(recorded);
+    // Plain data: what crosses to the page survives a structured clone unchanged.
+    expect(structuredClone(tools)).toEqual(tools);
   });
 
   it("only a pairing the services process completed reaches anytype_paired", async () => {

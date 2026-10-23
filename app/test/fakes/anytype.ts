@@ -15,7 +15,7 @@ import type {
 } from "../../src/ports/anytype";
 import type { Logger } from "../../src/ports/logger";
 import type { SecretName, SecretStore } from "../../src/ports/secret-store";
-import type { AnytypeStatus, McpEndpointStatus } from "../../src/ui/contract";
+import type { AnytypeStatus, AnytypeTool, McpEndpointStatus } from "../../src/ui/contract";
 
 /** AppApi's Anytype and MCP endpoint members for a page test that never calls them. */
 export const ANYTYPE_UNUSED = {
@@ -26,6 +26,7 @@ export const ANYTYPE_UNUSED = {
   mcpEndpoint: (): Promise<McpEndpointStatus> => Promise.reject(new Error("not used here")),
   moveMcpEndpoint: (): Promise<McpEndpointStatus> => Promise.reject(new Error("not used here")),
   mcpToken: (): Promise<string> => Promise.reject(new Error("not used here")),
+  anytypeTools: (): Promise<readonly AnytypeTool[]> => Promise.reject(new Error("not used here")),
 };
 
 /** The dispatch's file downloads for a test that downloads nothing: no key, no Anytype. */

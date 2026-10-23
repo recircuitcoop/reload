@@ -24,6 +24,8 @@ export const IPC = {
   mcpEndpointMove: "reload:mcp-endpoint-move",
   /** invoke: the MCP endpoint's token, for Copy token (WI-0022-30). */
   mcpToken: "reload:mcp-token",
+  /** invoke: which Anytype tools exist, from the recorded surface (plan 0032, group 16). */
+  anytypeTools: "reload:anytype-tools",
   /** invoke: a view call, `{op, args}`, answered by the runtime: Skip this step's dismissal. */
   viewCall: "reload:view-call",
   /** invoke: Answer: a pending view in its pop-out, with its id. */

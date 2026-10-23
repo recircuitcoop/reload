@@ -80,6 +80,12 @@ export interface TelemetryReport {
   readonly body: string;
 }
 
+/** One Anytype tool: its name, and `sha256:` over its input schema. */
+export interface AnytypeTool {
+  readonly name: string;
+  readonly signature: string;
+}
+
 /** The Anytype core service's state (WI-0018-18); see domain/anytype/status.ts. */
 export type AnytypeState =
   | "no-key"
@@ -229,6 +235,11 @@ export interface AppApi extends AppApiV2 {
    * Rejects when there is none yet.
    */
   mcpToken(): Promise<string>;
+  /**
+   * Which Anytype tools exist, by name, with the signature of each one's arguments: the list the
+   * pinned MCP server is held to, recorded with the app, so it reads with the MCP child down.
+   */
+  anytypeTools(): Promise<readonly AnytypeTool[]>;
   /** Submit a pending view; `{__dismiss__: true}` dismisses it (spec 8.2). */
   submitView(id: string, values: Readonly<Record<string, unknown>>): Promise<ViewResult>;
   /** Answer: the pending view in its own pop-out, or the open one focused. */
