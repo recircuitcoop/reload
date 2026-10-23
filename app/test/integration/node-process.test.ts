@@ -46,6 +46,14 @@ function send(node: NodeProcess, data: unknown, run?: string): [string, Recordin
   return [id ?? "(refused)", delivery];
 }
 
+/**
+ * How many exits the instance has handled. Its pid is null from the moment its process exits,
+ * but the exit is handled (the next process scheduled) only once the pipes close: a test that
+ * moves a fake clock waits for this, not for the pid.
+ */
+const handledExits = (node: RawNode): number =>
+  node.logger.lines.filter((line) => line.text.includes("process exited unexpectedly")).length;
+
 async function ready(node: RawNode): Promise<void> {
   await waitFor("ready", () => node.logger.has(/\] ready$/));
 }
@@ -498,7 +506,7 @@ describe("an unexpected exit of a node process", () => {
     const clock = new FakeClock();
     const node = raw({ clock, config: { exit_at_start: 3 } });
     for (let exit = 1; exit <= 5; exit += 1) {
-      await waitFor(`exit ${String(exit)}`, () => node.node.pid === null);
+      await waitFor(`exit ${String(exit)}`, () => handledExits(node) === exit);
       if (exit < 5) {
         clock.advance(999);
         expect(node.node.pid).toBeNull();
@@ -576,7 +584,7 @@ describe("an unexpected exit of a node process", () => {
     await waitFor("the stop", () => stopped.notifier.notices.length === 1);
     const first = other.node.pid as number;
     process.kill(first, "SIGKILL");
-    await waitFor("the other's exit", () => other.node.pid === null);
+    await waitFor("the other's exit", () => handledExits(other) === 1);
     clock.advance(1_000);
     expect(other.node.pid).not.toBeNull();
     expect(other.node.pid).not.toBe(first);
@@ -591,7 +599,7 @@ describe("an unexpected exit of a node process", () => {
     clock.advance(29_999);
     expect(node.node.pid).not.toBeNull();
     clock.advance(1);
-    await waitFor("the kill", () => node.node.pid === null);
+    await waitFor("the kill", () => handledExits(node) === 1);
     expect(node.host.statuses).toContainEqual({
       fill: "red",
       shape: "dot",
@@ -633,7 +641,7 @@ describe("an unexpected exit of a node process", () => {
     await waitFor("the stop", () => failed.notifier.notices.length === 1);
     const fixed = raw({ clock, id: failed.spec.identity.id, config: { exit_at_start: 3 } });
     for (let exit = 1; exit <= 5; exit += 1) {
-      await waitFor(`exit ${String(exit)}`, () => fixed.node.pid === null);
+      await waitFor(`exit ${String(exit)}`, () => handledExits(fixed) === exit);
       if (exit < 5) {
         clock.advance(1_000);
         expect(fixed.node.pid).not.toBeNull();
