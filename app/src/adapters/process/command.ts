@@ -6,6 +6,10 @@
 // what the caller names, and nothing else (plan 0018 §7).
 
 import * as path from "node:path";
+import { anytypeKeyVariables } from "../../domain/anytype/pins";
+import type { SecretPaths } from "../../domain/channel/messages";
+import type { LoadedType } from "../../domain/packages/declaration";
+import type { RuntimeLocator } from "../../ports/runtime-locator";
 
 /** A declared command: one argv for every platform, or one per platform (spec 2.3.1). */
 export type DeclaredCommand =
@@ -150,4 +154,40 @@ export function minimalEnvironment(
     }
   }
   return { ...env, ...NODE_DEFAULTS, ...extra };
+}
+
+/**
+ * A generated type's node command and environment (spec 2.3; WI-0018-09), as the registration
+ * asks for each instance it starts. `{python}` is the package's own environment's, else PATH's
+ * python3 (WI-0018-15); `{node}` is the locator's: the bundled Node once fetched (WI-0018-23),
+ * else Electron's own binary run as node. Only the first-party Anytype package shipped with the
+ * app is told where the key is (§4.2).
+ */
+export function nodeCommandFor(options: {
+  readonly locator: RuntimeLocator;
+  readonly python: (name: string) => string | undefined;
+  /** The folder of the packages shipped with the app. */
+  readonly shippedRoot: string;
+  readonly secretFiles: SecretPaths | undefined;
+  /** The runtime's own environment, handed in by the composition root. */
+  readonly env: Readonly<Record<string, string | undefined>>;
+}): (entry: LoadedType) => { argv: string[]; cwd: string; env: Record<string, string> } {
+  return (entry) => {
+    const node = options.locator.node();
+    return {
+      ...resolveCommand(entry.type.command, process.platform, {
+        python: options.python(entry.declaration.package) ?? "python3",
+        node: node.command,
+        package: entry.folder,
+      }),
+      env: minimalEnvironment(options.env, {
+        ...node.env,
+        ...anytypeKeyVariables(
+          entry.declaration.package,
+          path.dirname(entry.folder) === options.shippedRoot,
+          options.secretFiles,
+        ),
+      }),
+    };
+  };
 }

@@ -776,6 +776,71 @@ describe("applying an update", () => {
     expect(roots.installed("other")?.version).toBe("1.0.0");
   });
 
+  it("an update of a package no flow uses restarts nothing: its types are loaded again in place", async () => {
+    // test_update_of_an_addon_that_was_not_running_restarts_nothing (plan 0032 group 21).
+    publish("pinger", "0.1.0");
+    const reloaded: [string, string | undefined][] = [];
+    const { installer, updates } = setUp({
+      reloadTypes: (name) => {
+        // Loaded again once the new version is the live one.
+        reloaded.push([name, roots.installed(name)?.version]);
+        return Promise.resolve();
+      },
+    });
+    expect(await installer.installFromCatalogue("pinger")).toMatchObject({ ok: true });
+    publish("pinger", "0.2.0");
+    await updates.check();
+    readiness = () => Promise.resolve({ deployed: [], ready: [] });
+    restarts = [];
+    expect(await drive(updates.apply("pinger", "person"))).toMatchObject({ ok: true });
+    expect(restarts).toEqual([]);
+    expect(reloaded).toEqual([["pinger", "0.2.0"]]);
+    expect(roots.installed("pinger")?.version).toBe("0.2.0");
+    expect(logger.lines.join("\n")).toContain("pinger 0.1.0 → 0.2.0 is live; nothing restarted");
+  });
+
+  it("a package a flow uses, or a runtime that cannot say, restarts as before; types that do not load again restart after", async () => {
+    publish("pinger", "0.1.0");
+    let refuse = false;
+    const reloaded: string[] = [];
+    const { installer, updates } = setUp({
+      reloadTypes: (name) => {
+        reloaded.push(name);
+        return refuse
+          ? Promise.reject(new Error("a deployed node uses it now"))
+          : Promise.resolve();
+      },
+    });
+    expect(await installer.installFromCatalogue("pinger")).toMatchObject({ ok: true });
+    for (const version of ["0.2.0", "0.3.0", "0.4.0"]) {
+      publish("pinger", version);
+      await updates.check();
+      restarts = [];
+      if (version === "0.2.0") {
+        // In use: the instance comes back ready on the new version after the restart.
+        readiness = () => Promise.resolve({ deployed: ["n1"], ready: ["n1"] });
+      } else if (version === "0.3.0") {
+        // It cannot say before the swap; after the restart it can.
+        let asked = 0;
+        readiness = () =>
+          (asked += 1) === 1
+            ? Promise.reject(new Error("the runtime is restarting"))
+            : Promise.resolve({ deployed: [], ready: [] });
+      } else {
+        readiness = () => Promise.resolve({ deployed: [], ready: [] });
+        refuse = true;
+      }
+      expect(await drive(updates.apply("pinger", "person"))).toMatchObject({ ok: true });
+      expect(roots.installed("pinger")?.version).toBe(version);
+      expect(restarts).toEqual([`pinger was updated to ${version}`]);
+    }
+    // Asked only for the idle one, whose types then would not load: restarted after the swap.
+    expect(reloaded).toEqual(["pinger"]);
+    expect(logger.lines.join("\n")).toContain(
+      "pinger's types were not loaded again (a deployed node uses it now); restarting",
+    );
+  });
+
   it("says, and keeps what is live, when the old version cannot be put back", async () => {
     const { updates } = await installed("pinger", "0.1.0");
     publish("pinger", "0.2.0");

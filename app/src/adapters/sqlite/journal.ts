@@ -12,6 +12,8 @@
 // and why the folded state is what is stored, are in run-tables.ts; the schema versions and the
 // pre-0.3.0 copy in migrate.ts.
 
+import fs from "node:fs";
+import * as path from "node:path";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 
 import {
@@ -21,6 +23,7 @@ import {
 } from "../../domain/journal/entry";
 import type { Run, RunKey } from "../../domain/runs/run";
 import type { JournalStore, RunChange } from "../../ports/journal-store";
+import type { Logger } from "../../ports/logger";
 import type {
   RunInputs,
   RunPage,
@@ -54,6 +57,24 @@ const SCHEMA = `
   );
   CREATE INDEX IF NOT EXISTS journal_instance ON journal (instance_id);
 `;
+
+/**
+ * The journal in the user's data (`<userDir>/journal.sqlite`), the runtime's one: a run event the
+ * fold refuses keeps its run as it was and the journal write goes on (D15), said at WARNING.
+ */
+export function openUserJournal(userDir: string, logger: Logger): SqliteJournal {
+  fs.mkdirSync(userDir, { recursive: true });
+  const journal = openSqliteJournal(path.join(userDir, "journal.sqlite"), {
+    problem: (message) => {
+      logger.warn(`run records: ${message}`);
+    },
+  });
+  logger.info(
+    `journal: node:sqlite (SQLite ${journal.sqliteVersion}), WAL, ` +
+      `${String(journal.all().length)} entries in ${journal.file}`,
+  );
+  return journal;
+}
 
 /** Open (or create) the journal at `file`, in WAL mode with every commit synced. */
 export function openSqliteJournal(file: string, options: SqliteJournalOptions = {}): SqliteJournal {

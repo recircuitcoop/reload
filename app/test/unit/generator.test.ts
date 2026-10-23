@@ -14,7 +14,10 @@ import {
   CATEGORY,
   DEFAULT_ICON,
   FORMS_FILE,
+  generatedModulesIn,
+  generatePackageTypes,
   generateTypes,
+  packageModuleName,
   REGISTER_GLOBAL,
 } from "../../src/adapters/nodered/generator";
 import type { Declaration, DeclaredType } from "../../src/domain/packages/declaration";
@@ -89,7 +92,7 @@ interface Registered {
 
 /** Run a generated editor file's definition script as the editor would; what it registered. */
 function editorDefinition(file: string): { registered: Registered; defined: [string, unknown][] } {
-  const html = fs.readFileSync(path.join(dir, file), "utf8");
+  const html = fs.readFileSync(path.join(dir, "reload-demo", file), "utf8");
   const script = /<script type="text\/javascript">([\s\S]*?)<\/script>/.exec(html)?.[1] ?? "";
   const registered: Registered[] = [];
   const defined: [string, unknown][] = [];
@@ -111,7 +114,7 @@ function editorDefinition(file: string): { registered: Registered; defined: [str
 }
 
 describe("generateTypes", () => {
-  it("writes one module and one editor file per type, and the form code once", () => {
+  it("writes one Node-RED module per package, with a node file and an editor file per type, and the form code once", () => {
     const written = generateTypes(
       [SNAPSHOT, SOURCE].map((type) => ({ declaration: DECLARATION, type })),
       dir,
@@ -119,13 +122,31 @@ describe("generateTypes", () => {
     );
     expect(written).toEqual(["reload-demo-board", "reload-demo-watch"]);
     expect(fs.readdirSync(dir).sort()).toEqual([
+      "reload-demo",
+      `${FORMS_FILE}.html`,
+      `${FORMS_FILE}.js`,
+    ]);
+    expect(fs.readdirSync(path.join(dir, "reload-demo")).sort()).toEqual([
+      "package.json",
       "reload-demo-board.html",
       "reload-demo-board.js",
       "reload-demo-watch.html",
       "reload-demo-watch.js",
-      `${FORMS_FILE}.html`,
-      `${FORMS_FILE}.js`,
     ]);
+    // A module Node-RED's registry can drop and load again by its name (plan 0032 group 21).
+    expect(
+      JSON.parse(fs.readFileSync(path.join(dir, "reload-demo", "package.json"), "utf8")),
+    ).toMatchObject({
+      name: "reload-demo",
+      version: DECLARATION.version,
+      "node-red": {
+        nodes: {
+          "reload-demo-board": "reload-demo-board.js",
+          "reload-demo-watch": "reload-demo-watch.js",
+        },
+      },
+    });
+    expect(generatedModulesIn(dir)).toEqual(["reload-demo"]);
     expect(fs.readFileSync(path.join(dir, `${FORMS_FILE}.html`), "utf8")).toContain(
       "window.ReloadForms = {};",
     );
@@ -135,14 +156,29 @@ describe("generateTypes", () => {
     fs.writeFileSync(path.join(dir, "reload-demo-gone.js"), "");
     fs.writeFileSync(path.join(dir, "reload-demo-gone.html"), "");
     fs.writeFileSync(path.join(dir, "sleeper.js"), "hand-written");
+    fs.mkdirSync(path.join(dir, "reload-gone"));
     generateTypes([{ declaration: DECLARATION, type: SOURCE }], dir, "");
     expect(fs.readdirSync(dir).sort()).toEqual([
-      "reload-demo-watch.html",
-      "reload-demo-watch.js",
+      "reload-demo",
       `${FORMS_FILE}.html`,
       `${FORMS_FILE}.js`,
       "sleeper.js",
     ]);
+  });
+
+  it("writes one package's module afresh, and none for a package left with no types", () => {
+    generateTypes([{ declaration: DECLARATION, type: SOURCE }], dir, "");
+    expect(
+      generatePackageTypes([{ declaration: DECLARATION, type: SNAPSHOT }], dir, "demo"),
+    ).toEqual(["reload-demo-board"]);
+    expect(fs.readdirSync(path.join(dir, "reload-demo")).sort()).toEqual([
+      "package.json",
+      "reload-demo-board.html",
+      "reload-demo-board.js",
+    ]);
+    expect(generatePackageTypes([], dir, "demo")).toEqual([]);
+    expect(fs.existsSync(path.join(dir, "reload-demo"))).toBe(false);
+    expect(packageModuleName("demo")).toBe("reload-demo");
   });
 
   it("keeps a </script> in the form code from ending its element", () => {
@@ -245,7 +281,7 @@ describe("a generated editor definition", () => {
   });
 
   it("draws the secrets as password inputs Node-RED fills, the required one marked", () => {
-    const html = fs.readFileSync(path.join(dir, "reload-demo-board.html"), "utf8");
+    const html = fs.readFileSync(path.join(dir, "reload-demo", "reload-demo-board.html"), "utf8");
     expect(html).toContain(
       '<label for="node-input-token">Token <span class="reload-required" data-testid="reload-required-token">*</span></label>' +
         '<input type="password" id="node-input-token"',
@@ -259,7 +295,7 @@ describe("a generated editor definition", () => {
   });
 
   it("queues its schema when the form code is not in the page yet", () => {
-    const html = fs.readFileSync(path.join(dir, "reload-demo-watch.html"), "utf8");
+    const html = fs.readFileSync(path.join(dir, "reload-demo", "reload-demo-watch.html"), "utf8");
     const script = /<script type="text\/javascript">([\s\S]*?)<\/script>/.exec(html)?.[1] ?? "";
     const window: Record<string, unknown> = {};
     vm.runInNewContext(script, { window, RED: { nodes: { registerType: () => undefined } } });
@@ -272,7 +308,7 @@ describe("a generated module", () => {
     generateTypes([{ declaration: DECLARATION, type: SOURCE }], dir, "");
     const load = (): void => {
       const module: unknown = createRequire(import.meta.url)(
-        path.join(dir, "reload-demo-watch.js"),
+        path.join(dir, "reload-demo", "reload-demo-watch.js"),
       );
       (module as (RED: unknown) => void)("the RED");
     };

@@ -4,6 +4,10 @@
 import type { UpdateMode, VersionFinding } from "../domain/packages/versions";
 import type { InstalledRecord } from "../ports/package-roots";
 import type { UpdateLine } from "./install-package";
+import { READY_POLL_MS, READY_WINDOW_MS, type PackageUpdatesPorts } from "./update-package";
+
+const reasonOf = (error: unknown): string =>
+  error instanceof Error ? error.message : String(error);
 
 /** What the last check found about one package. */
 export interface Found {
@@ -62,4 +66,46 @@ export function movedDetail(record: InstalledRecord): string {
     `the content at ${where} changed and its version did not; the same version cannot hold ` +
     "other content, so it is not applied until its publisher gives it a new version"
   );
+}
+
+/**
+ * Null once every deployed instance of `name`'s types sent `ready`; otherwise, at the end of the
+ * window, why not.
+ */
+export function readyWithin(
+  ports: Pick<PackageUpdatesPorts, "clock" | "readiness">,
+  name: string,
+): Promise<string | null> {
+  const { clock, readiness } = ports;
+  const deadline = clock.now() + READY_WINDOW_MS;
+  let last = "the runtime did not say which of its instances are ready";
+  return new Promise((resolve) => {
+    const poll = (): void => {
+      readiness([name]).then(
+        ({ deployed, ready }) => {
+          const waiting = deployed.filter((id) => !ready.includes(id));
+          if (waiting.length === 0) {
+            resolve(null);
+            return;
+          }
+          last =
+            `${waiting.length === 1 ? "instance" : "instances"} ${waiting.join(", ")} of its ` +
+            `types sent no ready within ${String(READY_WINDOW_MS / 1000)} s`;
+          again();
+        },
+        (error: unknown) => {
+          last = `the runtime could not say which instances are ready: ${reasonOf(error)}`;
+          again();
+        },
+      );
+    };
+    const again = (): void => {
+      if (clock.now() >= deadline) {
+        resolve(last);
+        return;
+      }
+      clock.after(Math.min(READY_POLL_MS, deadline - clock.now()), poll);
+    };
+    poll();
+  });
 }

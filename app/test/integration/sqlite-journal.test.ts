@@ -5,7 +5,12 @@ import * as path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { openSqliteJournal, type SqliteJournal } from "../../src/adapters/sqlite/journal";
+import {
+  openSqliteJournal,
+  openUserJournal,
+  type SqliteJournal,
+} from "../../src/adapters/sqlite/journal";
+import { RecordingLogger } from "../fakes/children";
 import { newEntry, presented, type JournalEntry } from "../../src/domain/journal/entry";
 
 const opened: SqliteJournal[] = [];
@@ -94,5 +99,18 @@ describe("the SQLite journal", () => {
 
   it("refuses a database that cannot use WAL", () => {
     expect(() => openSqliteJournal(":memory:")).toThrow(/could not use WAL mode/);
+  });
+});
+
+describe("the runtime's own journal in the user's data", () => {
+  it("is made in a folder that may not exist yet, and says what it opened", () => {
+    const userDir = path.join(path.dirname(scratchFile()), "user", "data");
+    const logger = new RecordingLogger();
+    const journal = openUserJournal(userDir, logger);
+    opened.push(journal);
+    expect(journal.file).toBe(path.join(userDir, "journal.sqlite"));
+    expect(logger.lines.join("\n")).toMatch(
+      /journal: node:sqlite \(SQLite [\d.]+\), WAL, 0 entries in /,
+    );
   });
 });

@@ -50,3 +50,22 @@ declare module "node-red" {
   const RED: NodeRedApi;
   export default RED;
 }
+
+// Node-RED's node registry, as its own documented index exports it (@memberof @node-red/registry):
+// a module removed from the registry and added again from its folder while Node-RED runs
+// (plan 0032 group 21). The same instance Node-RED itself holds: the runtime bundle keeps the
+// package external.
+declare module "@node-red/registry" {
+  interface RegistryNodeSet {
+    readonly id: string;
+    readonly types: readonly string[];
+  }
+  interface NodeRedRegistry {
+    getModuleInfo(module: string): unknown;
+    /** Synchronous: the node sets removed. */
+    removeModule(module: string): RegistryNodeSet[];
+    addModule(module: string): Promise<unknown>;
+  }
+  const registry: NodeRedRegistry;
+  export default registry;
+}

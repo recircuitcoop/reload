@@ -42,7 +42,7 @@ import {
   type RestartRuntime,
 } from "./install-package";
 import { PackageCatalogues, type CatalogueReads, type UpdateArchives } from "./package-catalogues";
-import { movedDetail, updateLine, type Found } from "./update-lines";
+import { movedDetail, readyWithin, updateLine, type Found } from "./update-lines";
 import { packageUpdated, type Signal } from "../domain/telemetry/reports";
 import {
   inspectPackage,
@@ -71,6 +71,8 @@ export interface PackageUpdatesPorts extends CatalogueReads {
   /** The `packages` settings, read at the moment they are needed; throws when unreadable. */
   readonly policy: () => PackagePolicy;
   readonly restartRuntime: RestartRuntime;
+  /** Load package `name`'s types again in the running runtime; rejects when it cannot. */
+  readonly reloadTypes?: (name: string) => Promise<void>;
   readonly readiness: (packages: readonly string[]) => Promise<Readiness>;
   readonly blocked: BlockedUpdates;
   readonly notifier: Notifier;
@@ -388,11 +390,10 @@ export class PackageUpdates {
     }
     // Swapped in once the old instances have stopped, so they close on their own files.
     const built = staged.record.version;
-    const { took, refused } = await restartAround(
-      this.#ports.restartRuntime,
-      `${name} was updated to ${built}`,
-      () => void staged.swap(),
-    );
+    const reason = `${name} was updated to ${built}`;
+    const idle = await this.#swapIdle(name, reason, () => void staged.swap());
+    const { took, refused } =
+      idle ?? (await restartAround(this.#ports.restartRuntime, reason, () => void staged.swap()));
     if (refused !== null) {
       return this.#failed("Not updated", refused);
     }
@@ -407,9 +408,9 @@ export class PackageUpdates {
         const updated = packageUpdated(recordFacts(live), where, nodeTypes, record.version);
         this.#ports.signal?.(updated, live);
       }
+      const restarted = idle === null ? `only the runtime restarted, in ${String(took)} ms` : null;
       logger.info(
-        `update: ${name} ${record.version} → ${built} is live; only the runtime restarted, in ` +
-          `${String(took)} ms`,
+        `update: ${name} ${record.version} → ${built} is live; ${restarted ?? "nothing restarted"}`,
       );
       this.#found.set(name, { finding: { kind: "current" }, installed: built });
       if (from.kind === "catalogue") {
@@ -420,6 +421,38 @@ export class PackageUpdates {
       return { ok: true, message: `${name} is updated from ${record.version} to ${built}.` };
     }
     return this.#rollBack(record, built, problem, took !== null);
+  }
+
+  /**
+   * The swap with nothing restarted, when no deployed flow uses `name` (plan 0032 group 21): its
+   * types are loaded again in the running runtime. Null when one does, or it cannot be asked: the
+   * runtime then restarts around the swap. Types that cannot be loaded again restart it after.
+   */
+  async #swapIdle(
+    name: string,
+    reason: string,
+    swap: () => void,
+  ): Promise<{ readonly took: number | null; readonly refused: string | null } | null> {
+    const { reloadTypes, readiness, restartRuntime, logger } = this.#ports;
+    const deployed = await readiness([name]).then(
+      (answer) => answer.deployed,
+      () => null,
+    );
+    if (reloadTypes === undefined || deployed === null || deployed.length > 0) {
+      return null;
+    }
+    try {
+      swap();
+    } catch (error) {
+      return { took: null, refused: reasonOf(error) };
+    }
+    try {
+      await reloadTypes(name);
+      return { took: 0, refused: null };
+    } catch (error) {
+      logger.warn(`update: ${name}'s types were not loaded again (${reasonOf(error)}); restarting`);
+      return { took: await restartRuntime(reason), refused: null };
+    }
   }
 
   #archives(): UpdateArchives {
@@ -434,43 +467,9 @@ export class PackageUpdates {
     return this.#catalogues.offeredArchive(name, from, version, this.#archives());
   }
 
-  /**
-   * Null once every deployed instance of `name`'s types sent `ready`; otherwise, at the end of
-   * the window, why not.
-   */
+  /** Null once every deployed instance of `name`'s types sent `ready`; else, in the end, why not. */
   waitForReady(name: string): Promise<string | null> {
-    const { clock, readiness } = this.#ports;
-    const deadline = clock.now() + READY_WINDOW_MS;
-    let last = "the runtime did not say which of its instances are ready";
-    return new Promise((resolve) => {
-      const poll = (): void => {
-        readiness([name]).then(
-          ({ deployed, ready }) => {
-            const waiting = deployed.filter((id) => !ready.includes(id));
-            if (waiting.length === 0) {
-              resolve(null);
-              return;
-            }
-            last =
-              `${waiting.length === 1 ? "instance" : "instances"} ${waiting.join(", ")} of its ` +
-              `types sent no ready within ${String(READY_WINDOW_MS / 1000)} s`;
-            again();
-          },
-          (error: unknown) => {
-            last = `the runtime could not say which instances are ready: ${reasonOf(error)}`;
-            again();
-          },
-        );
-      };
-      const again = (): void => {
-        if (clock.now() >= deadline) {
-          resolve(last);
-          return;
-        }
-        clock.after(Math.min(READY_POLL_MS, deadline - clock.now()), poll);
-      };
-      poll();
-    });
+    return readyWithin(this.#ports, name);
   }
 
   /** Swap the old version back, restart again, block the version, and say so. */

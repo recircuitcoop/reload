@@ -10,13 +10,18 @@
 // this class refuses it at run time.
 
 import type { EventEmitter } from "node:events";
+import fs from "node:fs";
 import * as http from "node:http";
+import { createRequire } from "node:module";
+import * as path from "node:path";
+import registry from "@node-red/registry";
 import express from "express";
 import RED from "node-red";
 import type { OptionsAnswer, OptionsQuery } from "../../domain/forms/node-options";
 import type { NodeRedEditorEvents, NodeSet, NodeSetSummary } from "../../ports/node-red-engine";
 import type { RequestGuard } from "../../ports/request-guard";
 import { deployGuard, hostCheck, keepUndeclared, upgradeHostCheck } from "./guard-middleware";
+import { packageModuleName } from "./generator";
 import { optionsRoute } from "./options-route";
 import { ADMIN_ROOT } from "./settings";
 
@@ -40,11 +45,15 @@ export interface EmbeddedNodeRedOptions {
 export class EmbeddedNodeRed implements NodeRedEditorEvents {
   readonly #port: number;
   readonly #server: http.Server;
+  /** Where the generated modules are (the settings' one `nodesDir`). */
+  readonly #generatedDir: string | null;
   #phase: "initialised" | "starting" | "started" | "stopped" = "initialised";
 
   /** `RED.init` on a new server with the guards mounted; nothing listens until `start`. */
   constructor(options: EmbeddedNodeRedOptions) {
     this.#port = options.port;
+    const [generated] = (options.settings["nodesDir"] as readonly string[] | undefined) ?? [];
+    this.#generatedDir = generated ?? null;
     const web = express();
     // Node-RED needs no proxy trust, and its Express banner tells a caller nothing it needs.
     web.disable("x-powered-by");
@@ -147,6 +156,32 @@ export class EmbeddedNodeRed implements NodeRedEditorEvents {
       RED.events.emit(RUNTIME_EVENT, { id: "node/added", retain: false, payload: added });
     }
     return added.map((set) => set.id);
+  }
+
+  /**
+   * Package `name`'s generated module dropped from Node-RED's registry and loaded again from its
+   * folder, while Node-RED runs (plan 0032 group 21), and every editor told as after a palette
+   * install. For a package no deployed flow uses: its instances would keep the old constructors.
+   */
+  async reloadModule(name: string): Promise<void> {
+    if (this.#generatedDir === null) {
+      throw new Error("this Node-RED has no generated modules to load again");
+    }
+    const moduleName = packageModuleName(name);
+    const moduleDir = path.join(this.#generatedDir, moduleName);
+    const removed = registry.getModuleInfo(moduleName) ? registry.removeModule(moduleName) : [];
+    // Node-RED requires a module's package.json and node files; what it read before is forgotten.
+    const cache = createRequire(path.join(moduleDir, "package.json")).cache;
+    for (const file of Object.keys(cache).filter((one) => one.startsWith(moduleDir + path.sep))) {
+      Reflect.deleteProperty(cache, file);
+    }
+    this.raiseNodeRemoved(removed);
+    if (!fs.existsSync(path.join(moduleDir, "package.json"))) {
+      return;
+    }
+    await registry.addModule(moduleName);
+    const sets = await RED.runtime.nodes.getNodeList({});
+    await this.raiseNodeAdded(sets.filter((set) => set.module === moduleName).map((set) => set.id));
   }
 
   raiseNodeRemoved(sets: readonly NodeSetSummary[]): void {

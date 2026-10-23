@@ -42,6 +42,12 @@ export interface NodeRedSettingsInput {
   readonly logging: NodeRedLoggingSettings;
   /** Node-RED's own file storage, guarded (guarded-storage.ts): saves refused while a file is. */
   readonly storageModule: Record<string, unknown>;
+  /**
+   * The generated modules (generator.ts `packageModuleName`), each by its exact name: the only
+   * modules the palette lock lets load, and so what Node-RED's registry can load again while it
+   * runs (plan 0032 group 21). None by default.
+   */
+  readonly generatedModules?: readonly string[];
 }
 
 /** The whole `settings` object `RED.init` is given. */
@@ -60,11 +66,16 @@ export function nodeRedSettings(input: NodeRedSettingsInput): Record<string, unk
     nodesExcludes: coreNodesOutsideCommon(input.coreNodesDir),
     // Spec 11.4: Node-RED then mounts no install route (404) and shows no palette manager, and
     // the deny-all palette list keeps every module out of the node list, even one listed in
-    // userDir/package.json.
+    // userDir/package.json, but Reload's own generated modules, each by its exact name.
     functionExternalModules: false,
     externalModules: {
       autoInstall: false,
-      palette: { allowInstall: false, allowUpload: false, allowList: [], denyList: ["*"] },
+      palette: {
+        allowInstall: false,
+        allowUpload: false,
+        allowList: [...(input.generatedModules ?? [])],
+        denyList: ["*"],
+      },
       modules: { allowInstall: false, allowList: [], denyList: ["*"] },
     },
     editorTheme: {

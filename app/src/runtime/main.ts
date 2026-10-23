@@ -20,7 +20,12 @@ import { InstalledPackageStore } from "../adapters/fs/installed-package-store";
 import { FsPackageRoots } from "../adapters/fs/package-roots";
 import { EmbeddedNodeRed } from "../adapters/nodered/engine";
 import { NodeRedFlows } from "../adapters/nodered/flows";
-import { generateTypes, REGISTER_GLOBAL } from "../adapters/nodered/generator";
+import {
+  generatedModulesIn,
+  generatePackageTypes,
+  generateTypes,
+  REGISTER_GLOBAL,
+} from "../adapters/nodered/generator";
 import { TypeRegistration, type NodeRedNodeApi } from "../adapters/nodered/registration";
 import { nodeRedLogging } from "../adapters/nodered/logging";
 import {
@@ -30,14 +35,14 @@ import {
 } from "../adapters/nodered/guarded-storage";
 import { nodeRedSettings } from "../adapters/nodered/settings";
 import { guardMissingExamplesFailure } from "../adapters/nodered/examples";
-import { minimalEnvironment, resolveCommand } from "../adapters/process/command";
+import { nodeCommandFor } from "../adapters/process/command";
 import { DEFAULT_NODE_PROCESS, nodeProcessLauncher } from "../adapters/process/node-process";
 import { processTreeFor } from "../adapters/process/process-tree";
 import { resourceProbeFor } from "../adapters/process/resource-probe";
 import { JsonNodeRecords } from "../adapters/process/node-records";
 import { SystemRuntimeLocator } from "../adapters/process/runtime-locator";
 import { AjvSchemaValidator } from "../adapters/schema/ajv-validator";
-import { openSqliteJournal, type SqliteJournal } from "../adapters/sqlite/journal";
+import { openUserJournal, type SqliteJournal } from "../adapters/sqlite/journal";
 import { openSqliteSnapshots } from "../adapters/sqlite/snapshots";
 import { monotonicClock, systemClock } from "../adapters/system/clock";
 import { syncWriter } from "../adapters/system/sync-writer";
@@ -54,6 +59,7 @@ import { isRunActionOp, RunActions } from "../application/run-actions";
 import { isRunOp, RunService } from "../application/runs";
 import type { JournalStore } from "../ports/journal-store";
 import { loadNodeTypes, unregisteredNames } from "../application/load-node-types";
+import { PackageTypes } from "../application/package-types";
 import { watchParent } from "../application/parent-watchdog";
 import { NodeOptions } from "../application/node-options";
 import { PeerCaller, receiveKeys } from "../application/peer-link";
@@ -69,7 +75,6 @@ import {
 import { printCanary, sourceLog } from "../application/source-log";
 import { ViewService } from "../application/views";
 import { enabledNodes, InstanceReadiness } from "../application/instance-readiness";
-import { anytypeKeyVariables } from "../domain/anytype/pins";
 import { FLOW_FILES, refusedFlowFileSentence } from "../domain/flows/flow-file";
 import type { InitConfig, StopReason } from "../domain/channel/messages";
 import type { RuntimeLocator } from "../ports/runtime-locator";
@@ -133,20 +138,7 @@ const PACKAGE_ROOTS = [
 // JournalReplay (application/journal-replay.ts), constructed below before Node-RED starts.
 let journal: SqliteJournal | null = null;
 function openJournal(userDir: string): SqliteJournal {
-  if (journal !== null) {
-    return journal;
-  }
-  fs.mkdirSync(userDir, { recursive: true });
-  // An event the run fold refuses keeps its run as it was; the journal write goes on (D15).
-  journal = openSqliteJournal(path.join(userDir, "journal.sqlite"), {
-    problem: (message) => {
-      logger.warn(`run records: ${message}`);
-    },
-  });
-  logger.info(
-    `journal: node:sqlite (SQLite ${journal.sqliteVersion}), WAL, ` +
-      `${String(journal.all().length)} entries in ${journal.file}`,
-  );
+  journal ??= openUserJournal(userDir, logger);
   return journal;
 }
 
@@ -200,6 +192,7 @@ let runActions: RunActions | null = null;
 // each generated type belongs to.
 const readiness = new InstanceReadiness();
 let packageOfType: (type: string) => string | undefined = () => undefined;
+let packageTypes: PackageTypes | null = null;
 // Flow administration (plan 0022 §D): one tab is one flow, and the runtime owns its writes.
 let flows: FlowAdmin | null = null;
 let flowNodeType: (type: string) => ReturnType<typeof flowNodeTypeOf> | undefined = () => undefined;
@@ -258,6 +251,21 @@ function generateNodeTypes(
   };
   const written = generateTypes(loaded, generatedDir, fs.readFileSync(EDITOR_FORMS, "utf8"));
   logger.info(`generated ${String(written.length)} node types: ${written.join(", ") || "none"}`);
+  // A package no deployed flow uses is updated without a restart (plan 0032 group 21).
+  packageTypes = new PackageTypes({
+    packages: () => packages.documents(),
+    unregistered: () => unregisteredNames(() => settings.readPackages(), logger),
+    validator,
+    types,
+    python: ownPython,
+    generate: (entries, name) => generatePackageTypes(entries, generatedDir, name),
+    engine: {
+      deployedFlows: () => nodeRed?.deployedFlows() ?? Promise.resolve([]),
+      reloadModule: (name) =>
+        nodeRed?.reloadModule(name) ?? Promise.reject(new Error("no runtime")),
+    },
+    logger,
+  });
   // The person hears of a stopped node, and of a refused key, through the shell (WI-0018-21).
   const notifier = shellNotifier(link);
   // An Anytype key that Anytype refuses is said once, whichever instance meets it (§4.2).
@@ -315,29 +323,14 @@ function generateNodeTypes(
     runs: runService,
     reruns,
     logger,
-    commandFor: (entry) => {
-      const node = runtimeLocator.node();
-      return {
-        // {python} becomes the bundled Python with WI-0018-15; until then, PATH's python3.
-        // {node} is runtimeLocator's: the bundled Node once fetched (WI-0018-23), else
-        // Electron's own binary run as node.
-        ...resolveCommand(entry.type.command, process.platform, {
-          python: ownPython.get(entry.declaration.package) ?? "python3",
-          node: node.command,
-          package: entry.folder,
-        }),
-        env: minimalEnvironment(process.env, {
-          ...node.env,
-          // Only the key's location, only for the first-party Anytype package (§4.2).
-          ...anytypeKeyVariables(
-            entry.declaration.package,
-            // The first root is the packages shipped with the app.
-            path.dirname(entry.folder) === PACKAGE_ROOTS[0],
-            config.secretFiles,
-          ),
-        }),
-      };
-    },
+    commandFor: nodeCommandFor({
+      locator: runtimeLocator,
+      python: (name) => ownPython.get(name),
+      // The first root is the packages shipped with the app.
+      shippedRoot: PACKAGE_ROOTS[0] ?? "",
+      secretFiles: config.secretFiles,
+      env: process.env,
+    }),
     dataDirFor: (id) => path.join(config.userDir, "instances", id),
     closeReason: () => (stopping === null ? "redeploy" : CLOSE_REASON[stopping]),
   });
@@ -448,6 +441,7 @@ async function startNodeRed(config: InitConfig): Promise<void> {
       coreNodesDir: CORE_NODES_DIR,
       logging: nodeRedLogging(nodeRedLogger),
       storageModule: storage.module(),
+      generatedModules: generatedModulesIn(generatedDir),
     }),
     guard,
     nodeOptions: (query) => nodeOptions.resolve(query),
@@ -562,6 +556,9 @@ serveShell({
           enabledNodes(flows).map((node) => ({ id: node.id, package: packageOfType(node.type) })),
         ),
       );
+    }
+    if (op === "package.reload" && packageTypes !== null) {
+      return packageTypes.reload(args);
     }
     // The created event types (WI-0018-13): their store and their sources, kept for the source's
     // setting inside a flow (plan 0022 §N).
