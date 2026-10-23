@@ -1,5 +1,5 @@
 // The crash-loop limit end to end, without Electron (plan 0018 §7): a fake child that exits
-// at once is restarted with backoff until 5 crashes fall inside 2 minutes. Then the state is
+// at once is restarted with backoff until 5 crashes fall inside 10 minutes. Then the state is
 // down-for-good, the status AppApi hands the app window carries the error its runtime banner
 // shows, exactly one notice is raised, and the banner's Restart (restartChild) starts the child
 // again.
@@ -62,7 +62,7 @@ describe("the crash-loop limit", () => {
 
     supervisor.start();
     // Five crashes: at 0, then after 1, 2, 4 and 8 s of backoff (15 s in all), well inside
-    // the 2-minute window.
+    // the 10-minute window.
     clock.advance(15_000);
     expect(launcher.children).toHaveLength(5);
     expect(supervisor.status().state).toBe("down-for-good");
@@ -90,7 +90,7 @@ describe("the crash-loop limit", () => {
       { kind: "child-stopped", subject: "runtime", detail: message },
     ]);
     expect(message).toBe(
-      "The Reload runtime stopped unexpectedly 5 times in 2 minutes, so it is no longer " +
+      "The Reload runtime stopped unexpectedly 5 times in 10 minutes, so it is no longer " +
         "restarted. Press Restart to try again.",
     );
     // A one-minute window is said in the singular, and one under a whole minute in seconds.
@@ -138,10 +138,10 @@ describe("the crash-loop limit", () => {
     const { clock, launcher, supervisor, notifier } = supervised(obedient);
     supervisor.start();
     clock.advance(1);
-    // One crash every 40 s: never five inside two minutes.
+    // One crash every 200 s: never five inside ten minutes.
     for (let crash = 0; crash < 10; crash++) {
       launcher.current.exit(1);
-      clock.advance(40_000);
+      clock.advance(200_000);
       expect(supervisor.status().state, `crash ${String(crash)}`).toBe("running");
     }
     expect(notifier.notices).toEqual([]);
@@ -209,7 +209,7 @@ describe("the crash-loop limit", () => {
     throwing.start();
     clock.advance(15_000);
     expect(throwing.status().state).toBe("down-for-good");
-    expect(throwing.status().error).toContain("5 times in 2 minutes");
+    expect(throwing.status().error).toContain("5 times in 10 minutes");
     expect(logger.lines).toContain(
       "ERROR the crash-loop notice could not be raised: Error: notifications are switched off",
     );

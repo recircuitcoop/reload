@@ -4,7 +4,8 @@
 // corrupt file would otherwise be restarted for as long as the machine is on: a loop that
 // burns a laptop and tells nobody anything.
 //
-// The rule is N crashes inside a window (defaults 5 in 2 minutes). Counting inside a window
+// The rule is N crashes inside a window (defaults 5 in 10 minutes, the old helper's breaker;
+// the person may change both, plan 0032 group 9). Counting inside a window
 // rather than for all time is what tells "this is broken" from "this had a bad day": a child
 // that fails once a week is never stopped, one that fails five times in a minute is.
 //
@@ -20,12 +21,12 @@ export interface CrashLoopSettings {
   readonly windowMs: number;
 }
 
-export const DEFAULT_CRASH_LOOP: CrashLoopSettings = { maxCrashes: 5, windowMs: 120_000 };
+export const DEFAULT_CRASH_LOOP: CrashLoopSettings = { maxCrashes: 5, windowMs: 600_000 };
 
 /**
  * The resource watchdog's own limit (helper/config.py BreakerSettings): five stops over a limit
- * in ten minutes, and the process is not started again. A stop takes at least the grace window,
- * so the crash-loop limit above could never see five of them in its two minutes.
+ * in ten minutes, and the process is not started again. Its own numbers, not the crash-loop
+ * limit's: a person who narrows that window must not make five slow stops uncountable.
  */
 export const DEFAULT_INTERVENTIONS: CrashLoopSettings = { maxCrashes: 5, windowMs: 600_000 };
 
@@ -80,5 +81,52 @@ export class CrashLoopBreaker {
   #recent(at: number): number[] {
     const cutoff = at - this.#settings.windowMs;
     return this.#crashes.filter((crash) => crash > cutoff);
+  }
+}
+
+/**
+ * The crash-loop limit and the restart attempts together (plan 0032 group 9; the old helper's
+ * breaker and restart.max_attempts): a crash counts against both, and either one stops the
+ * restarts. Read as the crash-loop settings it was made with, and says which one stopped it.
+ */
+export class RestartLimit implements CrashLoopSettings {
+  readonly #breaker: CrashLoopBreaker;
+  readonly #settings: CrashLoopSettings;
+  readonly #attempts: number;
+  #inARow = 0;
+
+  constructor(
+    settings: { readonly crashLoop: CrashLoopSettings; readonly restartAttempts: number },
+    now: () => number,
+  ) {
+    this.#settings = settings.crashLoop;
+    this.#attempts = settings.restartAttempts;
+    this.#breaker = new CrashLoopBreaker(settings.crashLoop, now);
+  }
+
+  get maxCrashes(): number {
+    return this.#settings.maxCrashes;
+  }
+
+  get windowMs(): number {
+    return this.#settings.windowMs;
+  }
+
+  /** Count one crash. True while restarting is still allowed by both. */
+  recordCrash(): boolean {
+    this.#inARow += 1;
+    return this.#breaker.recordCrash() && this.#inARow <= this.#attempts;
+  }
+
+  /** The process came up: the crashes in a row start again from none. */
+  ready(): void {
+    this.#inARow = 0;
+  }
+
+  /** Why the restarts stopped when the attempts stopped them, in words; null otherwise. */
+  get overAttempts(): string | null {
+    return !this.#breaker.tripped && this.#inARow > this.#attempts
+      ? `stopped after ${String(this.#inARow)} exits in a row`
+      : null;
   }
 }

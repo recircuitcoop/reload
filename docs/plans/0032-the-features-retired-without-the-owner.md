@@ -144,9 +144,12 @@ settings.
   takes the same keys. If any field is refused, nothing is written. A draft survives leaving the
   screen. The shell's supervisor, the runtime's node processes and the services process's MCP
   child all read these numbers at start. Each process's resource watchdog reads the cadence and
-  the stop timeout again before every wait. The crash-loop limit stays 5 in 2 minutes by
-  default, and the person can now change it. The watchdog's own limit of five stops over a
-  limit is not one of these numbers. 15 rows.
+  the stop timeout again before every wait. The crash-loop limit is the old helper's 5 in 10 minutes by default, and the
+  person can change it. The runtime's node processes keep the restart attempts as the shell's
+  children do: so many exits in a row with no `ready` between, and no more restarts. The form
+  writes both settings in one rename, both or neither; a write the disk refuses leaves the old
+  file whole and is said, in the log and to the form. The watchdog's own limit of five stops over
+  a limit is not one of these numbers. 15 rows.
 - **Group 11** (branch `port/0032-wave3b`): the watcher is the shell's parent
   (`shell/watcher.ts`). A shell started without it, as a person or the login item starts Reload,
   takes the single-instance lock, then releases it, starts the watcher detached and quits. A

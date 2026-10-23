@@ -6,6 +6,7 @@ import * as fs from "node:fs";
 import { DEFAULT_QUEUE, type QueueSettings } from "../../domain/journal/queue";
 import { DEFAULT_BACKOFF, type BackoffSettings } from "../../domain/supervision/backoff";
 import { DEFAULT_CRASH_LOOP, type CrashLoopSettings } from "../../domain/supervision/breaker";
+import { DEFAULT_STABILITY } from "../../domain/supervision/stability";
 import type { Clock } from "../../ports/clock";
 import type { JournalStore } from "../../ports/journal-store";
 import type { Logger, SecretSink } from "../../ports/logger";
@@ -25,6 +26,8 @@ export interface NodeProcessSettings {
   /** An unexpected exit → the next process. */
   readonly respawnDelayMs: number;
   readonly crashLoop: CrashLoopSettings;
+  /** Unexpected exits in a row, with no `ready` between, that are restarted (stability.ts). */
+  readonly restartAttempts: number;
   /** A stuck process's restarts in a row wait these (node-heartbeat.ts). */
   readonly backoff: BackoffSettings;
   /**
@@ -43,6 +46,7 @@ export const DEFAULT_NODE_PROCESS: NodeProcessSettings = {
   respawnDelayMs: 1_000,
   crashLoop: DEFAULT_CRASH_LOOP,
   backoff: DEFAULT_BACKOFF,
+  restartAttempts: DEFAULT_STABILITY.restartAttempts,
   exitGraceMs: 500,
   queue: DEFAULT_QUEUE,
 };

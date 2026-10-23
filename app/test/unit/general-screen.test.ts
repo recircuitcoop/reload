@@ -957,7 +957,7 @@ describe("Stability defaults (plans 0031, 0032 group 9: the old helper form's tw
     stop_timeout_s: 10,
     restart_attempts: 5,
     restart_backoff_s: [1, 2, 4, 8, 16],
-    breaker_window_s: 120,
+    breaker_window_s: 600,
     breaker_count: 5,
     memory_mb: 1024,
     cpu_percent: 90,

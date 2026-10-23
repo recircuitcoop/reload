@@ -87,7 +87,7 @@ export interface StatusView {
   readonly banner: RuntimeBanner | null;
   /** Questions waiting for the person, hidden places included. */
   readonly badge: number;
-  /** The crash-loop limit the banner's Down sentence names ("5 times in 2 minutes"). */
+  /** The crash-loop limit the banner's Down sentence names ("5 times in 10 minutes"). */
   readonly crashLoop: { readonly crashes: number; readonly minutes: number };
   /**
    * A refused flows file's notice, as the desktop showed it; null while none is refused.

@@ -1007,7 +1007,7 @@ describe("a node's crash reaches the shell over the channel", () => {
     });
     supervisor.start();
     clock.advance(60_000);
-    // The crash-loop limit (5 in 2 minutes): four restarts, then down for good.
+    // The crash-loop limit (5 in 10 minutes): four restarts, then down for good.
     expect(reports.counts().runtime).toBe(5);
     expect(recorded.map((payload) => payload["stopped_for_good"])).toEqual([
       false,

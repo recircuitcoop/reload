@@ -207,7 +207,7 @@ describe("the hand-over to the watcher", () => {
       args: ["--hidden"],
       env: { HOME: "/home/test", ANYTYPE_API_KEY: "secret", [UNDER_WATCHER_VARIABLE]: "1" },
       delaysMs: [1_000, 2_000, 4_000, 8_000, 16_000],
-      crashLoop: { maxCrashes: 5, windowMs: 120_000 },
+      crashLoop: { maxCrashes: 5, windowMs: 600_000 },
     });
     expect(JSON.stringify(spawned[0]?.args)).not.toContain("secret");
   });

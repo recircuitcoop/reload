@@ -176,8 +176,7 @@ export function wireGeneralCalls(deps: GeneralCallsDeps): void {
                 })),
               });
             }
-            deps.limits.writeLimitDefaults(chosen as DeclaredLimits);
-            deps.limits.writeStability(stability);
+            deps.limits.writeLimitsAndStability(chosen as DeclaredLimits, stability);
             return { ok: true, value: limits() };
           }
           default:

@@ -199,6 +199,13 @@ function harness(options: { readonly logFile?: string | null } = {}) {
     writeStability(stability: DeclaredStability) {
       this.stored["stability"] = stability;
     },
+    /** Set to make the next writes fail as a disk that refuses them would. */
+    refuseWrites: false,
+    writeLimitsAndStability(limits: DeclaredLimits, stability: DeclaredStability) {
+      if (this.refuseWrites) throw new Error("could not write shell-settings.json: EACCES");
+      this.stored["limits"] = limits;
+      this.stored["stability"] = stability;
+    },
     readTelemetry() {
       return this.telemetry;
     },
@@ -289,6 +296,7 @@ function harness(options: { readonly logFile?: string | null } = {}) {
     runtime,
     services,
     settings,
+    logger,
     dialogs,
     quits,
     revealed,
@@ -935,7 +943,7 @@ describe("AppApi v2 calls, through the shell to its processes", () => {
       check_s: 10,
       stop_timeout_s: 10,
       restart_attempts: 5,
-      breaker_window_s: 120,
+      breaker_window_s: 600,
       breaker_count: 5,
     };
     expect(await h.api.limits()).toEqual({ ok: true, value: documented });
@@ -962,7 +970,7 @@ describe("AppApi v2 calls, through the shell to its processes", () => {
       check_s: 0.25,
       stop_timeout_s: 10,
       restart_attempts: 5,
-      breaker_window_s: 120,
+      breaker_window_s: 600,
       breaker_count: 9,
     });
     expect(await h.api.limits()).toEqual({ ok: true, value: raised });
@@ -1009,6 +1017,13 @@ describe("AppApi v2 calls, through the shell to its processes", () => {
       ok: false,
       refused: { reason: "invalid", sentence: "general.limits.refused", problems: [] },
     });
+    // A write the disk refuses stores neither half, and is said: in the log and to the form.
+    h.settings.refuseWrites = true;
+    expect(await h.api.setLimits({ ...raised, memory_mb: 512 })).toEqual(FAILED);
+    expect(stored()).toBe(before);
+    expect(
+      h.logger.lines.some((line) => line.includes("limits.set failed") && line.includes("EACCES")),
+    ).toBe(true);
   });
 
   it("answers an op no channel knows, and a handler that throws, as a refusal", async () => {

@@ -135,7 +135,7 @@ test("the crash-loop limit shows an error with Restart, and Restart brings the r
     await expect(window.getByTestId("status-pill")).toHaveText(t("status.stopped"));
     const banner = window.getByTestId("runtime-banner");
     await expect(banner).toHaveAttribute("data-banner", "down");
-    await expect(banner).toContainText(t("error.runtimeDown", { count: 5, minutes: 2 }));
+    await expect(banner).toContainText(t("error.runtimeDown", { count: 5, minutes: 10 }));
     const restart = banner.getByTestId("runtime-banner-restart");
     await expect(restart).toHaveText(t("notify.restart"));
     await expect(restart).toHaveAttribute("data-variant", /kind=primary/);

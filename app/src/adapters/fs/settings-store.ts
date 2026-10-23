@@ -227,6 +227,10 @@ export class JsonSettingsStore
     this.#write("stability", { ...stability });
   }
 
+  writeLimitsAndStability(limits: DeclaredLimits, stability: DeclaredStability): void {
+    this.#writeAll({ limits: { ...limits }, stability: { ...stability } });
+  }
+
   // Run history's retention (plan 0022 §C): `runs: {retentionDays}`, days or null for Forever.
   readRunRetentionDays(): number | null | undefined {
     const runs = this.#read()["runs"];
@@ -262,8 +266,12 @@ export class JsonSettingsStore
 
   /** Store one setting, keeping every other as it was. */
   #write(name: string, value: unknown): void {
-    const document = this.#read();
-    document[name] = value;
+    this.#writeAll({ [name]: value });
+  }
+
+  /** Every entry in one rename: all of them are written, or none and the old file stays whole. */
+  #writeAll(entries: Document): void {
+    const document = { ...this.#read(), ...entries };
     const scratch = `${this.#file}.${String(process.pid)}.tmp`;
     try {
       fs.mkdirSync(path.dirname(this.#file), { recursive: true });

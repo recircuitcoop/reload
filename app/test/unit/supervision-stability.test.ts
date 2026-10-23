@@ -47,14 +47,13 @@ const EVERY_KEY: Required<DeclaredStability> = {
 describe("the stability numbers", () => {
   it("are the old helper's numbers until the person sets their own", () => {
     // test_the_default_numbers_are_the_plan_s_numbers: a 10 s tick and stop timeout, at least
-    // one restart attempt, and the delays in order. The crash-loop limit stays this app's 5 in
-    // 2 minutes (the census's "Defaults differ" row), now the person's to change.
+    // one restart attempt, the delays in order, and the old breaker's 5 crashes in 10 minutes.
     expect(declaredStabilityOf(stabilityOf(undefined))).toEqual({
       check_s: 10,
       stop_timeout_s: 10,
       restart_attempts: 5,
       restart_backoff_s: [1, 2, 4, 8, 16],
-      breaker_window_s: 120,
+      breaker_window_s: 600,
       breaker_count: 5,
     });
     const delays = DEFAULT_STABILITY.backoff.delaysMs;
@@ -97,6 +96,29 @@ describe("the stability numbers", () => {
       stability: EVERY_KEY,
     });
     expect(store.readStability()).toEqual(EVERY_KEY);
+  });
+
+  it("are written with the limits in one rename: both, or neither and the old file whole", () => {
+    const before = JSON.stringify({ limits: { memory_mb: 512 }, stability: { check_s: 5 } });
+    fs.writeFileSync(file, before);
+    const store = new JsonSettingsStore(file);
+    store.writeLimitsAndStability({ memory_mb: 2048 }, { check_s: 2 });
+    expect(JSON.parse(fs.readFileSync(file, "utf8"))).toEqual({
+      limits: { memory_mb: 2048 },
+      stability: { check_s: 2 },
+    });
+    // A folder the write cannot go to: refused in words, and the file left as it was.
+    const written = fs.readFileSync(file, "utf8");
+    fs.chmodSync(scratch, 0o500);
+    try {
+      expect(() => {
+        store.writeLimitsAndStability({ memory_mb: 4096 }, { check_s: 1 });
+      }).toThrow(/could not write .*shell-settings\.json: EACCES/);
+    } finally {
+      fs.chmodSync(scratch, 0o700);
+    }
+    expect(fs.readFileSync(file, "utf8")).toBe(written);
+    expect(fs.readdirSync(scratch)).toEqual(["shell-settings.json"]);
   });
 
   it("refuse a file that holds a number they cannot be, naming the key", () => {

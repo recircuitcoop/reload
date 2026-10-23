@@ -518,7 +518,7 @@ describe("an unexpected exit of a node process", () => {
     expect(node.host.statuses.at(-1)).toEqual({
       fill: "red",
       shape: "dot",
-      text: "stopped after 5 exits in 120 s",
+      text: "stopped after 5 exits in 600 s",
     });
     expect(node.notifier.notices[0]).toMatchObject({ kind: "node-stopped", subject: "raw" });
     // Each exit is counted for the crash reports, the last as the one that stopped it.
@@ -530,6 +530,27 @@ describe("an unexpected exit of a node process", () => {
     expect(node.node.pid).toBeNull();
     const [, refused] = send(node.node, { do: "echo" });
     expect(refused.ends[0]?.message).toBe("the node process is stopped after repeated exits");
+  });
+
+  it("stops respawning after its restart attempts, exits in a row with no ready between, as the shell's children do", async () => {
+    // The old max_attempts, the person's restart_attempts: the crash-loop window set wide, so
+    // the attempts are what stops it.
+    const clock = new FakeClock();
+    const settings = { crashLoop: { maxCrashes: 100, windowMs: 600_000 }, restartAttempts: 2 };
+    const node = raw({ clock, config: { exit_at_start: 3 }, settings });
+    for (let exit = 1; exit <= 3; exit += 1) {
+      await waitFor(`exit ${String(exit)}`, () => handledExits(node) === exit);
+      if (exit < 3) clock.advance(1_000);
+    }
+    await waitFor("the stop", () => node.notifier.notices.length === 1);
+    expect(node.host.statuses.at(-1)).toEqual({
+      fill: "red",
+      shape: "dot",
+      text: "stopped after 3 exits in a row",
+    });
+    expect(node.notifier.notices[0]).toMatchObject({ kind: "node-stopped", subject: "raw" });
+    clock.advance(60_000);
+    expect(node.node.pid).toBeNull();
   });
 
   it("a type that says never to restart it is stopped at its first exit: red status, one notice, inputs refused", async () => {

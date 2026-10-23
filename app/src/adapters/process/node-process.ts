@@ -6,7 +6,7 @@ import { spawn, type ChildProcessWithoutNullStreams as ChildProcess } from "node
 import type { CloseReason } from "../../domain/journal/entry";
 import type { StepFailure } from "../../domain/telemetry/reports";
 import type { QueueReport } from "../../domain/journal/queue";
-import { CrashLoopBreaker } from "../../domain/supervision/breaker";
+import { RestartLimit } from "../../domain/supervision/breaker";
 import { TIMEOUT_PORT } from "../../domain/views/views";
 import type { Cancel } from "../../ports/clock";
 import type { NodeLineLevel } from "../../ports/logger";
@@ -57,9 +57,8 @@ class ChildNodeProcess implements NodeProcess {
   readonly #spec: NodeProcessSpec;
   readonly #host: NodeProcessHost;
   readonly #deps: NodeProcessDeps;
-  readonly #breaker: CrashLoopBreaker;
-  /** The outstanding inputs: journaled, not yet done (spec 7.6). */
-  readonly #inputs = new Map<string, Input>();
+  readonly #breaker: RestartLimit;
+  readonly #inputs = new Map<string, Input>(); // outstanding: journaled, not yet done (spec 7.6)
   readonly #journal: InputJournal;
   readonly #deadlines: ViewDeadlines;
   readonly #who: string;
@@ -86,7 +85,7 @@ class ChildNodeProcess implements NodeProcess {
     this.#spec = spec;
     this.#host = host;
     this.#deps = deps;
-    this.#breaker = new CrashLoopBreaker(deps.settings.crashLoop, () => deps.clock.now());
+    this.#breaker = new RestartLimit(deps.settings, () => deps.clock.now());
     this.#who = `[${spec.identity.type} ${spec.identity.id}]`;
     this.#subject = spec.identity.name || spec.identity.typeId;
     this.#journal = inputJournalFor(spec.identity, deps, this.#log.bind(this));
@@ -350,7 +349,7 @@ class ChildNodeProcess implements NodeProcess {
       this.#breaker.recordCrash();
     if (failure === undefined) this.#deps.crashes?.nodeCrashed(!again);
     if (!again) {
-      const { crashLoop } = this.#deps.settings;
+      const crashLoop = this.#breaker; // the crash-loop limit, and the attempts in a row
       const overLimits = this.#guard.restartable ? null : this.#guard.stopText(crashLoop);
       this.#stop(
         stoppedFor(this.#subject, crashLoop, { restartable, how, stuck, failure, overLimits }),
@@ -408,6 +407,7 @@ class ChildNodeProcess implements NodeProcess {
     switch (frame.t) {
       case "ready":
         this.ready = true;
+        this.#breaker.ready();
         this.#log("info", "ready");
         this.#heartbeat?.started();
         if (!this.#statusSeen) {

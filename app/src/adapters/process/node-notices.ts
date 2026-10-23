@@ -49,7 +49,8 @@ export function raiseStopped(
  */
 export function stoppedFor(
   subject: string,
-  crashLoop: CrashLoopSettings,
+  /** The crash-loop limit; a node process's also says when its restart attempts stopped it. */
+  crashLoop: CrashLoopSettings & { readonly overAttempts?: string | null },
   exit: {
     readonly restartable: boolean;
     readonly how: string;
@@ -75,6 +76,7 @@ export function stoppedFor(
     const { maxCrashes, windowMs } = crashLoop;
     const text =
       exit.overLimits ??
+      crashLoop.overAttempts ??
       `stopped after ${String(maxCrashes)} exits in ${String(windowMs / 1000)} s`;
     return {
       text,
