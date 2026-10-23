@@ -108,14 +108,14 @@ describe("a call while the child is not running", () => {
     expect(sent).toBe(0);
   });
 
-  it("answers down at once after a crash", async () => {
+  it("answers restarting at once after a crash, while it is brought back", async () => {
     const { state, result, sent } = await refusedIn(obedient, ({ supervisor, clock, launcher }) => {
       supervisor.start();
       clock.advance(1);
       launcher.current.exit(1);
     });
     expect(state).toBe("down");
-    expect(result).toMatchObject({ ok: false, code: "down" });
+    expect(result).toMatchObject({ ok: false, code: "restarting" });
     expect(sent).toBe(0);
   });
 
@@ -158,8 +158,8 @@ describe("the typed errors", () => {
       starting: "restarting",
       "restarting-planned": "restarting",
       restarting: "restarting",
-      recovering: "down",
-      down: "down",
+      recovering: "restarting",
+      down: "restarting",
       "down-for-good": "down",
       stopped: "stopped",
     };

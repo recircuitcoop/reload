@@ -126,13 +126,17 @@ export function answerPeerCalls(
 
 /**
  * The runtime side: calls to the services process over the current end. A call made before
- * any end arrived, one whose end was replaced, and one not answered within `timeoutMs` are
- * each answered `ok: false` here, so no caller waits forever.
+ * any end arrived waits for one: the runtime runs before the shell links it, and a call it
+ * answered itself then would be refused for a gap of a moment. A call whose end was replaced,
+ * and one not answered (or not sent) within `timeoutMs`, are each answered `ok: false` here,
+ * so no caller waits forever.
  */
 export class PeerCaller {
   readonly #clock: Clock;
   readonly #timeoutMs: number;
   readonly #pending = new Map<string, (result: OpResult) => void>();
+  /** Calls made before any end arrived, posted on the first one. */
+  readonly #unsent = new Map<string, { readonly op: PeerOp; readonly args: unknown }>();
   #peer: PeerLink | null = null;
   #next = 0;
 
@@ -151,16 +155,13 @@ export class PeerCaller {
         this.#pending.get(message.id)?.(message.result);
       }
     });
+    for (const [id, { op, args }] of this.#unsent) {
+      peer.post({ v: 1, t: "call", id, op, args });
+    }
+    this.#unsent.clear();
   }
 
   call(op: PeerOp, args: unknown): Promise<OpResult> {
-    const peer = this.#peer;
-    if (peer === null) {
-      return Promise.resolve({
-        ok: false,
-        error: "the services process is not linked to the runtime yet",
-      });
-    }
     this.#next += 1;
     const id = String(this.#next);
     return new Promise((resolve) => {
@@ -172,16 +173,24 @@ export class PeerCaller {
       });
       this.#pending.set(id, (result) => {
         this.#pending.delete(id);
+        this.#unsent.delete(id);
         cancel();
         resolve(result);
       });
-      peer.post({ v: 1, t: "call", id, op, args });
+      if (this.#peer === null) {
+        this.#unsent.set(id, { op, args });
+        return;
+      }
+      this.#peer.post({ v: 1, t: "call", id, op, args });
     });
   }
 
+  /** Answer every call already sent on the current end; one still unsent keeps waiting. */
   #settleAll(result: OpResult): void {
-    for (const settle of [...this.#pending.values()]) {
-      settle(result);
+    for (const [id, settle] of [...this.#pending]) {
+      if (!this.#unsent.has(id)) {
+        settle(result);
+      }
     }
   }
 }

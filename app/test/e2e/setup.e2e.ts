@@ -18,7 +18,15 @@ import { toolSignature } from "../../src/adapters/anytype/tool-surface";
 import { ANYTYPE_VERSION, PACKAGE_VERSION } from "../../src/domain/anytype/pins";
 import { STRINGS } from "../../src/ui/strings";
 import { FakeAnytypeServer } from "../fakes/anytype";
-import { anytypeKeyFile, APP, cleanUp, launchApp, quit, scratchDirectories } from "./app-harness";
+import {
+  anytypeKeyFile,
+  APP,
+  childOnPage,
+  cleanUp,
+  launchApp,
+  quit,
+  scratchDirectories,
+} from "./app-harness";
 
 /** The key the fake Anytype hands out for the code 1234: a test value, not a credential. */
 const KEY = "e2e-setup-anytype-key-5b21";
@@ -599,6 +607,41 @@ test("Anytype with no space: the example waits for one, and Check again finds it
     await window.getByTestId("setup-example-check").click();
     await expect(window.getByTestId("setup-example-use")).toBeVisible({ timeout: 20_000 });
     await expect(window.getByTestId("setup-example-no-space")).toHaveCount(0);
+    await quit(app);
+  } finally {
+    await cleanUp(apps, scratch);
+    await connected.anytype.close();
+  }
+});
+
+test("Anytype ready while the runtime restarts: Connect Anytype asks for the spaces again", async () => {
+  test.setTimeout(180_000);
+  const { scratch, env, canaryKey } = scratchDirectories();
+  const connected = await connectedAnytype(scratch, canaryKey);
+  const apps: ElectronApplication[] = [];
+  try {
+    const { app, window } = await launchApp({ ...env, ...connected.env });
+    apps.push(app);
+    const seen: string[] = [];
+    await at(window, "welcome", seen);
+    await button(window, "setup.welcome.start").click();
+    await at(window, "reports", seen);
+    // The runtime, which asks the services process for the spaces, is down as the step opens:
+    // Anytype answers ready, and the first ask for its spaces is refused.
+    let runtime = await childOnPage(window, "runtime");
+    await expect
+      .poll(async () => (runtime = await childOnPage(window, "runtime")).state, { timeout: 30_000 })
+      .toBe("running");
+    process.kill(runtime.pid, "SIGKILL");
+    await expect
+      .poll(async () => (await childOnPage(window, "runtime")).state, { timeout: 20_000 })
+      .not.toBe("running");
+    await button(window, "setup.reports.dontSend").click();
+    await at(window, "connect-anytype", seen);
+    // Once it is back, the spaces are asked again: never left at the refused answer.
+    await expect(window.getByTestId("setup-anytype")).toHaveText("Connected. Found 1 space.", {
+      timeout: 30_000,
+    });
     await quit(app);
   } finally {
     await cleanUp(apps, scratch);

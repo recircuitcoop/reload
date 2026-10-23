@@ -19,6 +19,36 @@ export interface AnytypeLine {
 }
 
 /**
+ * Anytype's spaces, read for `answered` once Anytype is ready; the function it answers stops
+ * the reading. The runtime asks the services process for them, so Anytype can be ready while
+ * the runtime is still starting or restarting: only that refusal, `restarting`, is asked again,
+ * every `againMs`, until an answer holds. Any other answer is shown as it is and not asked again
+ * (no timer retry of an Anytype that does not answer).
+ */
+export function readSpaces(
+  ask: () => Promise<Answer<NodeOptions>>,
+  answered: (answer: Answer<NodeOptions>) => void,
+  againMs: number,
+): () => void {
+  let live = true;
+  let again: ReturnType<typeof setTimeout> | undefined;
+  const read = () => {
+    void ask().then((answer) => {
+      if (!live) return;
+      answered(answer);
+      if (!answer.ok && answer.refused.reason === "restarting") {
+        again = setTimeout(read, againMs);
+      }
+    });
+  };
+  read();
+  return () => {
+    live = false;
+    clearTimeout(again);
+  };
+}
+
+/**
  * "Connected · 8 spaces" / "Not paired yet." (ux-writing), never a path. `spaces` is the answer
  * of anytypeSpaces, read only once Anytype is ready; null while it has not been read.
  */

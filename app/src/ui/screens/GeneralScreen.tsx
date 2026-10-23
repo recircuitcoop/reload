@@ -33,6 +33,7 @@ import {
   anytypeLine,
   clientSetup,
   moveRefusal,
+  readSpaces,
   reportsLine,
   RETENTION_OPTIONS,
   retentionDays,
@@ -142,13 +143,7 @@ export function useAnytype(api: AppApi) {
       setSpaces(null);
       return;
     }
-    let live = true;
-    void api.anytypeSpaces(checked > 0).then((answer) => {
-      if (live) setSpaces(answer);
-    });
-    return () => {
-      live = false;
-    };
+    return readSpaces(() => api.anytypeSpaces(checked > 0), setSpaces, ANYTYPE_POLL_MS);
   }, [api, ready, checked]);
   const checkAgain = useCallback(() => {
     setChecked((times) => times + 1);
