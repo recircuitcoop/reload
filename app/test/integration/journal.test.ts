@@ -203,7 +203,7 @@ describe("the bounded queue (spec 7.6)", () => {
   });
 
   it("hold: a node that falls behind is cut off at the held bound, its held inputs failed and never sent", async () => {
-    const node = raw(new MemoryJournal(), queueSettings(2, "hold"));
+    const node = raw(new MemoryJournal(), queueSettings(2, "hold", 2));
     send(node.node, { do: "present" });
     send(node.node, { do: "present" });
     await waitFor("two presents", () => node.host.presented.length === 2);

@@ -114,7 +114,7 @@ describe("the input journal's run changes", () => {
 });
 
 describe("the held inputs' bound (spec 7.6), in the runtime's own process", () => {
-  /** A node with `bound` inputs outstanding that never finishes one: everything else is held. */
+  /** A node with `bound` inputs outstanding that never finishes one, holding as many more. */
   function stuck(bound: number) {
     let n = 0;
     const logs: string[] = [];
@@ -123,7 +123,7 @@ describe("the held inputs' bound (spec 7.6), in the runtime's own process", () =
     const journal = new InputJournal({
       store,
       clock: new FakeClock(),
-      queue: { bound, policy: "hold" },
+      queue: { bound, policy: "hold", held: bound },
       instanceId: "n1",
       flowId: "tab1",
       type: "reload-pkg-t",

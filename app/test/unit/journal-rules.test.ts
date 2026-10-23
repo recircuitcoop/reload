@@ -13,7 +13,7 @@ import {
   submitted,
   type JournalEntry,
 } from "../../src/domain/journal/entry";
-import { admit, DEFAULT_QUEUE, queueSettings } from "../../src/domain/journal/queue";
+import { admit, DEFAULT_QUEUE, HELD_BOUND, queueSettings } from "../../src/domain/journal/queue";
 
 const MESSAGE = {
   payload: { a: 1 },
@@ -200,8 +200,9 @@ describe("the retry rules (spec 7.3, 7.4)", () => {
 });
 
 describe("the queue bound (spec 7.6)", () => {
-  it("defaults to 64, holding", () => {
+  it("defaults to 64, holding, and to 1024 held before the instance is cut off", () => {
     expect(DEFAULT_QUEUE).toEqual({ bound: 64, policy: "hold" });
+    expect(HELD_BOUND).toBe(1024);
   });
 
   it("sends under the bound and applies the policy at it", () => {
@@ -215,7 +216,9 @@ describe("the queue bound (spec 7.6)", () => {
   it("refuses a bound that is not a whole number of at least 1", () => {
     for (const bound of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
       expect(() => queueSettings(bound, "hold")).toThrow(/whole number of at least 1/);
+      expect(() => queueSettings(1, "hold", bound)).toThrow(/whole number of at least 1/);
     }
-    expect(queueSettings(1, "fail")).toEqual({ bound: 1, policy: "fail" });
+    expect(queueSettings(1, "fail")).toEqual({ bound: 1, policy: "fail", held: HELD_BOUND });
+    expect(queueSettings(1, "hold", 3)).toEqual({ bound: 1, policy: "hold", held: 3 });
   });
 });

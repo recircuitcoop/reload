@@ -99,7 +99,8 @@ settings.
   deploy and comes back when declared again. 1 row.
 
 - **Group 32** (branch `port/0032-wave1-rest`): the inputs held for a node at its queue bound
-  are bounded too, by the same number. One more cuts the node off, as the old bus cut off a
+  are bounded too, by a number of their own (1024, a runtime setting; far above the queue's
+  64, since a node waiting on a person may rightly hold many). One more cuts the node off, as the old bus cut off a
   subscriber that fell behind: what was held and every further input fail with `done(err)`
   ("queue full: the node is not keeping up"), said in the log and once as a notice, until the
   node finishes an input again (`adapters/process/input-journal.ts`, spec 7.6). 4 rows.

@@ -26,7 +26,12 @@ import {
   type JournaledEvent,
   type JournaledMessage,
 } from "../../domain/journal/entry";
-import { admit, type QueueReport, type QueueSettings } from "../../domain/journal/queue";
+import {
+  admit,
+  HELD_BOUND,
+  type QueueReport,
+  type QueueSettings,
+} from "../../domain/journal/queue";
 import { boundedContent, SAMPLE_TOO_LARGE, titleOf } from "../../domain/views/views";
 import type { StepOutcome } from "../../domain/runs/step-report";
 import type { Clock } from "../../ports/clock";
@@ -152,9 +157,9 @@ export class InputJournal {
         delivery.done(new Error("queue full"));
         return null;
       case "hold":
-        // Held inputs have a bound too, the queue's own: past it the node is cut off, as the
-        // old bus cut off a subscriber that fell behind, rather than held for without end.
-        if (this.#cutOff || this.#held.length >= queue.bound) {
+        // Held inputs have a bound too: past it the node is cut off, as the old bus cut off a
+        // subscriber that fell behind, rather than held for without end.
+        if (this.#cutOff || this.#held.length >= (queue.held ?? HELD_BOUND)) {
           this.#overflow(delivery);
           return null;
         }
@@ -228,9 +233,10 @@ export class InputJournal {
       const failed = this.failHeld(error);
       this.#refused += failed;
       const bound = String(this.#deps.queue.bound);
+      const held = String(this.#deps.queue.held ?? HELD_BOUND);
       this.#deps.log(
         "error",
-        `queue full: ${bound} inputs held besides the ${bound} outstanding (the bound); the node ` +
+        `queue full: ${held} inputs held besides the ${bound} outstanding (the bounds); the node ` +
           `is not keeping up, so ${String(failed + 1)} inputs failed, and each further one ` +
           `fails until it finishes one`,
       );
@@ -238,7 +244,7 @@ export class InputJournal {
         kind: "node-overloaded",
         subject: this.#deps.label,
         detail:
-          `It finished none of its ${bound} inputs while ${bound} more waited, so those failed, ` +
+          `It finished none of its ${bound} inputs while ${held} more waited, so those failed, ` +
           `and new ones fail until it finishes one`,
       });
     }
