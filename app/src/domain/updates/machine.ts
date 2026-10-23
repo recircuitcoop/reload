@@ -237,6 +237,10 @@ export function step(machine: UpdateMachine, event: UpdateEvent): StepResult {
       }
       return moveTo(machine, { ...state, percent: wholePercent(event.percent) });
     case "downloaded":
+      // Staged again while ready (Check now): whether it waits is the latest staging's.
+      if (state.kind === "ready" && state.waits !== (event.waits === true)) {
+        return moveTo(machine, { ...state, waits: event.waits === true });
+      }
       if (state.kind !== "downloading") {
         return ignore(machine);
       }

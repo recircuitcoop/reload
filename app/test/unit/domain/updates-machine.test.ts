@@ -73,6 +73,11 @@ describe("the self-update machine", () => {
     machine = run(machine, { kind: "downloaded" });
     expect(machine.state).toEqual({ kind: "ready", version: "0.3.0", waits: false });
     expect(run(machine, { kind: "quitAndInstall" })).toBe(machine);
+    // Staged again while ready: whether it waits follows the latest staging.
+    const waiting = run(machine, { kind: "downloaded", waits: true });
+    expect(waiting.state).toEqual({ kind: "ready", version: "0.3.0", waits: true });
+    expect(run(waiting, { kind: "downloaded" }).state).toMatchObject({ waits: false });
+    refuses(machine, { kind: "downloaded" });
   });
 
   it("no connection: couldn't check, with the last check kept", () => {
