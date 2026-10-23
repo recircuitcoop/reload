@@ -127,8 +127,7 @@ const logFilePath = logPath({ platform: process.platform, home: os.homedir(), en
 runCommandLine(app, process.argv, { log: logFilePath, notices: NOTICES_FILENAME });
 // The e2e gate's hooks (never set in an ordinary run, and never on in an installed build).
 const e2eHooks = e2eHooksOn({ packaged: app.isPackaged, env: process.env });
-// The first start over a 0.3.0 installation (plan 0028 step 1), before the single-instance lock;
-// never a start on an empty directory while the old data is still where it was. Failures are shown.
+// The first start over a 0.3.0 installation (plan 0028 step 1), before the single-instance lock; never a start on an empty directory while the old data is still where it was. Failures are shown.
 const firstStart = firstStartIn(app, e2eHooks, process.env, rewriteLegacyJournal, dialog);
 if (firstStart.problem !== null) app.exit(1);
 // The gate runs with hidden windows (§6, e2e stage), so a run never steals focus.
@@ -186,8 +185,7 @@ logger.info(`this process's HOME is ${process.env["HOME"] ?? "(unset)"}`);
 const supervisors = new Map<ChildName, Supervisor>();
 // Windows raises a toast only under the id the shortcuts carry (WI-0018-21).
 setAppUserModelId(app, process.platform);
-// The Anytype desktop app (§4.1 point 6): RELOAD_ANYTYPE_APP names it ("none": not used),
-// else the installed one, for the installed Reload only — never a dev or e2e run.
+// The Anytype desktop app (§4.1 point 6): RELOAD_ANYTYPE_APP names it ("none": not used), else the installed one, for the installed Reload only — never a dev or e2e run.
 const anytypeApp = new AnytypeApp({
   apps: new ProcessTableApps(process.platform),
   executable: anytypeAppPath(process.env["RELOAD_ANYTYPE_APP"], () =>
