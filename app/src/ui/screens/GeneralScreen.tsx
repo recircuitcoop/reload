@@ -361,7 +361,7 @@ function AnytypeTools({ api }: { readonly api: AppApi }) {
       {tools === null ? null : (
         <ul data-testid="general-anytype-tools" className="flex flex-wrap gap-1">
           {tools.map((tool) => (
-            <li key={tool.name}>
+            <li key={tool.name} data-testid="general-anytype-tool">
               <Code kind="inline">{tool.name}</Code>
             </li>
           ))}

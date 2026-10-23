@@ -555,7 +555,7 @@ test("General shows the queued reports in full, Advanced's status details, Recor
     const seeTools = general.getByTestId("general-anytype-tools-see");
     await expect(seeTools).toHaveText(STRINGS["general.aiApps.tools.see"]);
     await seeTools.click();
-    await expect(general.getByTestId("general-anytype-tools").getByRole("listitem")).toHaveText(
+    await expect(general.getByTestId("general-anytype-tool")).toHaveText(
       Object.keys(committedToolSurface(path.join(APP, "src", "adapters", "anytype")).tools).sort(),
     );
     await expect(seeTools).toHaveText(STRINGS["general.aiApps.tools.hide"]);
