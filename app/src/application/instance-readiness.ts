@@ -182,10 +182,6 @@ export class InstanceReadiness {
     return { ok: true, value: { deployed: ids, ready } };
   }
 
-  /**
-   * The `node.status` call: `{nodeId}` in; whether that instance runs in this generation, and the
-   * last status it reported (null before its first, and when it is not running).
-   */
   /** `node.status` (one instance's last status) and `nodes.list` (every process, with its state). */
   call(op: "node.status" | "nodes.list", args: unknown): OpResult {
     return op === "nodes.list" ? { ok: true, value: this.list() } : this.status(args);
@@ -210,6 +206,10 @@ export class InstanceReadiness {
     });
   }
 
+  /**
+   * The `node.status` call: `{nodeId}` in; whether that instance runs in this generation, and the
+   * last status it reported (null before its first, and when it is not running).
+   */
   status(args: unknown): OpResult {
     const nodeId =
       typeof args === "object" && args !== null ? (args as { nodeId?: unknown }).nodeId : null;

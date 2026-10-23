@@ -51,7 +51,6 @@ export interface LogRecord {
   readonly msg: string;
 }
 
-/** One verbosity setting as a level number; an Error naming what was wrong otherwise. */
 /**
  * The verbosity the log is written at: RELOAD_LOG_LEVEL when it is set, else the settings
  * file's `logging.level` (the old `[logging] level`), else the default. A level nobody has, or a
@@ -75,6 +74,7 @@ export function chosenLevel(
   }
 }
 
+/** One verbosity setting as a level number; an Error naming what was wrong otherwise. */
 export function resolveLevel(value: string | number | undefined): number {
   if (value === undefined) {
     return DEFAULT_LEVEL;
