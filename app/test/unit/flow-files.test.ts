@@ -1,8 +1,7 @@
 // Node-RED's flows files, refused while Node-RED could not load them: the rule
 // (domain/flows/flow-file), the copy kept aside on disk (adapters/fs/flow-files), the refusal
-// told once and Save the flows that are running (application/flow-files), and the guarded
-// storage (adapters/nodered/guarded-storage). The real Node-RED start is
-// test/integration/flows-file-refused.test.ts.
+// told once (application/flow-files), and the guarded storage (adapters/nodered/guarded-storage).
+// The real Node-RED start is test/integration/flows-file-refused.test.ts.
 import fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -14,7 +13,10 @@ import {
 } from "../../src/adapters/nodered/guarded-storage";
 import { FlowFiles } from "../../src/application/flow-files";
 import {
+  CREDENTIALS_SHAPE,
+  EMPTY,
   FLOW_FILES,
+  MISSING,
   flowFileProblem,
   refusedFlowFileSentence,
   refusedFlowFileTitle,
@@ -81,6 +83,7 @@ describe("the words for a refused file: true to what was loaded", () => {
     safeCopy: "/u/flows.json.broken-x",
     backup: "/u/.flows.json.backup",
     loadsChanged: false,
+    keptBackup: false,
     state: "not-loaded",
   };
   const creds: RefusedFlowFile = {
@@ -114,6 +117,41 @@ describe("the words for a refused file: true to what was loaded", () => {
     expect(refusedFlowFileSentence({ ...atStart, safeCopy: null, backup: null })).toBe(
       "/u/flows.json isn't valid JSON, so Reload didn't load your flows from it and won't save " +
         "over it. Reload could not make a copy of it. Fix flows.json, then start Reload again.",
+    );
+  });
+
+  it("missing with a backup: says nothing was loaded, why nothing is saved, and both ways on", () => {
+    const missing: RefusedFlowFile = {
+      ...atStart,
+      problem: MISSING,
+      keptBackup: true,
+      safeCopy: "/u/flows.json.broken-x",
+    };
+    expect(refusedFlowFileTitle(missing)).toBe("Reload didn't find your flows");
+    expect(refusedFlowFileSentence(missing)).toBe(
+      "/u/flows.json is missing, so Reload started without your flows, and won't save: a save " +
+        "would replace its backup /u/.flows.json.backup (its name starts with a dot, so Finder " +
+        "hides it). Reload kept a copy of the backup at /u/flows.json.broken-x. To get them " +
+        "back, quit Reload, copy the backup to flows.json, and start Reload again. To start " +
+        "without them, quit Reload, move the backup out of its folder, and start Reload again.",
+    );
+    const creds: RefusedFlowFile = { ...missing, file: "/u/flows_cred.json", backup: "/u/.c" };
+    expect(refusedFlowFileTitle(creds)).toBe("Reload didn't find your flows' passwords");
+    expect(refusedFlowFileSentence(creds)).toContain(
+      "Reload started without the passwords and tokens your flows use",
+    );
+  });
+
+  it("emptied while running: the backup's copy is named as the backup's", () => {
+    const emptied: RefusedFlowFile = {
+      ...atStart,
+      problem: EMPTY,
+      keptBackup: true,
+      state: "running",
+    };
+    expect(refusedFlowFileSentence(emptied)).toContain(
+      "/u/flows.json is empty. The flows Reload loaded when it started are still running, and " +
+        "Reload won't save over the file. Reload kept a copy of the backup at /u/flows.json.broken-x.",
     );
   });
 
@@ -172,12 +210,20 @@ describe("the words for a refused file: true to what was loaded", () => {
     expect(refusedFlowFileSentence(running)).toBe(
       "/u/flows_cred.json isn't valid JSON. The passwords and tokens Reload loaded when it " +
         "started are still in use, and Reload won't save over the file. Reload kept a copy of " +
-        "it at /u/flows_cred.json.broken-x. The file is encrypted, so it can't be fixed by hand.",
+        "it at /u/flows_cred.json.broken-x. The file is encrypted, so it can't be fixed by hand. " +
+        "To go on, quit Reload, move flows_cred.json out of its folder, start Reload again, and " +
+        "enter the passwords in your flows again.",
     );
     expect(refusedFlowFileSentence({ ...running, backup: "/u/.b" })).toContain(
       "copy its backup /u/.b (its name starts with a dot, so Finder hides it) over it: Reload",
     );
     expect(refusedFlowFileSentence(creds)).not.toContain("your flows from it");
+    // Plain JSON of the wrong shape: said as it is, not as encrypted.
+    const shape: RefusedFlowFile = { ...creds, problem: CREDENTIALS_SHAPE };
+    for (const refused of [shape, { ...shape, state: "running" as const }]) {
+      expect(refusedFlowFileSentence(refused)).toContain(CREDENTIALS_SHAPE);
+      expect(refusedFlowFileSentence(refused)).not.toContain("encrypted");
+    }
   });
 });
 
@@ -197,10 +243,10 @@ describe("keepBrokenFlowFiles", () => {
   });
 
   it("finds nothing when the files are absent, empty or loadable", () => {
-    expect(keepBrokenFlowFiles(dir, FLOW_FILES, NOW)).toEqual([]);
+    expect(keepBrokenFlowFiles(dir, FLOW_FILES, NOW, false)).toEqual([]);
     write(FLOWS, "[]");
     write(CREDS, "");
-    expect(keepBrokenFlowFiles(dir, FLOW_FILES, NOW)).toEqual([]);
+    expect(keepBrokenFlowFiles(dir, FLOW_FILES, NOW, false)).toEqual([]);
     expect(fs.readdirSync(dir).sort()).toEqual([FLOWS, CREDS]);
   });
 
@@ -209,13 +255,14 @@ describe("keepBrokenFlowFiles", () => {
     write(`.${FLOWS}.backup`, "[]");
     write(CREDS, new Uint8Array([0xff]));
     write(`.${CREDS}.backup`, '"not credentials"');
-    expect(keepBrokenFlowFiles(dir, FLOW_FILES, NOW)).toEqual([
+    expect(keepBrokenFlowFiles(dir, FLOW_FILES, NOW, false)).toEqual([
       {
         file: path.join(dir, FLOWS),
         problem: "isn't valid JSON",
         safeCopy: path.join(dir, `${FLOWS}.${STAMP}`),
         backup: path.join(dir, `.${FLOWS}.backup`),
         loadsChanged: false,
+        keptBackup: false,
       },
       {
         file: path.join(dir, CREDS),
@@ -223,6 +270,7 @@ describe("keepBrokenFlowFiles", () => {
         safeCopy: path.join(dir, `${CREDS}.${STAMP}`),
         backup: null,
         loadsChanged: false,
+        keptBackup: false,
       },
     ]);
     expect(fs.readFileSync(path.join(dir, FLOWS), "utf8")).toBe("[{");
@@ -235,17 +283,17 @@ describe("keepBrokenFlowFiles", () => {
 
   it("makes no second copy of the same bytes, at any later time", () => {
     write(FLOWS, "[{");
-    const first = keepBrokenFlowFiles(dir, [FLOWS], NOW);
-    const later = keepBrokenFlowFiles(dir, [FLOWS], new Date("2026-10-23T08:00:00Z"));
+    const first = keepBrokenFlowFiles(dir, [FLOWS], NOW, false);
+    const later = keepBrokenFlowFiles(dir, [FLOWS], new Date("2026-10-23T08:00:00Z"), false);
     expect(later[0]?.safeCopy).toBe(first[0]?.safeCopy);
     expect(copies(FLOWS)).toHaveLength(1);
   });
 
   it("names a different copy made in the same second apart, and says it was kept", () => {
     write(FLOWS, "[{");
-    keepBrokenFlowFiles(dir, [FLOWS], NOW);
+    keepBrokenFlowFiles(dir, [FLOWS], NOW, false);
     write(FLOWS, "{{");
-    const [second] = keepBrokenFlowFiles(dir, [FLOWS], NOW);
+    const [second] = keepBrokenFlowFiles(dir, [FLOWS], NOW, false);
     expect(second?.safeCopy).toBe(path.join(dir, `${FLOWS}.${STAMP}-2`));
     expect(fs.readFileSync(path.join(dir, `${FLOWS}.${STAMP}-2`), "utf8")).toBe("{{");
     expect(
@@ -258,13 +306,14 @@ describe("keepBrokenFlowFiles", () => {
     write(`.${FLOWS}.backup`, "");
     fs.chmodSync(dir, 0o500);
     try {
-      expect(keepBrokenFlowFiles(dir, [FLOWS], NOW)).toEqual([
+      expect(keepBrokenFlowFiles(dir, [FLOWS], NOW, false)).toEqual([
         {
           file: path.join(dir, FLOWS),
           problem: "isn't valid JSON",
           safeCopy: null,
           backup: null,
           loadsChanged: false,
+          keptBackup: false,
         },
       ]);
     } finally {
@@ -275,13 +324,14 @@ describe("keepBrokenFlowFiles", () => {
   it("refuses a file it cannot read, in plain words, and copies nothing", () => {
     fs.mkdirSync(path.join(dir, FLOWS));
     write(`.${FLOWS}.backup`, "[]");
-    expect(keepBrokenFlowFiles(dir, [FLOWS], NOW)).toEqual([
+    expect(keepBrokenFlowFiles(dir, [FLOWS], NOW, false)).toEqual([
       {
         file: path.join(dir, FLOWS),
         problem: "is a folder, not a file",
         safeCopy: null,
         backup: path.join(dir, `.${FLOWS}.backup`),
         loadsChanged: false,
+        keptBackup: false,
       },
     ]);
   });
@@ -293,7 +343,7 @@ describe("keepBrokenFlowFiles", () => {
       Buffer.concat([Buffer.from('[{"id":"t","label":"'), Buffer.from([0xff]), Buffer.from('"}]')]),
     );
     write(CREDS, new Uint8Array([0xff]));
-    const [flows, creds] = keepBrokenFlowFiles(dir, FLOW_FILES, NOW);
+    const [flows, creds] = keepBrokenFlowFiles(dir, FLOW_FILES, NOW, false);
     expect(flows).toMatchObject({ problem: "isn't UTF-8 text", loadsChanged: true });
     expect(creds).toMatchObject({ problem: "isn't UTF-8 text", loadsChanged: false });
   });
@@ -301,30 +351,69 @@ describe("keepBrokenFlowFiles", () => {
   it("refuses an empty file over a backup Node-RED cannot load, keeping the backup's bytes", () => {
     write(FLOWS, "");
     write(`.${FLOWS}.backup`, "[{");
-    const [found] = keepBrokenFlowFiles(dir, [FLOWS], NOW);
+    const [found] = keepBrokenFlowFiles(dir, [FLOWS], NOW, false);
     expect(found).toEqual({
       file: path.join(dir, FLOWS),
       problem: `is empty, and its backup ${path.join(dir, `.${FLOWS}.backup`)} isn't valid JSON`,
       safeCopy: path.join(dir, `${FLOWS}.${STAMP}`),
       backup: null,
       loadsChanged: false,
+      keptBackup: true,
     });
     expect(fs.readFileSync(path.join(dir, `${FLOWS}.${STAMP}`), "utf8")).toBe("[{");
     // A good backup, or an empty one, or none: Node-RED restores or starts empty, and loses nothing.
     write(`.${FLOWS}.backup`, "[]");
-    expect(keepBrokenFlowFiles(dir, [FLOWS], NOW)).toEqual([]);
+    expect(keepBrokenFlowFiles(dir, [FLOWS], NOW, false)).toEqual([]);
     write(`.${FLOWS}.backup`, "");
-    expect(keepBrokenFlowFiles(dir, [FLOWS], NOW)).toEqual([]);
+    expect(keepBrokenFlowFiles(dir, [FLOWS], NOW, false)).toEqual([]);
     fs.rmSync(path.join(dir, `.${FLOWS}.backup`));
     fs.mkdirSync(path.join(dir, `.${FLOWS}.backup`));
-    expect(keepBrokenFlowFiles(dir, [FLOWS], NOW)).toEqual([]);
+    expect(keepBrokenFlowFiles(dir, [FLOWS], NOW, false)).toEqual([]);
+  });
+
+  it("refuses a missing file at the start while its backup holds anything, keeping the backup", () => {
+    write(`.${FLOWS}.backup`, "[]");
+    expect(keepBrokenFlowFiles(dir, [FLOWS], NOW, false)).toEqual([
+      {
+        file: path.join(dir, FLOWS),
+        problem: MISSING,
+        safeCopy: path.join(dir, `${FLOWS}.${STAMP}`),
+        backup: path.join(dir, `.${FLOWS}.backup`),
+        loadsChanged: false,
+        keptBackup: true,
+      },
+    ]);
+    expect(fs.readFileSync(path.join(dir, `${FLOWS}.${STAMP}`), "utf8")).toBe("[]");
+    // While running, the next save writes the running flows and keeps the backup: fine.
+    expect(keepBrokenFlowFiles(dir, [FLOWS], NOW, true)).toEqual([]);
+    // An empty backup, or none: nothing to lose.
+    write(`.${FLOWS}.backup`, "");
+    expect(keepBrokenFlowFiles(dir, [FLOWS], NOW, false)).toEqual([]);
+  });
+
+  it("refuses a file emptied while running when its backup holds anything, but not at the start", () => {
+    write(FLOWS, "");
+    write(`.${FLOWS}.backup`, "[]");
+    expect(keepBrokenFlowFiles(dir, [FLOWS], NOW, false)).toEqual([]);
+    expect(keepBrokenFlowFiles(dir, [FLOWS], NOW, true)).toEqual([
+      {
+        file: path.join(dir, FLOWS),
+        problem: EMPTY,
+        safeCopy: path.join(dir, `${FLOWS}.${STAMP}`),
+        backup: path.join(dir, `.${FLOWS}.backup`),
+        loadsChanged: false,
+        keptBackup: true,
+      },
+    ]);
+    fs.rmSync(path.join(dir, `.${FLOWS}.backup`));
+    expect(keepBrokenFlowFiles(dir, [FLOWS], NOW, true)).toEqual([]);
   });
 
   it("offers no backup it cannot read, and skips a copy it cannot read", () => {
     write(FLOWS, "[{");
     fs.mkdirSync(path.join(dir, `.${FLOWS}.backup`));
     fs.mkdirSync(path.join(dir, `${FLOWS}.broken-old`));
-    const [found] = keepBrokenFlowFiles(dir, [FLOWS], NOW);
+    const [found] = keepBrokenFlowFiles(dir, [FLOWS], NOW, false);
     expect(found?.backup).toBeNull();
     expect(found?.safeCopy).toBe(path.join(dir, `${FLOWS}.${STAMP}`));
   });
@@ -337,6 +426,7 @@ describe("FlowFiles", () => {
     safeCopy: "/u/flows.json.broken-x",
     backup: null,
     loadsChanged: false,
+    keptBackup: false,
   };
   const files = ["/u/flows.json", "/u/flows_cred.json"];
 
@@ -370,10 +460,11 @@ describe("FlowFiles", () => {
         detail: refusedFlowFileSentence(refused),
       },
     ]);
-    // The credentials file is fine: what an earlier runtime said of it is cleared.
+    // An earlier runtime's "still running" is cleared for both; the fine file's refusal too.
     expect(h.notifier.cleared).toEqual([
-      "flows-file-refused /u/flows_cred.json",
+      "flows-file-damaged /u/flows.json",
       "flows-file-damaged /u/flows_cred.json",
+      "flows-file-refused /u/flows_cred.json",
     ]);
     expect(h.logger.lines).toEqual([`ERROR ${refusedFlowFileSentence(refused)}`]);
   });

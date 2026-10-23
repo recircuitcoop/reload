@@ -20,7 +20,16 @@ export interface BrokenFlowFile {
    * save would write the replacements over what the person had.
    */
   readonly loadsChanged: boolean;
+  /** The copy is of the backup, the bytes at stake when the file itself is missing or empty. */
+  readonly keptBackup: boolean;
 }
+
+/** The problem of a file that is not there while its backup is: a save would replace the backup. */
+export const MISSING = "is missing";
+/** The problem of a file emptied while Reload runs: a save would copy it over the backup. */
+export const EMPTY = "is empty";
+/** flows_cred.json holds JSON, but not the one object Node-RED keeps the passwords in. */
+export const CREDENTIALS_SHAPE = "doesn't hold your flows' passwords in a form Reload can read";
 
 /**
  * What Node-RED holds from a refused file, which is what the person is told:
@@ -61,7 +70,7 @@ export function flowFileProblem(name: string, bytes: Uint8Array): string | null 
     return "isn't valid JSON";
   }
   if (name === "flows_cred.json") {
-    return isObject(value) ? null : "doesn't hold your flows' passwords in a form Reload can read";
+    return isObject(value) ? null : CREDENTIALS_SHAPE;
   }
   return Array.isArray(value) && value.every(isObject)
     ? null
@@ -106,6 +115,11 @@ const isCredentials = (file: string): boolean => baseName(file) === "flows_cred.
 
 /** The title of what the person is told about one refused file. */
 export function refusedFlowFileTitle(refused: RefusedFlowFile): string {
+  if (refused.problem === MISSING) {
+    return isCredentials(refused.file)
+      ? "Reload didn't find your flows' passwords"
+      : "Reload didn't find your flows";
+  }
   if (isCredentials(refused.file)) {
     return refused.state === "running"
       ? "Your flows' passwords file is damaged"
@@ -132,8 +146,23 @@ export function refusedFlowFileSentence(refused: RefusedFlowFile): string {
   const kept =
     refused.safeCopy === null
       ? "Reload could not make a copy of it."
-      : `Reload kept a copy of it at ${refused.safeCopy}.`;
+      : `Reload kept a copy of ${refused.keptBackup ? "the backup" : "it"} at ${refused.safeCopy}.`;
   const credentials = isCredentials(file);
+  // Encrypted, so beyond fixing by hand; unless what is wrong is plainly its shape.
+  const encrypted =
+    problem === CREDENTIALS_SHAPE ? "" : "The file is encrypted, so it can't be fixed by hand. ";
+  const startOver =
+    `quit Reload, move ${name} out of its folder, start Reload again, and enter the ` +
+    "passwords in your flows again.";
+  if (problem === MISSING && backup !== null) {
+    const what = credentials ? "the passwords and tokens your flows use" : "your flows";
+    return (
+      `${file} ${problem}, so Reload started without ${what}, and won't save: a save would ` +
+      `replace its backup ${hidden(backup)}. ${kept} To get them back, quit Reload, copy the ` +
+      `backup to ${name}, and start Reload again. To start without them, quit Reload, move the ` +
+      "backup out of its folder, and start Reload again."
+    );
+  }
   if (state === "running") {
     const what = credentials
       ? "The passwords and tokens Reload loaded when it started are still in use"
@@ -141,7 +170,7 @@ export function refusedFlowFileSentence(refused: RefusedFlowFile): string {
     const remedy =
       backup === null
         ? credentials
-          ? "The file is encrypted, so it can't be fixed by hand."
+          ? `${encrypted}To go on, ${startOver}`
           : "Fix the file: Reload saves again once it can be read."
         : `If you didn't mean to change it, copy its backup ${hidden(backup)} over it` +
           `${credentials ? "" : ", or fix it"}: Reload saves again once the file can be read.`;
@@ -152,12 +181,9 @@ export function refusedFlowFileSentence(refused: RefusedFlowFile): string {
       ? null
       : `To use its backup ${hidden(backup)}, quit Reload, copy it over ${name}, and start Reload again.`;
   if (credentials) {
-    const startOver =
-      `quit Reload, move ${name} out of its folder, start Reload again, and enter the ` +
-      "passwords in your flows again.";
     return (
       `${file} ${problem}, so Reload didn't load the passwords and tokens your flows use, and ` +
-      `won't save over it. ${kept} The file is encrypted, so it can't be fixed by hand. ` +
+      `won't save over it. ${kept} ${encrypted}` +
       (useBackup === null ? `To start over, ${startOver}` : `${useBackup} Otherwise, ${startOver}`)
     );
   }

@@ -551,6 +551,7 @@ describe("every write", () => {
       safeCopy: null,
       backup: null,
       loadsChanged: false,
+      keptBackup: false,
       state: "not-loaded" as const,
     };
     const h = harness({ refused: [refused] });

@@ -268,6 +268,43 @@ test("a flows file broken while Reload runs: a save is refused, told as still ru
   }
 });
 
+test("a runtime restarted over a flows file broken while it ran says nothing loaded, not still running", async () => {
+  const { scratch, userData, env } = scratchDirectories();
+  const folder = path.join(userData, "node-red");
+  const flowsFile = path.join(folder, "flows.json");
+  fs.mkdirSync(folder, { recursive: true });
+  fs.writeFileSync(
+    flowsFile,
+    JSON.stringify([{ id: "a1b2c3d4e5f60718", type: "tab", label: "Recordings to Anytype" }]),
+  );
+  const apps: ElectronApplication[] = [];
+  try {
+    const { app, window } = await launchApp(env);
+    apps.push(app);
+    const before = await waitForRunning(window, "runtime");
+    await expect(frame(window)).toHaveAttribute("data-route", "live", { timeout: 15_000 });
+    fs.writeFileSync(flowsFile, '[{"id":"a1b2c3d4e5f60718","type":"ta');
+    await window.evaluate(() =>
+      (
+        globalThis as unknown as {
+          reload: { app: { setFlowOn(id: string, on: boolean): Promise<unknown> } };
+        }
+      ).reload.app.setFlowOn("a1b2c3d4e5f60718", false),
+    );
+    const banner = window.getByTestId("flows-file-banner");
+    await expect(banner).toContainText("still running", { timeout: 15_000 });
+    // The runtime restarts, the shell stays up: Node-RED loads nothing from the broken file.
+    process.kill(before.pid, "SIGKILL");
+    await waitForRunning(window, "runtime", before.generation + 1);
+    await expect(banner).toContainText("Reload didn't load your flows", { timeout: 15_000 });
+    await expect(banner).not.toContainText("still running");
+    await expect(banner).not.toContainText("saves again");
+    await quit(app);
+  } finally {
+    await cleanUp(apps, scratch);
+  }
+});
+
 test("the quit question shows and is answered even when Setup's state cannot be read", async () => {
   const { scratch, userData, env } = scratchDirectories();
   // shell-settings.json is not JSON: setup.get is refused, and the frame cannot place Setup.

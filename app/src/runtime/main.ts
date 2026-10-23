@@ -355,7 +355,7 @@ async function startNodeRed(config: InitConfig): Promise<void> {
   );
   const flowFiles: FlowFiles = new FlowFiles({
     files: FLOW_FILES.map((name) => path.join(userDir, name)),
-    check: () => keepBrokenFlowFiles(userDir, FLOW_FILES, new Date()),
+    check: (running) => keepBrokenFlowFiles(userDir, FLOW_FILES, new Date(), running),
     notifier: shellNotifier(link),
     logger,
   });

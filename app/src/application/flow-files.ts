@@ -16,8 +16,11 @@ import type { Notifier } from "../ports/notifier";
 export interface FlowFilesDeps {
   /** The files, in Node-RED's folder, that are checked. */
   readonly files: readonly string[];
-  /** The broken ones on disk now, each copied aside first (adapters/fs/flow-files.ts). */
-  readonly check: () => readonly BrokenFlowFile[];
+  /**
+   * The broken ones on disk now, each copied aside first (adapters/fs/flow-files.ts); `running`
+   * once Node-RED has loaded them.
+   */
+  readonly check: (running: boolean) => readonly BrokenFlowFile[];
   readonly notifier: Notifier;
   readonly logger: Logger;
 }
@@ -44,7 +47,7 @@ export class FlowFiles {
     }
     const running = this.#started;
     this.#started = true;
-    const found = this.#deps.check().map((broken): RefusedFlowFile => ({
+    const found = this.#deps.check(running).map((broken): RefusedFlowFile => ({
       ...broken,
       state: running ? "running" : broken.loadsChanged ? "loaded-changed" : "not-loaded",
     }));
@@ -75,12 +78,15 @@ export class FlowFiles {
         detail: sentence,
       });
     }
-    for (const file of files.filter((name) => !found.some((refused) => refused.file === name))) {
+    for (const file of files) {
+      const refusedNow = found.some((refused) => refused.file === file);
       if (atStart) {
-        // A runtime started on a fine file: what an earlier one said is no longer true.
-        notifier.clear("flows-file-refused", file);
+        // A new runtime: an earlier one's "still running" is no longer true, refused or not.
         notifier.clear("flows-file-damaged", file);
-      } else if (before.some((was) => was.file === file)) {
+        if (!refusedNow) {
+          notifier.clear("flows-file-refused", file);
+        }
+      } else if (!refusedNow && before.some((was) => was.file === file)) {
         // Fixed by hand while running.
         notifier.clear("flows-file-damaged", file);
       }

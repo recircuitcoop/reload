@@ -76,4 +76,13 @@ describe("a flows file broken while Reload runs, at a real Node-RED", () => {
     );
     expect(copies()).toHaveLength(1);
   });
+
+  it("refuses a save over a file emptied while running: the backup is not wiped", async () => {
+    const backup = read(".flows.json.backup");
+    expect(backup.length).toBeGreaterThan(0);
+    fs.writeFileSync(path.join(userDir, "flows.json"), "");
+    expect((await red.send("POST", "/red/flows", RUNNING)).status).toBe(409);
+    expect(read("flows.json")).toBe("");
+    expect(read(".flows.json.backup")).toBe(backup);
+  });
 });

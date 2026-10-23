@@ -211,6 +211,7 @@ describe("DeployGuard", () => {
       safeCopy: "/u/flows.json.broken-x",
       backup: null,
       loadsChanged: false,
+      keptBackup: false,
       state: "not-loaded",
     };
     const { deployGuard, logger, asked } = guard(SETS, [refused]);

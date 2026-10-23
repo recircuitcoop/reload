@@ -6,8 +6,10 @@
 import fs from "node:fs";
 import * as path from "node:path";
 import {
+  EMPTY,
   flowFileProblem,
   loadsWithReplacements,
+  MISSING,
   safeCopyName,
   unreadableProblem,
   type BrokenFlowFile,
@@ -89,21 +91,44 @@ function keepCopy(file: string, bytes: Buffer, now: Date): string | null {
   return null;
 }
 
-/** One file: null when absent or loadable; else broken, with its copy kept aside. */
-function check(file: string, now: Date): BrokenFlowFile | null {
+/** Node-RED's backup of `file`: `.<name>.backup` beside it. */
+const backupOf = (file: string): string =>
+  path.join(path.dirname(file), `.${path.basename(file)}.backup`);
+
+/** The backup's bytes when it holds any; null when absent, empty or unreadable. */
+function backupBytes(file: string): Buffer | null {
+  try {
+    const bytes = readOrNull(backupOf(file));
+    return bytes !== null && bytes.length > 0 ? bytes : null;
+  } catch {
+    // Node-RED cannot read it either: it has nothing to copy, and nothing to lose.
+    return null;
+  }
+}
+
+/**
+ * One file: null when Node-RED may load it and save over it; else broken, its bytes (or, when
+ * the file is missing or empty, its backup's) kept aside. `running`: checked before a save
+ * while Reload runs, rather than before Node-RED first reads it.
+ */
+function check(file: string, now: Date, running: boolean): BrokenFlowFile | null {
   let bytes: Buffer | null;
   try {
     bytes = readOrNull(file);
   } catch (error) {
     const problem = unreadableProblem((error as NodeJS.ErrnoException).code);
-    return { file, problem, safeCopy: null, backup: goodBackup(file), loadsChanged: false };
-  }
-  if (bytes === null) {
-    return null;
+    return {
+      file,
+      problem,
+      safeCopy: null,
+      backup: goodBackup(file),
+      loadsChanged: false,
+      keptBackup: false,
+    };
   }
   const name = path.basename(file);
-  if (bytes.length === 0) {
-    return emptyOverBrokenBackup(file, now);
+  if (bytes === null || bytes.length === 0) {
+    return missingOrEmpty(file, bytes === null, now, running);
   }
   const problem = flowFileProblem(name, bytes);
   if (problem === null) {
@@ -115,26 +140,37 @@ function check(file: string, now: Date): BrokenFlowFile | null {
     safeCopy: keepCopy(file, bytes, now),
     backup: goodBackup(file),
     loadsChanged: loadsWithReplacements(name, bytes),
+    keptBackup: false,
   };
 }
 
 /**
- * An empty file: Node-RED copies its backup over it and loads that. Fine when the backup is,
- * or when there is none; a backup it cannot load means it loads nothing, so that is refused,
- * with the backup's bytes kept aside.
+ * A file that is missing or empty, judged by its backup, which Node-RED's next saves would
+ * replace. No backup with anything in it: nothing to lose.
+ * * Missing at the start: Node-RED starts with nothing, and its second save copies the first
+ *   over the backup. Refused until the person restores the backup or moves it away.
+ * * Empty at the start: Node-RED copies its backup over it and loads that; refused only when it
+ *   cannot load the backup.
+ * * Missing while running: the next save writes the running flows, and keeps the backup.
+ * * Empty while running: the next save copies the empty file over the backup. Refused.
  */
-function emptyOverBrokenBackup(file: string, now: Date): BrokenFlowFile | null {
+function missingOrEmpty(
+  file: string,
+  missing: boolean,
+  now: Date,
+  running: boolean,
+): BrokenFlowFile | null {
   const name = path.basename(file);
-  const backup = path.join(path.dirname(file), `.${name}.backup`);
-  let bytes: Buffer | null;
-  try {
-    bytes = readOrNull(backup);
-  } catch {
-    // Node-RED cannot read it either: it starts with nothing, and has nothing to lose.
+  const bytes = backupBytes(file);
+  if (bytes === null || (missing && running)) {
     return null;
   }
-  if (bytes === null || bytes.length === 0) {
-    return null;
+  const kept = { safeCopy: keepCopy(file, bytes, now), keptBackup: true };
+  if (missing) {
+    return { file, problem: MISSING, backup: backupOf(file), loadsChanged: false, ...kept };
+  }
+  if (running) {
+    return { file, problem: EMPTY, backup: goodBackup(file), loadsChanged: false, ...kept };
   }
   const problem = flowFileProblem(name, bytes);
   if (problem === null) {
@@ -142,18 +178,19 @@ function emptyOverBrokenBackup(file: string, now: Date): BrokenFlowFile | null {
   }
   return {
     file,
-    problem: `is empty, and its backup ${backup} ${problem}`,
-    safeCopy: keepCopy(file, bytes, now),
+    problem: `is empty, and its backup ${backupOf(file)} ${problem}`,
     backup: null,
     loadsChanged: loadsWithReplacements(name, bytes),
+    ...kept,
   };
 }
 
-/** Every file of `names` in `dir` that Node-RED could not load, each kept aside first. */
+/** Every file of `names` in `dir` that Node-RED may not save over, each kept aside first. */
 export function keepBrokenFlowFiles(
   dir: string,
   names: readonly string[],
   now: Date,
+  running: boolean,
 ): BrokenFlowFile[] {
-  return names.flatMap((name) => check(path.join(dir, name), now) ?? []);
+  return names.flatMap((name) => check(path.join(dir, name), now, running) ?? []);
 }
