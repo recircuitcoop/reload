@@ -4,12 +4,8 @@
 // Plan 0013 is why this is built the way it is: a version moved, nothing said so, and the
 // window showed no "update available". So:
 //
-// - The check asks where each package came from: its catalogue's entry for a newer version, or
-//   its folder (a path install) for a newer version AND for content that changed under the same
-//   version (domain/packages/versions.ts). What it finds is in General › Packages, and each
-//   newer version is told in one notice, once (the NoticeBoard's rule, application/notices.ts).
-// - The mode decides what happens next: `auto` applies, `manual` waits for Apply, `pinned`
-//   holds even against a press. A version that failed here is held until a newer one appears.
+// - The check asks where each package came from: its catalogue's entry for a newer version, or its folder (a path install) for a newer version AND for content that changed under the same version (domain/packages/versions.ts). What it finds is in General › Packages, and each newer version is told in one notice, once (the NoticeBoard's rule, application/notices.ts).
+// - The mode decides what happens next: `auto` applies, `manual` waits for Apply, `pinned` holds even against a press. A version that failed here is held until a newer one appears.
 // - Apply builds the new version in staging and swaps it in (application/package-environment.ts,
 //   which keeps the old one), then restarts ONLY the runtime. If every deployed instance of the
 //   package's types does not send `ready` within 30 s, the old version is swapped back, the

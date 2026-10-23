@@ -1,9 +1,5 @@
 // Composition root 1 of 3 (plan 0018 §2.2): the Electron main process.
-// The only place in the shell where parts are wired together, and one of the three files allowed
-// to read process.env or import adapters (§2.3). It takes the single-instance lock, picks the
-// runtime's stable port, supervises the runtime and services utilityProcesses, serves the app
-// pages and the pop-outs, keeps the Inbox, tells the person things once (WI-0018-21), starts or
-// adopts the Anytype desktop app, and stops both children before it quits.
+// The only place in the shell where parts are wired together, and one of the three files allowed to read process.env or import adapters (§2.3). It takes the single-instance lock, picks the runtime's stable port, supervises the runtime and services utilityProcesses, serves the app pages and the pop-outs, keeps the Inbox, tells the person things once (WI-0018-21), starts or adopts the Anytype desktop app, and stops both children before it quits.
 import { randomBytes, randomUUID } from "node:crypto";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -327,8 +323,7 @@ async function start(): Promise<DesktopWired["notices"] | null> {
     firstStart,
   });
   ipcMain.handle(IPC.secretStorage, (): Contract.SecretStorageStatus => secretStorage);
-  // Kept once made, the same for every runtime. One the keychain cannot decrypt stops the start
-  // rather than orphan every credential, except on the move's own start (plan 0028, answer 1).
+  // Kept once made, the same for every runtime. One the keychain cannot decrypt stops the start rather than orphan every credential, except on the move's own start (plan 0028, answer 1).
   const replace = firstStart.credentialReplacement(() => {
     notices.raise({ kind: "credentials-reset", subject: "flows" });
   });

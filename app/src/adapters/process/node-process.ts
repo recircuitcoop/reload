@@ -1,9 +1,5 @@
-// One node instance's process, speaking protocol v2 (spec §3–§6, §11.2): spawned with a minimal
-// environment in its package directory, `start`, `ready` within 30 s, every frame routed, and
-// `close` → `closed` → exit (killed 5 s after `close`). An unexpected exit fails the `sent`
-// inputs, keeps the `awaiting` ones, and respawns after 1 s until the crash-loop breaker trips
-// (plan 0018 §7). The runtime stamps every envelope field, and a process emits only on its own
-// ports and live input ids (spec 11.2); inputs are journaled before they are sent (spec §7).
+// One node instance's process, speaking protocol v2 (spec §3–§6, §11.2): spawned with a minimal environment in its package directory, `start`, `ready` within 30 s, every frame routed, and `close` → `closed` → exit (killed 5 s after `close`). An unexpected exit fails the `sent`
+// inputs, keeps the `awaiting` ones, and respawns after 1 s until the crash-loop breaker trips (plan 0018 §7). The runtime stamps every envelope field, and a process emits only on its own ports and live input ids (spec 11.2); inputs are journaled before they are sent (spec §7).
 
 import { spawn, type ChildProcessWithoutNullStreams as ChildProcess } from "node:child_process";
 
@@ -206,8 +202,7 @@ class ChildNodeProcess implements NodeProcess {
     }
     this.#cancelTimers();
     this.#deadlines.disarmAll();
-    // The inputs still open belong to the journal now: it re-sends them to the next instance
-    // (spec 7.2), marked by why this one closed. They are neither done nor failed here.
+    // The inputs still open belong to the journal now: it re-sends them to the next instance (spec 7.2), marked by why this one closed. They are neither done nor failed here.
     this.#journal.close(reason, [...this.#inputs.keys()]);
     this.#inputs.clear();
     const child = this.#child;
@@ -265,8 +260,7 @@ class ChildNodeProcess implements NodeProcess {
       credentials,
       data_dir: dataDir,
     });
-    // Everything still open goes to the new process: inputs that arrived while none ran, and
-    // action views, which are re-presented rather than failed (spec 6.5).
+    // Everything still open goes to the new process: inputs that arrived while none ran, and action views, which are re-presented rather than failed (spec 6.5).
     for (const [id, input] of this.#inputs) {
       this.#sendInput(id, input);
     }
@@ -303,8 +297,7 @@ class ChildNodeProcess implements NodeProcess {
         );
       }
     }
-    // A failed start spends no attempt and is not retried (helper/restart.py); a type that must
-    // never run twice (spec 2.4.2) stops at its first exit; a stuck one comes back at once.
+    // A failed start spends no attempt and is not retried (helper/restart.py); a type that must never run twice (spec 2.4.2) stops at its first exit; a stuck one comes back at once.
     const restartable = this.#spec.restartable !== false;
     const again =
       failure === undefined &&
@@ -353,8 +346,7 @@ class ChildNodeProcess implements NodeProcess {
 
   #onStdout(child: ChildProcess, lines: ReadLine[]): void {
     for (const line of lines) {
-      // After `closed` the runtime ignores the process (spec 4.3.4); a stale process is
-      // ignored always.
+      // After `closed` the runtime ignores the process (spec 4.3.4); a stale process is ignored always.
       if (child !== this.#child || this.#closedAck) {
         continue;
       }
@@ -534,8 +526,7 @@ class ChildNodeProcess implements NodeProcess {
     }
     this.#inputs.delete(inputId);
     this.#deadlines.disarm(inputId);
-    // Cleared before Node-RED hears of it: a crash in between loses nothing that was not done,
-    // and never re-sends a step that was.
+    // Cleared before Node-RED hears of it: a crash in between loses nothing that was not done, and never re-sends a step that was.
     this.#journal.finished(inputId, error, outcome);
     input.delivery.done(error, outcome);
     const took = this.#deps.clock.now() - (input.at ?? this.#deps.clock.now());
