@@ -100,9 +100,9 @@ afterEach(() => {
   fs.rmSync(base, { recursive: true, force: true });
 });
 
-function declaration(name: string, version: string): string {
+function declaration(name: string, version: string, protocol = 2): string {
   return JSON.stringify({
-    protocol: 2,
+    protocol,
     package: name,
     version,
     environment: { kind: "node", node: ">=22" },
@@ -119,8 +119,8 @@ function declaration(name: string, version: string): string {
   });
 }
 
-const packageFiles = (name: string, version: string, body = "// v\n"): Files => ({
-  "reload-package.json": declaration(name, version),
+const packageFiles = (name: string, version: string, body = "// v\n", protocol = 2): Files => ({
+  "reload-package.json": declaration(name, version, protocol),
   "node.js": `process.stdout.write('')\n${body}`,
 });
 
@@ -128,12 +128,15 @@ const packageFiles = (name: string, version: string, body = "// v\n"): Files => 
 function publish(
   name: string,
   version: string,
-  options: { declares?: string; body?: string } = {},
+  options: { declares?: string; body?: string; protocol?: number } = {},
 ): void {
   const url = archiveUrl(name, version);
   served.set(
     url,
-    signedArchive(packageFiles(name, options.declares ?? version, options.body), signer),
+    signedArchive(
+      packageFiles(name, options.declares ?? version, options.body, options.protocol),
+      signer,
+    ),
   );
   entries = [
     ...entries.filter((entry) => entry.packageId !== name),
@@ -319,6 +322,26 @@ describe("the version check", () => {
       apply: false,
     });
     expect(told).toEqual([]);
+  });
+
+  it("a published version that needs a newer Reload is said at the check, not hidden and not offered", async () => {
+    // test_a_published_version_needing_a_newer_host_is_reported_not_hidden, and rule 1: a
+    // version this Reload cannot run is never one a check proposes.
+    const { installer, updates } = await installed("pinger", "0.1.0");
+    publish("pinger", "3.0.0", { protocol: 3 });
+    await updates.check();
+    expect((await line(installer, updates, "pinger"))?.update).toEqual({
+      kind: "unchecked",
+      version: null,
+      detail:
+        "the catalogue offers version 3.0.0, and its archive did not verify: " +
+        "reload-package.json: it needs a newer Reload: protocol: 3 is not implemented by this " +
+        "runtime, which implements protocol 2",
+      apply: false,
+    });
+    expect(told).toEqual([]);
+    await expect(updates.apply("pinger", "person")).resolves.toMatchObject({ ok: false });
+    expect(roots.installed("pinger")?.version).toBe("0.1.0");
   });
 
   it("an entry naming a newer version with no archive is not offered", async () => {

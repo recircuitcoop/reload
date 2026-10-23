@@ -12,6 +12,7 @@ import type { DeclaredLimits } from "../supervision/resources";
 import type { StabilityProfile } from "../supervision/staleness";
 import { configProblems, type ConfigJudge } from "./config-lint";
 import { oldKeywordAt, oldKeywordProblem } from "./old-names";
+import { compareVersions } from "./versions";
 
 /** The one protocol version this runtime implements (spec 1.2). */
 export const PROTOCOL = 2;
@@ -336,6 +337,13 @@ function dottedNames(schema: Readonly<Record<string, unknown>>, path = ""): stri
 /** The rules a JSON Schema cannot state: uniqueness, reserved ports, event owners. */
 function beyondTheSchema(declaration: Declaration): string[] {
   const problems: string[] = [];
+  // One exact version, so a check can order it: never a range, a tag or nothing (manifest.py).
+  if (compareVersions(declaration.version, declaration.version) === null) {
+    problems.push(
+      `version: ${JSON.stringify(declaration.version)} is not an exact version; a package ` +
+        "declares the one version it is, as numbers joined by dots (1.4.0, or 2.0.0-rc.1)",
+    );
+  }
   const typeIds = new Set<string>();
   declaration.types.forEach((type, index) => {
     const at = `types/${String(index)}`;

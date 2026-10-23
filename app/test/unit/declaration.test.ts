@@ -318,6 +318,22 @@ describe("parseDeclaration", () => {
     }
   });
 
+  it.each(["*", ">=1.0", "latest", "", "1.x"])(
+    "refuses a version that is not an exact version, quoting it: %j",
+    (version) => {
+      expect(refused(declaration({ version }))).toEqual([
+        `version: ${JSON.stringify(version)} is not an exact version; a package declares the ` +
+          "one version it is, as numbers joined by dots (1.4.0, or 2.0.0-rc.1)",
+      ]);
+    },
+  );
+
+  it("accepts an exact version, a pre-release and build metadata included", () => {
+    for (const version of ["1", "1.4.0", "2.0.0-rc.1", "1.0.0+build.7"]) {
+      expect(parse(declaration({ version })).ok).toBe(true);
+    }
+  });
+
   it("refuses a version that is not a string", () => {
     expect(refused(declaration({ version: 1 }))).toEqual(["version: must be string"]);
   });

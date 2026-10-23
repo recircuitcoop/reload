@@ -32,7 +32,7 @@ import {
   type FileManifest,
   type Sha256,
 } from "../domain/packages/archive";
-import { parseDeclaration, type Declaration } from "../domain/packages/declaration";
+import { parseDeclaration, PROTOCOL, type Declaration } from "../domain/packages/declaration";
 import { OLD_DECLARATION_FILE, oldDeclarationProblem } from "../domain/packages/old-names";
 import { planEnvironment, type Target } from "../domain/packages/environment";
 import { heldSources } from "../domain/telemetry/sources";
@@ -166,7 +166,13 @@ function declarationOf(
   }
   const parsed = parseDeclaration(document, validator);
   if (!parsed.ok) {
-    throw new PackageRefusal("declaration", `${DECLARATION_FILE}: ${parsed.problems.join("; ")}`);
+    // Written for a later protocol: said as what it is, a package this Reload is too old for.
+    const protocol = (document as { readonly protocol?: unknown } | null)?.protocol;
+    const newer = typeof protocol === "number" && protocol > PROTOCOL;
+    throw new PackageRefusal(
+      "declaration",
+      `${DECLARATION_FILE}: ${newer ? "it needs a newer Reload: " : ""}${parsed.problems.join("; ")}`,
+    );
   }
   return parsed.declaration;
 }

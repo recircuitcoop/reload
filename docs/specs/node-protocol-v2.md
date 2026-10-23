@@ -87,6 +87,9 @@ package authors.
    - The name `user-events` is RESERVED for created event types (section 9).
 3. Each type has an `id`, matching `^[a-z][a-z0-9_-]{0,63}$`, unique within its package.
 4. The Node-RED node type name is derived, never declared: `reload-<package>-<id>`.
+5. `version` is the one exact version the package is: numbers joined by dots, optionally a
+   pre-release after `-` and build metadata after `+` (`1.4.0`, `2.0.0-rc.1`). A range, a tag
+   such as `latest`, `*` or an empty string MUST be refused, quoting it.
 
 ### 2.2 Types
 
