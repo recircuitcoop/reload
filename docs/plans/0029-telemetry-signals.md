@@ -339,12 +339,16 @@ Where the build differs from the text above, and why:
 - **`machine_id` and `report_id` are checked at send**: 64 and 32 lower-case hex characters, and
   the machine id must be the pipeline's own; a report that fails either is dropped.
 - **Turning reports off is final for what was queued before**, by queue order, not by the
-  reports' clock. The purge first writes a fence (the queue's last sequence, `.fence` in the
-  queue folder), then moves the folder aside; when the move fails, every report at or below the
-  fence is never read again, on this launch or the next, and is deleted as it is found. A purge
-  that can neither fence nor move the folder (the queue's folder and its parent both unwritable)
-  fails and is tried again at the next look; a yes before one succeeded would send what it
-  holds.
+  reports' clock. An off stores a purge owed (`telemetryPurgeOwed` in `shell-settings.json`)
+  before it stores the no, and a purge that fails, for an off or for an unset (a yes to an older
+  notice), owes one too. While a purge is owed, or the marker cannot be read, nothing is queued or
+  sent, after a yes and on later launches, until a purge succeeds. The purge first writes a fence
+  (the queue's last sequence, `.fence` in the queue folder), then moves the folder aside; when
+  the move fails, every report at or below the fence is never read again and is deleted as it is
+  found.
+- **A report dropped at send says why in the log**: made under other rules, carrying a field
+  named like a credential, not stamped with this machine's id and a report id of the app's own,
+  or naming no known event.
 - **The notice names every field that leaves**, the pipeline's own too: `kind`, `event` and
   `rules` beside `at` and `report_id`.
 
