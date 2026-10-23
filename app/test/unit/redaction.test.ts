@@ -59,6 +59,8 @@ describe("redactStrings: a whole message bound for another process", () => {
     const bare = Object.create(null) as Record<string, unknown>;
     bare["key"] = "the s3cret";
     const bytes = new Uint8Array([1, 2]);
+    // A run's moments cross the channel as Dates, and must arrive as Dates.
+    const at = new Date(1_700_000_000_000);
     const out = redactStrings(
       {
         map: new Map([["s3cret", "s3cret"]]),
@@ -66,6 +68,7 @@ describe("redactStrings: a whole message bound for another process", () => {
         bare,
         holder: new Holder(),
         bytes,
+        at,
         n: 3,
         nothing: null,
       },
@@ -78,9 +81,11 @@ describe("redactStrings: a whole message bound for another process", () => {
       bare: { key: `the ${REDACTED}` },
       holder: { token: REDACTED, nested: { deeper: [REDACTED] } },
       bytes,
+      at,
       n: 3,
       nothing: null,
     });
+    expect((out as { at: unknown }).at).toBeInstanceOf(Date);
   });
 
   it("redacts an Error's message, name and stack, and leaves the original as it was", () => {

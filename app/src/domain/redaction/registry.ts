@@ -73,7 +73,8 @@ export function redactStrings(value: unknown, redact: (text: string) => string):
     // A bigint, symbol or function cannot cross the channel; numbers and the rest carry no text.
     return value;
   }
-  if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) {
+  if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer || value instanceof Date) {
+    // Bytes and a moment carry no text a secret could be in, and must arrive as they are.
     return value;
   }
   if (value instanceof Error) {
