@@ -606,6 +606,13 @@ test("General shows the queued reports in full, Advanced's status details, Recor
     );
     await expect(sent).toHaveText(STRINGS["general.reports.nothing"]);
 
+    // ── The old Application tab's groups, each drawn here: Anytype (pairing, AI apps), the
+    // installed plugins and the catalogue (Packages), the helper's numbers and its processes
+    // (Advanced: Stability defaults and the node list, below).
+    for (const kind of ["anytype", "ai-apps", "packages", "advanced"]) {
+      await expect(section(general, kind)).toBeVisible();
+    }
+
     // ── Advanced: each child's state, process, port and generation; the endpoint served ─────
     const advanced = general.getByTestId("general-advanced");
     // The services process starts beside the runtime, and on a loaded machine after it.
