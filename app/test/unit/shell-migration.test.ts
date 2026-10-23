@@ -43,6 +43,7 @@ function memorySettings(): ShellSettings {
       telemetry = on ? "on" : "off";
     },
     askAgain: () => false,
+    offAt: () => null,
     readLaunchAtLogin: () => launchAtLogin,
     writeLaunchAtLogin: (on) => {
       launchAtLogin = on;

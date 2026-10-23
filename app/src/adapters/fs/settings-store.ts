@@ -117,7 +117,15 @@ export class JsonSettingsStore
     this.#write("telemetry", on);
     if (on) {
       this.#write("telemetryNotice", NOTICE_VERSION);
+    } else {
+      // Every report queued before this moment stays unsent, whatever a later yes says.
+      this.#write("telemetryOffAt", Date.now());
     }
+  }
+
+  offAt(): number | null {
+    const at = this.#read()["telemetryOffAt"];
+    return typeof at === "number" && Number.isFinite(at) ? at : null;
   }
 
   // The package settings (WI-0018-17), raw: domain/packages judges them.

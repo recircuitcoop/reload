@@ -250,6 +250,8 @@ describe("the telemetry switch in shell-settings.json", () => {
       launchAtLogin: true,
       telemetry: false,
       telemetryNotice: NOTICE_VERSION,
+      // When reports were turned off: no report queued before it is ever sent.
+      telemetryOffAt: expect.any(Number) as unknown,
     });
     // A yes to an older privacy notice (plan 0029) is asked again; a no stays a no.
     // The frame asks it on launch only for such a yes (askAgain), never for an unanswered one.

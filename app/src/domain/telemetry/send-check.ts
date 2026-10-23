@@ -66,8 +66,8 @@ const DURATION = int(0, 1_000_000_000);
 const RULES: Readonly<Record<string, Rule>> = {
   event: text(isSignalName),
   kind: oneOf("usage", "error"),
-  machine_id: shape(/^[\w-]{1,64}$/),
-  report_id: shape(/^[\w-]{1,64}$/),
+  machine_id: shape(/^[0-9a-f]{64}$/),
+  report_id: shape(/^[0-9a-f]{32}$/),
   at: shape(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/),
   rules: int(RULES_VERSION, RULES_VERSION),
   app_version: shape(VERSION),
@@ -216,16 +216,29 @@ function vouched(report: JsonObject, vouch: Vouch): JsonObject {
 
 /**
  * A queued report's payload as it may leave, or null when it may not leave at all: stamped under
- * other rules, naming no known event, or still carrying a field named like a credential.
+ * other rules, naming no known event, carrying a field named like a credential, or not stamped
+ * by this pipeline with `machineId` (this machine's) and a report id of its own.
  */
 export function checkAtSend(
   payload: JsonObject,
   kind: "usage" | "error",
   vouch: Vouch,
+  machineId: string | null,
 ): JsonObject | null {
   // A report under other rules, or one carrying a field named like a credential, was not made
   // by this app as it is: it does not leave at all.
   if (payload["rules"] !== RULES_VERSION || credentialFieldName(payload) !== null) {
+    return null;
+  }
+  // The pipeline's own stamps, or not its report: this machine's id, and a random id of its own.
+  const id = payload["report_id"];
+  if (
+    machineId === null ||
+    !/^[0-9a-f]{64}$/.test(machineId) ||
+    payload["machine_id"] !== machineId ||
+    typeof id !== "string" ||
+    !/^[0-9a-f]{32}$/.test(id)
+  ) {
     return null;
   }
   const event = payload["event"];

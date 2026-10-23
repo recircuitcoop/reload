@@ -7,12 +7,21 @@ import { checkAtSend } from "../../src/domain/telemetry/send-check";
 import { RULES_VERSION } from "../../src/domain/telemetry/vocabulary";
 import { TEST_VOUCH } from "../fakes/telemetry";
 
+/** The pipeline's own stamps: this machine's id and a report id, both hex. */
+const MACHINE = "a".repeat(64);
+const STAMPS = { machine_id: MACHINE, report_id: "b".repeat(32) };
+
 const usage = (fields: Record<string, unknown>) =>
-  checkAtSend({ rules: RULES_VERSION, kind: "usage", ...fields }, "usage", TEST_VOUCH);
+  checkAtSend(
+    { rules: RULES_VERSION, kind: "usage", ...STAMPS, ...fields },
+    "usage",
+    TEST_VOUCH,
+    MACHINE,
+  );
 
 describe("the check at send", () => {
   it("drops a report under other rules, of no known event, or carrying a credential-named field", () => {
-    expect(checkAtSend({ event: "app_start" }, "usage", TEST_VOUCH)).toBeNull();
+    expect(checkAtSend({ event: "app_start" }, "usage", TEST_VOUCH, MACHINE)).toBeNull();
     expect(usage({ event: "not_an_event" })).toBeNull();
     expect(usage({ startup_ms: 1 })).toBeNull();
     expect(usage({ event: "app_start", api_key: "x" })).toBeNull();
@@ -24,6 +33,7 @@ describe("the check at send", () => {
       {
         rules: RULES_VERSION,
         kind: "error",
+        ...STAMPS,
         exception_type: "RuntimeCrashed",
         crashed: "runtime",
         stopped_for_good: "yes",
@@ -33,17 +43,24 @@ describe("the check at send", () => {
       },
       "error",
       TEST_VOUCH,
+      MACHINE,
     );
     expect(sent).toEqual({
       rules: RULES_VERSION,
       kind: "error",
+      ...STAMPS,
       exception_type: "RuntimeCrashed",
       crashed: "runtime",
       stopped_for_good: WITHHELD,
       crashes: { runtime: 1, services: WITHHELD, node: WITHHELD, node_stopped: 0 },
     });
     expect(
-      checkAtSend({ rules: RULES_VERSION, crashes: [1, 2] }, "error", TEST_VOUCH)?.["crashes"],
+      checkAtSend(
+        { rules: RULES_VERSION, ...STAMPS, crashes: [1, 2] },
+        "error",
+        TEST_VOUCH,
+        MACHINE,
+      )?.["crashes"],
     ).toBe(WITHHELD);
   });
 

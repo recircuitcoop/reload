@@ -557,6 +557,8 @@ describe("Umami's batch request and the pipeline's batches", () => {
     world.queue.enqueue("usage", {
       event: "package_error",
       rules: RULES_VERSION,
+      machine_id: world.queue.reports[0]?.payload["machine_id"] ?? null,
+      report_id: "f".repeat(32),
       error_type: "sk_live_abc123",
       version: "1.0.0-Ab3d.Ef6h.Ij9k",
       client: "bob hunter2",

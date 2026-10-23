@@ -199,7 +199,7 @@ describe("telemetry against local fake GlitchTip and Umami servers", () => {
     // rule again at send: the type a careless caller gave is withheld.
     const sendable = {
       ...queued(report),
-      payload: checkAtSend(queued(report).payload, "error", TEST_VOUCH) ?? {},
+      payload: checkAtSend(queued(report).payload, "error", TEST_VOUCH, machineIdHash(RAW)) ?? {},
     };
     expect(got?.body).toBe(outgoingFor(sendable, endpoints(), "2.0.0").body);
     expect(got?.body).not.toContain("ServicesCrashed near");

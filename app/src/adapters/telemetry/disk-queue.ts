@@ -176,13 +176,15 @@ export class DiskReportQueue implements ReportQueue {
 
   purge(): number {
     const count = this.#files().length;
-    this.#index = [];
     if (count > 0) {
       // One rename takes every report out of the queue at once: nothing in the trash is ever read
       // or sent, and deleting thousands of files does not block the caller.
       const trash = `${this.#root}${TRASH_INFIX}${String(process.pid)}-${String(Date.now())}`;
       fs.renameSync(this.#root, trash);
     }
+    // Forgotten only once they are gone: a rename that failed leaves them known, and kept back
+    // by the off they were queued before (application/telemetry.ts).
+    this.#index = [];
     this.#emptyTrash();
     return count;
   }

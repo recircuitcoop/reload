@@ -20,7 +20,13 @@ import { heldFrom, heldSources } from "../../src/domain/telemetry/sources";
 import { wireTelemetry, withShippedSources, type ShellTelemetry } from "../../src/shell/telemetry";
 import { RecordingLogger } from "../fakes/children";
 import { FakeClock } from "../fakes/clock";
-import { MemoryQueue, MemorySetting, RecordingPoster, telemetryWorld } from "../fakes/telemetry";
+import {
+  MemoryQueue,
+  MemorySetting,
+  RAW_IDENTIFIER,
+  RecordingPoster,
+  telemetryWorld,
+} from "../fakes/telemetry";
 
 let scratch = "";
 afterEach(() => {
@@ -215,6 +221,9 @@ describe("the queue on disk", () => {
       path.join(root, "000000000001-usage.json"),
       JSON.stringify({
         rules: RULES_VERSION,
+        // Stamped as this machine's pipeline would: only then is it read at all.
+        machine_id: RAW_IDENTIFIER.length.toString(16).padStart(64, "0"),
+        report_id: "f".repeat(32),
         event: "app_start",
         app_version: "1.0.0",
         "/Users/alice/Documents/tax return": true,
@@ -247,6 +256,57 @@ describe("the queue on disk", () => {
     }
     const data = (JSON.parse(body) as { payload: { data: Record<string, unknown> } }).payload.data;
     expect(data).toMatchObject({ startup_ms: "[withheld]", packages: "[withheld]" });
+  });
+});
+
+describe("a report is sent only as this pipeline stamped it", () => {
+  it("one with another machine's id, or a report id not its own, is dropped unsent", async () => {
+    const world = telemetryWorld("on");
+    const pipeline = new TelemetryPipeline(world.deps);
+    pipeline.recordUsage("setup_step", { step: "launched" });
+    const own = world.queue.reports[0]?.payload ?? {};
+    world.queue.enqueue("usage", { ...own, machine_id: "e".repeat(64) });
+    world.queue.enqueue("usage", { ...own, machine_id: "alice-macbook" });
+    world.queue.enqueue("usage", { ...own, report_id: "report-alice-1" });
+    world.queue.enqueue("usage", { ...own, report_id: "F".repeat(32) });
+    expect(await pipeline.flush()).toEqual({ sent: 1, retryInMs: null });
+    expect(world.queue.reports).toEqual([]);
+  });
+});
+
+describe("a report queued before reports were last turned off never leaves", () => {
+  it("not even when the purge failed and a later yes drains the queue", async () => {
+    const queue = new MemoryQueue();
+    const world = telemetryWorld("on", { queue });
+    const pipeline = new TelemetryPipeline(world.deps);
+    pipeline.recordUsage("setup_step", { step: "launched" });
+    // Off, and the purge fails: the report stays on disk.
+    vi.spyOn(queue, "purge").mockImplementationOnce(() => {
+      throw new Error("EPERM: rename telemetry-queue");
+    });
+    world.setting.writeTelemetry(false);
+    world.setting.off = Date.UTC(2026, 8, 26, 13);
+    pipeline.state();
+    expect(queue.reports).toHaveLength(1);
+    // A yes later: the old report is dropped, never sent.
+    world.setting.writeTelemetry(true);
+    expect(await pipeline.flush()).toEqual({ sent: 0, retryInMs: null });
+    expect(world.poster.sent).toEqual([]);
+    expect(queue.reports).toEqual([]);
+  });
+
+  it("a purge whose rename fails leaves the queue's index as it was", () => {
+    scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-queue-"));
+    const root = path.join(scratch, "telemetry-queue");
+    const queue = new DiskReportQueue(root, new RecordingLogger());
+    queue.enqueue("usage", { n: 1 });
+    vi.spyOn(fs, "renameSync").mockImplementationOnce(() => {
+      throw new Error("EPERM: operation not permitted");
+    });
+    expect(() => queue.purge()).toThrow("EPERM");
+    expect(queue.count()).toBe(1);
+    expect(queue.purge()).toBe(1);
+    expect(queue.count()).toBe(0);
   });
 });
 

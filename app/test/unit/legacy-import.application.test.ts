@@ -35,6 +35,9 @@ class MemoryShellSettings implements ShellSettings {
   askAgain(): boolean {
     return false;
   }
+  offAt(): number | null {
+    return null;
+  }
   readLaunchAtLogin(): boolean {
     return this.launchAtLogin;
   }

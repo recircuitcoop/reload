@@ -499,6 +499,8 @@ test("telemetry asks first, sends nothing before a yes, sends only redacted repo
         telemetry: false,
         // The notice the earlier yes answered (plan 0029); off stays off whatever it says.
         telemetryNotice: NOTICE_VERSION,
+        // When it was turned off: a report made before it never leaves, whatever a later yes says.
+        telemetryOffAt: expect.any(Number) as unknown,
         setup: expect.objectContaining({ step: "connect-anytype", completed: true }) as unknown,
       },
     );

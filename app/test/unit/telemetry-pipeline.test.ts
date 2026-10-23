@@ -175,8 +175,8 @@ describe("the telemetry pipeline: what is queued", () => {
     expect(report?.kind).toBe("error");
     expect(report?.payload).toMatchObject({
       kind: "error",
-      machine_id: `hash-of-${String(RAW_IDENTIFIER.length)}-chars`,
-      report_id: "report00000000000000000000000001",
+      machine_id: RAW_IDENTIFIER.length.toString(16).padStart(64, "0"),
+      report_id: "0".repeat(31) + "1",
       at: "2026-09-26T12:00:00.000Z",
       exception_type: "RuntimeCrashed",
       crashed: "runtime",

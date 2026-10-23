@@ -19,6 +19,9 @@ import type {
 import { FakeClock } from "./clock";
 import { RecordingLogger } from "./children";
 
+/** The fixed time of every test world (`now`): an off at it keeps no later report back. */
+const OFF_NOW = Date.UTC(2026, 8, 26, 12);
+
 export class MemorySetting implements TelemetrySetting {
   answer: TelemetryAnswer;
   reads = 0;
@@ -43,6 +46,16 @@ export class MemorySetting implements TelemetrySetting {
     }
     this.answer = on ? "on" : "off";
     this.olderYes = false;
+    if (!on) {
+      this.off = OFF_NOW;
+    }
+  }
+
+  /** When reports were last turned off: the world's own clock, so its reports are not before. */
+  off: number | null = null;
+
+  offAt(): number | null {
+    return this.off;
   }
 
   /** A yes to an older notice: read as unset, and asked again. */
@@ -156,13 +169,14 @@ export function telemetryWorld(
       calls += 1;
       return RAW_IDENTIFIER;
     },
-    hashIdentifier: (raw) => `hash-of-${String(raw.length)}-chars`,
+    // Hex, as the real keyed hash is: the check at send refuses any other machine id.
+    hashIdentifier: (raw) => raw.length.toString(16).padStart(64, "0"),
     endpoints: ENDPOINTS,
     vouch: TEST_VOUCH,
     release: "9.9.9",
     clock,
     now: () => Date.UTC(2026, 8, 26, 12),
-    newId: () => `report${String((ids += 1)).padStart(26, "0")}`,
+    newId: () => (ids += 1).toString(16).padStart(32, "0"),
     credentials: (text) => registry.redact(text),
     secrets: { protect: (secret) => registry.protect(secret) },
     logger,

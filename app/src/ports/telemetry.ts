@@ -18,6 +18,11 @@ export interface TelemetrySetting {
    * unanswered, and the question is asked again on launch. Throws when the file cannot be read.
    */
   askAgain(): boolean;
+  /**
+   * When reports were last turned off (epoch ms), or null when they never were: a report queued
+   * before it is never sent, even when its purge failed and a later yes would drain it.
+   */
+  offAt(): number | null;
 }
 
 /** Reports on disk, in order, bounded, dropping the oldest when full (telemetry.py:737). */
