@@ -8,6 +8,7 @@ import * as http from "node:http";
 import { createRequire } from "node:module";
 import * as os from "node:os";
 import * as path from "node:path";
+import RED from "node-red";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { DeclaredPackageStore } from "../../src/adapters/fs/declared-package-store";
 import { EmbeddedNodeRed } from "../../src/adapters/nodered/engine";
@@ -32,7 +33,13 @@ class LeveledRecorder extends RecordingLogger {
 
 function send(
   port: number,
-  options: { method?: string; path: string; host?: string; body?: string },
+  options: {
+    method?: string;
+    path: string;
+    host?: string;
+    body?: string;
+    headers?: Record<string, string>;
+  },
 ): Promise<{ status: number; text: string }> {
   return new Promise((resolve, reject) => {
     const headers: Record<string, string> = {
@@ -42,6 +49,7 @@ function send(
     if (options.body !== undefined) {
       headers["content-type"] = "application/json";
     }
+    Object.assign(headers, options.headers);
     // A connection per request: a kept-alive socket would outlive the stop test's server.
     const request = http.request(
       {
@@ -175,6 +183,41 @@ describe("the embedded Node-RED", () => {
     expect(accepted.status).toBe(204);
     const flows = JSON.parse((await send(port, { path: "/red/flows" })).text) as { id: string }[];
     expect(flows.map((node) => node.id)).toEqual(["t", "i"]);
+  });
+
+  it("restarts only the node whose setting changed on a modified-nodes deploy, as the editor deploys", async () => {
+    const deploy = async (name: string, type: string) => {
+      const answer = await send(port, {
+        method: "POST",
+        path: "/red/flows",
+        headers: { "Node-RED-Deployment-Type": type },
+        body: JSON.stringify([
+          { id: "t2", type: "tab" },
+          { id: "a", type: "inject", z: "t2", name, wires: [] },
+          { id: "b", type: "inject", z: "t2", name: "unchanged", wires: [] },
+        ]),
+      });
+      expect(answer.status).toBe(204);
+    };
+    // Node-RED's own registry of running nodes: the instance a deploy started for each id.
+    const running = (RED as unknown as { nodes: { getNode(id: string): unknown } }).nodes;
+    const started = async (id: string, not: unknown = null): Promise<unknown> => {
+      await expect
+        .poll(() => running.getNode(id) ?? null, { timeout: 10_000 })
+        .not.toBe(not ?? null);
+      return running.getNode(id);
+    };
+    await deploy("first", "full");
+    const a = await started("a");
+    const b = await started("b");
+    expect([typeof a, typeof b]).toEqual(["object", "object"]);
+    await deploy("changed", "nodes");
+    // The changed node is a new instance; the other was never stopped.
+    await started("a", a);
+    expect(running.getNode("b")).toBe(b);
+    // A full deploy, Node-RED's own default, would restart both.
+    await deploy("again", "full");
+    await started("b", b);
   });
 
   it("refuses a request, and a WebSocket upgrade, for any other Host", async () => {

@@ -484,13 +484,20 @@ declare global {
       browsed: typeof browsed;
     };
     /** The editor's own RED, as far as the form uses it. */
-    RED?: { notify(message: string, type: string): void };
+    RED?: {
+      notify(message: string, type: string): void;
+      menu?: { setSelected(id: string, selected: boolean): void };
+    };
     /** Definitions Node-RED put in the page before this code: defined now. */
     ReloadFormsPending?: [string, JsonSchema][];
   }
 }
 
 window.ReloadForms = { define, validate, prepare, save, close, browsed };
+// Deploy only the modified nodes (plan 0032, group 37): saving one step's setting restarts that
+// step's process alone, as the old app restarted only that plugin. Node-RED's own default, a
+// full deploy, would restart every node of every flow. The person may still choose another.
+window.RED?.menu?.setSelected("deploymenu-item-node", true);
 // One type whose form cannot be built never costs the types after it: each is defined alone.
 for (const [type, schema] of window.ReloadFormsPending ?? []) {
   try {
