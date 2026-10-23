@@ -5,6 +5,7 @@ import {
   parseReleaseMetadata,
   pickReleaseFile,
   ReleaseMetadataError,
+  releaseMismatch,
 } from "../../src/domain/update/release-metadata";
 
 const VALID = [
@@ -149,5 +150,41 @@ describe("pickReleaseFile", () => {
       error = thrown;
     }
     expect(error).toMatchObject({ reason: "ambiguous-file" });
+  });
+});
+
+describe("what the platform updater found, against the verified release", () => {
+  const signed = {
+    version: "1.2.3",
+    files: [{ url: "Reload-1.2.3-mac.zip", sha512: "abc", size: 10 }],
+  };
+  const file = (fields: Record<string, unknown>) => ({
+    version: "1.2.3",
+    files: [{ url: "Reload-1.2.3-mac.zip", sha512: "abc", size: 10, ...fields }],
+  });
+
+  it("is the release when its version, files, sha512 and size are the signed ones", () => {
+    expect(releaseMismatch(file({}), signed)).toBeNull();
+    expect(releaseMismatch(file({ size: undefined }), signed)).toBeNull();
+  });
+
+  it("names what differs: version, files, a file, its sha512, its size", () => {
+    expect(releaseMismatch({ ...file({}), version: "1.2.4" }, signed)).toBe(
+      "it found version 1.2.4, not 1.2.3",
+    );
+    expect(releaseMismatch({ version: "1.2.3", files: [] }, signed)).toBe("it names no files");
+    expect(releaseMismatch({ version: "1.2.3", files: "x" }, signed)).toBe("it names no files");
+    expect(releaseMismatch(file({ url: "other.zip" }), signed)).toBe(
+      "it names a file the signed metadata does not: other.zip",
+    );
+    expect(releaseMismatch({ version: "1.2.3", files: [null] }, signed)).toBe(
+      "it names a file the signed metadata does not: undefined",
+    );
+    expect(releaseMismatch(file({ sha512: "def" }), signed)).toBe(
+      "its sha512 for Reload-1.2.3-mac.zip is not the signed one",
+    );
+    expect(releaseMismatch(file({ size: 11 }), signed)).toBe(
+      "its size for Reload-1.2.3-mac.zip is not the signed one",
+    );
   });
 });
