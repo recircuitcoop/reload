@@ -423,6 +423,29 @@ describe("the self-update check over real HTTPS", () => {
     });
   });
 
+  it("a release that cannot be kept in Reload's folder is not staged, and nothing says it installs at quit", async () => {
+    const signer = new Signer();
+    const artifact = encode("bytes");
+    const yaml = metadataYaml("1.2.3", "a.zip", artifact);
+    published.set("/latest-mac.yml", encode(yaml));
+    published.set("/latest-mac.yml.minisig", encode(signer.sign(encode(yaml))));
+    published.set("/a.zip", artifact);
+    publishSidecar(signer, "1.2.3");
+    // The folder's parent is a file: nothing can be written under it.
+    fs.writeFileSync(path.join(scratch, "updates"), "not a folder");
+    const { check, events, notifier, selfUpdater } = checker({ publicKey: signer.publicKeyText });
+    expect(await check.check()).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("the verified release could not be kept") as unknown,
+    });
+    expect(events).toEqual(["check", "found 1.2.3", "failed unreadable"]);
+    expect(check.staged).toBe(false);
+    // Announced only once staging completes: never before, nor after a staging that failed.
+    expect(notifier.notices.map((notice) => notice.kind)).not.toContain("core-update-available");
+    await check.installAtQuit();
+    expect(selfUpdater.handed).toEqual([]);
+  });
+
   it("a version no newer than this one is not proposed", async () => {
     const signer = new Signer();
     const artifact = encode("bytes");

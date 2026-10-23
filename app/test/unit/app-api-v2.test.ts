@@ -636,7 +636,7 @@ describe("AppApi v2 calls, through the shell to its processes", () => {
     expect(h.settings.stored["setup"]).toMatchObject({ completed: true });
   });
 
-  it("update: the state follows each check's events; quit only with an update ready", async () => {
+  it("update: the state follows each check's events, and quit only with an update ready", async () => {
     const h = harness();
     expect(await h.api.updateState()).toEqual({
       ok: true,
