@@ -2,12 +2,13 @@
 // production UpdateCheck, ElectronUpdaterInstaller, HttpsClient, MinisignVerifier and
 // sha512Base64, against a local HTTPS release host — never GitHub (test/fixtures/tls).
 //
-// electron-updater reads the feed a second time, on its own fetch, after Reload verified it.
-// The host here can answer that second fetch with another document, as a hostile or broken
-// server could. The AppUpdater is a fake that fetches and downloads from that host as
-// electron-updater 6 does (its own yml read; an older version offered only with allowDowngrade;
-// the download refused unless its bytes hash to the sha512 its own yml named), since the real
-// one needs an installed Electron app.
+// Reload keeps the verified release in its own folder and, at quit, hands electron-updater those
+// bytes alone, from a loopback server of the adapter's own (plan 0032 group 19). The host here
+// can answer any later fetch with another document, as a hostile or broken server could: it is
+// never asked again. The AppUpdater is a fake that fetches and downloads from whatever feed it is
+// pointed at as electron-updater 6 does (its own yml read; an older version offered only with
+// allowDowngrade; the download refused unless its bytes hash to the sha512 its own yml named),
+// since the real one needs an installed Electron app.
 import fs from "node:fs";
 import https from "node:https";
 import type { AddressInfo } from "node:net";
@@ -15,6 +16,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { FsReleaseStaging } from "../../src/adapters/fs/release-staging";
 import { JsonSettingsStore } from "../../src/adapters/fs/settings-store";
 import { HttpsClient } from "../../src/adapters/net/https-client";
 import { sha512Base64 } from "../../src/adapters/signature/digest";
@@ -105,6 +107,9 @@ function publish(
     ...(other === undefined ? {} : { later: other.yaml }),
   });
   published.set(`${dir}/latest-mac.yml.minisig`, { first: encode(signer.sign(good.yaml)) });
+  const sidecar = encode(JSON.stringify({ version, protocol: 2 }));
+  published.set(`${dir}/latest-release.json`, { first: sidecar });
+  published.set(`${dir}/latest-release.json.minisig`, { first: encode(signer.sign(sidecar)) });
   published.set(`${dir}/${good.file}`, { first: good.artifact });
   if (other !== undefined) {
     // The same name: the verified bytes first (Reload's own fetch), the substitute after.
@@ -141,8 +146,20 @@ class HostAppUpdater {
     // The GitHub provider's own route to the newest release, modelled as the host's feed root.
     this.#feed = options.provider === "github" ? base : String(options.url);
   }
+  /** Every URL electron-updater fetched. */
+  readonly fetched: string[] = [];
+  async #get(url: string) {
+    this.fetched.push(url);
+    if (url.startsWith("http://")) {
+      const answer = await fetch(url);
+      return answer.ok
+        ? { ok: true as const, body: new Uint8Array(await answer.arrayBuffer()) }
+        : { ok: false as const, detail: String(answer.status) };
+    }
+    return http.get(url, { maxBytes: 1 << 20 });
+  }
   async checkForUpdates() {
-    const got = await http.get(`${this.#feed}/latest-mac.yml`, { maxBytes: 1 << 20 });
+    const got = await this.#get(`${this.#feed}/latest-mac.yml`);
     if (!got.ok) {
       throw new Error(got.detail);
     }
@@ -158,7 +175,7 @@ class HostAppUpdater {
     if (found === null || file === undefined || this.failDownload) {
       throw new Error("ECONNRESET");
     }
-    const got = await http.get(`${found.feed}/${file.url}`, { maxBytes: 1 << 20 });
+    const got = await this.#get(`${found.feed}/${file.url}`);
     if (!got.ok || sha512Base64(got.body) !== file.sha512) {
       throw new Error("ERR_CHECKSUM_MISMATCH");
     }
@@ -195,78 +212,82 @@ function checker(signer: Signer) {
     tagBaseUrl: (tag) => `${base}/download/${tag}`,
     platform: "mac",
     arch: "arm64",
+    staging: new FsReleaseStaging(path.join(scratch, "staged")),
+    installedProtocols: () => [],
   });
   return { check, updater, notifier, events };
 }
 
 describe("electron-updater installs only what Reload verified", () => {
-  it("the same release on electron-updater's own fetch: downloaded, and installed at quit", async () => {
+  const fromLoopback = (updater: HostAppUpdater) =>
+    updater.fetched.every((url) => url.startsWith("http://127.0.0.1:"));
+
+  it("the verified release: kept in Reload's folder, handed over from it at quit, and installed", async () => {
     const signer = new Signer();
     publish("", signer, NEWER);
     const { check, updater, events } = checker(signer);
     expect(await check.check()).toMatchObject({ ok: true });
     expect(events).toEqual(["check", "found", "progress", "downloaded"]);
-    check.installAtQuit();
+    // Nothing reached electron-updater before the quit.
+    expect(updater.fetched).toEqual([]);
+    await check.installAtQuit();
     expect(updater.installed).toEqual([NEWER]);
+    expect(updater.fetched).toHaveLength(2);
+    expect(fromLoopback(updater)).toBe(true);
   });
 
-  it("a host that serves another update on electron-updater's second fetch is refused", async () => {
+  it("a host that serves another update afterwards changes nothing: it is never asked again", async () => {
     const signer = new Signer();
-    // Its own, consistent yml and zip: only the signature it lacks gives it away.
+    // Its own, consistent yml and zip, served to any fetch after Reload's own.
     publish("", signer, NEWER, { version: "3.0.2", bytes: "a substitute" });
-    const { check, updater, notifier, events } = checker(signer);
-    const outcome = await check.check();
-    expect(outcome).toMatchObject({
-      ok: false,
-      error: expect.stringContaining("not 3.0.1") as unknown,
-    });
-    expect(events).toEqual(["check", "found", "failed safety-check"]);
+    const { check, updater } = checker(signer);
+    expect(await check.check()).toMatchObject({ ok: true });
+    await check.installAtQuit();
+    expect(updater.installed).toEqual([NEWER]);
+    expect(fromLoopback(updater)).toBe(true);
+    expect([...seen.values()].every((count) => count === 1)).toBe(true);
+  });
+
+  it("the same version with another artifact afterwards changes nothing either", async () => {
+    const signer = new Signer();
+    publish("", signer, NEWER, { version: NEWER, bytes: "a substitute with the same name" });
+    const { check, updater } = checker(signer);
+    expect(await check.check()).toMatchObject({ ok: true });
+    await check.installAtQuit();
+    expect(updater.installed).toEqual([NEWER]);
+    expect(updater.downloaded).toBe(NEWER);
+    expect(fromLoopback(updater)).toBe(true);
+  });
+
+  it("a Go back hands over the older release from Reload's folder, with the downgrade for that alone", async () => {
+    const signer = new Signer();
+    publish(`/download/${TAG}`, signer, OLDER, { version: OLDER, bytes: "a substitute" });
+    const { check, updater } = checker(signer);
+    expect(await check.goBack({ version: OLDER, tag: TAG })).toMatchObject({ ok: true });
+    await check.installAtQuit();
+    expect(updater.installed).toEqual([OLDER]);
+    expect(fromLoopback(updater)).toBe(true);
+    expect(updater.allowDowngrade).toBe(false);
+  });
+
+  it("a Go back whose handoff fails leaves no pinned feed: the next check installs the verified forward version only", async () => {
+    const signer = new Signer();
+    publish(`/download/${TAG}`, signer, OLDER);
+    const { check, updater, notifier } = checker(signer);
+    updater.failDownload = true;
+    expect(await check.goBack({ version: OLDER, tag: TAG })).toMatchObject({ ok: true });
+    await check.installAtQuit();
+    expect(updater.installed).toEqual([]);
+    expect(updater.allowDowngrade).toBe(false);
     expect(notifier.notices).toContainEqual(
       expect.objectContaining({ kind: "core-update-refused" }),
     );
-    expect(updater.downloaded).toBeNull();
-    check.installAtQuit();
-    expect(updater.installed).toEqual([]);
-  });
-
-  it("a host that serves the same version with another artifact on the second fetch is refused", async () => {
-    const signer = new Signer();
-    publish("", signer, NEWER, { version: NEWER, bytes: "a substitute with the same name" });
-    const { check, updater, events } = checker(signer);
-    expect(await check.check()).toMatchObject({ ok: false });
-    expect(events).toEqual(["check", "found", "failed safety-check"]);
-    expect(updater.downloaded).toBeNull();
-    check.installAtQuit();
-    expect(updater.installed).toEqual([]);
-  });
-
-  it("a Go back whose tag is served differently on the second fetch is refused; the feed is restored", async () => {
-    const signer = new Signer();
-    publish(`/download/${TAG}`, signer, OLDER, { version: OLDER, bytes: "a substitute" });
-    const { check, updater, events } = checker(signer);
-    expect(await check.goBack({ version: OLDER, tag: TAG })).toMatchObject({ ok: false });
-    expect(events).toEqual(["failed safety-check"]);
-    expect(updater.downloaded).toBeNull();
-    expect(updater.allowDowngrade).toBe(false);
-    check.installAtQuit();
-    expect(updater.installed).toEqual([]);
-  });
-
-  it("a Go back whose download fails leaves no pinned feed: the next check stages the verified forward version only", async () => {
-    const signer = new Signer();
-    publish(`/download/${TAG}`, signer, OLDER);
-    const { check, updater, events } = checker(signer);
-    updater.failDownload = true;
-    expect(await check.goBack({ version: OLDER, tag: TAG })).toMatchObject({ ok: false });
-    expect(events).toEqual(["failed no-connection"]);
-    expect(updater.allowDowngrade).toBe(false);
 
     // Later, the scheduled check (or Check now) finds the newer release on the normal feed.
     updater.failDownload = false;
     publish("", signer, NEWER);
     expect(await check.check()).toMatchObject({ ok: true });
-    expect(updater.downloaded).toBe(NEWER);
-    check.installAtQuit();
+    await check.installAtQuit();
     expect(updater.installed).toEqual([NEWER]);
   });
 });

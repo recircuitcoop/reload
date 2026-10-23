@@ -201,7 +201,10 @@ export const UPDATE_SENTENCES: Record<UpdateStateKind, readonly [UpdateState, st
     "Up to date · 0.2.1 · checked today 09:14",
   ],
   checking: [{ kind: "checking" }, "Checking…"],
-  ready: [{ kind: "ready", version: "0.3.0" }, "0.3.0 is ready. It installs when you quit."],
+  ready: [
+    { kind: "ready", version: "0.3.0", waits: false },
+    "0.3.0 is ready. It installs when you quit.",
+  ],
   downloading: [{ kind: "downloading", version: "0.3.0", percent: 42 }, "Downloading 0.3.0 · 42%"],
   "check-failed": [
     { kind: "check-failed", reason: "no-connection", lastCheckedAt: MONDAY },

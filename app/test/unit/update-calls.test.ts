@@ -79,6 +79,7 @@ function goBackAnswers(
   const asked: { version: string; tag: string }[] = [];
   h.calls.attach({
     check: () => Promise.resolve({ ok: true, message: "checked" }),
+    requestInstall: () => undefined,
     goBack: (to) => {
       asked.push(to);
       for (const event of events) h.calls.onEvent(event);
@@ -222,6 +223,7 @@ describe("Reload's own update calls", () => {
         h.calls.onEvent({ kind: "found", version: null, at: new Date(T0) });
         return Promise.resolve({ ok: true, message: "checked" });
       },
+      requestInstall: () => undefined,
       goBack: () => Promise.resolve({ ok: true, message: "" }),
     });
     const answer = await h.call("update.checkNow");

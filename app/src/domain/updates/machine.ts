@@ -41,8 +41,11 @@ export type UpdateState =
   | { readonly kind: "up-to-date"; readonly version: string; readonly checkedAt: Date }
   | { readonly kind: "checking" }
   | { readonly kind: "downloading"; readonly version: string; readonly percent: number }
-  /** Downloaded and verified: it installs when you quit. */
-  | { readonly kind: "ready"; readonly version: string }
+  /**
+   * Downloaded and verified: it installs when you quit, unless it `waits` for Quit and update (a
+   * release that changes the plugin protocol, or would stop an installed package).
+   */
+  | { readonly kind: "ready"; readonly version: string; readonly waits: boolean }
   | {
       readonly kind: "check-failed";
       readonly reason: CheckFailure;
@@ -101,7 +104,7 @@ export type UpdateEvent =
   /** The check finished: a newer version, or null for none. */
   | { readonly kind: "found"; readonly version: string | null; readonly at: Date }
   | { readonly kind: "progress"; readonly percent: number }
-  | { readonly kind: "downloaded" }
+  | { readonly kind: "downloaded"; readonly waits?: boolean }
   | { readonly kind: "quitAndInstall" }
   | { readonly kind: "failed"; readonly reason: CheckFailure | "safety-check" }
   /**
@@ -237,7 +240,11 @@ export function step(machine: UpdateMachine, event: UpdateEvent): StepResult {
       if (state.kind !== "downloading") {
         return ignore(machine);
       }
-      return moveTo(machine, { kind: "ready", version: state.version });
+      return moveTo(machine, {
+        kind: "ready",
+        version: state.version,
+        waits: event.waits === true,
+      });
     case "quitAndInstall":
       // The shell quits and installs; the state stays until the next start reports `installed`.
       return state.kind === "ready" ? accept(machine) : ignore(machine);

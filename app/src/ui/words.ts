@@ -303,7 +303,7 @@ export function wordUpdateState(state: UpdateState, now: Date): string {
     case "downloading":
       return t("update.downloading", { version: state.version, percent: state.percent });
     case "ready":
-      return t("update.ready", { version: state.version });
+      return t(state.waits ? "update.waits" : "update.ready", { version: state.version });
     case "check-failed": {
       const why =
         state.reason === "no-connection"

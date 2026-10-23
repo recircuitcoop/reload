@@ -4,7 +4,7 @@
 //
 // * Check now checks even with "Check automatically" off: the person asked (plan 0003).
 // * Quit and update quits when an update is ready; the quit installs it (QuitFlow's exit calls
-//   UpdateCheck.installAtQuit).
+//   UpdateCheck.installAtQuit), a release that waits for the person included (the old D13).
 // * Go back (D4): offered for seven days after the first start on a new version, which this file
 //   records (domain/updates/history.ts). It verifies the older release exactly as an update is
 //   verified (UpdateCheck.goBack); only a verified one is staged, and Reload then quits to
@@ -64,7 +64,7 @@ export interface UpdateCalls {
   /** UpdateCheck's `onEvent`: each step of a check moves the state, and the page is told. */
   onEvent(event: UpdateEvent): void;
   /** The check itself, once built; null on a platform that does not self-update. */
-  attach(updates: Pick<UpdateCheck, "check" | "goBack"> | null): void;
+  attach(updates: Pick<UpdateCheck, "check" | "goBack" | "requestInstall"> | null): void;
 }
 
 /** Reads the install record and judges this start against it; the record is written back. */
@@ -97,7 +97,7 @@ function startOf(deps: UpdateCallsDeps): { history: UpdateHistory; machine: Upda
 export function wireUpdateCalls(deps: UpdateCallsDeps): UpdateCalls {
   const { ipc, toPage, clock, settings, notifier, logger } = deps;
   let { history, machine } = startOf(deps);
-  let updates: Pick<UpdateCheck, "check" | "goBack"> | null = null;
+  let updates: Pick<UpdateCheck, "check" | "goBack" | "requestInstall"> | null = null;
   const remember = (next: UpdateHistory): void => {
     history = next;
     try {
@@ -190,6 +190,8 @@ export function wireUpdateCalls(deps: UpdateCallsDeps): UpdateCalls {
             return refused("nothing-to-do", "update.notReady");
           }
           onEvent({ kind: "quitAndInstall" });
+          // The person's own Apply: a release that waits for them is installed by this quit.
+          updates?.requestInstall();
           deps.quit();
           return { ok: true, value: null };
         case "update.goBack":

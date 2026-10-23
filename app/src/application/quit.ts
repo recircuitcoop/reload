@@ -21,7 +21,7 @@ export interface QuitDeps {
   /** Stop every child (the runtime runs `RED.stop()`), and resolve once all have. */
   readonly stopChildren: () => Promise<void>;
   /** Really quit, once the children have stopped. */
-  readonly exit: () => void;
+  readonly exit: () => void | Promise<void>;
   /** Told a decided quit is about to stop the children: app_stop is queued here (plan 0029). */
   readonly stopping?: () => void;
   readonly logger: Logger;
@@ -74,7 +74,7 @@ export class QuitFlow {
     await this.#deps.stopChildren();
     this.#phase = "done";
     logger.info("quit complete");
-    this.#deps.exit();
+    await this.#deps.exit();
     return "quit";
   }
 

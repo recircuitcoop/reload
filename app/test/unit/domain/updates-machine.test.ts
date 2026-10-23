@@ -65,8 +65,13 @@ describe("the self-update machine", () => {
     expect(machine.state).toEqual({ kind: "downloading", version: "0.3.0", percent: 42 });
     expect(run(machine, { kind: "progress", percent: 120 }).state).toMatchObject({ percent: 100 });
     expect(run(machine, { kind: "progress", percent: -1 }).state).toMatchObject({ percent: 0 });
+    expect(run(machine, { kind: "downloaded", waits: true }).state).toEqual({
+      kind: "ready",
+      version: "0.3.0",
+      waits: true,
+    });
     machine = run(machine, { kind: "downloaded" });
-    expect(machine.state).toEqual({ kind: "ready", version: "0.3.0" });
+    expect(machine.state).toEqual({ kind: "ready", version: "0.3.0", waits: false });
     expect(run(machine, { kind: "quitAndInstall" })).toBe(machine);
   });
 

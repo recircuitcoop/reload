@@ -43,7 +43,9 @@ function harness(setting: unknown, draws: number[] = [0.5]): Harness {
       writeUpdate: vi.fn(),
     },
     report: { notifier: new RecordingNotifier(), logger },
-    selfUpdater: { checkForUpdates: vi.fn(), downloadRelease: vi.fn(), quitAndInstall: vi.fn() },
+    selfUpdater: { install: vi.fn(), quitAndInstall: vi.fn() },
+    staging: { write: () => "", read: () => new Uint8Array(), discard: vi.fn() },
+    installedProtocols: () => [],
     session: {
       clock,
       currentVersion: () => "1.0.0",
@@ -162,10 +164,8 @@ describe("UpdateCheck.schedule", () => {
     h.check.stop();
   });
 
-  it("installAtQuit is a no-op before any check has staged an update", () => {
+  it("installAtQuit is a no-op before any check has staged an update", async () => {
     const h = harness({ auto_check: false });
-    expect(() => {
-      h.check.installAtQuit();
-    }).not.toThrow();
+    await expect(h.check.installAtQuit()).resolves.toBeUndefined();
   });
 });

@@ -15,7 +15,8 @@ import { MinisignVerifier } from "../../src/adapters/signature/minisign";
 import { HttpsClient } from "../../src/adapters/net/https-client";
 import { JsonSettingsStore } from "../../src/adapters/fs/settings-store";
 import { UpdateCheck } from "../../src/application/update-check";
-import type { SelfUpdater } from "../../src/ports/self-updater";
+import { FsReleaseStaging } from "../../src/adapters/fs/release-staging";
+import type { SelfUpdater, StagedHandoff } from "../../src/ports/self-updater";
 import { RecordingLogger, RecordingNotifier } from "../fakes/children";
 import { Signer } from "../fakes/minisign-signer";
 
@@ -67,23 +68,33 @@ afterEach(() => {
   fs.rmSync(scratch, { recursive: true, force: true });
 });
 
-/** A fake SelfUpdater: records every call, and never touches a real platform updater. */
+/** A fake SelfUpdater: records every handoff, and never touches a real platform updater. */
 class RecordingSelfUpdater implements SelfUpdater {
-  checked = 0;
   installed = 0;
-  /** The release folders Go back pinned the platform updater to. */
-  readonly pinned: string[] = [];
-  downloadRelease(releaseUrl: string): Promise<void> {
-    this.pinned.push(releaseUrl);
-    return Promise.resolve();
+  readonly handed: StagedHandoff[] = [];
+  /** Set: the platform updater does not take the release. */
+  fails: Error | null = null;
+  get checked(): number {
+    return this.handed.filter((one) => !one.downgrade).length;
   }
-  checkForUpdates(): Promise<void> {
-    this.checked += 1;
-    return Promise.resolve();
+  /** The older releases handed over (Go back), by version. */
+  get pinned(): string[] {
+    return this.handed.filter((one) => one.downgrade).map((one) => one.verified.version);
+  }
+  install(handoff: StagedHandoff): Promise<void> {
+    this.handed.push(handoff);
+    return this.fails === null ? Promise.resolve() : Promise.reject(this.fails);
   }
   quitAndInstall(): void {
     this.installed += 1;
   }
+}
+
+/** The release's signed sidecar: the plugin protocol it implements. */
+function publishSidecar(signer: Signer, version: string, protocol = 2, dir = ""): void {
+  const body = encode(JSON.stringify({ version, protocol }));
+  published.set(`${dir}/latest-release.json`, body);
+  published.set(`${dir}/latest-release.json.minisig`, encode(signer.sign(body)));
 }
 
 function encode(text: string): Uint8Array {
@@ -116,6 +127,7 @@ function checker(options: {
   currentVersion?: string;
   selfUpdater?: RecordingSelfUpdater;
   notifier?: RecordingNotifier;
+  installed?: { name: string; protocol: number | null }[];
 }) {
   const notifier = options.notifier ?? new RecordingNotifier();
   const selfUpdater = options.selfUpdater ?? new RecordingSelfUpdater();
@@ -155,6 +167,8 @@ function checker(options: {
     tagBaseUrl: (tag) => `${base}/download/${tag}`,
     platform: "mac",
     arch: "arm64",
+    staging: new FsReleaseStaging(path.join(scratch, "updates", "staged")),
+    installedProtocols: () => options.installed ?? [{ name: "reload_anytype", protocol: 2 }],
   });
   return { check, notifier, selfUpdater, logger, events, signals };
 }
@@ -176,34 +190,41 @@ describe("the self-update check over real HTTPS", () => {
     published.set("/latest-mac.yml", encode(yaml));
     published.set("/latest-mac.yml.minisig", encode(signer.sign(encode(yaml))));
     published.set(`/${fileName}`, artifact);
+    publishSidecar(signer, "1.2.3");
 
     const { check, events, notifier, selfUpdater, signals } = checker({
       publicKey: signer.publicKeyText,
     });
-    // A staged release is announced once staging completes: not while it is still downloading.
-    const stage = selfUpdater.checkForUpdates.bind(selfUpdater);
-    let announcedEarly = true;
-    selfUpdater.checkForUpdates = () => {
-      announcedEarly = notifier.notices.some((notice) => notice.kind === "core-update-available");
-      return stage();
-    };
     const outcome = await check.check();
     expect(events).toEqual(["check", "found 1.2.3", "progress", "downloaded"]);
-    expect(announcedEarly).toBe(false);
     expect(check.staged).toBe(true);
 
     expect(outcome).toMatchObject({
       ok: true,
       message: expect.stringContaining("1.2.3") as unknown,
     });
-    expect(asked).toEqual(["/latest-mac.yml", "/latest-mac.yml.minisig", `/${fileName}`]);
-    expect(selfUpdater.checked).toBe(1);
+    expect(asked).toEqual([
+      "/latest-mac.yml",
+      "/latest-mac.yml.minisig",
+      `/${fileName}`,
+      "/latest-release.json",
+      "/latest-release.json.minisig",
+    ]);
+    // Kept in Reload's own folder: the platform updater is handed nothing before the quit.
+    expect(selfUpdater.handed).toEqual([]);
+    expect(fs.readdirSync(path.join(scratch, "updates", "staged"))).toEqual([fileName]);
     // Raised exactly once, with the staged version.
     expect(notifier.notices.filter((notice) => notice.kind === "core-update-available")).toEqual([
       { kind: "core-update-available", subject: "Reload", version: "1.2.3" },
     ]);
 
-    check.installAtQuit();
+    await check.installAtQuit();
+    expect(selfUpdater.handed.map((one) => [one.fileName, one.downgrade])).toEqual([
+      [fileName, false],
+    ]);
+    // Exactly the verified bytes and the signed yml, as they verified.
+    expect(Buffer.from(selfUpdater.handed[0]?.bytes ?? [])).toEqual(Buffer.from(artifact));
+    expect(Buffer.from(selfUpdater.handed[0]?.metadata ?? [])).toEqual(Buffer.from(yaml));
     expect(selfUpdater.installed).toBe(1);
     // Offered once verified, applied as it installs: the versions and the channel only.
     expect(signals).toEqual([
@@ -226,6 +247,7 @@ describe("the self-update check over real HTTPS", () => {
     published.set("/latest-mac.yml", encode(yaml));
     published.set("/latest-mac.yml.minisig", encode(signer.sign(encode(yaml))));
     published.set(`/${fileName}`, artifact);
+    publishSidecar(signer, "1.2.3");
     const notifier = new RecordingNotifier();
     notifier.raise = () => {
       throw new Error("the notice board is full");
@@ -240,7 +262,7 @@ describe("the self-update check over real HTTPS", () => {
       "staged, but could not be told: the notice board is full",
     );
     // Staged all the same: it installs at quit.
-    check.installAtQuit();
+    await check.installAtQuit();
     expect(selfUpdater.installed).toBe(1);
   });
 
@@ -264,7 +286,7 @@ describe("the self-update check over real HTTPS", () => {
       expect.objectContaining({ kind: "core-update-refused" }),
     );
     expect(selfUpdater.checked).toBe(0);
-    check.installAtQuit();
+    await check.installAtQuit();
     expect(selfUpdater.installed).toBe(0);
   });
 
@@ -373,30 +395,32 @@ describe("the self-update check over real HTTPS", () => {
     expect(asked).toEqual([]);
   });
 
-  it("a verified feed whose platform updater cannot be reached is not staged, but is not a refusal", async () => {
+  it("a handoff the platform updater does not take leaves the installation alone, and says so", async () => {
+    // test_an_unpack_that_fails_leaves_the_installation_alone.
     const signer = new Signer();
     const artifact = encode("bytes");
-    const fileName = "a.zip";
-    const yaml = metadataYaml("1.2.3", fileName, artifact);
+    const yaml = metadataYaml("1.2.3", "a.zip", artifact);
     published.set("/latest-mac.yml", encode(yaml));
     published.set("/latest-mac.yml.minisig", encode(signer.sign(encode(yaml))));
-    published.set(`/${fileName}`, artifact);
-
+    published.set("/a.zip", artifact);
+    publishSidecar(signer, "1.2.3");
     const failing = new RecordingSelfUpdater();
-    failing.checkForUpdates = () => Promise.reject(new Error("offline"));
-    const { check, events, notifier } = checker({
+    failing.fails = new Error("the archive is truncated");
+    const { check, notifier, signals } = checker({
       publicKey: signer.publicKeyText,
       selfUpdater: failing,
     });
-    const outcome = await check.check();
-    expect(events).toEqual(["check", "found 1.2.3", "failed no-connection"]);
-    expect(outcome).toMatchObject({ ok: true });
-    // Nothing is ready, so nothing says it installs when you quit.
-    expect(notifier.notices).not.toContainEqual(
-      expect.objectContaining({ kind: "core-update-available" }),
-    );
-    check.installAtQuit();
+    expect(await check.check()).toMatchObject({ ok: true });
+    await check.installAtQuit();
+    expect(failing.handed).toHaveLength(1);
+    // Nothing installed and nothing applied: the running Reload stays, and the person is told.
     expect(failing.installed).toBe(0);
+    expect(signals.map((signal) => signal.name)).toEqual(["update_offered"]);
+    expect(notifier.notices).toContainEqual({
+      kind: "core-update-refused",
+      subject: "Reload",
+      detail: "Reload 1.2.3 could not be installed (the archive is truncated); 1.0.0 keeps running",
+    });
   });
 
   it("a version no newer than this one is not proposed", async () => {
@@ -451,9 +475,10 @@ describe("Go back over real HTTPS: as verified as an update (plan 0022 §G, D4)"
       `/download/${TAG}/latest-mac.yml.minisig`,
       `/download/${TAG}/${fileName}`,
     ]);
-    expect(selfUpdater.pinned).toEqual([`${base}/download/${TAG}`]);
-    expect(selfUpdater.checked).toBe(0);
-    check.installAtQuit();
+    // Kept in Reload's folder, and handed over only at the quit, older and so with the downgrade.
+    expect(selfUpdater.handed).toEqual([]);
+    await check.installAtQuit();
+    expect(selfUpdater.pinned).toEqual([OLD]);
     expect(selfUpdater.installed).toBe(1);
     expect(signals.map((signal) => [signal.name, signal.fields["to_version"]])).toEqual([
       ["update_applied", OLD],
@@ -473,7 +498,7 @@ describe("Go back over real HTTPS: as verified as an update (plan 0022 §G, D4)"
     );
     expect(asked).not.toContain(`/download/${TAG}/${fileName}`);
     expect(selfUpdater.pinned).toEqual([]);
-    check.installAtQuit();
+    await check.installAtQuit();
     expect(selfUpdater.installed).toBe(0);
   });
 
@@ -523,5 +548,172 @@ describe("Go back over real HTTPS: as verified as an update (plan 0022 §G, D4)"
     });
     expect(await check.check({ manual: true })).toMatchObject({ ok: true });
     expect(events).toEqual(["check", "found null"]);
+  });
+});
+
+describe("what a staged release may do at quit (plan 0032: the old D13, the staged re-hash, and the packages it would stop)", () => {
+  const fileName = "Reload-1.2.3-mac.zip";
+  const artifact = encode("the Reload 1.2.3 zip");
+
+  /** Release 1.2.3 published and signed; its sidecar names `protocol`, or there is none. */
+  function release(signer: Signer, protocol: number | null): void {
+    const yaml = metadataYaml("1.2.3", fileName, artifact);
+    published.set("/latest-mac.yml", encode(yaml));
+    published.set("/latest-mac.yml.minisig", encode(signer.sign(encode(yaml))));
+    published.set(`/${fileName}`, artifact);
+    if (protocol !== null) {
+      publishSidecar(signer, "1.2.3", protocol);
+    }
+  }
+
+  it("an artifact changed since it was staged is deleted rather than installed", async () => {
+    const signer = new Signer();
+    release(signer, 2);
+    const { check, notifier, selfUpdater } = checker({ publicKey: signer.publicKeyText });
+    expect(await check.check()).toMatchObject({ ok: true });
+    const staged = path.join(scratch, "updates", "staged", fileName);
+    fs.writeFileSync(staged, "something else entirely");
+    await check.installAtQuit();
+    // Never handed over, never installed, and gone: no later quit reads those bytes either.
+    expect(selfUpdater.handed).toEqual([]);
+    expect(selfUpdater.installed).toBe(0);
+    expect(fs.existsSync(staged)).toBe(false);
+    expect(check.staged).toBe(false);
+    expect(notifier.notices).toContainEqual(
+      expect.objectContaining({
+        kind: "core-update-refused",
+        detail: `the staged ${fileName} no longer matches its own checksum, so it was deleted rather than installed`,
+      }),
+    );
+  });
+
+  it("a release that changes the plugin protocol waits however often the person quits, and never says a quit installs it", async () => {
+    const signer = new Signer();
+    release(signer, 3);
+    const { check, events, notifier, selfUpdater } = checker({
+      publicKey: signer.publicKeyText,
+      installed: [],
+    });
+    expect(await check.check()).toMatchObject({ ok: true });
+    expect(events.at(-1)).toBe("downloaded");
+    expect(notifier.notices.map((notice) => notice.kind)).not.toContain("core-update-available");
+    expect(notifier.notices).toContainEqual({
+      kind: "core-update-waiting",
+      subject: "Reload",
+      version: "1.2.3",
+      detail: "it changes the plugin protocol from 2 to 3",
+    });
+    await check.installAtQuit();
+    await check.installAtQuit();
+    // Not handed to the platform updater at all, and still staged for the person's own Apply.
+    expect(selfUpdater.handed).toEqual([]);
+    expect(selfUpdater.installed).toBe(0);
+    expect(check.staged).toBe(true);
+    expect(fs.readdirSync(path.join(scratch, "updates", "staged"))).toEqual([fileName]);
+
+    // Quit and update: the explicit Apply installs it.
+    check.requestInstall();
+    await check.installAtQuit();
+    expect(selfUpdater.handed).toHaveLength(1);
+    expect(selfUpdater.installed).toBe(1);
+  });
+
+  it("a release whose sidecar is missing or does not verify is offered, never installed by a quit alone", async () => {
+    const signer = new Signer();
+    release(signer, null);
+    const missing = checker({ publicKey: signer.publicKeyText });
+    await missing.check.check();
+    await missing.check.installAtQuit();
+    expect(missing.selfUpdater.handed).toEqual([]);
+    expect(missing.notifier.notices).toContainEqual(
+      expect.objectContaining({
+        kind: "core-update-waiting",
+        detail: "its latest-release.json could not be read, so it may change the plugin protocol",
+      }),
+    );
+
+    // Signed by another key: not trusted either.
+    const body = encode(JSON.stringify({ version: "1.2.3", protocol: 2 }));
+    published.set("/latest-release.json", body);
+    published.set("/latest-release.json.minisig", encode(new Signer().sign(body)));
+    const forged = checker({ publicKey: signer.publicKeyText });
+    await forged.check.check();
+    await forged.check.installAtQuit();
+    expect(forged.selfUpdater.handed).toEqual([]);
+    expect(
+      forged.notifier.notices.find((notice) => notice.kind === "core-update-waiting")?.detail,
+    ).toMatch(/^its latest-release\.json could not be trusted: /);
+
+    // A sidecar about another release is not this one's either.
+    publishSidecar(signer, "1.2.4", 2);
+    const other = checker({ publicKey: signer.publicKeyText });
+    await other.check.check();
+    expect(
+      other.notifier.notices.find((notice) => notice.kind === "core-update-waiting")?.detail,
+    ).toContain('it speaks of "1.2.4", not of 1.2.3');
+  });
+
+  it("an installed package on another protocol stops the install, and the update waits naming each one", async () => {
+    const signer = new Signer();
+    release(signer, 3);
+    const { check, notifier, selfUpdater } = checker({
+      publicKey: signer.publicKeyText,
+      installed: [
+        { name: "monty", protocol: 2 },
+        { name: "whodunnit", protocol: 3 },
+        { name: "folder", protocol: 2 },
+      ],
+    });
+    await check.check();
+    // Even the person's own Apply does not stop a package: it waits until each one supports it.
+    check.requestInstall();
+    await check.installAtQuit();
+    expect(selfUpdater.handed).toEqual([]);
+    expect(selfUpdater.installed).toBe(0);
+    expect(check.staged).toBe(true);
+    expect(notifier.notices.at(-1)).toEqual({
+      kind: "core-update-waiting",
+      subject: "Reload",
+      version: "1.2.3",
+      detail: "monty, folder declare another plugin protocol than 3, so they would stop",
+    });
+  });
+
+  it("the check names every package that would stop, at the check already", async () => {
+    const signer = new Signer();
+    release(signer, 2);
+    const { check, notifier, selfUpdater } = checker({
+      publicKey: signer.publicKeyText,
+      installed: [
+        { name: "monty", protocol: 1 },
+        { name: "whodunnit", protocol: 2 },
+        { name: "old_one", protocol: 1 },
+      ],
+    });
+    await check.check();
+    expect(notifier.notices).toContainEqual({
+      kind: "core-update-waiting",
+      subject: "Reload",
+      version: "1.2.3",
+      detail: "monty, old_one declare another plugin protocol than 2, so they would stop",
+    });
+    await check.installAtQuit();
+    expect(selfUpdater.handed).toEqual([]);
+  });
+
+  it("a compatible package does not stop it, nor one whose declaration cannot be read", async () => {
+    const signer = new Signer();
+    release(signer, 3);
+    const { check, selfUpdater } = checker({
+      publicKey: signer.publicKeyText,
+      installed: [
+        { name: "monty", protocol: 3 },
+        { name: "broken", protocol: null },
+      ],
+    });
+    await check.check();
+    check.requestInstall();
+    await check.installAtQuit();
+    expect(selfUpdater.installed).toBe(1);
   });
 });

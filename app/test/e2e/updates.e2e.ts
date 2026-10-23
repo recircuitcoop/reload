@@ -4,8 +4,10 @@
 // - Every state's sentence from ux-writing, reached by Check now against a feed that answers,
 //   holds, refuses or tampers; Quit and update quits; "Check automatically" is stored.
 // - Go back verifies the older release exactly as an update is verified (its tag's signed
-//   latest-*.yml, its artifact's sha512) before electron-updater is pinned to it, and quits to
-//   install it; a tampered older release is refused and nothing is installed.
+//   latest-*.yml, its artifact's sha512), keeps it in Reload's own folder, and quits to hand it to
+//   electron-updater and install it; a tampered older release is refused and nothing is installed.
+// - A release whose signed sidecar names another plugin protocol is ready and waits for Quit and
+//   update (plan 0032, the old D13).
 // - A crash loop just after an update offers Go back in the banner and in one notice, never
 //   applying it.
 //
@@ -111,6 +113,7 @@ function publish(
   version: string,
   signer: Signer,
   served?: Uint8Array,
+  protocol = 2,
 ): string {
   const artifact = new TextEncoder().encode(`Reload ${version}, the zip's bytes`);
   const file = `Reload-${version}-${process.arch}-${PLATFORM}.zip`;
@@ -121,6 +124,13 @@ function publish(
   host.published.set(`${dir}/${YML}`, yaml);
   host.published.set(`${dir}/${YML}.minisig`, new TextEncoder().encode(signer.sign(yaml)));
   host.published.set(`${dir}/${file}`, served ?? artifact);
+  // The release's signed sidecar: the plugin protocol it implements.
+  const sidecar = new TextEncoder().encode(JSON.stringify({ version, protocol }));
+  host.published.set(`${dir}/latest-release.json`, sidecar);
+  host.published.set(
+    `${dir}/latest-release.json.minisig`,
+    new TextEncoder().encode(signer.sign(sidecar)),
+  );
   return `${dir}/${file}`;
 }
 
@@ -223,6 +233,13 @@ test("every state sentence", async () => {
     release();
     await expect(line).toHaveText(t("update.installFailed", { version: NEWER }));
 
+    // One that changes the plugin protocol: ready, and it waits for Quit and update.
+    unpublish(host);
+    publish(host, LATEST, NEWER, signer, undefined, 3);
+    await checkNow(window);
+    await expect(line).toHaveText(t("update.waits", { version: NEWER }));
+    await expect(window.getByTestId("general-update-quit")).toHaveText(t("general.quitAndUpdate"));
+
     // The real one: ready, with Quit and update as the Primary button.
     unpublish(host);
     publish(host, LATEST, NEWER, signer);
@@ -313,11 +330,11 @@ test("go back verifies the old release", async () => {
     expect(host.asked).toEqual([`${OLD_DIR}/${YML}`, `${OLD_DIR}/${YML}.minisig`, artifact]);
     const log = output.join("");
     expect(log).toContain(`update: going back to ${OLD}: ${host.base}${OLD_DIR}/${YML}`);
-    // Only then is electron-updater pinned to that release, with the downgrade allowed.
-    expect(log).toContain(`electron-updater: pinned to ${host.base}${OLD_DIR}, downgrade allowed`);
-    expect(log.indexOf("electron-updater: pinned to")).toBeGreaterThan(
-      log.indexOf(`update: going back to ${OLD}:`),
-    );
+    // Only then, at the quit, is it handed to electron-updater from Reload's own folder, with the
+    // downgrade allowed.
+    const handed = `electron-updater: handed Reload-${OLD}-${process.arch}-${PLATFORM}.zip from Reload's own folder, downgrade allowed`;
+    expect(log).toContain(handed);
+    expect(log.indexOf(handed)).toBeGreaterThan(log.indexOf(`update: going back to ${OLD}:`));
     expect(settingsOf(userData)["appUpdate"]).toMatchObject({ goingBackTo: OLD });
   } finally {
     await cleanUp(apps, scratch);
@@ -353,7 +370,7 @@ test("tampered old release refused", async () => {
 
     // Neither reached electron-updater, nothing is going back, and Reload kept running.
     const log = output.join("");
-    expect(log).not.toContain("electron-updater: pinned to");
+    expect(log).not.toContain("electron-updater: handed");
     expect(log).not.toContain(`update: going back to ${OLD}:`);
     expect(log.match(/notice: A Reload update was refused:/g)?.length).toBeGreaterThan(0);
     expect(settingsOf(userData)["appUpdate"]).toMatchObject({ goingBackTo: null });

@@ -21,6 +21,11 @@
 //
 // The switch and the channel are the `update` setting (domain/update/policy.ts), read fresh on
 // every check: off makes no request at all, not even for the metadata (D14's rule, again).
+//
+// Plan 0032 (the old D13): the verified artifact waits in Reload's own folder, and is hashed again
+// and handed over only at quit. A release whose signed sidecar names another plugin protocol, or
+// cannot be trusted, waits for Quit and update; one that would stop an installed package waits,
+// naming it (application/release-terms.ts).
 
 import { compareVersions } from "../domain/packages/versions";
 import { updateSignal, type Signal } from "../domain/telemetry/reports";
@@ -40,11 +45,15 @@ import {
   type ReleasePlatform,
   type Sha512,
 } from "../domain/update/release-metadata";
+import { PROTOCOL } from "../domain/packages/declaration";
+import { sidecarFileName } from "../domain/update/release-sidecar";
+import { readSidecar, stoppedBy } from "./release-terms";
 import type { CheckFailure, UpdateEvent } from "../domain/updates/machine";
 import type { Clock } from "../ports/clock";
 import type { HttpClient } from "../ports/http-client";
 import type { Logger } from "../ports/logger";
 import type { Notifier } from "../ports/notifier";
+import type { ReleaseStaging } from "../ports/release-staging";
 import { ReleaseMismatchError, type SelfUpdater } from "../ports/self-updater";
 import type { SignatureVerifier } from "../ports/signature-verifier";
 import type { UpdateSettingsStore } from "../ports/settings-store";
@@ -114,6 +123,26 @@ export interface UpdateCheckPorts {
   readonly onEvent?: (event: UpdateEvent) => void;
   /** Where update_offered and update_applied go (plan 0029): the usage signals, behind consent. */
   readonly signal?: (signal: Signal) => void;
+  /** Reload's own folder for the verified release, until it is handed over at quit. */
+  readonly staging: ReleaseStaging;
+  /** The installed packages and the protocol each declares; null when it cannot be read. */
+  readonly installedProtocols: () => readonly { name: string; protocol: number | null }[];
+}
+
+/** A verified release kept in Reload's own folder, until it is handed over at quit. */
+interface Staged {
+  readonly version: string;
+  readonly channel: string;
+  readonly path: string;
+  readonly fileName: string;
+  readonly sha512: string;
+  readonly metadata: Uint8Array;
+  readonly verified: ReleaseMetadata;
+  /** The protocol its signed sidecar names; null when there was none to trust. */
+  readonly protocol: number | null;
+  /** Why a quit alone does not install it; null when it does. */
+  readonly waitsFor: string | null;
+  readonly downgrade: boolean;
 }
 
 const reasonOf = (error: unknown): string =>
@@ -126,8 +155,10 @@ function joinUrl(base: string, segment: string): string {
 
 export class UpdateCheck {
   readonly #ports: UpdateCheckPorts;
-  /** The verified release the platform updater holds, installed at quit; null when none. */
-  #staged: { readonly version: string; readonly channel: string } | null = null;
+  /** The verified release kept in Reload's folder, installed at quit; null when none. */
+  #staged: Staged | null = null;
+  /** Quit and update (or Go back) was pressed: a release that waits is installed. */
+  #requested = false;
   #cancelSchedule: (() => void) | null = null;
 
   constructor(ports: UpdateCheckPorts) {
@@ -143,6 +174,7 @@ export class UpdateCheck {
   async check(options: { readonly manual?: boolean } = {}): Promise<UpdateOutcome> {
     const { notifier, logger } = this.#ports.report;
     this.#staged = null;
+    this.#requested = false;
     const policy = this.#policy();
     if (!policy.ok) {
       return this.#failed(policy.why);
@@ -179,52 +211,53 @@ export class UpdateCheck {
     }
     this.#emit({ kind: "found", version: parsed.version, at: this.#now() });
     const fetched = await this.#checkArtifact(feedBaseUrl, file);
-    if (fetched !== null) {
-      return fetched;
+    if (!fetched.ok) {
+      return fetched.outcome;
     }
-
-    notifier.clear("core-update-refused", NOTICE_SUBJECT);
-    const available: UpdateOutcome = {
-      ok: true,
-      message: `Checked: Reload ${parsed.version} is available.`,
-    };
     const { channel } = policy.value;
+    const sidecar = await readSidecar(this.#ports, feedBaseUrl, channel, parsed.version);
+    const waitsFor =
+      typeof sidecar === "string"
+        ? `its ${sidecarFileName(channel)} ${sidecar}, so it may change the plugin protocol`
+        : sidecar.protocol !== PROTOCOL
+          ? `it changes the plugin protocol from ${String(PROTOCOL)} to ${String(sidecar.protocol)}`
+          : null;
+    const staged = this.#stage(signed, file, fetched.bytes, channel, {
+      protocol: typeof sidecar === "string" ? null : sidecar.protocol,
+      waitsFor,
+      downgrade: false,
+    });
+    if (!staged.ok) {
+      return staged.outcome;
+    }
+    notifier.clear("core-update-refused", NOTICE_SUBJECT);
     this.#ports.signal?.(
       updateSignal("update_offered", this.#ports.session.currentVersion(), parsed.version, channel),
     );
-    try {
-      await this.#ports.selfUpdater.checkForUpdates(parsed);
-    } catch (error) {
-      notifier.clear("core-update-available", NOTICE_SUBJECT);
-      if (error instanceof ReleaseMismatchError) {
-        // The platform updater was served something other than what verified: never staged.
-        return this.#refused(`${metadataUrl}: ${error.message}`, "safety-check");
-      }
-      this.#emit({ kind: "failed", reason: "no-connection" });
-      // The verified feed is good; only the platform updater's own network call failed. Not
-      // a refusal (nothing was tampered with), so no notice, but nothing is staged either.
-      logger.warn(`update: the platform updater could not be reached: ${reasonOf(error)}`);
-      return available;
-    }
-    // Staged: nothing after this point is a failure to reach the platform updater.
-    this.#staged = { version: parsed.version, channel };
     this.#emit({ kind: "progress", percent: 100 });
-    this.#emit({ kind: "downloaded" });
-    // "Ready, installs when you quit" only once it is (test_helper_notification.py: a staged
-    // release is announced once staging completes), never before nor after a failed staging.
+    // Waiting for the person, for a protocol it changes or a package it would stop: said so,
+    // and never "it installs when you quit".
+    const reasons = [waitsFor, stoppedBy(this.#ports, staged.value.protocol)];
+    const waits = reasons.filter((reason) => reason !== null).join("; ") || null;
+    this.#emit({ kind: "downloaded", waits: waits !== null });
     try {
-      notifier.raise({
-        kind: "core-update-available",
-        subject: NOTICE_SUBJECT,
-        version: parsed.version,
-      });
+      notifier.raise(
+        waits === null
+          ? { kind: "core-update-available", subject: NOTICE_SUBJECT, version: parsed.version }
+          : {
+              kind: "core-update-waiting",
+              subject: NOTICE_SUBJECT,
+              version: parsed.version,
+              detail: waits,
+            },
+      );
     } catch (error) {
-      // Logged, so the daily schedule keeps going; the update still installs at quit.
+      // Logged, so the daily schedule keeps going; the update is still staged.
       logger.warn(
         `update: Reload ${parsed.version} is staged, but could not be told: ${reasonOf(error)}`,
       );
     }
-    return available;
+    return { ok: true, message: `Checked: Reload ${parsed.version} is available.` };
   }
 
   /**
@@ -265,23 +298,55 @@ export class UpdateCheck {
       throw error;
     }
     const fetched = await this.#checkArtifact(base, file, "safety-check");
-    if (fetched !== null) {
-      return fetched;
+    if (!fetched.ok) {
+      return fetched.outcome;
     }
     logger.info(`update: going back to ${to.version}: ${metadataUrl} and its artifact verified`);
-    try {
-      await this.#ports.selfUpdater.downloadRelease(base, parsed);
-    } catch (error) {
-      if (error instanceof ReleaseMismatchError) {
-        return this.#refused(`${metadataUrl}: ${error.message}`, "safety-check");
-      }
-      return this.#failed(
-        `the platform updater could not fetch ${to.version}: ${reasonOf(error)}`,
-        "no-connection",
-      );
+    // The person's own press: installed at the quit it asks for, older than this one.
+    const staged = this.#stage(signed, file, fetched.bytes, policy.value.channel, {
+      protocol: null,
+      waitsFor: null,
+      downgrade: true,
+    });
+    if (!staged.ok) {
+      return staged.outcome;
     }
-    this.#staged = { version: to.version, channel: policy.value.channel };
+    this.#requested = true;
     return { ok: true, message: `Verified: Reload ${to.version} installs when you quit.` };
+  }
+
+  /** Keep the verified artifact in Reload's own folder; a staging that fails stages nothing. */
+  #stage(
+    signed: { readonly parsed: ReleaseMetadata; readonly body: Uint8Array },
+    file: ReleaseFile,
+    bytes: Uint8Array,
+    channel: string,
+    terms: Pick<Staged, "protocol" | "waitsFor" | "downgrade">,
+  ):
+    | { readonly ok: true; readonly value: Staged }
+    | { readonly ok: false; readonly outcome: UpdateOutcome } {
+    const fileName = file.url.split("/").pop() ?? file.url;
+    let path: string;
+    try {
+      path = this.#ports.staging.write(fileName, bytes);
+    } catch (error) {
+      return {
+        ok: false,
+        outcome: this.#failed(`the verified release could not be kept: ${reasonOf(error)}`),
+      };
+    }
+    const staged: Staged = {
+      version: signed.parsed.version,
+      channel,
+      path,
+      fileName,
+      sha512: file.sha512,
+      metadata: signed.body,
+      verified: signed.parsed,
+      ...terms,
+    };
+    this.#staged = staged;
+    return { ok: true, value: staged };
   }
 
   #policy():
@@ -303,7 +368,12 @@ export class UpdateCheck {
     channel: string,
     refusal: CheckFailure | "safety-check",
   ): Promise<
-    | { readonly ok: true; readonly parsed: ReleaseMetadata; readonly metadataUrl: string }
+    | {
+        readonly ok: true;
+        readonly parsed: ReleaseMetadata;
+        readonly body: Uint8Array;
+        readonly metadataUrl: string;
+      }
     | { readonly ok: false; readonly outcome: UpdateOutcome }
   > {
     const { platform, publicKey } = this.#ports;
@@ -347,7 +417,7 @@ export class UpdateCheck {
     }
     try {
       const text = new TextDecoder("utf-8", { fatal: true }).decode(metadata.body);
-      return { ok: true, parsed: parseReleaseMetadata(text), metadataUrl };
+      return { ok: true, parsed: parseReleaseMetadata(text), body: metadata.body, metadataUrl };
     } catch (error) {
       if (error instanceof ReleaseMetadataError) {
         // Signed, but not understood: refused all the same, never read in part.
@@ -362,37 +432,98 @@ export class UpdateCheck {
     }
   }
 
-  /** The artifact the signed metadata names, fetched and checked against its sha512; null when good. */
+  /** The artifact the signed metadata names, fetched and checked against its sha512. */
   async #checkArtifact(
     base: string,
     file: ReleaseFile,
     refusal: CheckFailure | "safety-check" = "safety-check",
-  ): Promise<UpdateOutcome | null> {
+  ): Promise<
+    | { readonly ok: true; readonly bytes: Uint8Array }
+    | { readonly ok: false; readonly outcome: UpdateOutcome }
+  > {
     const { http, sha512 } = this.#ports.transport;
     const artifactUrl = joinUrl(base, file.url);
     const artifact = await http.get(artifactUrl, {
       maxBytes: Math.max(MAX_ARTIFACT_BYTES, file.size),
     });
     if (!artifact.ok) {
-      return this.#failed(`${artifactUrl} could not be read: ${artifact.detail}`, "no-connection");
+      const why = `${artifactUrl} could not be read: ${artifact.detail}`;
+      return { ok: false, outcome: this.#failed(why, "no-connection") };
     }
     if (sha512(artifact.body) !== file.sha512) {
-      return this.#refused(
-        `${artifactUrl} does not match the sha512 the signed metadata named`,
-        refusal,
-      );
+      const why = `${artifactUrl} does not match the sha512 the signed metadata named`;
+      return { ok: false, outcome: this.#refused(why, refusal) };
     }
-    return null;
+    return { ok: true, bytes: artifact.body };
   }
 
-  /** Install the verified update now; a no-op unless the last check staged one. */
-  installAtQuit(): void {
-    if (this.#staged !== null) {
-      const { version, channel } = this.#staged;
-      const from = this.#ports.session.currentVersion();
-      this.#ports.signal?.(updateSignal("update_applied", from, version, channel));
-      this.#ports.selfUpdater.quitAndInstall();
+  /** Quit and update: a release that waits for the person is installed by this quit. */
+  requestInstall(): void {
+    this.#requested = true;
+  }
+
+  /**
+   * At quit: install the staged release, unless it waits for the person or would stop an
+   * installed package; hash it again first, and hand over only what still verifies. Never
+   * throws; whatever is not installed leaves the running installation as it is, and says why.
+   */
+  async installAtQuit(): Promise<void> {
+    const staged = this.#staged;
+    if (staged === null) return;
+    const { notifier, logger } = this.#ports.report;
+    const from = this.#ports.session.currentVersion();
+    const waits =
+      (this.#requested ? null : staged.waitsFor) ?? stoppedBy(this.#ports, staged.protocol);
+    if (waits !== null) {
+      // Kept staged, for a later quit when it no longer waits; the person who asked is told why.
+      logger.info(`update: Reload ${staged.version} is not installed at this quit: ${waits}`);
+      if (this.#requested) {
+        const { version } = staged;
+        notifier.raise({
+          kind: "core-update-waiting",
+          subject: NOTICE_SUBJECT,
+          version,
+          detail: waits,
+        });
+      }
+      return;
     }
+    let bytes: Uint8Array | null;
+    try {
+      bytes = this.#ports.staging.read(staged.path);
+    } catch {
+      bytes = null;
+    }
+    if (bytes === null || this.#ports.transport.sha512(bytes) !== staged.sha512) {
+      this.#staged = null;
+      try {
+        this.#ports.staging.discard();
+      } catch (error) {
+        logger.warn(`update: the staged release could not be deleted: ${reasonOf(error)}`);
+      }
+      this.#refused(
+        `the staged ${staged.fileName} no longer matches its own checksum, so it was deleted ` +
+          "rather than installed",
+        "safety-check",
+      );
+      return;
+    }
+    try {
+      await this.#ports.selfUpdater.install({
+        fileName: staged.fileName,
+        bytes,
+        metadata: staged.metadata,
+        verified: staged.verified,
+        downgrade: staged.downgrade,
+      });
+    } catch (error) {
+      // Refused (another release was found) or not taken: either way, what runs stays.
+      const why = `Reload ${staged.version} could not be installed (${reasonOf(error)}); ${from} keeps running`;
+      this.#refused(why, error instanceof ReleaseMismatchError ? "safety-check" : "unreadable");
+      return;
+    }
+    this.#ports.signal?.(updateSignal("update_applied", from, staged.version, staged.channel));
+    this.#ports.selfUpdater.quitAndInstall();
   }
 
   /** Whether a verified release waits to be installed at quit. */

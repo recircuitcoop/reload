@@ -1,36 +1,35 @@
 // The SelfUpdater over electron-updater (plan 0018 §1, §3 swap.py/windows.py: Replace;
-// WI-0018-24): the platform-specific download and install, once
-// application/update-check.ts's own minisign check of the feed has already passed.
+// WI-0018-24; plan 0032 group 19): the platform-specific install of a release Reload has already
+// verified, downloaded into its own folder, and hashed again at quit.
 //
-// electron-updater is asked nothing until `checkForUpdates` is called (this class makes no
-// call in its constructor), and application/update-check.ts calls it only after its own
-// verification of `latest-*.yml` and its signature succeeded — never on its own.
-//
-// What electron-updater downloads is bound to what Reload verified. electron-updater reads the
-// feed again on its own fetch, which a server can answer differently, so `autoDownload` is off:
-// each check first compares what electron-updater found with the verified release
+// electron-updater never touches the network. At the handoff it is pointed at a loopback server
+// of this adapter's own, for that handoff alone, which serves exactly two things: the signed
+// `latest-*.yml` Reload verified, byte for byte, and the staged artifact's bytes as they were just
+// hashed. Before it downloads, what it found is compared with the verified release
 // (domain/update/release-metadata.ts's releaseMismatch: the same version, and only files the
-// signed metadata names, with their signed sha512), and only then is the download started.
-// electron-updater refuses, as it downloads them, any bytes that do not hash to that sha512 (its
-// DigestTransform; a cached or differential download is checked against the same sha512). The
-// comparison must come BEFORE the download: on macOS electron-updater hands a finished download
-// to Squirrel.Mac at once, which installs it at quit whatever happens next.
+// signed metadata names, with their signed sha512), and electron-updater refuses, as it downloads
+// them, any bytes that do not hash to that sha512. On macOS electron-updater hands a finished
+// download to Squirrel.Mac, which installs it at quit whatever happens next: which is why the
+// handoff is made only at quit, never earlier.
 //
 // `autoInstallOnAppQuit` is set explicitly so the rule (install at quit; plan 0003 D11's
 // apply-at-quit, kept) is read from this file rather than assumed from a library default.
-// `allowDowngrade` is false at all times but during a verified Go back's own check: setting
+// `allowDowngrade` is false at all times but during a verified Go back's own handoff: setting
 // `channel` turns it on inside electron-updater, so it is turned off again right after.
-//
-// One operation at a time: electron-updater shares one feed and one in-flight check between all
-// callers, so a scheduled check never runs inside a Go back's pinned feed, nor the reverse.
 //
 // electron-updater supports auto-update only for a macOS zip (Squirrel.Mac) and a Linux
 // AppImage; the Linux deb target this application also ships is updated by the system's own
 // package manager, never by this class.
 
+import http from "node:http";
+import type { AddressInfo } from "node:net";
 import type { AppUpdater } from "electron-updater";
 import { releaseMismatch, type ReleaseMetadata } from "../../domain/update/release-metadata";
-import { ReleaseMismatchError, type SelfUpdater } from "../../ports/self-updater";
+import {
+  ReleaseMismatchError,
+  type SelfUpdater,
+  type StagedHandoff,
+} from "../../ports/self-updater";
 
 export interface UpdaterLogger {
   info(message: string): void;
@@ -73,30 +72,21 @@ export class ElectronUpdaterInstaller implements SelfUpdater {
     updater.setFeedURL(this.#feed);
   }
 
-  checkForUpdates(verified: ReleaseMetadata): Promise<void> {
+  install(handoff: StagedHandoff): Promise<void> {
     return this.#exclusive(async () => {
-      this.#restoreFeed();
+      const served = await serveStaged(handoff);
       try {
-        await this.#stage(verified);
+        this.#updater.setFeedURL({ provider: "generic", url: served.url });
+        this.#updater.allowDowngrade = handoff.downgrade;
+        this.#logger.info(
+          `electron-updater: handed ${handoff.fileName} from Reload's own folder` +
+            (handoff.downgrade ? ", downgrade allowed" : ""),
+        );
+        await this.#stage(handoff.verified);
       } finally {
+        // Whatever happened: the next handoff starts from the normal feed, with no downgrade.
+        served.close();
         this.#restoreFeed();
-      }
-    });
-  }
-
-  downloadRelease(releaseUrl: string, verified: ReleaseMetadata): Promise<void> {
-    // electron-updater has no rollback (plan 0022 risk 2): an older release is installed as an
-    // update from a feed pinned to that release's tag, with downgrades allowed for it alone.
-    return this.#exclusive(async () => {
-      this.#updater.setFeedURL({ provider: "generic", url: releaseUrl });
-      this.#updater.allowDowngrade = true;
-      this.#logger.info(`electron-updater: pinned to ${releaseUrl}, downgrade allowed`);
-      try {
-        await this.#stage(verified);
-      } finally {
-        // Whatever happened: a failed Go back must not leave the next check on the old feed.
-        this.#restoreFeed();
-        this.#logger.info("electron-updater: back on the normal feed, downgrade not allowed");
       }
     });
   }
@@ -138,4 +128,39 @@ export class ElectronUpdaterInstaller implements SelfUpdater {
     this.#queue = run.catch(() => undefined);
     return run;
   }
+}
+
+/**
+ * A loopback server, for one handoff, of the signed metadata (at any `.yml` path electron-updater
+ * asks for) and the staged artifact (at its own name); anything else is a 404.
+ */
+function serveStaged(
+  handoff: StagedHandoff,
+): Promise<{ readonly url: string; readonly close: () => void }> {
+  const server = http.createServer((request, response) => {
+    const name = decodeURIComponent((request.url ?? "").split("?")[0] ?? "").replace(/^\/+/, "");
+    const body = name.endsWith(".yml")
+      ? handoff.metadata
+      : name === handoff.fileName
+        ? handoff.bytes
+        : null;
+    if (body === null) {
+      response.writeHead(404).end();
+      return;
+    }
+    response.writeHead(200, { "content-length": String(body.length) }).end(body);
+  });
+  return new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const { port } = server.address() as AddressInfo;
+      resolve({
+        url: `http://127.0.0.1:${String(port)}`,
+        close: () => {
+          server.closeAllConnections();
+          server.close();
+        },
+      });
+    });
+  });
 }

@@ -652,25 +652,35 @@ describe("AppApi v2 calls, through the shell to its processes", () => {
       { kind: "check" },
       { kind: "found", version: "0.4.0", at: new Date(2026, 9, 2, 9, 0) },
       { kind: "progress", percent: 100 },
-      { kind: "downloaded" },
+      { kind: "downloaded", waits: true },
     ];
+    let requested = 0;
     h.updateCalls.attach({
       check: () => {
         for (const event of events) h.updateCalls.onEvent(event);
         return Promise.resolve({ ok: true, message: "checked" });
       },
+      requestInstall: () => (requested += 1),
       goBack: () => Promise.resolve({ ok: true, message: "verified" }),
     });
+    // A release that waits for the person (it changes the plugin protocol): ready, and waiting.
     expect(await h.api.checkNow()).toEqual({
       ok: true,
-      value: { state: { kind: "ready", version: "0.4.0" }, goBack: null, autoCheck: false },
+      value: {
+        state: { kind: "ready", version: "0.4.0", waits: true },
+        goBack: null,
+        autoCheck: false,
+      },
     });
     // An event the state does not take changes nothing.
     h.updateCalls.onEvent({ kind: "progress", percent: 5 });
     expect((await h.api.updateState()).ok && (await h.api.updateState())).toMatchObject({
       value: { state: { kind: "ready" } },
     });
+    expect(requested).toBe(0);
     expect(await h.api.quitAndUpdate()).toEqual({ ok: true, value: null });
+    // Quit and update is the explicit Apply: the quit it asks for installs a waiting release.
+    expect(requested).toBe(1);
     expect(h.quits).toEqual([1]);
     // Nothing to go back to: the first start ever recorded this version only.
     expect(await h.api.goBack()).toEqual({

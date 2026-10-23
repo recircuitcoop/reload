@@ -49,6 +49,7 @@ import { rewriteLegacyJournal } from "../adapters/sqlite/legacy-journal";
 import { FsLegacyPackageEnvironments, legacyAddonsRoot } from "../adapters/fs/legacy-packages";
 import { JsonNoticeFile, NOTICES_FILENAME } from "../adapters/fs/notice-file";
 import { JsonSettingsStore } from "../adapters/fs/settings-store";
+import { FsReleaseStaging } from "../adapters/fs/release-staging";
 import { anytypeExecutable, ProcessTableApps } from "../adapters/process/desktop-apps";
 import { DiskReportQueue, QUEUE_DIRNAME } from "../adapters/telemetry/disk-queue";
 import { HttpsPoster } from "../adapters/telemetry/https-poster";
@@ -107,7 +108,7 @@ import { forkSpecFor, LOG_CANARY_VARIABLE } from "./child-environment";
 import { wireRuntimeCalls } from "./runtime-calls";
 import { wireAnytypeTools, wireServiceCalls } from "./service-calls";
 import { endpointEnv, withShippedSources, wireTelemetry, type ShellTelemetry } from "./telemetry";
-import { releaseUrls, updateSource, wireUpdate } from "./update";
+import { protocolsOf, releaseUrls, updateSource, wireUpdate } from "./update";
 import { wireViews } from "./views";
 import { previewOn, wirePreview } from "./view-preview";
 import { wireAppCalls } from "./app-calls";
@@ -233,8 +234,8 @@ const quitFlow = new QuitFlow({
       anytypeApp.quitIfOurs(),
     ]);
   },
-  exit: () => {
-    updates?.installAtQuit(); // a no-op unless WI-0018-24 staged a verified update
+  exit: async () => {
+    await updates?.installAtQuit(); // a no-op unless WI-0018-24 staged a verified update
     app.quit();
   },
   logger,
@@ -527,6 +528,8 @@ async function start(): Promise<DesktopWired["notices"] | null> {
     signal: (signal) => telemetry?.signal(signal),
     feedBaseUrl: releases.feedBaseUrl,
     tagBaseUrl: releases.tagBaseUrl,
+    staging: new FsReleaseStaging(path.join(userDir, "updates", "staged")),
+    installedProtocols: protocolsOf(() => packageStore.documents()),
   });
   updateCalls.attach(updates);
   // The person's answer to the quit question.

@@ -8,7 +8,7 @@ acceptance:
   The ledger and old-tests.txt stay as the record.'
 - tools/parity/check.ts --final passes with every proof pass on every target.
 - README, CHANGELOG and docs/anytype-mcp-connection.md describe only the new app. Version 1.0.0 is published
-  to GitHub Releases, signed and minisigned.
+  to GitHub Releases, signed and minisigned, with its signed latest-release.json (docs/specs/release-feed.md).
 - 'docs/loop/verify.sh exits zero and prints gate: GREEN.'
 canonical_id: '0026'
 canonical_source: plans

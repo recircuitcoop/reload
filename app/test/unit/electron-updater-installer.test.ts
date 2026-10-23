@@ -1,22 +1,41 @@
-// The SelfUpdater over electron-updater (WI-0018-24; plan 0022 §G). The real AppUpdater needs a
-// real, installed Electron main process, so a fake stands in that keeps the parts of
-// electron-updater 6's AppUpdater this adapter relies on (read from its source, AppUpdater.js):
-// the `channel` setter turns `allowDowngrade` on; `setFeedURL` replaces the feed;
-// `checkForUpdates` reads whatever feed is set NOW and offers an older version only when
-// `allowDowngrade` is on; `downloadUpdate` downloads what the last check found.
+// The SelfUpdater over electron-updater (WI-0018-24; plan 0022 §G; plan 0032 group 19). The real
+// AppUpdater needs a real, installed Electron main process, so a fake stands in that keeps the
+// parts of electron-updater 6's AppUpdater this adapter relies on (read from its source,
+// AppUpdater.js and GenericProvider.js): the `channel` setter turns `allowDowngrade` on;
+// `setFeedURL` replaces the feed; `checkForUpdates` fetches `<feed>/<channel>-mac.yml` NOW and
+// offers an older version only when `allowDowngrade` is on; `downloadUpdate` fetches the file
+// the yml names and refuses bytes that do not hash to its sha512.
 import { describe, expect, it, vi } from "vitest";
 import { ElectronUpdaterInstaller } from "../../src/adapters/update/electron-updater-installer";
-import type { ReleaseMetadata } from "../../src/domain/update/release-metadata";
-import { ReleaseMismatchError } from "../../src/ports/self-updater";
+import { sha512Base64 } from "../../src/adapters/signature/digest";
+import {
+  parseReleaseMetadata,
+  type ReleaseMetadata,
+} from "../../src/domain/update/release-metadata";
+import { ReleaseMismatchError, type StagedHandoff } from "../../src/ports/self-updater";
 
 const CURRENT = "3.0.0";
 const NEWER = "3.0.1";
 const OLDER = "2.0.1";
-const TAG_URL = "https://example.invalid/acme/reload/releases/download/v2.0.1";
 const GITHUB = "github:acme/reload";
+const encode = (text: string) => new TextEncoder().encode(text);
 
-function release(version: string, sha512 = `sha-of-${version}`): ReleaseMetadata {
-  return { version, files: [{ url: `Reload-${version}-mac.zip`, sha512, size: 10 }] };
+/** A staged release: its bytes, and the signed yml that names them. */
+function handoff(version: string, options: { downgrade?: boolean; names?: string } = {}) {
+  const bytes = encode(`Reload ${version}, the zip's bytes`);
+  const fileName = `Reload-${version}-mac.zip`;
+  const yaml = (named: string) =>
+    `version: ${named}\nfiles:\n  - url: ${fileName}\n    sha512: ${sha512Base64(bytes)}\n` +
+    `    size: ${String(bytes.length)}\n`;
+  const verified = parseReleaseMetadata(yaml(version));
+  const value: StagedHandoff = {
+    fileName,
+    bytes,
+    metadata: encode(yaml(options.names ?? version)),
+    verified,
+    downgrade: options.downgrade ?? false,
+  };
+  return value;
 }
 
 const order = (a: string, b: string): number => {
@@ -25,26 +44,25 @@ const order = (a: string, b: string): number => {
   return left.reduce((found, part, index) => found || part - (right[index] ?? 0), 0);
 };
 
-/** An AppUpdater shaped and behaving as electron-updater's does, over feeds this test serves. */
-function fakeAppUpdater(feeds: Record<string, ReleaseMetadata> = {}) {
+/** An AppUpdater shaped and behaving as electron-updater's generic provider does. */
+function fakeAppUpdater() {
   const fake = {
-    feeds,
     logger: null as unknown,
     autoDownload: true,
     autoInstallOnAppQuit: false,
     allowDowngrade: false,
     feed: null as string | null,
-    channelValue: null as string | null,
-    /** allowDowngrade and the feed, as each check saw them. */
+    channelValue: "latest",
+    /** The feed and allowDowngrade, as each check saw them; and every URL fetched. */
     checks: [] as { feed: string | null; allowDowngrade: boolean }[],
-    found: null as ReleaseMetadata | null,
-    downloaded: null as string | null,
-    failDownload: false as boolean | Promise<void>,
+    fetched: [] as string[],
+    found: null as { info: ReleaseMetadata; feed: string } | null,
+    downloaded: null as Uint8Array | null,
     set channel(value: string) {
       fake.channelValue = value;
       fake.allowDowngrade = true; // AppUpdater.js: "allowDowngrade will be automatically set"
     },
-    get channel(): string | null {
+    get channel(): string {
       return fake.channelValue;
     },
     setFeedURL: vi.fn(
@@ -55,27 +73,37 @@ function fakeAppUpdater(feeds: Record<string, ReleaseMetadata> = {}) {
             : String(options.url);
       },
     ),
+    async get(url: string): Promise<Uint8Array> {
+      fake.fetched.push(url);
+      const answer = await fetch(url);
+      if (!answer.ok) {
+        throw new Error(`HttpError: ${String(answer.status)} ${url}`);
+      }
+      return new Uint8Array(await answer.arrayBuffer());
+    },
     checkForUpdates: vi.fn(async () => {
       fake.checks.push({ feed: fake.feed, allowDowngrade: fake.allowDowngrade });
-      await Promise.resolve();
-      const info = fake.feed === null ? undefined : fake.feeds[fake.feed];
-      if (info === undefined) {
-        throw new Error(`HttpError: 404 ${String(fake.feed)}`);
-      }
+      const feed = String(fake.feed);
+      const info = parseReleaseMetadata(
+        new TextDecoder().decode(await fake.get(`${feed}/${fake.channelValue}-mac.yml`)),
+      );
       const newer = order(info.version, CURRENT) > 0;
-      const older = order(info.version, CURRENT) < 0;
-      const isUpdateAvailable = newer || (fake.allowDowngrade && older);
-      fake.found = isUpdateAvailable ? info : null;
+      const isUpdateAvailable = newer || (fake.allowDowngrade && order(info.version, CURRENT) < 0);
+      fake.found = isUpdateAvailable ? { info, feed } : null;
       return { isUpdateAvailable, updateInfo: info, versionInfo: info };
     }),
+    failDownload: false,
     downloadUpdate: vi.fn(async () => {
-      if (fake.failDownload instanceof Promise) {
-        await fake.failDownload;
-      } else if (fake.failDownload) {
+      const file = fake.found?.info.files[0];
+      if (fake.found === null || file === undefined || fake.failDownload) {
         throw new Error("ECONNRESET");
       }
-      fake.downloaded = fake.found?.version ?? null;
-      return [`/cache/${String(fake.downloaded)}.zip`];
+      const bytes = await fake.get(`${fake.found.feed}/${file.url}`);
+      if (sha512Base64(bytes) !== file.sha512) {
+        throw new Error("ERR_CHECKSUM_MISMATCH");
+      }
+      fake.downloaded = bytes;
+      return [`/cache/${file.url}`];
     }),
     quitAndInstall: vi.fn(),
   };
@@ -117,125 +145,83 @@ describe("ElectronUpdaterInstaller", () => {
     }
   });
 
-  it("downloads an update when what electron-updater found is the verified release", async () => {
-    const updater = fakeAppUpdater({ [GITHUB]: release(NEWER) });
-    await installer(updater).checkForUpdates(release(NEWER));
-    expect(updater.checks).toEqual([{ feed: GITHUB, allowDowngrade: false }]);
-    expect(updater.downloadUpdate).toHaveBeenCalledTimes(1);
-    expect(updater.downloaded).toBe(NEWER);
-  });
-
-  it.each([
-    ["another version", release("3.0.2")],
-    ["another sha512 for the same file", release(NEWER, "sha-of-something-else")],
-    [
-      "a file the signed metadata does not name",
-      { version: NEWER, files: [{ url: "Other.zip", sha512: `sha-of-${NEWER}`, size: 10 }] },
-    ],
-    ["no files at all", { version: NEWER, files: [] }],
-  ])(
-    "refuses, and downloads nothing, when electron-updater's own fetch found %s",
-    async (_, found) => {
-      const updater = fakeAppUpdater({ [GITHUB]: found });
-      const outcome = installer(updater).checkForUpdates(release(NEWER));
-      await expect(outcome).rejects.toBeInstanceOf(ReleaseMismatchError);
-      expect(updater.downloadUpdate).not.toHaveBeenCalled();
-      expect(updater.downloaded).toBeNull();
-    },
-  );
-
-  it("a forward check never stages an older version, even one that matches what it was handed", async () => {
-    const updater = fakeAppUpdater({ [GITHUB]: release(OLDER) });
-    await expect(installer(updater).checkForUpdates(release(OLDER))).rejects.toThrow(
-      /does not offer/,
+  it("hands over only the staged bytes, from a loopback server of its own, and they install", async () => {
+    const updater = fakeAppUpdater();
+    const logger = fakeLogger();
+    const staged = handoff(NEWER);
+    await installer(updater, logger).install(staged);
+    // electron-updater never asked GitHub nor any release host: only the handoff's own server.
+    expect(updater.fetched).toHaveLength(2);
+    expect(updater.fetched.every((url) => url.startsWith("http://127.0.0.1:"))).toBe(true);
+    expect(updater.downloaded).toEqual(staged.bytes);
+    expect(logger.info).toHaveBeenCalledWith(
+      `electron-updater: handed Reload-${NEWER}-mac.zip from Reload's own folder`,
     );
-    expect(updater.checks).toEqual([{ feed: GITHUB, allowDowngrade: false }]);
+    // The server is gone with the handoff, and the normal feed is back.
+    await expect(fetch(updater.fetched[0] ?? "")).rejects.toThrow();
+    expect(updater.feed).toBe(GITHUB);
+    expect(updater.allowDowngrade).toBe(false);
+  });
+
+  it("serves nothing but the signed yml and the staged file", async () => {
+    const updater = fakeAppUpdater();
+    let missing = 0;
+    updater.checkForUpdates.mockImplementationOnce(async () => {
+      const feed = String(updater.feed);
+      missing = (await fetch(`${feed}/../shell-settings.json`)).status;
+      return {
+        isUpdateAvailable: false,
+        updateInfo: handoff(NEWER).verified,
+        versionInfo: handoff(NEWER).verified,
+      };
+    });
+    await expect(installer(updater).install(handoff(NEWER))).rejects.toThrow("does not offer");
+    expect(missing).toBe(404);
+  });
+
+  it("a yml that is not the verified release is refused, and nothing is downloaded", async () => {
+    const updater = fakeAppUpdater();
+    await expect(
+      installer(updater).install(handoff(NEWER, { names: "9.9.9" })),
+    ).rejects.toBeInstanceOf(ReleaseMismatchError);
     expect(updater.downloadUpdate).not.toHaveBeenCalled();
+    expect(updater.feed).toBe(GITHUB);
   });
 
-  it("a check or download that fails rejects, for the caller to report", async () => {
-    const offline = fakeAppUpdater({});
-    await expect(installer(offline).checkForUpdates(release(NEWER))).rejects.toThrow("404");
-    const broken = fakeAppUpdater({ [GITHUB]: release(NEWER) });
-    broken.failDownload = true;
-    await expect(installer(broken).checkForUpdates(release(NEWER))).rejects.toThrow("ECONNRESET");
+  it("a forward handoff never installs an older version", async () => {
+    const updater = fakeAppUpdater();
+    await expect(installer(updater).install(handoff(OLDER))).rejects.toThrow("does not offer");
+    expect(updater.downloaded).toBeNull();
   });
 
-  it("an inactive electron-updater (a build that is not installed) downloads nothing", async () => {
+  it("Go back allows the downgrade for its own handoff alone, then restores the rule", async () => {
+    const updater = fakeAppUpdater();
+    const logger = fakeLogger();
+    const updates = installer(updater, logger);
+    await updates.install(handoff(OLDER, { downgrade: true }));
+    expect(updater.checks.at(-1)?.allowDowngrade).toBe(true);
+    expect(updater.downloaded).toEqual(handoff(OLDER).bytes);
+    expect(updater.allowDowngrade).toBe(false);
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining("downgrade allowed"));
+    // The next handoff is a forward one again.
+    await expect(updates.install(handoff(OLDER))).rejects.toThrow("does not offer");
+  });
+
+  it("a download that fails rejects, and leaves the feed and the downgrade rule restored", async () => {
+    const updater = fakeAppUpdater();
+    updater.failDownload = true;
+    await expect(installer(updater).install(handoff(OLDER, { downgrade: true }))).rejects.toThrow(
+      "ECONNRESET",
+    );
+    expect(updater.feed).toBe(GITHUB);
+    expect(updater.allowDowngrade).toBe(false);
+  });
+
+  it("an inactive electron-updater (a build that is not installed) takes nothing", async () => {
     const updater = fakeAppUpdater();
     updater.checkForUpdates.mockResolvedValueOnce(null as never);
-    await installer(updater).checkForUpdates(release(NEWER));
+    await installer(updater).install(handoff(NEWER));
     expect(updater.downloadUpdate).not.toHaveBeenCalled();
-  });
-
-  it("going back pins the tag with the downgrade allowed for that check alone, then restores both", async () => {
-    const updater = fakeAppUpdater({ [TAG_URL]: release(OLDER) });
-    const logger = fakeLogger();
-    await installer(updater, logger).downloadRelease(TAG_URL, release(OLDER));
-    expect(updater.checks).toEqual([{ feed: TAG_URL, allowDowngrade: true }]);
-    expect(updater.downloaded).toBe(OLDER);
-    expect(logger.info).toHaveBeenCalledWith(
-      `electron-updater: pinned to ${TAG_URL}, downgrade allowed`,
-    );
-    expect(updater.feed).toBe(GITHUB);
-    expect(updater.allowDowngrade).toBe(false);
-  });
-
-  it("a failed Go back restores the feed and the downgrade rule; the next check stages the verified forward version only", async () => {
-    // The tag's release verified, then electron-updater's own download of it failed.
-    const updater = fakeAppUpdater({ [TAG_URL]: release(OLDER), [GITHUB]: release(NEWER) });
-    updater.failDownload = true;
-    const updates = installer(updater);
-    await expect(updates.downloadRelease(TAG_URL, release(OLDER))).rejects.toThrow("ECONNRESET");
-    expect(updater.feed).toBe(GITHUB);
-    expect(updater.allowDowngrade).toBe(false);
-
-    // A later forward check (scheduled or Check now) reads the normal feed, without downgrades.
-    updater.failDownload = false;
-    await updates.checkForUpdates(release(NEWER));
-    expect(updater.checks.at(-1)).toEqual({ feed: GITHUB, allowDowngrade: false });
-    expect(updater.downloaded).toBe(NEWER);
-    updates.quitAndInstall();
-    expect(updater.quitAndInstall).toHaveBeenCalledTimes(1);
-  });
-
-  it("a Go back whose tag electron-updater reads differently is refused, and the feed restored", async () => {
-    const updater = fakeAppUpdater({ [TAG_URL]: release(OLDER, "sha-of-a-substitute") });
-    const outcome = installer(updater).downloadRelease(TAG_URL, release(OLDER));
-    await expect(outcome).rejects.toBeInstanceOf(ReleaseMismatchError);
-    expect(updater.downloadUpdate).not.toHaveBeenCalled();
-    expect(updater.feed).toBe(GITHUB);
-    expect(updater.allowDowngrade).toBe(false);
-  });
-
-  it("a Go back whose check fails restores the feed and the downgrade rule too", async () => {
-    const updater = fakeAppUpdater({});
-    await expect(installer(updater).downloadRelease(TAG_URL, release(OLDER))).rejects.toThrow();
-    expect(updater.feed).toBe(GITHUB);
-    expect(updater.allowDowngrade).toBe(false);
-  });
-
-  it("a check asked for during a Go back waits for it: never run inside the pinned feed", async () => {
-    let finish = (): void => undefined;
-    const updater = fakeAppUpdater({ [TAG_URL]: release(OLDER), [GITHUB]: release(NEWER) });
-    updater.failDownload = new Promise<void>((resolve) => {
-      finish = resolve;
-    });
-    const updates = installer(updater);
-    const goingBack = updates.downloadRelease(TAG_URL, release(OLDER));
-    const checking = updates.checkForUpdates(release(NEWER));
-    await vi.waitFor(() => {
-      expect(updater.downloadUpdate).toHaveBeenCalledTimes(1);
-    });
-    expect(updater.checks).toEqual([{ feed: TAG_URL, allowDowngrade: true }]);
-    updater.failDownload = false;
-    finish();
-    await goingBack;
-    await checking;
-    expect(updater.checks).toEqual([
-      { feed: TAG_URL, allowDowngrade: true },
-      { feed: GITHUB, allowDowngrade: false },
-    ]);
   });
 
   it("quitAndInstall delegates, and never throws when the updater's own call fails", () => {

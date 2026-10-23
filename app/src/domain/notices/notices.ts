@@ -56,6 +56,11 @@ export type NoticeKind =
   | "package-recovered"
   /** A newer version of Reload itself is verified and queued to install at quit (WI-0018-24). */
   | "core-update-available"
+  /**
+   * A newer Reload is verified and staged, but a quit alone does not install it: it changes the
+   * plugin protocol, or would stop an installed package (plan 0032, the old D13). Quit and update.
+   */
+  | "core-update-waiting"
   /** The core update check found a tampered feed or artifact; nothing is installed (WI-0018-24). */
   | "core-update-refused"
   /** The runtime crash-looped just after an update: Go back is offered, never applied (D4). */
@@ -105,6 +110,7 @@ export const NOTICE_KINDS: readonly NoticeKind[] = [
   "package-update-refused",
   "package-recovered",
   "core-update-available",
+  "core-update-waiting",
   "core-update-refused",
   "core-crash-loop",
   "legacy-packages-found",
@@ -297,6 +303,14 @@ function composeWords(notice: Notice): Message {
       return {
         title: `Reload ${version} is ready`,
         body: sentences(detail, "It installs the next time you quit Reload."),
+      };
+    case "core-update-waiting":
+      return {
+        title: `Reload ${version} waits for you`,
+        body: sentences(
+          detail,
+          "Quitting does not install it. Install it with Quit and update in Configuration › General.",
+        ),
       };
     case "core-update-refused":
       return {

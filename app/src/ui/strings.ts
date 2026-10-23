@@ -399,6 +399,7 @@ export const STRINGS = {
   "update.checking": "Checking…",
   "update.downloading": "Downloading {version} · {percent}%",
   "update.ready": "{version} is ready. It installs when you quit.",
+  "update.waits": "{version} is ready and waits for you. Quit and update installs it.", // decided (plan 0032, the old D13)
   "update.checkFailed.noConnection": "Couldn't check for updates: no connection.",
   "update.checkFailed.unreadable": "Couldn't check for updates: the answer was unreadable.", // decided
   "update.lastChecked": "Last checked {day}.",

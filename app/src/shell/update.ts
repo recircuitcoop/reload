@@ -78,6 +78,17 @@ export function updateSource(options: {
 }
 
 /** Null on a platform this application does not self-update on (Windows: WI-0025-01). */
+/** Each installed package's declared protocol, for the check before Reload updates itself. */
+export function protocolsOf(
+  documents: () => readonly { readonly name: string; readonly document: unknown }[],
+): () => readonly { readonly name: string; readonly protocol: number | null }[] {
+  return () =>
+    documents().map(({ name, document }) => {
+      const protocol = (document as { readonly protocol?: unknown } | null)?.protocol;
+      return { name, protocol: typeof protocol === "number" ? protocol : null };
+    });
+}
+
 export function wireUpdate(options: WireUpdateOptions): UpdateCheck | null {
   const platform = releasePlatform();
   if (platform === null) {
