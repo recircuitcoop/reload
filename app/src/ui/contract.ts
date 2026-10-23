@@ -74,7 +74,10 @@ export interface TelemetryStatus {
  */
 export interface TelemetryReport {
   readonly kind: "usage" | "error";
-  readonly payload: Readonly<Record<string, unknown>>;
+  /** Where it is posted. */
+  readonly url: string;
+  /** The exact body posted: a crash report alone, or up to 50 usage events in one request. */
+  readonly body: string;
 }
 
 /** The Anytype core service's state (WI-0018-18); see domain/anytype/status.ts. */
@@ -244,7 +247,7 @@ export interface AppApi extends AppApiV2 {
   telemetry(): Promise<TelemetryStatus>;
   /** Answer the question, or move the switch: off deletes what waits. Rejects with a sentence. */
   setTelemetry(on: boolean): Promise<TelemetryStatus>;
-  /** "See what would be sent": the queued reports, in full, oldest first; none unless it is on. */
+  /** "See what would be sent": the requests a send would post now, byte for byte, oldest first. */
   telemetryReports(): Promise<readonly TelemetryReport[]>;
   /** The old installation's plugin environments still on disk, by id (WI-0018-25). */
   legacyPackages(): Promise<readonly string[]>;

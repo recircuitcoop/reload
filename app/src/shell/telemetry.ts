@@ -352,7 +352,7 @@ export function wireTelemetry(deps: TelemetryWiring): ShellTelemetry {
     return status();
   });
   ipc.handle(IPC.telemetryReports, (): readonly TelemetryReport[] =>
-    pipeline.pending().map((report) => ({ kind: report.kind, payload: report.payload })),
+    pipeline.wouldSend().map(({ kind, url, body }) => ({ kind, url, body })),
   );
 
   // With no report waiting, a package removed since no longer needs vouching for.

@@ -565,16 +565,23 @@ test("General shows the queued reports in full, Advanced's status details, Recor
     const queued = await window.evaluate(() =>
       (
         globalThis as unknown as {
-          reload: { app: { telemetryReports(): Promise<{ kind: string; payload: unknown }[]> } };
+          reload: {
+            app: {
+              telemetryReports(): Promise<{ kind: string; url: string; body: string }[]>;
+            };
+          };
         }
       ).reload.app.telemetryReports(),
     );
     // This launch's usage events (plan 0029: its first step, and app_start once both are up).
     expect(queued.length).toBeGreaterThan(0);
-    expect(new Set(queued.map((report) => report.kind))).toEqual(new Set(["usage"]));
-    // In full: each report's every field, exactly as it would leave.
-    await expect(sent.getByTestId("general-reports-report")).toHaveText(
-      queued.map((report) => JSON.stringify(report.payload, null, 2)),
+    expect(new Set(queued.map((request) => request.kind))).toEqual(new Set(["usage"]));
+    // In full: each request's address and body, byte for byte as it would be posted.
+    await expect(sent.getByTestId("general-reports-url")).toHaveText(
+      queued.map((request) => request.url),
+    );
+    await expect(sent.getByTestId("general-reports-body")).toHaveText(
+      queued.map((request) => request.body),
     );
     await expect(see).toHaveText(STRINGS["general.reports.hide"]);
     await expect(see).toHaveAttribute("aria-expanded", "true");

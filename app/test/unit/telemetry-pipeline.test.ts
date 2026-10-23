@@ -52,12 +52,23 @@ describe("the telemetry pipeline: nothing before the question is answered (F2)",
     );
     // Every public method, so a new one cannot slip past the gate unseen.
     expect(methods.sort()).toEqual(
-      ["answer", "flush", "pending", "recordCrash", "recordUsage", "start", "state", "stop"].sort(),
+      [
+        "answer",
+        "flush",
+        "pending",
+        "recordCrash",
+        "recordUsage",
+        "start",
+        "state",
+        "stop",
+        "wouldSend",
+      ].sort(),
     );
     pipeline.start();
     pipeline.recordCrash(crash());
     pipeline.recordUsage("app_start", usage());
     expect(pipeline.pending()).toEqual([]);
+    expect(pipeline.wouldSend()).toEqual([]);
     expect(pipeline.state()).toEqual({
       answer: "unset",
       problem: null,
@@ -390,6 +401,28 @@ describe("the telemetry pipeline: sending", () => {
     expect(world.poster.sent).toEqual([]);
     expect(world.queue.reports).toEqual([]);
     expect(world.logger.lines.join("\n")).toContain("must be https, got http");
+  });
+
+  it("what would be sent is what the sender posts: a report it would drop is not shown, nor sent", async () => {
+    const world = telemetryWorld("on", {
+      endpoints: { ...ENDPOINTS, glitchtipDsn: "http://key@glitchtip.test/42" },
+    });
+    const pipeline = new TelemetryPipeline(world.deps);
+    pipeline.recordUsage("app_start", usage());
+    pipeline.recordUsage("app_start", usage());
+    pipeline.recordCrash(crash());
+    // Not stamped by this pipeline: dropped at send, so never shown either.
+    world.queue.enqueue("usage", { ...world.queue.reports[0]?.payload, report_id: "x" });
+    const shown = pipeline.wouldSend();
+    expect(world.queue.reports).toHaveLength(4);
+    // Two usage events in one batch; the crash has nowhere https to go.
+    expect(shown.map((request) => [request.kind, request.url])).toEqual([
+      ["usage", "https://umami.test/api/batch"],
+    ]);
+    await pipeline.flush();
+    expect(world.poster.sent).toEqual(
+      shown.map(({ url, headers, body }) => ({ url, headers, body })),
+    );
   });
 
   it("stopping stops the sender, and stopping twice is harmless", async () => {

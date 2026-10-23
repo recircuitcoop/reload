@@ -283,17 +283,25 @@ describe("the shell's telemetry", () => {
     expect(world.queue.reports).toEqual([]);
   });
 
-  it("See what would be sent answers the queued reports in full, and nothing once off", () => {
+  it("See what would be sent shows byte for byte the requests the sender then posts, and nothing once off", async () => {
+    // D24, taken literally: both sides are real, the bodies shown and the bytes posted after.
     const world = wired("on");
     world.runtime.publish(status("runtime", "down"));
+    world.up();
     const shown = world.call(IPC.telemetryReports) as unknown as readonly {
       kind: string;
-      payload: Record<string, unknown>;
+      url: string;
+      body: string;
     }[];
-    expect(shown).toEqual(
-      world.queue.reports.map((report) => ({ kind: report.kind, payload: report.payload })),
+    expect(shown.map((request) => request.kind)).toEqual(["usage", "error", "usage"]);
+    world.clock.advance(60_000);
+    await settle();
+    expect(world.queue.reports).toEqual([]);
+    expect(world.poster.sent.map(({ url, body }) => ({ url, body }))).toEqual(
+      shown.map(({ url, body }) => ({ url, body })),
     );
-    expect(shown.map((report) => report.kind)).toEqual(["usage", "error"]);
+
+    world.runtime.publish(status("runtime", "down"));
     world.call(IPC.setTelemetry, false);
     expect(world.call(IPC.telemetryReports)).toEqual([]);
   });

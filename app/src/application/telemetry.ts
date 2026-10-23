@@ -239,26 +239,10 @@ export class TelemetryPipeline {
       if (head.length === 0) {
         return { sent, retryInMs: null };
       }
-      // Every field held to its rule again, just before it leaves (plan 0029): a report made
-      // under other rules is dropped, never sent as it was queued.
-      const current: QueuedReport[] = [];
-      const identity = this.#ownIdentity();
-      for (const report of head) {
-        const payload = checkAtSend(
-          report.payload,
-          report.kind,
-          this.#deps.vouch,
-          identity,
-          (why) => {
-            this.#deps.logger.info(`a ${named(report.kind)} ${why} is dropped unsent`);
-          },
-        );
-        if (payload === null) {
-          this.#deps.queue.remove(report);
-        } else {
-          current.push({ ...report, payload });
-        }
-      }
+      const current = this.#checked(head, (report, why) => {
+        this.#deps.logger.info(`a ${named(report.kind)} ${why} is dropped unsent`);
+        this.#deps.queue.remove(report);
+      });
       const group = nextGroup(current);
       if (group.length === 0) {
         continue;
@@ -292,6 +276,56 @@ export class TelemetryPipeline {
       }
       sent += group.length;
     }
+  }
+
+  /**
+   * "See what would be sent": the requests a send would post now, each with the exact body, built
+   * by the sender's own steps (the check at send, the grouping, the transport), so what is shown
+   * is byte for byte what is posted (the old D24). A report with nowhere to go is not in it: the
+   * sender drops it unsent. Touches neither the queue nor the network.
+   */
+  wouldSend(): readonly (Outgoing & { readonly kind: ReportKind })[] {
+    const pending = this.pending();
+    // Nothing waits unless it is on: the identifier is never read for an empty preview.
+    const waiting = pending.length === 0 ? [] : this.#checked(pending, () => undefined);
+    const requests: (Outgoing & { readonly kind: ReportKind })[] = [];
+    while (waiting.length > 0) {
+      const group = nextGroup(waiting);
+      const kind = (group[0] as QueuedReport).kind;
+      try {
+        requests.push({ kind, ...outgoingFor(group, this.#deps.endpoints, this.#deps.release) });
+      } catch {
+        // No endpoint for it, or not HTTPS: the sender drops it, so it would not be sent.
+      }
+    }
+    return requests;
+  }
+
+  /**
+   * Every field held to its rule again, just before it leaves (plan 0029): a report made under
+   * other rules is handed to `dropped`, never sent as it was queued.
+   */
+  #checked(
+    reports: readonly QueuedReport[],
+    dropped: (report: QueuedReport, why: string) => void,
+  ): QueuedReport[] {
+    const current: QueuedReport[] = [];
+    const identity = this.#ownIdentity();
+    for (const report of reports) {
+      const payload = checkAtSend(
+        report.payload,
+        report.kind,
+        this.#deps.vouch,
+        identity,
+        (why) => {
+          dropped(report, why);
+        },
+      );
+      if (payload !== null) {
+        current.push({ ...report, payload });
+      }
+    }
+    return current;
   }
 
   /** Start sending in the background. Idempotent. */

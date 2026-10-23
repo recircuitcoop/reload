@@ -461,10 +461,7 @@ function ReportsSection({ api }: { readonly api: AppApi }) {
   );
 }
 
-/**
- * The queued reports in full: each report's payload as it was queued (redacted then). Sending
- * wraps it for its endpoint, adding the release, the website id and the endpoint's own fields.
- */
+/** What a send would post now: each request's address and its body, byte for byte. */
 function ReportList({ reports }: { readonly reports: readonly TelemetryReport[] }) {
   if (reports.length === 0) {
     return (
@@ -476,8 +473,23 @@ function ReportList({ reports }: { readonly reports: readonly TelemetryReport[] 
   return (
     <ol data-testid="general-reports-sent" className="flex flex-col gap-2">
       {reports.map((report, index) => (
-        <li key={index} data-testid="general-reports-report" data-kind={report.kind}>
-          <Code kind="block">{JSON.stringify(report.payload, null, 2)}</Code>
+        <li
+          key={index}
+          data-testid="general-reports-report"
+          data-kind={report.kind}
+          className="flex flex-col items-start gap-1"
+        >
+          <Code kind="inline" testId="general-reports-url">
+            {report.url}
+          </Code>
+          {/* Wrapped, never reflowed: the body's own bytes, as posted. */}
+          <Code
+            kind="block"
+            testId="general-reports-body"
+            className="self-stretch whitespace-pre-wrap break-all"
+          >
+            {report.body}
+          </Code>
         </li>
       ))}
     </ol>
