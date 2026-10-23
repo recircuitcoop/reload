@@ -280,6 +280,12 @@ describe("the shell's flow relay", () => {
       await expect(writeWhole(blocked, "[3]\n")).rejects.toThrow();
       expect(fs.readdirSync(blocked)).toEqual(["inside"]);
       expect(fs.readdirSync(scratch).sort()).toEqual(["dir.json", "out.json"]);
+      // A link chosen stays a link: the file it points to gets the export.
+      const link = path.join(scratch, "link.json");
+      fs.symlinkSync(file, link);
+      await writeWhole(link, "[4]\n");
+      expect(fs.lstatSync(link).isSymbolicLink()).toBe(true);
+      expect(fs.readFileSync(file, "utf8")).toBe("[4]\n");
     } finally {
       fs.rmSync(scratch, { recursive: true, force: true });
     }

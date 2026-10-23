@@ -26,14 +26,23 @@ export function exportFileName(name: string): string {
 }
 
 /**
- * `text` at `file`, whole or not at all: written beside it, then renamed over it, so nothing ever
- * reads half an export, and a write that fails leaves a file already there as it was.
+ * `text` at `file`, whole or not at all: written beside it, on disk before it is renamed over it,
+ * so nothing ever reads half an export, even after a crash, and a write that fails leaves a file
+ * already there as it was. A link chosen is written through: the file it points to is replaced,
+ * never the link.
  */
 export async function writeWhole(file: string, text: string): Promise<void> {
-  const scratch = `${file}.part`;
+  const target = await fs.realpath(file).catch(() => file); // a new file has no real path yet
+  const scratch = `${target}.part`;
   try {
-    await fs.writeFile(scratch, text, "utf8");
-    await fs.rename(scratch, file);
+    const handle = await fs.open(scratch, "w");
+    try {
+      await handle.writeFile(text, "utf8");
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    await fs.rename(scratch, target);
   } catch (error) {
     await fs.rm(scratch, { force: true });
     throw error;
