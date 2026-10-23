@@ -202,18 +202,15 @@ export function withMode(
   // Judged whole first: a setting this cannot read is never rewritten around.
   parsePackagePolicy(section);
   const kept = isRecord(section) ? section : {};
-  const overrides = isRecord(kept["overrides"]) ? { ...kept["overrides"] } : {};
-  const own = isRecord(overrides[name]) ? { ...overrides[name] } : {};
-  if (mode === null) {
-    delete own["update_mode"];
-  } else {
-    own["update_mode"] = mode;
-  }
-  if (Object.keys(own).length === 0) {
-    delete overrides[name];
-  } else {
-    overrides[name] = own;
-  }
+  const listed = isRecord(kept["overrides"]) ? kept["overrides"] : {};
+  const others = Object.entries(listed).filter(([other]) => other !== name);
+  const ownKeys = Object.entries(isRecord(listed[name]) ? listed[name] : {}).filter(
+    ([key]) => key !== "update_mode",
+  );
+  const own = Object.fromEntries(mode === null ? ownKeys : [...ownKeys, ["update_mode", mode]]);
+  const overrides = Object.fromEntries(
+    Object.keys(own).length === 0 ? others : [...others, [name, own]],
+  );
   return { ...kept, overrides };
 }
 
