@@ -17,6 +17,7 @@ import type { Supervisor } from "../../src/application/supervisor";
 import type { BoardOutcome, BoardRow } from "../../src/application/package-board";
 import type { CallResult } from "../../src/domain/channel/errors";
 import type { StepUse } from "../../src/domain/packages/states";
+import type { UpdateMode } from "../../src/domain/packages/versions";
 import type { EditorNode } from "../../src/ports/editor";
 import type { ChildStatus } from "../../src/domain/supervision/child-state";
 import type { UpdateEvent } from "../../src/domain/updates/machine";
@@ -114,6 +115,11 @@ class FakeBoard {
   checkFolder = (name: string) => this.#did("checkFolder", name);
   goBack = (name: string) => this.#did("goBack", name);
   reinstall = (name: string) => this.#did("reinstall", name);
+  updateAll = () => this.#did("updateAll");
+  setMode = (name: string, mode: string | null): BoardOutcome => {
+    this.calls.push(["setMode", name, mode]);
+    return this.outcome;
+  };
   unregister = (name: string, uses: readonly StepUse[]) => {
     this.calls.push(["unregister", name, uses]);
     return Promise.resolve(this.#judged("unregister", uses));
@@ -789,6 +795,32 @@ describe("AppApi v2 calls, through the shell to its processes", () => {
     });
     h.dialogs.folder = null;
     expect(await h.api.chooseInstallFolder()).toEqual({ ok: true, value: { folder: null } });
+  });
+
+  it("packages: a mode is set from the page, a mode it does not know is refused, and Update all is one call", async () => {
+    const h = harness();
+    expect(await h.api.setPackageMode("monty", "pinned")).toEqual({ ok: true, value: null });
+    expect(await h.api.setPackageMode("monty", null)).toEqual({ ok: true, value: null });
+    expect(await h.api.setPackageMode("monty", "sometimes" as unknown as UpdateMode)).toMatchObject(
+      { refused: { sentence: "refused.failed" } },
+    );
+    h.board.outcome = { ok: false, refusal: { reason: "not-installed" } };
+    expect(await h.api.setPackageMode("Who.Dunnit", "pinned")).toMatchObject({
+      refused: { reason: "not-installed" },
+    });
+    h.board.outcome = { ok: true };
+    expect(await h.api.updateAllPackages()).toEqual({ ok: true, value: null });
+    h.board.outcome = { ok: false, failed: "update-all" };
+    expect(await h.api.updateAllPackages()).toMatchObject({
+      refused: { sentence: "packages.updateAllFailed" },
+    });
+    expect(h.board.calls).toEqual([
+      ["setMode", "monty", "pinned"],
+      ["setMode", "monty", null],
+      ["setMode", "Who.Dunnit", "pinned"],
+      ["updateAll"],
+      ["updateAll"],
+    ]);
   });
 
   it("status and retention: the pill, banner and badge; 90 days unless a choice is made", async () => {

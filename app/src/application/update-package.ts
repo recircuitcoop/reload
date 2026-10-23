@@ -40,9 +40,9 @@ import {
   type PackageOutcome,
   type PackagesState,
   type RestartRuntime,
-  type UpdateLine,
 } from "./install-package";
 import { PackageCatalogues, type CatalogueReads, type UpdateArchives } from "./package-catalogues";
+import { movedDetail, updateLine, type Found } from "./update-lines";
 import { packageUpdated, type Signal } from "../domain/telemetry/reports";
 import {
   inspectPackage,
@@ -82,13 +82,6 @@ export interface PackageUpdatesPorts extends CatalogueReads {
   readonly archives: ArchiveCache;
   /** Where the update event goes (plan 0029), with the verified record that vouches for it. */
   readonly signal?: (signal: Signal, record?: InstalledRecord) => void;
-}
-
-/** What the last check found about one package. */
-interface Found {
-  readonly finding: VersionFinding;
-  /** The version the check found installed: a finding about another is stale. */
-  readonly installed: string;
 }
 
 const reasonOf = (error: unknown): string =>
@@ -204,12 +197,17 @@ export class PackageUpdates {
     this.#cancelSchedule = null;
   }
 
-  /** One package against where it came from, kept as what the last check found for it. */
+  /**
+   * One package against where it came from, kept as what the last check found for it. A package
+   * whose updates are off is not asked about at all: no catalogue and no folder is read for it.
+   */
   async checkOne(record: InstalledRecord): Promise<VersionFinding> {
-    const finding = await this.#judge(record).catch((error: unknown): VersionFinding => ({
-      kind: "unchecked",
-      reason: reasonOf(error),
-    }));
+    const finding = this.#isOff(record)
+      ? { kind: "unchecked" as const, reason: `its updates are off, so it is not checked` }
+      : await this.#judge(record).catch((error: unknown): VersionFinding => ({
+          kind: "unchecked",
+          reason: reasonOf(error),
+        }));
     this.#found.set(record.package, { finding, installed: record.version });
     return finding;
   }
@@ -310,10 +308,11 @@ export class PackageUpdates {
       const action = this.#actionOf(record, policy);
       if (action === "hold") {
         const blocked = this.#blockedReason(name, version);
+        const held = this.#modeOf(record, policy) === "off" ? "in off mode" : "pinned";
         return this.#failed(
           "Not updated",
           blocked === null
-            ? `${name} is pinned at ${record.version}; its mode must change before it is updated`
+            ? `${name} is ${held} at ${record.version}; its mode must change before it is updated`
             : `${name} ${version} failed here before (${blocked}), and is held back`,
         );
       }
@@ -322,6 +321,36 @@ export class PackageUpdates {
       }
       return this.#update(record, record.origin, version);
     });
+  }
+
+  /**
+   * Update all: apply, one after another, each newer version the last check found whose mode
+   * lets a press apply it. Pinned, off and blocked ones are left as they are.
+   */
+  async applyAll(): Promise<PackageOutcome> {
+    let policy: PackagePolicy;
+    try {
+      policy = this.#ports.policy();
+    } catch (error) {
+      return this.#failed("Not updated", reasonOf(error));
+    }
+    const names = this.#ports.environment.roots
+      .list()
+      .map(({ record }) => ({ record, found: this.#found.get(record.package) }))
+      .filter(({ record, found }) => found?.installed === record.version)
+      .filter(
+        ({ record, found }) =>
+          found?.finding.kind === "newer" && this.#actionOf(record, policy) !== "hold",
+      )
+      .map(({ record }) => record.package);
+    const failed: string[] = [];
+    for (const name of names) {
+      const outcome = await this.apply(name, "person");
+      failed.push(...(outcome.ok ? [] : [outcome.error]));
+    }
+    return failed.length > 0
+      ? { ok: false, error: failed.join(" ") }
+      : { ok: true, message: `Updated: ${names.join(", ") || "nothing had a newer version"}.` };
   }
 
   async #update(
@@ -518,44 +547,13 @@ export class PackageUpdates {
           return listed;
         }
         const mode = this.#modeOf(record, policy);
-        return { ...listed, mode, update: this.#lineFor(record, mode) };
+        const found = this.#found.get(record.package);
+        const update = updateLine(record, found, mode, (version) =>
+          this.#blockedReason(record.package, version),
+        );
+        return { ...listed, mode, update };
       }),
     };
-  }
-
-  #lineFor(record: InstalledRecord, mode: UpdateMode): UpdateLine | null {
-    const found = this.#found.get(record.package);
-    if (found?.installed !== record.version) {
-      return null;
-    }
-    const { finding } = found;
-    switch (finding.kind) {
-      case "current":
-        return null;
-      case "unchecked":
-        return { kind: "unchecked", version: null, detail: finding.reason, apply: false };
-      case "moved":
-        return {
-          kind: "moved",
-          version: finding.version,
-          detail: movedDetail(record),
-          apply: false,
-        };
-      case "newer": {
-        const blocked = this.#blockedReason(record.package, finding.version);
-        if (blocked !== null) {
-          return { kind: "failed", version: finding.version, detail: blocked, apply: false };
-        }
-        return {
-          kind: "newer",
-          version: finding.version,
-          detail: mode === "pinned" ? `${record.package} is pinned at ${record.version}` : null,
-          // One rule for "waiting for the person": manual only. An auto one is the machine's to
-          // apply at its next check, and a pinned one nobody's (window.py pending_update_row).
-          apply: mode === "manual",
-        };
-      }
-    }
   }
 
   #modeOf(record: InstalledRecord, policy: PackagePolicy): UpdateMode {
@@ -567,6 +565,15 @@ export class PackageUpdates {
     }
     const source = record.origin?.kind === "catalogue" ? record.origin.source : null;
     return modeFor(policy, sources, record.package, source).mode;
+  }
+
+  /** Whether `record`'s updates are off; a setting that cannot be read is judged by check. */
+  #isOff(record: InstalledRecord): boolean {
+    try {
+      return this.#modeOf(record, this.#ports.policy()) === "off";
+    } catch {
+      return false;
+    }
   }
 
   #actionOf(record: InstalledRecord, policy: PackagePolicy): ReturnType<typeof actionFor> {
@@ -589,12 +596,4 @@ export class PackageUpdates {
     this.#ports.logger.warn(`update: ${what.toLowerCase()}: ${why}`);
     return { ok: false, error: `${what}: ${why}.` };
   }
-}
-
-function movedDetail(record: InstalledRecord): string {
-  const where = record.origin?.kind === "file" ? record.origin.path : "its source";
-  return (
-    `the content at ${where} changed and its version did not; the same version cannot hold ` +
-    "other content, so it is not applied until its publisher gives it a new version"
-  );
 }

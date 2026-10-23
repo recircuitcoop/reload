@@ -5,6 +5,7 @@
 // The screen (screens/GeneralScreen.tsx) only draws what these answer, so every sentence it shows
 // is held here by a unit test.
 import type { RowAction } from "../domain/packages/states";
+import type { UpdateMode } from "../domain/packages/versions";
 import type { AppApiV2 } from "./app-api-v2";
 import type { AnytypeStatus, McpEndpointStatus } from "./contract";
 import type { Answer, Refusal } from "./answer";
@@ -354,6 +355,14 @@ export const PACKAGE_ACTIONS: Readonly<
   "check-for-changes": (api, name) => ({ kind: "call", call: () => api.checkFolder(name) }),
   "go-back": () => ({ kind: "confirm-go-back" }),
 };
+
+/** A package's update modes as its row offers them (plan 0032, group 8), in that order. */
+export const MODE_OPTIONS: readonly { readonly value: UpdateMode; readonly label: string }[] = [
+  { value: "auto", label: t("packages.mode.auto") },
+  { value: "manual", label: t("packages.mode.manual") },
+  { value: "pinned", label: t("packages.mode.pinned") },
+  { value: "off", label: t("packages.mode.off") },
+];
 
 // ── Stability defaults (plan 0031): the person's own resource limits ─────────────────────────
 

@@ -200,7 +200,7 @@ export function installingRows(
     readonly verifiedAt: Date;
   }>,
   listed: readonly { readonly package: Package }[],
-): { package: Package; publisher: null }[] {
+): { package: Package; publisher: null; mode: null }[] {
   return [...installing].flatMap((progress) =>
     progress.name === null || listed.some((row) => row.package.name === progress.name)
       ? []
@@ -221,6 +221,7 @@ export function installingRows(
               update: null,
             },
             publisher: null,
+            mode: null,
           },
         ],
   );
@@ -233,7 +234,7 @@ export function installingRows(
 export function brokenRows(
   roots: Pick<PackageRoots, "broken">,
   now: Date,
-): { package: Package; publisher: null }[] {
+): { package: Package; publisher: null; mode: null }[] {
   return roots.broken().map(({ name, reason }) => ({
     package: {
       name,
@@ -251,5 +252,6 @@ export function brokenRows(
       update: null,
     },
     publisher: null,
+    mode: null,
   }));
 }

@@ -248,6 +248,17 @@ const CALLS: Record<string, { call: (api: AppApi) => Promise<unknown>; sent: unk
     call: (api) => api.checkFolder("reload_summarize"),
     sent: [IPC.packageCall, { op: "package.checkFolder", args: { name: "reload_summarize" } }],
   },
+  setPackageMode: {
+    call: (api) => api.setPackageMode("reload_summarize", "off"),
+    sent: [
+      IPC.packageCall,
+      { op: "package.setMode", args: { name: "reload_summarize", mode: "off" } },
+    ],
+  },
+  updateAllPackages: {
+    call: (api) => api.updateAllPackages(),
+    sent: [IPC.packageCall, { op: "package.updateAll", args: null }],
+  },
   goBackPackage: {
     call: (api) => api.goBackPackage("reload_summarize"),
     sent: [IPC.packageCall, { op: "package.goBack", args: { name: "reload_summarize" } }],

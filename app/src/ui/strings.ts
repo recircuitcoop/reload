@@ -468,6 +468,15 @@ export const STRINGS = {
     "Going back is offered for seven days after an update, and they have passed.", // decided
   "packages.installFailed": "The package wasn't installed. Nothing on your Mac changed.", // decided
   "packages.updateFailed": "*{name}* wasn't updated. The version you had keeps running.", // decided
+  // Per-package update controls (plan 0032, group 8): the mode, and Update all.
+  "packages.updateAll": "Update all", // decided
+  "packages.updateAllFailed":
+    "Not every package was updated. Each one not updated keeps its version.", // decided
+  "packages.mode": "Updates", // decided: the mode picker's label
+  "packages.mode.auto": "Automatically", // decided
+  "packages.mode.manual": "When I choose", // decided
+  "packages.mode.pinned": "Pinned to this version", // decided
+  "packages.mode.off": "Never check", // decided
   "packages.goBackFailed": "*{name}* went back to {version}, but not all of its steps started.", // decided
   "packages.offers.none": "The catalogue has nothing more to install.", // decided
 

@@ -92,6 +92,8 @@ export function appApiV2Over(ipc: RendererIpc): AppApiV2 {
     chooseInstallFolder: () => pkg("package.chooseFolder"),
     checkFolder: (name) => pkg("package.checkFolder", { name }),
     goBackPackage: (name) => pkg("package.goBack", { name }),
+    setPackageMode: (name, mode) => pkg("package.setMode", { name, mode }),
+    updateAllPackages: () => pkg("package.updateAll"),
     onPackages: (listener) => {
       on(IPC.packagesChanged, listener);
     },

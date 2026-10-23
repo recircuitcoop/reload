@@ -14,6 +14,7 @@ import type { Answer } from "../answer";
 import type { PackageOffer, PackageView, PackagesView } from "../general-contract";
 import type { RowAction } from "../../domain/packages/states";
 import { Button, type ButtonKind } from "../components/atoms/Button";
+import { Select } from "../components/atoms/Select";
 import type { StatusPillState } from "../components/atoms/StatusPill";
 import { DialogButtons } from "../components/molecules/DialogButtons";
 import { InlineMessage } from "../components/molecules/InlineMessage";
@@ -26,7 +27,7 @@ import {
   type PackageFacet,
   type PackageRowState,
 } from "../components/organisms/PackageRow";
-import { nameParts, PACKAGE_ACTIONS, packagesLine, withoutMarks } from "../general";
+import { MODE_OPTIONS, nameParts, PACKAGE_ACTIONS, packagesLine, withoutMarks } from "../general";
 import { usePackageProgress, usePackages } from "../store";
 import { t, type PlainKey } from "../strings";
 import {
@@ -209,7 +210,7 @@ export function PackagesSection({ api }: { readonly api: AppApi }) {
         </span>
       }
     >
-      <div>
+      <div className="flex gap-2">
         <Menu
           placement="bottom-start"
           trigger={
@@ -233,6 +234,15 @@ export function PackagesSection({ api }: { readonly api: AppApi }) {
             onSelect={chooseFolder}
           />
         </Menu>
+        <Button
+          kind="secondary"
+          data-testid="packages-update-all"
+          onClick={() => {
+            act(() => api.updateAllPackages());
+          }}
+        >
+          {t("packages.updateAll")}
+        </Button>
       </div>
       {catalogue && view !== null ? (
         <Offers
@@ -244,7 +254,15 @@ export function PackagesSection({ api }: { readonly api: AppApi }) {
       ) : null}
       <ul data-testid="packages-rows" className="flex flex-col">
         {(view?.packages ?? []).map((row) => (
-          <Row key={row.package.name} row={row} now={now} onAction={run} />
+          <Row
+            key={row.package.name}
+            row={row}
+            now={now}
+            onAction={run}
+            onMode={(mode) => {
+              act(() => api.setPackageMode(row.package.name, mode));
+            }}
+          />
         ))}
         {installing === null ? null : (
           <PackageRow
@@ -314,10 +332,12 @@ function Row({
   row,
   now,
   onAction,
+  onMode,
 }: {
   readonly row: PackageView;
   readonly now: Date;
   readonly onAction: (pkg: Pkg, action: RowAction) => void;
+  readonly onMode: (mode: PackageView["mode"]) => void;
 }) {
   const pkg = row.package;
   const button = (action: RowAction, enabled: boolean) => {
@@ -363,6 +383,21 @@ function Row({
       actions={[
         ...row.actions.enabled.map((action) => button(action, true)),
         ...row.actions.disabled.map((action) => button(action, false)),
+        ...(row.mode === null
+          ? []
+          : [
+              <Select
+                key="mode"
+                label={t("packages.mode")}
+                testId="package-mode"
+                options={MODE_OPTIONS}
+                value={row.mode}
+                onValueChange={(value) => {
+                  const chosen = MODE_OPTIONS.find((option) => option.value === value);
+                  if (chosen !== undefined) onMode(chosen.value);
+                }}
+              />,
+            ]),
       ]}
     />
   );

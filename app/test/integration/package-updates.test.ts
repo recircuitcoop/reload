@@ -950,6 +950,47 @@ describe("the modes", () => {
     expect(roots.installed("pinger")?.version).toBe("0.2.0");
   });
 
+  it("off: never checked, the catalogue never asked, never applied, and its line says why", async () => {
+    // test_a_plugin_in_off_mode_is_never_checked, and rule 4's [off]: never moved.
+    const { installer, updates } = await installed("pinger", "0.1.0");
+    writePackages({ update_mode: "auto", overrides: { pinger: { update_mode: "off" } } });
+    publish("pinger", "0.2.0");
+    let asked = 0;
+    const read = reads().catalogue;
+    const counted = setUp({
+      catalogue: () => {
+        asked += 1;
+        return read();
+      },
+    });
+    fetched = [];
+    await drive(counted.updates.check());
+    expect(asked).toBe(0);
+    expect(fetched).toEqual([]);
+    expect(told).toEqual([]);
+    expect(roots.installed("pinger")?.version).toBe("0.1.0");
+    expect(await line(counted.installer, counted.updates, "pinger")).toMatchObject({
+      mode: "off",
+      update: {
+        kind: "unchecked",
+        version: null,
+        detail: "its updates are off, so it is not checked",
+        apply: false,
+      },
+    });
+    // Checked while it was manual: a press still does not move it once it is off.
+    writePackages({ overrides: { pinger: { update_mode: "manual" } } });
+    await updates.check();
+    writePackages({ overrides: { pinger: { update_mode: "off" } } });
+    expect(await updates.apply("pinger", "person")).toEqual({
+      ok: false,
+      error:
+        "Not updated: pinger is in off mode at 0.1.0; its mode must change before it is updated.",
+    });
+    expect(roots.installed("pinger")?.version).toBe("0.1.0");
+    expect((await line(installer, updates, "pinger"))?.mode).toBe("off");
+  });
+
   it("reads the modes at the moment they are needed, and offers Apply in manual mode only", async () => {
     const { installer, updates } = await installed("pinger", "0.1.0");
     publish("pinger", "0.2.0");
@@ -966,7 +1007,7 @@ describe("the modes", () => {
     writePackages({ update_mode: "sometimes" });
     expect(await updates.apply("pinger", "person")).toMatchObject({
       ok: false,
-      error: expect.stringContaining("one of auto, manual, pinned") as unknown,
+      error: expect.stringContaining("one of auto, manual, pinned, off") as unknown,
     });
   });
 });

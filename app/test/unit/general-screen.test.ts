@@ -779,6 +779,7 @@ describe("Packages (plan 0022 §F)", () => {
     packages: ["anytype", "folder", "monty", "reload_summarize"].map((name, index) => ({
       publisher: null,
       actions: { enabled: [], disabled: [] },
+      mode: null,
       package: {
         name,
         version: "0.3",

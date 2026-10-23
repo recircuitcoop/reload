@@ -3,6 +3,7 @@
 // (app/.dependency-cruiser.cjs, ui-imports-domain-types-only), so nothing is restated.
 import type { BoardLayout, SlotSize } from "../domain/board/layout";
 import type { Package, RowActions } from "../domain/packages/states";
+import type { UpdateMode } from "../domain/packages/versions";
 import type { StatusPill, RuntimeBanner } from "../domain/status/status";
 import type { SetupState } from "../domain/setup/setup";
 import type { RollbackOffer, UpdateState } from "../domain/updates/machine";
@@ -154,6 +155,8 @@ export interface PackageView {
   readonly publisher: string | null;
   /** The row's buttons, from domain/packages/states.ts `rowActions`, judged when listed. */
   readonly actions: RowActions;
+  /** Its update mode in force, which the row can change; null for a shipped package. */
+  readonly mode: UpdateMode | null;
 }
 
 /** A catalogue entry "Add a package… › From the catalogue" offers. */

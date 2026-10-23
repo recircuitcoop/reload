@@ -11,6 +11,7 @@ import type { BoardOutcome, PackageBoard } from "../application/package-board";
 import { typesOf } from "../application/remove-package";
 import type { Supervisor } from "../application/supervisor";
 import { rowActions, type StepUse } from "../domain/packages/states";
+import { UPDATE_MODES } from "../domain/packages/versions";
 import type { EditorNode, EditorNodes } from "../ports/editor";
 import type { Logger } from "../ports/logger";
 import type { Answer } from "../ui/answer";
@@ -69,6 +70,8 @@ export interface PackageCallsDeps {
     | "checkFolder"
     | "goBack"
     | "reinstall"
+    | "setMode"
+    | "updateAll"
   >;
   readonly toPage: (channel: string, ...args: unknown[]) => void;
   /** Wall-clock time, epoch ms: when a row's actions are judged (Go back's seven days). */
@@ -87,6 +90,8 @@ export function answerOf(name: string, outcome: BoardOutcome): Answer<null> {
         return refused("failed", "packages.installFailed");
       case "update":
         return refused("failed", "packages.updateFailed", { params: { name } });
+      case "update-all":
+        return refused("failed", "packages.updateAllFailed");
       case "go-back":
         return refused("failed", "packages.goBackFailed", {
           params: { name, version: outcome.version ?? "" },
@@ -189,6 +194,15 @@ export function wirePackageCalls(deps: PackageCallsDeps): void {
           return changing(name, () => board.checkFolder(name));
         case "package.goBack":
           return changing(name, () => board.goBack(name));
+        case "package.setMode": {
+          const mode = UPDATE_MODES.find((known) => known === args["mode"]) ?? null;
+          if (args["mode"] !== null && mode === null) {
+            return refused("failed", "refused.failed");
+          }
+          return changing(name, () => Promise.resolve(board.setMode(name, mode)));
+        }
+        case "package.updateAll":
+          return changing("", () => board.updateAll());
         case "package.chooseFolder": {
           const chosen = await dialog.showOpenDialog({
             title: STRINGS["packages.add"],

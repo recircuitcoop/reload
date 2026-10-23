@@ -29,7 +29,7 @@ describe("buildLegacyImportPlan", () => {
     });
   });
 
-  it("maps [plugins] into packages.update_mode and overrides, off becoming pinned", () => {
+  it("maps [plugins] into packages.update_mode and overrides, off staying off and a pin pinned", () => {
     const plan = buildLegacyImportPlan({
       plugins: {
         update_mode: "off",
@@ -39,14 +39,14 @@ describe("buildLegacyImportPlan", () => {
       },
     });
     expect(plan.packagesSetting).toEqual({
-      update_mode: "pinned",
+      update_mode: "off",
       overrides: {
         monty: { update_mode: "auto" },
-        reload_summarize: { update_mode: "pinned" },
+        reload_summarize: { update_mode: "off" },
         whodunnit: { update_mode: "pinned" },
       },
     });
-    expect(plan.imported.some((line) => line.includes('plugins.update_mode: "off"'))).toBe(true);
+    expect(plan.imported).toContain("plugins.update_mode: packages.update_mode = off");
   });
 
   it("auto_check_versions applies to both packages and the update setting", () => {

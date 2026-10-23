@@ -14,7 +14,8 @@
 //
 // - `auto`: this machine applies it by itself;
 // - `manual`: it is shown, with Apply, and applied only when the person presses it;
-// - `pinned`: it is shown, and never applied, not even by a press.
+// - `pinned`: it is shown, and never applied, not even by a press;
+// - `off`: it is never checked at all, so nothing about it is asked of any catalogue or folder.
 //
 // The mode in force is three levels, most specific first (config.py update_mode_for, plan 0006
 // F2): the package's own mode, then the auto-update switch of the source it was installed from,
@@ -22,9 +23,9 @@
 
 import type { CatalogueSource } from "./catalogue";
 
-export type UpdateMode = "auto" | "manual" | "pinned";
+export type UpdateMode = "auto" | "manual" | "pinned" | "off";
 
-export const UPDATE_MODES: readonly UpdateMode[] = ["auto", "manual", "pinned"];
+export const UPDATE_MODES: readonly UpdateMode[] = ["auto", "manual", "pinned", "off"];
 
 /** The default for a package nobody chose a mode for: shown, never applied on its own. */
 export const DEFAULT_UPDATE_MODE: UpdateMode = "manual";
@@ -175,6 +176,45 @@ export function withRegistration(
   const kept = isRecord(section) ? section : {};
   const others = unregisteredOf(kept).filter((listed) => listed !== name);
   return { ...kept, unregistered: on ? others : [...others, name] };
+}
+
+/** Spec 2.1: a package's name, which `packages.overrides` is keyed by. */
+const PACKAGE_NAME = /^[a-z][a-z0-9_]{1,39}$/;
+
+/**
+ * The `packages` setting with `name`'s own mode set (null: its own mode removed, so the source's
+ * switch or the default decides again), every other key and every other package's kept. Throws
+ * for a name no package can have, and for a setting it cannot read: nothing is then written.
+ */
+export function withMode(
+  section: unknown,
+  name: string,
+  mode: UpdateMode | null,
+): Readonly<Record<string, unknown>> {
+  if (!PACKAGE_NAME.test(name)) {
+    throw new PackageSettingsError(`${JSON.stringify(name)} is not a package name`);
+  }
+  if (mode !== null && !UPDATE_MODES.includes(mode)) {
+    throw new PackageSettingsError(
+      `${JSON.stringify(mode)} is not a mode; it must be one of ${UPDATE_MODES.join(", ")}`,
+    );
+  }
+  // Judged whole first: a setting this cannot read is never rewritten around.
+  parsePackagePolicy(section);
+  const kept = isRecord(section) ? section : {};
+  const overrides = isRecord(kept["overrides"]) ? { ...kept["overrides"] } : {};
+  const own = isRecord(overrides[name]) ? { ...overrides[name] } : {};
+  if (mode === null) {
+    delete own["update_mode"];
+  } else {
+    own["update_mode"] = mode;
+  }
+  if (Object.keys(own).length === 0) {
+    delete overrides[name];
+  } else {
+    overrides[name] = own;
+  }
+  return { ...kept, overrides };
 }
 
 /** Where the mode in force came from, so the page can say who decided. */
@@ -338,12 +378,12 @@ export function judgeFolder(
 export type UpdateAction = "apply" | "ask" | "hold";
 
 /**
- * `auto` applies, `manual` waits for Apply, `pinned` holds. A version that failed here before
+ * `auto` applies, `manual` waits for Apply, `pinned` and `off` hold. A version that failed here before
  * (it was rolled back) is held whatever the mode, until a newer one than it is published: a
  * machine that applied it again on every check would roll back on every check.
  */
 export function actionFor(mode: UpdateMode, blocked: boolean): UpdateAction {
-  if (mode === "pinned" || blocked) {
+  if (mode === "pinned" || mode === "off" || blocked) {
     return "hold";
   }
   return mode === "auto" ? "apply" : "ask";

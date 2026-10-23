@@ -10,6 +10,7 @@
 // a bare "the flows / the packages changed", or the small state itself (Setup, the update, the
 // status). Each is coalesced by the shell (shell/push.ts): a burst reaches the page as one event
 // per key, carrying the last value.
+import type { UpdateMode } from "../domain/packages/versions";
 import type { Answer } from "./answer";
 import type {
   FlowAnswer,
@@ -168,6 +169,10 @@ export interface AppApiV2 {
   checkFolder(name: string): Promise<Answer<null>>;
   /** Go back to a package's previous version, within seven days of its update (D5). */
   goBackPackage(name: string): Promise<Answer<null>>;
+  /** An installed package's own update mode; null: its source's switch or the default again. */
+  setPackageMode(name: string, mode: UpdateMode | null): Promise<Answer<null>>;
+  /** Update all: every package asked again, then each newer one that is neither pinned nor off. */
+  updateAllPackages(): Promise<Answer<null>>;
   /** An install's phase as it starts, or null when packages changed otherwise: coalesced. */
   onPackages(listener: (changed: PackagesChanged) => void): void;
 

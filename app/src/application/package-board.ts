@@ -33,7 +33,13 @@ import {
   type Refusal,
   type StepUse,
 } from "../domain/packages/states";
-import { parsePackagePolicy, unregisteredOf, withRegistration } from "../domain/packages/versions";
+import {
+  parsePackagePolicy,
+  unregisteredOf,
+  withMode,
+  withRegistration,
+  type UpdateMode,
+} from "../domain/packages/versions";
 import type { Logger } from "../ports/logger";
 import type { InstalledRecord, LivePackage, PackageRoots } from "../ports/package-roots";
 import type { PackageSettingsStore } from "../ports/settings-store";
@@ -65,6 +71,7 @@ import type { PackageRemover } from "./remove-package";
 import { keepSevenDays } from "./kept-copies";
 import { shippedCheck, type ShippedManifest } from "./shipped-manifest";
 import type { PackageUpdates } from "./update-package";
+import type { Board, BoardOutcome, BoardRow, InstallProgress } from "./board-rows";
 
 /** Who publishes what Reload ships, and its official catalogue's packages. */
 export const OWN_PUBLISHER = "Reload";
@@ -87,7 +94,10 @@ export interface PackageBoardPorts {
     PackageInstaller,
     "state" | "installFromSource" | "installFromFile" | "reinstall"
   >;
-  readonly updates: Pick<PackageUpdates, "decorate" | "checkOne" | "apply" | "waitForReady">;
+  readonly updates: Pick<
+    PackageUpdates,
+    "decorate" | "checkOne" | "apply" | "applyAll" | "waitForReady"
+  >;
   readonly remover: Pick<PackageRemover, "remove">;
   readonly settings: Pick<PackageSettingsStore, "readPackages" | "writePackages">;
   /** The node types the running runtime generated; null while it is not running to ask. */
@@ -101,44 +111,7 @@ export interface PackageBoardPorts {
   readonly logger: Logger;
 }
 
-/** An install's phase as it starts: `name` is null until its declaration has been read. */
-export interface InstallProgress {
-  readonly name: string | null;
-  readonly phase: InstallPhase;
-  readonly percent: number;
-  readonly verifiedAt: Date;
-}
-
-/** One row: the package, and who publishes it (null for a folder nobody vouches for). */
-export interface BoardRow {
-  readonly package: Package;
-  readonly publisher: string | null;
-}
-
-/** A catalogue entry "Add a package… › From the catalogue" offers. */
-export interface BoardOffer {
-  readonly source: string;
-  readonly id: string;
-  readonly name: string;
-  readonly version: string | null;
-  readonly summary: string;
-}
-
-export interface Board {
-  readonly rows: readonly BoardRow[];
-  readonly offers: readonly BoardOffer[];
-}
-
-/** What an action came to: done, refused by the domain's rules, or failed on the way. */
-export type BoardOutcome =
-  | { readonly ok: true }
-  | { readonly ok: false; readonly refusal: Refusal }
-  | {
-      readonly ok: false;
-      readonly failed: "install" | "remove" | "update" | "go-back";
-      /** go-back: the version it went back to. */
-      readonly version?: string;
-    };
+export type { Board, BoardOffer, BoardOutcome, BoardRow, InstallProgress } from "./board-rows";
 
 const DONE: BoardOutcome = { ok: true };
 const refused = (refusal: Refusal): BoardOutcome => ({ ok: false, refusal });
@@ -260,6 +233,7 @@ export class PackageBoard {
         update: null,
       },
       publisher: OWN_PUBLISHER,
+      mode: null,
     }));
     const live = roots.list();
     for (const { record, folder } of live) {
@@ -287,6 +261,7 @@ export class PackageBoard {
             : origin.source === OFFICIAL_SOURCE_NAME
               ? OWN_PUBLISHER
               : origin.source,
+        mode: listed.get(record.package)?.mode ?? null,
       });
     }
     rows.push(...installingRows(this.#installing.values(), rows), ...brokenRows(roots, now));
@@ -430,6 +405,36 @@ export class PackageBoard {
     if (!outcome.ok) {
       return this.#ports.one.busy() ? refused({ reason: "busy" }) : { ok: false, failed: "update" };
     }
+    return DONE;
+  }
+
+  /** Update all: every package asked again, then each newer one its mode lets a press apply. */
+  async updateAll(): Promise<BoardOutcome> {
+    if (this.#ports.one.busy()) {
+      return refused({ reason: "busy" });
+    }
+    for (const live of this.#ports.roots.list()) {
+      await this.#ask(live.record);
+    }
+    const outcome = await this.#ports.updates.applyAll();
+    return outcome.ok ? DONE : { ok: false, failed: "update-all" };
+  }
+
+  /** An installed package's own update mode; null: the source's switch or the default again. */
+  setMode(name: string, mode: UpdateMode | null): BoardOutcome {
+    // A name no package can have is not installed either: refused, and nothing is written.
+    const installed = (() => {
+      try {
+        return this.#ports.roots.installed(name);
+      } catch {
+        return undefined;
+      }
+    })();
+    if (installed === undefined) {
+      return refused({ reason: "not-installed" });
+    }
+    const { settings } = this.#ports;
+    settings.writePackages(withMode(settings.readPackages(), name, mode));
     return DONE;
   }
 

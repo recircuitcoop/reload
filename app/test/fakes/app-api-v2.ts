@@ -56,6 +56,8 @@ export const V2_UNUSED: AppApiV2 = {
   choosePath: never,
   checkFolder: never,
   goBackPackage: never,
+  setPackageMode: never,
+  updateAllPackages: never,
   onPackages: ignored,
   anytypeSpaces: never,
   status: never,

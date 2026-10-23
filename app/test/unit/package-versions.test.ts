@@ -17,6 +17,7 @@ import {
   PackageSettingsError,
   parsePackagePolicy,
   unregisteredOf,
+  withMode,
   withRegistration,
 } from "../../src/domain/packages/versions";
 
@@ -63,7 +64,7 @@ describe("the packages settings", () => {
     ["an override with an unknown key", { overrides: { monty: { pinned: true } } }, "unknown keys"],
     [
       "an override with a misspelled mode",
-      { overrides: { monty: { update_mode: "off" } } },
+      { overrides: { monty: { update_mode: "never" } } },
       "packages.overrides.monty.update_mode",
     ],
   ])("refuse %s whole, naming what is wrong", (_what, section, reason) => {
@@ -194,7 +195,39 @@ describe("what the mode lets be done", () => {
     expect(actionFor("auto", false)).toBe("apply");
     expect(actionFor("manual", false)).toBe("ask");
     expect(actionFor("pinned", false)).toBe("hold");
+    expect(actionFor("off", false)).toBe("hold");
     expect(actionFor("auto", true)).toBe("hold");
     expect(actionFor("manual", true)).toBe("hold");
+  });
+});
+
+describe("a package's own mode, set (plan 0032, group 8)", () => {
+  it("sets and removes one package's mode, keeping every other key and package", () => {
+    const section = {
+      update_mode: "auto",
+      unregistered: ["a_b"],
+      overrides: { whodunnit: { update_mode: "pinned" } },
+    };
+    const pinned = withMode(section, "monty", "pinned");
+    expect(pinned).toEqual({
+      ...section,
+      overrides: { whodunnit: { update_mode: "pinned" }, monty: { update_mode: "pinned" } },
+    });
+    expect(parsePackagePolicy(pinned).overrides.get("monty")?.mode).toBe("pinned");
+    expect(withMode(pinned, "monty", null)).toEqual(section);
+    expect(withMode(undefined, "monty", "off")).toEqual({
+      overrides: { monty: { update_mode: "off" } },
+    });
+    expect(parsePackagePolicy({ update_mode: "off" }).defaultMode).toBe("off");
+  });
+
+  it("refuses a name no package can have, a mode it does not know, and a setting it cannot read", () => {
+    expect(() => withMode({}, "Who.Dunnit", "pinned")).toThrow(
+      '"Who.Dunnit" is not a package name',
+    );
+    expect(() => withMode({}, "monty", "sometimes" as never)).toThrow(PackageSettingsError);
+    expect(() => withMode({ update_mode: "sometimes" }, "monty", "pinned")).toThrow(
+      PackageSettingsError,
+    );
   });
 });

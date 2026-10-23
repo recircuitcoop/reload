@@ -61,14 +61,12 @@ function reasonOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/** auto/manual pass through; off has no equivalent mode, so it is imported as pinned (never
- * applied on its own, which is the closer of the two to "never auto-updated" than "auto"). */
+/** auto, manual and off pass through: each mode the old app had, the new one has too. */
 function mapUpdateMode(
   value: TomlValue | TomlTable | undefined,
   where: string,
   ignored: LegacyIgnoredItem[],
-  imported: string[],
-): "auto" | "manual" | "pinned" | undefined {
+): "auto" | "manual" | "off" | undefined {
   if (value === undefined) {
     return undefined;
   }
@@ -79,11 +77,7 @@ function mapUpdateMode(
     });
     return undefined;
   }
-  if (value === "off") {
-    imported.push(`${where}: "off" has no equivalent mode in the new app; imported as "pinned"`);
-    return "pinned";
-  }
-  return value === "auto" ? "auto" : "manual";
+  return value === "auto" ? "auto" : value === "off" ? "off" : "manual";
 }
 
 export function buildLegacyImportPlan(document: TomlTable): LegacyImportPlan {
@@ -136,14 +130,10 @@ export function buildLegacyImportPlan(document: TomlTable): LegacyImportPlan {
   const updateSection = isTable(document["update"]) ? document["update"] : {};
   const packagesCandidate: Record<string, unknown> = {};
 
-  const globalMode = mapUpdateMode(
-    plugins["update_mode"],
-    "plugins.update_mode",
-    ignored,
-    imported,
-  );
+  const globalMode = mapUpdateMode(plugins["update_mode"], "plugins.update_mode", ignored);
   if (globalMode !== undefined) {
     packagesCandidate["update_mode"] = globalMode;
+    imported.push(`plugins.update_mode: packages.update_mode = ${globalMode}`);
   }
   if (typeof document["auto_check_versions"] === "boolean") {
     packagesCandidate["auto_check_versions"] = document["auto_check_versions"];
@@ -166,7 +156,7 @@ export function buildLegacyImportPlan(document: TomlTable): LegacyImportPlan {
     const pinned = value["pinned"] === true;
     const mode = pinned
       ? "pinned"
-      : mapUpdateMode(value["update_mode"], `plugins.${name}.update_mode`, ignored, imported);
+      : mapUpdateMode(value["update_mode"], `plugins.${name}.update_mode`, ignored);
     if (mode !== undefined) {
       overrides[name] = { update_mode: mode };
       imported.push(`plugins.${name}: packages.overrides.${name}.update_mode = ${mode}`);

@@ -836,3 +836,76 @@ describe("Install again repairs the version installed, in place", () => {
     expect(roots.installed("verkit")).toMatchObject({ version: "0.1.0", signed: true });
   });
 });
+
+describe("per-package update controls: a mode from the page, Off, and Update all", () => {
+  const modeOf = (board: Board, name: string) =>
+    board.rows.find((entry) => entry.package.name === name)?.mode;
+
+  it("a mode set from the page round-trips, and leaves every other setting alone", async () => {
+    const { board } = setUp();
+    await board.start();
+    await board.installFolder(writeFolder("monty", "0.1.0"));
+    const file = path.join(base, "shell-settings.json");
+    const others = {
+      telemetry: true,
+      update: { auto_check: false },
+      packages: {
+        update_mode: "manual",
+        check_interval: 3600,
+        unregistered: ["reload_anytype"],
+        overrides: { whodunnit: { update_mode: "pinned" } },
+      },
+    };
+    fs.writeFileSync(file, JSON.stringify(others));
+    expect(modeOf(await board.board(), "monty")).toBe("manual");
+
+    expect(board.setMode("monty", "pinned")).toEqual({ ok: true });
+    const written = JSON.parse(fs.readFileSync(file, "utf8")) as Record<string, unknown>;
+    expect(written).toMatchObject({ telemetry: true, update: { auto_check: false } });
+    expect(written["packages"]).toEqual({
+      ...others.packages,
+      overrides: { whodunnit: { update_mode: "pinned" }, monty: { update_mode: "pinned" } },
+    });
+    expect(modeOf(await board.board(), "monty")).toBe("pinned");
+
+    // Unpinned: its own mode is gone, and the default decides again.
+    expect(board.setMode("monty", null)).toEqual({ ok: true });
+    expect(settings.readPackages()).toEqual(others.packages);
+    expect(modeOf(await board.board(), "monty")).toBe("manual");
+    expect(board.setMode("monty", "off")).toEqual({ ok: true });
+    expect(modeOf(await board.board(), "monty")).toBe("off");
+  });
+
+  it("refuses a name that is not an installed package, and writes nothing", async () => {
+    const { board } = setUp();
+    await board.start();
+    const file = path.join(base, "shell-settings.json");
+    const before = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null;
+    expect(board.setMode("Who.Dunnit", "pinned")).toEqual({
+      ok: false,
+      refusal: { reason: "not-installed" },
+    });
+    expect(fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null).toBe(before);
+  });
+
+  it("Update all applies every package that is not pinned or off, one after another", async () => {
+    const { board } = setUp();
+    await board.start();
+    for (const name of ["monty", "whodunnit", "pinned_one", "off_one"]) {
+      await board.installFolder(writeFolder(name, "1.0.0"));
+      writeFolder(name, "2.0.0");
+    }
+    expect(board.setMode("pinned_one", "pinned")).toEqual({ ok: true });
+    expect(board.setMode("off_one", "off")).toEqual({ ok: true });
+    restarts = [];
+    expect(await board.updateAll()).toEqual({ ok: true });
+    expect(roots.installed("monty")?.version).toBe("2.0.0");
+    expect(roots.installed("whodunnit")?.version).toBe("2.0.0");
+    expect(roots.installed("pinned_one")?.version).toBe("1.0.0");
+    expect(roots.installed("off_one")?.version).toBe("1.0.0");
+    expect(restarts).toEqual(["monty was updated to 2.0.0", "whodunnit was updated to 2.0.0"]);
+    // Nothing newer: Update all is done, and changes nothing.
+    expect(await board.updateAll()).toEqual({ ok: true });
+    expect(restarts).toHaveLength(2);
+  });
+});
