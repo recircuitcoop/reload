@@ -71,6 +71,8 @@ import {
   UMAMI_URL_PATH,
 } from "../../src/domain/telemetry/transports";
 import { reportedPackages, telemetryEndpoints } from "../../src/shell/telemetry";
+import { TelemetryPipeline } from "../../src/application/telemetry";
+import { telemetryWorld } from "../fakes/telemetry";
 
 const anytype = (state: AnytypeStatus["state"]): AnytypeStatus => ({
   state,
@@ -326,7 +328,7 @@ describe("the Reports section's state line", () => {
   });
 });
 
-/** Which line of the notice tells each signal (plan 0029), and the fields that line names. */
+/** Which line of the notice tells each signal (plan 0029). */
 const SIGNAL_LINES: Readonly<Record<SignalName, PlainKey>> = {
   app_start: "privacy.sent.launches",
   app_stop: "privacy.sent.launches",
@@ -347,153 +349,152 @@ const SIGNAL_LINES: Readonly<Record<SignalName, PlainKey>> = {
   update_offered: "privacy.sent.updates",
   update_applied: "privacy.sent.updates",
 };
-const STEP_FIELDS = ["package", "version", "source", "signed", "environment", "node_kind"];
-const LINE_FIELDS: Readonly<Record<string, readonly string[]>> = {
-  "privacy.sent.launches": [
-    "startup_ms",
-    "packages",
-    "package",
-    "version",
-    "source",
-    "signed",
-    "environment",
-    "unsigned_packages",
-    "first_launch",
-    "uptime_s",
-    "reason",
-    "last_version",
-  ],
-  "privacy.sent.steps": [...STEP_FIELDS, "node_id", "duration_ms", "ok"],
-  "privacy.sent.errors": [
-    ...STEP_FIELDS,
-    "node_id",
-    "duration_ms",
-    "ok",
-    "error_type",
-    "file",
-    "line",
-  ],
-  "privacy.sent.aiApps": [
-    "package",
-    "version",
-    "method",
-    "tool",
-    "client",
-    "duration_ms",
-    "ok",
-    "error_code",
-  ],
-  "privacy.sent.flows": ["flows", "total_nodes", "nodes", "config_nodes", "package"],
-  "privacy.sent.setup": ["step"],
-  "privacy.sent.catalogues": [
-    "provider_host",
-    "official",
-    "signer_fingerprint",
-    "packages_offered",
-  ],
-  "privacy.sent.installs": [
-    "package",
-    "version",
-    "source",
-    "signed",
-    "environment",
-    "provider_host",
-    "node_types",
-    "from_version",
-    "reason",
-  ],
-  "privacy.sent.updates": ["from_version", "to_version", "channel"],
+/** The lines every report carries (`privacy.sent.where`: "the first three"). */
+const COMMON_LINES = [
+  "privacy.sent.machineId",
+  "privacy.sent.versions",
+  "privacy.sent.stamp",
+] as const satisfies readonly PlainKey[];
+/** Each line's fields, each with the words the line says it in: a field is listed with its words. */
+const STEP_WORDS = {
+  package: ["the package", "is never named", "only called unsigned", "only custom"],
+  version: ["its version", "with neither its version"],
+  source: ["where it came from"],
+  signed: ["whether it is signed"],
+  environment: ["what it runs on"],
+  node_kind: ["the kind and type of the step"],
+  node_id: ["type of the step but never its name", "nor its type of step"],
+  duration_ms: ["how long it took"],
+  ok: ["whether it worked"],
 };
-/** The words each line uses for its fields, so a field cannot be listed and not said. */
-const LINE_WORDS: Readonly<Record<string, readonly string[]>> = {
-  "privacy.sent.launches": [
-    "how long it took to start",
-    "how many packages are installed",
-    "each installed package on its own",
-    "how long Reload ran",
-    "why it quit",
-    "first start",
-    "the version that last ran",
-  ],
-  "privacy.sent.steps": [
-    "a package's source starts a run",
-    "the package",
-    "its version",
-    "where it came from",
-    "signed",
-    "what it runs on",
-    "the kind and type of the step",
-    "never its name",
-    "how long it took",
-    "whether it worked",
-    "only called unsigned",
-  ],
-  "privacy.sent.errors": [
-    "a package's source",
-    "the same",
-    "the kind of error when it is a standard one",
-    "the file and line",
-    "the signed package's own",
-    "Never the error's message",
-  ],
-  "privacy.sent.aiApps": [
-    "the Anytype package and its version",
-    "whether it called a tool or read a file",
-    "which tool",
-    "which known AI app it is",
-    "how long it took",
-    "whether it worked",
-    "the error's code",
-    "never what it asked",
-  ],
-  "privacy.sent.flows": [
-    "how many flows and steps in all",
-    "how many steps each flow has with the steps inside its subflows",
-    "how many configuration nodes",
-    "how many steps of each package",
-  ],
-  "privacy.sent.setup": ["Reload started", "Anytype paired", "a first flow deployed"],
-  "privacy.sent.catalogues": [
-    "its server's name only if it is Reload's own",
-    "a local one is only file",
-    "only custom",
-    "Reload's own",
-    "fingerprint of its signing key",
-    "how many packages it offers",
-  ],
-  "privacy.sent.installs": [
-    "installed, updated, removed or refused",
-    "its versions",
-    "Reload's own catalogue's server name",
-    "another catalogue or a file",
-    "signed",
-    "what it runs on",
-    "how many step types",
-    "the reason's code, never its words",
-  ],
-  "privacy.sent.updates": ["offered or installed", "the versions", "the update channel"],
+const NOTICE_FIELDS: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = {
+  "privacy.sent.machineId": { machine_id: ["a machine id", "a keyed hash (HMAC-SHA256)"] },
+  "privacy.sent.versions": {
+    app_version: ["the Reload version"],
+    os: ["your operating system"],
+    os_version: ["its version"],
+    arch: ["the processor type"],
+  },
+  "privacy.sent.stamp": {
+    kind: ["what kind of report it is"],
+    event: ["which of the things below happened"],
+    at: ["when it was made"],
+    report_id: ["a random number that tells it apart"],
+    rules: ["the version of the rules it was checked by"],
+  },
+  "privacy.sent.launches": {
+    startup_ms: ["how long it took to start"],
+    packages: ["how many packages are installed"],
+    unsigned_packages: ["how many of them are unsigned"],
+    package: [
+      "each installed package on its own",
+      "the package",
+      "one signed by any other catalogue only as custom",
+      "an unsigned one only as unsigned",
+    ],
+    version: ["its version if it ships with Reload or is signed by Reload's own catalogue"],
+    source: ["where it came from"],
+    signed: ["whether it is signed"],
+    environment: ["what it runs on"],
+    uptime_s: ["how long Reload ran"],
+    reason: ["why it quit"],
+    first_launch: ["whether it is its first start"],
+    last_version: ["the version that last ran when it ended without quitting"],
+  },
+  "privacy.sent.steps": STEP_WORDS,
+  "privacy.sent.errors": {
+    ...Object.fromEntries(Object.keys(STEP_WORDS).map((field) => [field, ["the same"]])),
+    error_type: ["the kind of error when it is a standard one", "any other is only other"],
+    file: ["the file", "only when the package is Reload's own, the file is one of its own"],
+    line: ["and line", "the line is in it"],
+  },
+  "privacy.sent.aiApps": {
+    package: ["the Anytype package"],
+    version: ["its version"],
+    method: ["whether it called a tool or read a file"],
+    tool: ["which of Reload's own Anytype tools"],
+    client: ["which known AI app it is"],
+    duration_ms: ["how long it took"],
+    ok: ["whether it worked"],
+    error_code: ["the error's code"],
+  },
+  "privacy.sent.flows": {
+    flows: ["how many flows"],
+    total_nodes: ["and steps in all"],
+    nodes: ["how many steps each flow has with the steps inside its subflows"],
+    config_nodes: ["how many configuration nodes"],
+    package: ["how many steps of each package"],
+  },
+  "privacy.sent.setup": { step: ["Reload started", "Anytype paired", "a first flow deployed"] },
+  "privacy.sent.catalogues": {
+    provider_host: [
+      "its server's name only if it is Reload's own",
+      "a local one is only file",
+      "any other only custom",
+    ],
+    official: ["whether it is Reload's own"],
+    signer_fingerprint: ["a short fingerprint of its signing key"],
+    packages_offered: ["how many packages it offers"],
+  },
+  "privacy.sent.installs": {
+    package: ["the package", "any other only as custom or unsigned"],
+    version: ["its versions if it is Reload's own"],
+    from_version: ["its versions"],
+    provider_host: ["Reload's own catalogue's server name", "another catalogue or a file"],
+    source: ["it came from another catalogue or a file"],
+    signed: ["whether it is signed"],
+    environment: ["what it runs on"],
+    node_types: ["how many step types it brings"],
+    reason: ["the reason's code, never its words"],
+  },
+  "privacy.sent.updates": {
+    from_version: ["the versions"],
+    to_version: ["the versions"],
+    channel: ["the update channel"],
+  },
 };
+
+/** The fields `line` lists. */
+function fieldsOf(line: string): readonly string[] {
+  return Object.keys(NOTICE_FIELDS[line] ?? {});
+}
 
 describe("the privacy notice lists every field of every signal (plan 0029)", () => {
   const listed = PRIVACY_NOTICE.flatMap((part) => part.listed ?? []);
-  const common = ["app_version", "os", "os_version", "arch"];
+  const built = [...everySignal("x"), ...everySignal("x", false)];
+  const common = COMMON_LINES.flatMap(fieldsOf);
 
   it("names a line for every signal, and every line it names is in the notice", () => {
     expect(Object.keys(SIGNAL_LINES).sort()).toEqual([...SIGNALS].sort());
-    for (const key of new Set(Object.values(SIGNAL_LINES))) {
+    expect(Object.keys(NOTICE_FIELDS).sort()).toEqual(
+      [...new Set([...COMMON_LINES, ...Object.values(SIGNAL_LINES)])].sort(),
+    );
+    for (const key of Object.keys(NOTICE_FIELDS)) {
       expect(listed, key).toContain(key);
+    }
+    expect(STRINGS["privacy.sent.where"]).toContain("Each one carries the first three");
+    expect(listed.slice(0, 3)).toEqual(COMMON_LINES);
+  });
+
+  it("says every field it lists, in its own words", () => {
+    for (const [line, fields] of Object.entries(NOTICE_FIELDS)) {
+      for (const [field, words] of Object.entries(fields)) {
+        expect(words.length, `${line}: ${field}`).toBeGreaterThan(0);
+        for (const word of words) {
+          expect(STRINGS[line as PlainKey], `${line}: ${field}: ${word}`).toContain(word);
+        }
+      }
     }
   });
 
-  it("every field a line says is one a builder of that line makes: the notice claims nothing more", () => {
-    const built = [...everySignal("x"), ...everySignal("x", false)];
-    for (const [line, fields] of Object.entries(LINE_FIELDS)) {
+  it("every field a line lists is one a builder of that line makes: the notice claims nothing more", () => {
+    for (const line of new Set(Object.values(SIGNAL_LINES))) {
       const made = new Set(
         built
           .filter((signal) => SIGNAL_LINES[signal.name] === line)
           .flatMap((signal) => Object.keys(signal.fields)),
       );
-      for (const field of fields) {
+      for (const field of fieldsOf(line)) {
         expect(made.has(field), `${line} names ${field}, which none of its events carries`).toBe(
           true,
         );
@@ -501,20 +502,37 @@ describe("the privacy notice lists every field of every signal (plan 0029)", () 
     }
   });
 
-  it("every field a builder makes is one its line says, in words", () => {
-    const built = [...everySignal("x"), ...everySignal("x", false)];
+  it("every field that leaves, the builder's and the pipeline's, is one its line or the first three list", async () => {
     expect(new Set(built.map((signal) => signal.name))).toEqual(new Set(SIGNALS));
+    const world = telemetryWorld("on");
+    const pipeline = new TelemetryPipeline(world.deps);
+    const versions = { appVersion: "1.0.0", os: "darwin", osVersion: "25.3.0", arch: "arm64" };
     for (const signal of built) {
-      const line = SIGNAL_LINES[signal.name];
-      for (const field of Object.keys(signal.fields)) {
-        expect(LINE_FIELDS[line], `${signal.name}.${field}`).toContain(field);
-      }
-      expect(common.some((field) => field in signal.fields)).toBe(false);
+      expect(
+        common.some((field) => field in signal.fields),
+        signal.name,
+      ).toBe(false);
+      pipeline.recordUsage(signal.name, { ...versionFields(versions), ...signal.fields });
     }
-    for (const [line, words] of Object.entries(LINE_WORDS)) {
-      for (const word of words) {
-        expect(STRINGS[line as PlainKey], `${line}: ${word}`).toContain(word);
+    await pipeline.flush();
+    const sent = world.poster.sent.flatMap((request) =>
+      (JSON.parse(request.body) as { payload: { data: Record<string, unknown> } }[]).map(
+        (event) => event.payload.data,
+      ),
+    );
+    expect(new Set(sent.map((data) => data["event"]))).toEqual(new Set(SIGNALS));
+    const wire = new Set<string>();
+    for (const data of sent) {
+      const line = SIGNAL_LINES[data["event"] as SignalName];
+      for (const key of Object.keys(data)) {
+        const field = key.split(".")[0] ?? key;
+        wire.add(field);
+        expect([...fieldsOf(line), ...common], `${line}: ${key}`).toContain(field);
       }
+    }
+    // What the pipeline stamps is on the wire, so the first three claim nothing it does not send.
+    for (const field of common) {
+      expect(wire.has(field), field).toBe(true);
     }
   });
 
@@ -524,8 +542,9 @@ describe("the privacy notice lists every field of every signal (plan 0029)", () 
     expect(STRINGS["privacy.never.line"]).toContain(
       "Your Anytype key or any other key, token or password.",
     );
-    expect(Object.values(LINE_FIELDS).flat()).not.toContain("error");
-    expect(Object.values(LINE_FIELDS).flat()).not.toContain("message");
+    const fields = Object.keys(NOTICE_FIELDS).flatMap(fieldsOf);
+    expect(fields).not.toContain("error");
+    expect(fields).not.toContain("message");
     expect(NOTICE_VERSION).toBe(2);
   });
 });

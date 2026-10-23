@@ -3,7 +3,7 @@ type: plan
 title: Telemetry signals, counted on the circu.it site
 status: DONE
 created: 2026-10-20
-updated: 2026-10-21
+updated: 2026-10-23
 ---
 
 # 0029 — Telemetry signals, counted on the circu.it site
@@ -40,7 +40,7 @@ attribution. when a plugin is used get the metadata of the plugin in the message
 - **Named fields only.** Each signal is a function in `domain/telemetry/reports.ts` that builds
   its body from named fields; nothing is forwarded as a caller handed it over.
 - **Unsigned packages are counted, not named.** An unsigned package's name is free text its
-  author typed, so its events say `package: "unsigned"` and carry no file path (only the line).
+  author typed, so its events say `package: "unsigned"` and carry no file and no line.
 - **The privacy notice lists every field.** Each signal adds its lines to `ui/strings.ts`
   (`privacy.*`), checked true against the code as WI-0022-29 did.
 
@@ -98,7 +98,7 @@ The Umami event name is the signal's name.
 | `app_stop` | Every quit, queued before the children stop | `uptime_s`, `reason` (`quit`, `update`) |
 | `app_unclean_stop` | At start, when the last launch left no `app_stop` | `last_version` |
 | `package_used` | Every time a node of a package runs one step, and every run a source starts | `package`, `version`, `source` (`shipped`, `catalogue`, `file`), `signed`, `environment` (`uv-python`, `node`, `executable`), `node_kind`, `node_id` (the declared id, not the instance), `duration_ms`, `ok` |
-| `package_error` | Every time such a step fails, and every error a source sends outside any step | the `package_used` fields, plus `error_type` (a standard JS or Python error's name or a Node system code, else `other`), `file` (only one the signed package holds), `line`; never the message |
+| `package_error` | Every time such a step fails, and every error a source sends outside any step | the `package_used` fields, plus `error_type` (a standard JS or Python error's name or a Node system code, else `other`), `file` and `line` (only from a package of the build's own catalogue, for a file it holds; an unsigned package sends neither); never the message |
 | `mcp_call` | Every `tools/call` and `resources/read` on the loopback endpoint (not `initialize`, `ping` or the lists) | `package` (`reload_anytype`), `version`, `method`, `tool` (only names from the validated set; null for a read), `client` (a known AI app's label for its own session's `clientInfo.name`, else `other`), `duration_ms`, `ok`, `error_code` (JSON-RPC's reserved range or 100–599) |
 | `flow_deployed` | Every deploy, one per flow | `flows` (in the deploy), `total_nodes` (exact), `nodes` (this flow's, exact, the nodes inside its subflow instances included), `config_nodes` (the deploy's) |
 | `package_deployed` | Every deploy, one per package | `package`, `nodes` (exact) |
@@ -323,10 +323,34 @@ Where the build differs from the text above, and why:
   drop the duplicates in an export; Umami itself does not deduplicate by it. Accepted: a count
   slightly high is no leak.
 
+### As built, after the fourth review (2026-10-23)
+
+- **Only the build's own catalogue's packages are named** (decided 2026-10-23). A package's name,
+  its type ids and its file paths leave only for a package shipped with Reload or signed by the
+  key of the catalogue the build ships (package.json `reload.catalogueKey`; the installer records
+  each archive's signer, `installed.json`'s `signerKey`, as its SHA-256). A package signed by any
+  other catalogue's key goes as `custom`, its type ids as `custom`, its version as null, its file
+  and line withheld; an unsigned one as `unsigned`, with no file and no line.
+- **A removed package keeps its name.** Each report is vouched for when it is queued, from the
+  verified store entry, and the facts that vouched for it (the official package's type ids and
+  held files) are kept in the telemetry memory (`telemetry-memory.json`'s `vouched`), so the check at
+  send still vouches for a package removed before its reports left. A launch whose queue is empty
+  keeps only what the store lists.
+- **A tool name is sent only when Reload's Anytype tool list has it** (the committed
+  `tool_surface.json`), asked again at send; any other is withheld.
+- **`machine_id` and `report_id` are checked at send**: 64 and 32 lower-case hex characters, and
+  the machine id must be the pipeline's own; a report that fails either is dropped.
+- **Turning reports off is final for what was queued before.** The time of the last off is kept
+  in the settings (`telemetryOffAt`); a report made before it is never sent, even if emptying the
+  queue failed, and the queue forgets its files only once they are gone.
+- **The notice names every field that leaves**, the pipeline's own too: `kind`, `event` and
+  `rules` beside `at` and `report_id`.
+
 ## Risks
 
-- **A signed package's own name and declared type ids are still sent as declared**, and a tool
-  name as the validated set lists it: their provenance vouches for them, their form does not.
+- **An official package's own name and declared type ids are still sent as declared**, and a
+  tool name as Reload's own tool list has it: their provenance vouches for them, their form does
+  not.
 - **Some harmless values are withheld** (an error class of 25 letters, a client name with a dot).
   Accepted: a withheld value costs a diagnosis, a sent credential costs the person.
 - **`at` versus Umami's time.** Umami counts an event when it arrives. Events sent after a time
