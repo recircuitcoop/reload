@@ -37,6 +37,12 @@ const LIMITS = {
   open_files: 1024,
   children: 32,
   grace_s: 60,
+  check_s: 10,
+  stop_timeout_s: 10,
+  restart_attempts: 5,
+  restart_backoff_s: [1, 2, 4, 8, 16],
+  breaker_window_s: 120,
+  breaker_count: 5,
 };
 
 const CALLS: Record<string, { call: (api: AppApi) => Promise<unknown>; sent: unknown[] }> = {

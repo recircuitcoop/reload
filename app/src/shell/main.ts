@@ -88,9 +88,10 @@ import { chosenLevel } from "../domain/logging/record";
 import { SecretRegistry } from "../domain/redaction/registry";
 import {
   CHILD_NAMES,
-  DEFAULT_SUPERVISION,
+  supervisionSettings,
   type ChildName,
 } from "../domain/supervision/child-state";
+import { readStability } from "../application/resource-watch";
 import type { ForkSpec } from "../ports/process-launcher";
 import type * as Contract from "../ui/contract";
 import packageJson from "../../package.json";
@@ -350,7 +351,7 @@ async function start(): Promise<DesktopWired["notices"] | null> {
           ? // The key's path only, for the first-party Anytype nodes (WI-0018-20, §4.2).
             { port, userDir, credentialSecret, secretFiles: keyFileOnly(anytypeSecrets) }
           : { port: null, userDir, secretFiles: anytypeSecrets },
-      settings: DEFAULT_SUPERVISION,
+      settings: supervisionSettings(readStability(shellSettings, logger, notices)),
       launcher,
       clock: systemClock,
       logger,

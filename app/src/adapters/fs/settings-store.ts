@@ -12,6 +12,7 @@ import fs from "node:fs";
 import * as path from "node:path";
 import type { StoredEndpoint } from "../../domain/endpoint/address";
 import { limitsProblem, type DeclaredLimits } from "../../domain/supervision/resources";
+import { stabilityProblem, type DeclaredStability } from "../../domain/supervision/stability";
 import { NOTICE_VERSION, type TelemetryAnswer } from "../../domain/telemetry/reports";
 import type {
   LaunchAtLoginSetting,
@@ -20,6 +21,7 @@ import type {
   RunRetentionSetting,
   SettingsStore,
   SetupSetting,
+  StabilityStore,
   UpdateHistoryStore,
   UpdateSettingsStore,
 } from "../../ports/settings-store";
@@ -46,6 +48,7 @@ export class JsonSettingsStore
     PackageSettingsStore,
     RunRetentionSetting,
     SetupSetting,
+    StabilityStore,
     TelemetrySetting,
     UpdateHistoryStore,
     UpdateSettingsStore
@@ -205,6 +208,23 @@ export class JsonSettingsStore
 
   writeLimitDefaults(limits: DeclaredLimits): void {
     this.#write("limits", { ...limits });
+  }
+
+  // The person's own supervision numbers (plan 0032 group 9): `stability`, judged as written.
+  readStability(): DeclaredStability | undefined {
+    const stability = this.#read()["stability"];
+    if (stability === undefined) {
+      return undefined;
+    }
+    const problem = stabilityProblem(stability);
+    if (problem !== null) {
+      throw new SettingsFileError(`the stability setting in ${this.#file}: ${problem}`);
+    }
+    return stability as DeclaredStability;
+  }
+
+  writeStability(stability: DeclaredStability): void {
+    this.#write("stability", { ...stability });
   }
 
   // Run history's retention (plan 0022 §C): `runs: {retentionDays}`, days or null for Forever.

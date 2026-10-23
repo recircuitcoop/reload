@@ -15,6 +15,7 @@ import type {
   UpdateHistoryStore,
   UpdateSettingsStore,
   LimitDefaultsStore,
+  StabilityStore,
 } from "../ports/settings-store";
 import type { TelemetrySetting } from "../ports/telemetry";
 import { wireBoard } from "./board";
@@ -44,6 +45,7 @@ export interface AppCallsDeps {
   readonly settings: SetupSetting &
     RunRetentionSetting &
     LimitDefaultsStore &
+    StabilityStore &
     Pick<TelemetrySetting, "readTelemetry"> &
     UpdateHistoryStore &
     UpdateSettingsStore;

@@ -66,6 +66,8 @@ export interface AnytypeServiceSettings {
   readonly apiBaseUrl: string;
   readonly backoff: BackoffSettings;
   readonly crashLoop: CrashLoopSettings;
+  /** Failures in a row, with no validated child between, that are restarted (stability.ts). */
+  readonly restartAttempts: number;
   readonly profile: StabilityProfile;
   /** Where the key is looked for, in words: the no-key state names it. */
   readonly keyLocation: string;
@@ -549,11 +551,13 @@ export class AnytypeService {
   /** Count one failure against the breaker, then restart after the backoff or stop for good. */
   #down(reason: string): void {
     this.#crashesInARow += 1;
-    if (!this.#breaker.recordCrash()) {
-      const { maxCrashes, windowMs } = this.#deps.settings.crashLoop;
-      const message =
-        `The Anytype MCP child stopped ${String(maxCrashes)} times in ` +
-        `${String(Math.round(windowMs / 1000))} s, so it is no longer restarted (${reason}).`;
+    const { crashLoop, restartAttempts } = this.#deps.settings;
+    const looping = !this.#breaker.recordCrash();
+    if (looping || this.#crashesInARow > restartAttempts) {
+      const often = looping
+        ? `${String(crashLoop.maxCrashes)} times in ${String(Math.round(crashLoop.windowMs / 1000))} s`
+        : `${String(this.#crashesInARow)} times in a row`;
+      const message = `The Anytype MCP child stopped ${often}, so it is no longer restarted (${reason}).`;
       this.#setState("down-for-good", message);
       this.#notice("mcp-child-stopped", message);
       return;

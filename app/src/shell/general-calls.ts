@@ -16,9 +16,18 @@ import { compose } from "../domain/notices/notices";
 import { runtimeBanner, statusPill } from "../domain/status/status";
 import type { ChildStatus } from "../domain/supervision/child-state";
 import type { Logger } from "../ports/logger";
-import { readPersonalLimits } from "../application/resource-watch";
+import { readPersonalLimits, readStability } from "../application/resource-watch";
 import { declaredOf, limitProblems, type DeclaredLimits } from "../domain/supervision/resources";
-import type { LimitDefaultsStore, RunRetentionSetting } from "../ports/settings-store";
+import {
+  declaredStabilityOf,
+  STABILITY_KEYS,
+  stabilityProblems,
+} from "../domain/supervision/stability";
+import type {
+  LimitDefaultsStore,
+  RunRetentionSetting,
+  StabilityStore,
+} from "../ports/settings-store";
 import type { Answer } from "../ui/answer";
 import {
   RETENTION_CHOICES,
@@ -47,7 +56,8 @@ export interface GeneralCallsDeps {
   /** Finder on macOS, a folder elsewhere: the button's word. */
   readonly platform: NodeJS.Platform;
   readonly retention: RunRetentionSetting;
-  readonly limits: LimitDefaultsStore;
+  /** The form's two settings: `limits` and `stability`, saved together. */
+  readonly limits: LimitDefaultsStore & StabilityStore;
   readonly toPage: (channel: string, ...args: unknown[]) => void;
   /** The log this run writes (null: none could be opened), and the file manager that shows it. */
   readonly log: { readonly file: string | null; readonly shell: Pick<Shell, "showItemInFolder"> };
@@ -100,8 +110,12 @@ export function wireGeneralCalls(deps: GeneralCallsDeps): void {
   pending.onChange(push);
   notices.onChange(push);
 
-  // What the form shows: the person's limits, or the documented ones where they set none.
-  const limits = (): LimitValues => declaredOf(readPersonalLimits(deps.limits, logger));
+  // What the form shows: the person's limits and supervision numbers, or the documented ones
+  // where they set none.
+  const limits = (): LimitValues => ({
+    ...declaredOf(readPersonalLimits(deps.limits, logger)),
+    ...declaredStabilityOf(readStability(deps.limits, logger)),
+  });
   const days = (): Retention => {
     const stored = retention.readRunRetentionDays();
     return { days: stored === undefined ? DEFAULT_RETENTION_DAYS : stored };
@@ -149,18 +163,21 @@ export function wireGeneralCalls(deps: GeneralCallsDeps): void {
           case "limits.get":
             return { ok: true, value: limits() };
           case "limits.set": {
-            const chosen = args["limits"];
+            // One form, one group (the old helper form): every field judged, then both written.
+            const [chosen, stability] = splitStability(args["limits"]);
             const problems = limitProblems(chosen);
-            if (problems === null || problems.length > 0) {
+            const numbers = stabilityProblems(stability) ?? [];
+            if (problems === null || problems.length > 0 || numbers.length > 0) {
               logger.warn(`limits.set: refused ${JSON.stringify(chosen)}`);
               return refused("invalid", "general.limits.refused", {
-                problems: (problems ?? []).map(({ key, problem }) => ({
+                problems: [...(problems ?? []), ...numbers].map(({ key, problem }) => ({
                   path: key,
                   message: problem,
                 })),
               });
             }
             deps.limits.writeLimitDefaults(chosen as DeclaredLimits);
+            deps.limits.writeStability(stability);
             return { ok: true, value: limits() };
           }
           default:
@@ -169,4 +186,17 @@ export function wireGeneralCalls(deps: GeneralCallsDeps): void {
       },
     );
   });
+}
+
+/** The form's values parted: the limits (and any key neither knows), and the stability numbers. */
+function splitStability(values: unknown): readonly [unknown, Record<string, unknown>] {
+  if (typeof values !== "object" || values === null || Array.isArray(values)) {
+    return [values, {}];
+  }
+  const stability: Record<string, unknown> = {};
+  const limits: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(values)) {
+    ((STABILITY_KEYS as readonly string[]).includes(key) ? stability : limits)[key] = value;
+  }
+  return [limits, stability];
 }

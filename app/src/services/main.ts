@@ -23,7 +23,7 @@ import { signalProcessLiveness } from "../adapters/process/process-liveness";
 import { SystemRuntimeLocator } from "../adapters/process/runtime-locator";
 import { monotonicClock, systemClock } from "../adapters/system/clock";
 import { resourceProbeFor } from "../adapters/process/resource-probe";
-import { DEFAULT_WATCH_PACE, resourceWatchdog } from "../application/resource-watch";
+import { readStability, resourceWatchdog, stabilityPace } from "../application/resource-watch";
 import { syncWriter } from "../adapters/system/sync-writer";
 import { FileDownloads } from "../application/anytype-file-download";
 import {
@@ -49,8 +49,6 @@ import type { InitConfig, SecretPaths } from "../domain/channel/messages";
 import type { RuntimeLocator } from "../ports/runtime-locator";
 import { MCP_HOST_VARIABLE, MCP_PORT_VARIABLE } from "../domain/endpoint/address";
 import { SecretRegistry } from "../domain/redaction/registry";
-import { DEFAULT_BACKOFF } from "../domain/supervision/backoff";
-import { DEFAULT_CRASH_LOOP } from "../domain/supervision/breaker";
 import { MCP_STABILITY } from "../domain/supervision/staleness";
 import type { SecretStore } from "../ports/secret-store";
 
@@ -245,11 +243,16 @@ function startService(config: InitConfig): void {
   }
   const secrets = keyStore(config.secretFiles);
   endpoint = buildEndpoint(config, secrets);
+  // The person's restart delays, attempts and crash-loop limit (plan 0032 group 9), which the
+  // shell keeps in its own settings file; read here at start, and only read.
+  const stabilitySetting = new JsonSettingsStore(path.join(config.userDir, "shell-settings.json"));
+  const stability = readStability(stabilitySetting, logger);
   service = new AnytypeService({
     settings: {
       apiBaseUrl,
-      backoff: DEFAULT_BACKOFF,
-      crashLoop: DEFAULT_CRASH_LOOP,
+      backoff: stability.backoff,
+      crashLoop: stability.crashLoop,
+      restartAttempts: stability.restartAttempts,
       profile:
         substitutes.heartbeatMs === undefined
           ? MCP_STABILITY
@@ -275,7 +278,7 @@ function startService(config: InitConfig): void {
         logger.warn(message);
       }),
       clock: monotonicClock,
-      pace: DEFAULT_WATCH_PACE,
+      pace: stabilityPace(stabilitySetting, logger),
       log: (level, message) => {
         logger[level](message);
       },

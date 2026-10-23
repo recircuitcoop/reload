@@ -8,7 +8,6 @@ import {
   serveAnytypeCall,
 } from "../../src/application/anytype-service";
 import { SessionError, ToolSurfaceMismatchError } from "../../src/domain/anytype/errors";
-import { DEFAULT_BACKOFF } from "../../src/domain/supervision/backoff";
 import { MCP_STABILITY } from "../../src/domain/supervision/staleness";
 import { DEFAULT_LIMITS, MCP_LIMITS } from "../../src/domain/supervision/resources";
 import { DEFAULT_WATCH_PACE, resourceWatchdog } from "../../src/application/resource-watch";
@@ -40,8 +39,10 @@ function service(
   const subject = new AnytypeService({
     settings: {
       apiBaseUrl: "http://127.0.0.1:31009",
-      backoff: DEFAULT_BACKOFF,
+      // 250 ms × n, so each wait below is its own number; the defaults are backoff.ts's tests'.
+      backoff: { delaysMs: [250, 500, 750, 1_000, 1_250] },
       crashLoop: { maxCrashes: 5, windowMs: 120_000 },
+      restartAttempts: 5,
       profile: MCP_STABILITY,
       keyLocation: "/home/x/.config/reload/anytype_api_key or /legacy/anytype_api_key",
     },

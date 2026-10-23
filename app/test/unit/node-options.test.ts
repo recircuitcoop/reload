@@ -58,6 +58,7 @@ function services(key: string | null = KEY) {
       apiBaseUrl: "http://127.0.0.1:31009",
       backoff: DEFAULT_BACKOFF,
       crashLoop: { maxCrashes: 5, windowMs: 120_000 },
+      restartAttempts: 5,
       profile: MCP_STABILITY,
       keyLocation: "the key file",
     },

@@ -2,6 +2,7 @@
 
 import { DEFAULT_BACKOFF, type BackoffSettings } from "./backoff";
 import { DEFAULT_CRASH_LOOP, type CrashLoopSettings } from "./breaker";
+import { DEFAULT_STABILITY, type Stability } from "./stability";
 
 /** The two utilityProcess children the shell supervises. */
 export type ChildName = "runtime" | "services";
@@ -51,14 +52,28 @@ export interface SupervisionSettings {
   readonly callTimeoutMs: number;
   /** A child still alive this long after `stop` is killed (spec 10.7). */
   readonly stopDeadlineMs: number;
+  /** Crashes in a row, with no `ready` between, that are restarted; the next one is not. */
+  readonly restartAttempts: number;
 }
 
 export const DEFAULT_SUPERVISION: SupervisionSettings = {
   backoff: DEFAULT_BACKOFF,
   crashLoop: DEFAULT_CRASH_LOOP,
   callTimeoutMs: 5_000,
-  stopDeadlineMs: 10_000,
+  stopDeadlineMs: DEFAULT_STABILITY.stopTimeoutMs,
+  restartAttempts: DEFAULT_STABILITY.restartAttempts,
 };
+
+/** The supervisor's numbers, with the person's own (stability.ts) where they may set them. */
+export function supervisionSettings(stability: Stability): SupervisionSettings {
+  return {
+    ...DEFAULT_SUPERVISION,
+    backoff: stability.backoff,
+    crashLoop: stability.crashLoop,
+    stopDeadlineMs: stability.stopTimeoutMs,
+    restartAttempts: stability.restartAttempts,
+  };
+}
 
 /** The words for a child that crashed too often, for the page and for the notice. */
 export function crashLoopMessage(child: ChildName, settings: CrashLoopSettings): string {
@@ -69,5 +84,13 @@ export function crashLoopMessage(child: ChildName, settings: CrashLoopSettings):
   return (
     `The Reload ${child} stopped unexpectedly ${String(settings.maxCrashes)} times in ` +
     `${window}, so it is no longer restarted. Press Restart to try again.`
+  );
+}
+
+/** The words for a child that crashed more times in a row than it is restarted. */
+export function restartAttemptsMessage(child: ChildName, attempts: number): string {
+  return (
+    `The Reload ${child} stopped unexpectedly ${String(attempts + 1)} times in a row, so it ` +
+    `is no longer restarted. Press Restart to try again.`
   );
 }

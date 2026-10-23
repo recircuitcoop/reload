@@ -951,8 +951,14 @@ describe("every action a Package row draws has its call", () => {
   });
 });
 
-describe("Stability defaults (plan 0031, the old helper form's six numbers)", () => {
+describe("Stability defaults (plans 0031, 0032 group 9: the old helper form's twelve numbers)", () => {
   const values = {
+    check_s: 10,
+    stop_timeout_s: 10,
+    restart_attempts: 5,
+    restart_backoff_s: [1, 2, 4, 8, 16],
+    breaker_window_s: 120,
+    breaker_count: 5,
     memory_mb: 1024,
     cpu_percent: 90,
     cpu_window_s: 120,
@@ -961,24 +967,55 @@ describe("Stability defaults (plan 0031, the old helper form's six numbers)", ()
     grace_s: 60,
   };
 
-  it("asks for all six limits, each with its strings.ts label, the two counts whole", () => {
+  it("asks for all twelve, each with its strings.ts label and explanation, the counts whole", () => {
     expect(LIMIT_FIELDS.map((field) => field.key)).toEqual(Object.keys(values));
     expect(LIMIT_FIELDS.filter((field) => field.whole).map((field) => field.key)).toEqual([
+      "restart_attempts",
+      "breaker_count",
       "open_files",
       "children",
     ]);
     for (const field of LIMIT_FIELDS) {
       expect(STRINGS[field.label]).toBeTruthy();
+      expect(STRINGS[field.help]).toBeTruthy();
+      expect(STRINGS[field.help]).not.toBe(STRINGS[field.label]);
     }
+    expect(new Set(LIMIT_FIELDS.map((field) => STRINGS[field.help])).size).toBe(12);
+  });
+
+  it("types the restart delays in one comma-separated field, and sends them as their numbers", () => {
+    // test_numeric_lists_use_one_comma_separated_text_field: one field, not a row per delay.
+    expect(LIMIT_FIELDS.filter((field) => field.list === true).map((field) => field.key)).toEqual([
+      "restart_backoff_s",
+    ]);
+    const typed = limitsTyped(values);
+    expect(typed.restart_backoff_s).toBe("1, 2, 4, 8, 16");
+    expect(limitsToSave({ ...typed, restart_backoff_s: "1, 2.5, 4" }).restart_backoff_s).toEqual([
+      1, 2.5, 4,
+    ]);
+    // A word among them, or a gap, is sent as not a number for the shell to refuse in words.
+    expect(limitsToSave({ ...typed, restart_backoff_s: "1, soon, 4" }).restart_backoff_s).toEqual([
+      1,
+      Number.NaN,
+      4,
+    ]);
+    expect(limitsToSave({ ...typed, restart_backoff_s: "1,,4" }).restart_backoff_s).toEqual([
+      1,
+      Number.NaN,
+      4,
+    ]);
+    expect(limitsToSave({ ...typed, restart_backoff_s: " " }).restart_backoff_s).toEqual([]);
   });
 
   it("shows the values in force, and sends what was typed, an empty field as zero for the shell to refuse", () => {
     const typed = limitsTyped(values);
     expect(typed.memory_mb).toBe("1024");
-    expect(limitsToSave({ ...typed, memory_mb: "2048.5", grace_s: " " })).toEqual({
+    expect(typed.check_s).toBe("10");
+    expect(limitsToSave({ ...typed, memory_mb: "2048.5", grace_s: " ", check_s: "0.25" })).toEqual({
       ...values,
       memory_mb: 2048.5,
       grace_s: 0,
+      check_s: 0.25,
     });
   });
 
@@ -990,6 +1027,7 @@ describe("Stability defaults (plan 0031, the old helper form's six numbers)", ()
         { path: "children", message: "not-whole" },
         { path: "grace_s", message: "not-positive" },
         { path: "memory_mb", message: "too-large" },
+        { path: "restart_backoff_s", message: "not-a-list" },
         { path: "nonsense", message: "not-a-limit" },
       ],
     });
@@ -997,6 +1035,7 @@ describe("Stability defaults (plan 0031, the old helper form's six numbers)", ()
       children: STRINGS["general.limits.notWhole"],
       grace_s: STRINGS["general.limits.notPositive"],
       memory_mb: STRINGS["general.limits.tooLarge"],
+      restart_backoff_s: STRINGS["general.limits.notList"],
     });
     expect(limitErrors({ reason: "failed", sentence: "refused.failed" })).toEqual({});
   });

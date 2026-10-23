@@ -61,9 +61,9 @@ describe("the crash-loop limit", () => {
     const api = appApiOver(supervisor);
 
     supervisor.start();
-    // Five crashes: at 0, then after 250, 500, 750 and 1000 ms of backoff (2.5 s in all),
-    // well inside the 2-minute window.
-    clock.advance(2_500);
+    // Five crashes: at 0, then after 1, 2, 4 and 8 s of backoff (15 s in all), well inside
+    // the 2-minute window.
+    clock.advance(15_000);
     expect(launcher.children).toHaveLength(5);
     expect(supervisor.status().state).toBe("down-for-good");
     expect(states()).toEqual([
@@ -122,13 +122,13 @@ describe("the crash-loop limit", () => {
   it("gives a restarted child the whole limit again, and a second trip a second notice", () => {
     const { clock, launcher, notifier, supervisor } = supervised(exitsAtOnce);
     supervisor.start();
-    clock.advance(2_500);
+    clock.advance(15_000);
     expect(supervisor.status().state).toBe("down-for-good");
 
     expect(supervisor.recover()).toBe(true);
-    clock.advance(1_000); // four crashes: 0, +250, +500 (750), +750 (1500) is past 1000
+    clock.advance(7_000); // four crashes: 0, +1 s, +2 s (3 s), +4 s (7 s); the fifth is at 15 s
     expect(supervisor.status().state).not.toBe("down-for-good");
-    clock.advance(1_500);
+    clock.advance(8_000);
     expect(launcher.children).toHaveLength(10);
     expect(supervisor.status().state).toBe("down-for-good");
     expect(notifier.notices).toHaveLength(2);
@@ -171,7 +171,7 @@ describe("the crash-loop limit", () => {
     const runtime = make("runtime", exitsAtOnce);
     const services = make("services", obedient);
 
-    clock.advance(2_500);
+    clock.advance(15_000);
     expect(runtime.supervisor.status().state).toBe("down-for-good");
     expect(services.supervisor.status()).toMatchObject({ state: "running", generation: 1 });
     expect(services.launcher.children).toHaveLength(1);
@@ -182,7 +182,7 @@ describe("the crash-loop limit", () => {
     // The services process then crashes once: its own first crash, not the runtime's sixth.
     services.launcher.current.exit(1);
     expect(services.supervisor.status().state).toBe("down");
-    clock.advance(251);
+    clock.advance(1_001);
     expect(services.supervisor.status().state).toBe("running");
   });
 
@@ -207,7 +207,7 @@ describe("the crash-loop limit", () => {
       newId: () => "rid",
     });
     throwing.start();
-    clock.advance(2_500);
+    clock.advance(15_000);
     expect(throwing.status().state).toBe("down-for-good");
     expect(throwing.status().error).toContain("5 times in 2 minutes");
     expect(logger.lines).toContain(

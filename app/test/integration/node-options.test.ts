@@ -66,6 +66,7 @@ function linked(key: string | null) {
       apiBaseUrl: base,
       backoff: DEFAULT_BACKOFF,
       crashLoop: { maxCrashes: 5, windowMs: 120_000 },
+      restartAttempts: 5,
       profile: MCP_STABILITY,
       keyLocation: "the key file",
     },

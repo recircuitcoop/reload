@@ -732,7 +732,7 @@ describe("a node process whose type declares a heartbeat (spec 2.4.2)", () => {
       const wedgedAt = Date.now();
       const stuck = await loggedAt(
         node,
-        /stuck: no progress for \d+ s; restarting it in 250 ms/,
+        /stuck: no progress for \d+ s; restarting it in 1000 ms/,
         8_000,
       );
       // Judged at the window, three intervals, within one interval of it.
@@ -760,8 +760,8 @@ describe("a node process whose type declares a heartbeat (spec 2.4.2)", () => {
         () => node.node.pid !== null && node.node.pid !== first,
         3_000,
       );
-      // The 250 ms backoff, less the millisecond a timer may fire early by on a loaded machine.
-      expect(Date.now() - stuck.before).toBeGreaterThanOrEqual(249);
+      // The 1 s backoff, less the millisecond a timer may fire early by on a loaded machine.
+      expect(Date.now() - stuck.before).toBeGreaterThanOrEqual(999);
       expect(alive(first)).toBe(false);
       expect(wedged.ends[0]?.message).toMatch(/node process exited \(signal SIGKILL\)/);
       expect(node.crashes).toEqual([false]);

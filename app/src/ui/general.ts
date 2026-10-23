@@ -394,54 +394,137 @@ export const MODE_OPTIONS: readonly { readonly value: UpdateMode; readonly label
   { value: "off", label: t("packages.mode.off") },
 ];
 
-// ── Stability defaults (plan 0031): the person's own resource limits ─────────────────────────
+// ── Stability defaults (plans 0031, 0032 group 9): limits and supervision numbers ───────────
 
-/** Each limit General › Advanced asks for, in the settings file's order and units. */
+type LimitKey = keyof LimitValues;
+
+/** Each number General › Advanced asks for, in the old helper form's order and the file's units. */
 export const LIMIT_FIELDS: readonly {
-  readonly key: keyof LimitValues;
+  readonly key: LimitKey;
   readonly label: PlainKey;
-  /** A count: open files and child processes are whole numbers. */
+  /** The line under the field: what the number does. */
+  readonly help: PlainKey;
+  /** A count: open files, child processes, restart attempts and the breaker's count. */
   readonly whole: boolean;
+  /** A list of numbers, typed in one field separated by commas (the restart delays). */
+  readonly list?: true;
 }[] = [
-  { key: "memory_mb", label: "general.limits.memory", whole: false },
-  { key: "cpu_percent", label: "general.limits.cpu", whole: false },
-  { key: "cpu_window_s", label: "general.limits.cpuWindow", whole: false },
-  { key: "open_files", label: "general.limits.openFiles", whole: true },
-  { key: "children", label: "general.limits.children", whole: true },
-  { key: "grace_s", label: "general.limits.grace", whole: false },
+  {
+    key: "check_s",
+    label: "general.limits.check",
+    help: "general.limits.check.help",
+    whole: false,
+  },
+  {
+    key: "stop_timeout_s",
+    label: "general.limits.stopTimeout",
+    help: "general.limits.stopTimeout.help",
+    whole: false,
+  },
+  {
+    key: "restart_attempts",
+    label: "general.limits.attempts",
+    help: "general.limits.attempts.help",
+    whole: true,
+  },
+  {
+    key: "restart_backoff_s",
+    label: "general.limits.backoff",
+    help: "general.limits.backoff.help",
+    whole: false,
+    list: true,
+  },
+  {
+    key: "breaker_window_s",
+    label: "general.limits.breakerWindow",
+    help: "general.limits.breakerWindow.help",
+    whole: false,
+  },
+  {
+    key: "breaker_count",
+    label: "general.limits.breakerCount",
+    help: "general.limits.breakerCount.help",
+    whole: true,
+  },
+  {
+    key: "memory_mb",
+    label: "general.limits.memory",
+    help: "general.limits.memory.help",
+    whole: false,
+  },
+  {
+    key: "cpu_percent",
+    label: "general.limits.cpu",
+    help: "general.limits.cpu.help",
+    whole: false,
+  },
+  {
+    key: "cpu_window_s",
+    label: "general.limits.cpuWindow",
+    help: "general.limits.cpuWindow.help",
+    whole: false,
+  },
+  {
+    key: "open_files",
+    label: "general.limits.openFiles",
+    help: "general.limits.openFiles.help",
+    whole: true,
+  },
+  {
+    key: "children",
+    label: "general.limits.children",
+    help: "general.limits.children.help",
+    whole: true,
+  },
+  {
+    key: "grace_s",
+    label: "general.limits.grace",
+    help: "general.limits.grace.help",
+    whole: false,
+  },
 ];
 
-/** The form's fields as typed, from the values in force. */
-export function limitsTyped(values: LimitValues): Record<keyof LimitValues, string> {
-  return Object.fromEntries(LIMIT_FIELDS.map(({ key }) => [key, String(values[key])])) as Record<
-    keyof LimitValues,
-    string
-  >;
+/** The form's fields as typed, from the values in force; a list as "1, 2, 4". */
+export function limitsTyped(values: LimitValues): Record<LimitKey, string> {
+  return Object.fromEntries(
+    LIMIT_FIELDS.map(({ key }) => {
+      const value = values[key];
+      return [key, Array.isArray(value) ? value.join(", ") : String(value)];
+    }),
+  ) as Record<LimitKey, string>;
 }
 
 /**
- * What the form sends: every field as a number. An empty field is sent as zero, so the shell
- * refuses it in words rather than the page guessing a default.
+ * What the form sends: every field as a number, a list as its numbers. An empty field is sent
+ * as zero and a word in a list as NaN, so the shell refuses it in words rather than the page
+ * guessing a default.
  */
-export function limitsToSave(typed: Readonly<Record<keyof LimitValues, string>>): LimitValues {
+export function limitsToSave(typed: Readonly<Record<LimitKey, string>>): LimitValues {
   return Object.fromEntries(
-    LIMIT_FIELDS.map(({ key }) => [key, typed[key].trim() === "" ? 0 : Number(typed[key])]),
+    LIMIT_FIELDS.map(({ key, list }): readonly [LimitKey, number | number[]] => {
+      const text = typed[key].trim();
+      if (list === true) {
+        return [key, text === "" ? [] : text.split(",").map((one) => Number(one.trim() || NaN))];
+      }
+      return [key, text === "" ? 0 : Number(text)];
+    }),
   ) as unknown as LimitValues;
 }
 
+/** The line for each rule a field can break: what is wrong and what to enter. */
+const LIMIT_PROBLEM_LINE: Readonly<Record<string, PlainKey>> = {
+  "too-large": "general.limits.tooLarge",
+  "not-whole": "general.limits.notWhole",
+  "not-a-list": "general.limits.notList",
+};
+
 /** Each refused field's line, by the rule it broke: what is wrong and what to enter. */
-export function limitErrors(refusal: Refusal): Partial<Record<keyof LimitValues, string>> {
-  const errors: Partial<Record<keyof LimitValues, string>> = {};
+export function limitErrors(refusal: Refusal): Partial<Record<LimitKey, string>> {
+  const errors: Partial<Record<LimitKey, string>> = {};
   for (const { path, message } of refusal.problems ?? []) {
     const field = LIMIT_FIELDS.find((one) => one.key === path);
     if (field !== undefined) {
-      errors[field.key] = t(
-        message === "too-large"
-          ? "general.limits.tooLarge"
-          : message === "not-whole"
-            ? "general.limits.notWhole"
-            : "general.limits.notPositive",
-      );
+      errors[field.key] = t(LIMIT_PROBLEM_LINE[message] ?? "general.limits.notPositive");
     }
   }
   return errors;

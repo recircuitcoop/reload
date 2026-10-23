@@ -20,8 +20,8 @@ import type { Cancel, Clock } from "../ports/clock";
 import type { Logger } from "../ports/logger";
 import type { Notifier } from "../ports/notifier";
 import type { ResourceProbe, ResourceWatchdog } from "../ports/resource-watch";
-import type { LimitDefaultsSetting } from "../ports/settings-store";
-import { DEFAULT_WATCH_PACE, readPersonalLimits, resourceWatchdog } from "./resource-watch";
+import type { LimitDefaultsSetting, StabilitySetting } from "../ports/settings-store";
+import { readPersonalLimits, resourceWatchdog, stabilityPace } from "./resource-watch";
 
 /** What of a supervisor the watch needs. */
 export interface WatchedChild {
@@ -53,7 +53,8 @@ export interface ManagedWatchDeps {
 /** What the shell builds the watch from: the composition root's adapters. */
 export interface ManagedWatchParts {
   readonly probe: ResourceProbe;
-  readonly settings: LimitDefaultsSetting;
+  /** The limits, read at every start, and the stability numbers, read before every wait. */
+  readonly settings: LimitDefaultsSetting & StabilitySetting;
   readonly clock: Clock;
   readonly logger: Logger;
   readonly notifier: Notifier;
@@ -67,7 +68,7 @@ export function managedWatch(parts: ManagedWatchParts): ManagedWatchDeps {
     watchdog: resourceWatchdog({
       probe: parts.probe,
       clock: parts.clock,
-      pace: DEFAULT_WATCH_PACE,
+      pace: stabilityPace(parts.settings, logger),
       log: (level, message) => {
         logger[level](message);
       },

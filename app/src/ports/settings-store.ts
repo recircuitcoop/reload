@@ -4,6 +4,7 @@
 
 import type { StoredEndpoint } from "../domain/endpoint/address";
 import type { DeclaredLimits } from "../domain/supervision/resources";
+import type { DeclaredStability } from "../domain/supervision/stability";
 
 /**
  * The package settings (WI-0018-17): the update policy (`packages`) and the registered catalogue
@@ -66,6 +67,21 @@ export interface LimitDefaultsSetting {
 /** The same setting, written: General's form, judged before it gets here. */
 export interface LimitDefaultsStore extends LimitDefaultsSetting {
   writeLimitDefaults(limits: DeclaredLimits): void;
+}
+
+/**
+ * The person's own supervision numbers (plan 0032 group 9, the old `[helper]` restart, breaker,
+ * tick and stop timeout): the `stability` setting, saved with `limits` by the same form. Read by
+ * each process as its supervision starts, and by the shell's watchdog before every wait.
+ */
+export interface StabilitySetting {
+  /** The `stability` setting; undefined when unset. Throws when unreadable or not one. */
+  readStability(): DeclaredStability | undefined;
+}
+
+/** The same setting, written: General's form, judged before it gets here. */
+export interface StabilityStore extends StabilitySetting {
+  writeStability(stability: DeclaredStability): void;
 }
 
 /**

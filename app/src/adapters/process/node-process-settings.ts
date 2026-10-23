@@ -4,6 +4,7 @@
 import * as fs from "node:fs";
 
 import { DEFAULT_QUEUE, type QueueSettings } from "../../domain/journal/queue";
+import { DEFAULT_BACKOFF, type BackoffSettings } from "../../domain/supervision/backoff";
 import { DEFAULT_CRASH_LOOP, type CrashLoopSettings } from "../../domain/supervision/breaker";
 import type { Clock } from "../../ports/clock";
 import type { JournalStore } from "../../ports/journal-store";
@@ -24,6 +25,8 @@ export interface NodeProcessSettings {
   /** An unexpected exit → the next process. */
   readonly respawnDelayMs: number;
   readonly crashLoop: CrashLoopSettings;
+  /** A stuck process's restarts in a row wait these (node-heartbeat.ts). */
+  readonly backoff: BackoffSettings;
   /**
    * After the process exits, how long its pipes may stay open before the exit is handled
    * anyway. Normally they close at once, and waiting for that is what lets a `done` written
@@ -39,6 +42,7 @@ export const DEFAULT_NODE_PROCESS: NodeProcessSettings = {
   closeDeadlineMs: 5_000,
   respawnDelayMs: 1_000,
   crashLoop: DEFAULT_CRASH_LOOP,
+  backoff: DEFAULT_BACKOFF,
   exitGraceMs: 500,
   queue: DEFAULT_QUEUE,
 };

@@ -17,6 +17,7 @@ import type {
 import { Button } from "../components/atoms/Button";
 import { StatusPill, type StatusPillState } from "../components/atoms/StatusPill";
 import { NumberField } from "../components/atoms/NumberField";
+import { TextField } from "../components/atoms/TextField";
 import { Field } from "../components/molecules/Field";
 import { KeyValue } from "../components/molecules/KeyValue";
 import { GeneralSection } from "../components/organisms/GeneralSection";
@@ -240,18 +241,26 @@ function EndpointRows({ status }: { readonly status: McpEndpointStatus }) {
   );
 }
 
+/** What was typed and not saved yet: kept when the form is left, as the old helper's draft was. */
+let unsaved: Record<keyof LimitValues, string> | null = null;
+
 /**
- * Stability defaults (plan 0031, the old helper form's group): the person's own resource limits,
- * every field refused in words by the shell's rules before anything is written.
+ * Stability defaults (plans 0031 and 0032 group 9, the old helper form's group): the person's
+ * own supervision numbers and resource limits, every field refused in words by the shell's rules
+ * before anything is written.
  */
 function LimitsForm({ api }: { readonly api: AppApi }) {
-  const [typed, setTyped] = useState<Record<keyof LimitValues, string> | null>(null);
+  const [typed, setTypedState] = useState<Record<keyof LimitValues, string> | null>(unsaved);
+  const setTyped = (next: Record<keyof LimitValues, string>, saved = false) => {
+    unsaved = saved ? null : next;
+    setTypedState(next);
+  };
   const [errors, setErrors] = useState<Partial<Record<keyof LimitValues, string>>>({});
   const [said, say] = useState<PlainKey | null>(null);
   useEffect(() => {
     api.limits().then(
       (answer) => {
-        if (answer.ok) setTyped(limitsTyped(answer.value));
+        if (answer.ok && unsaved === null) setTyped(limitsTyped(answer.value), true);
       },
       () => undefined,
     );
@@ -264,7 +273,7 @@ function LimitsForm({ api }: { readonly api: AppApi }) {
     api.setLimits(limitsToSave(typed)).then(
       (answer) => {
         if (answer.ok) {
-          setTyped(limitsTyped(answer.value));
+          setTyped(limitsTyped(answer.value), true);
           setErrors({});
           say("general.limits.saved");
         } else {
@@ -286,26 +295,42 @@ function LimitsForm({ api }: { readonly api: AppApi }) {
     >
       <KeyValue kind="text" label={t("general.limits")} value={t("general.limits.line")} />
       <div className="grid grid-cols-2 gap-3">
-        {LIMIT_FIELDS.map(({ key, label }) => (
+        {LIMIT_FIELDS.map(({ key, label, help, list }) => (
           <Field
             key={key}
             label={t(label)}
+            help={t(help)}
             state={errors[key] === undefined ? "default" : "error"}
             {...(errors[key] === undefined ? {} : { error: errors[key] })}
           >
-            {(control) => (
-              <NumberField
-                id={control.id}
-                testId={`general-limits-${key}`}
-                state={control.state === "error" ? "error" : "default"}
-                value={typed[key]}
-                onValueChange={(value) => {
-                  setTyped({ ...typed, [key]: value });
-                }}
-                incrementLabel={t("general.port.more")}
-                decrementLabel={t("general.port.less")}
-              />
-            )}
+            {(control) =>
+              list === true ? (
+                <TextField
+                  id={control.id}
+                  testId={`general-limits-${key}`}
+                  state={control.state === "error" ? "error" : "default"}
+                  value={typed[key]}
+                  onValueChange={(value) => {
+                    setTyped({ ...typed, [key]: value });
+                  }}
+                  {...(control.describedBy === undefined
+                    ? {}
+                    : { describedBy: control.describedBy })}
+                />
+              ) : (
+                <NumberField
+                  id={control.id}
+                  testId={`general-limits-${key}`}
+                  state={control.state === "error" ? "error" : "default"}
+                  value={typed[key]}
+                  onValueChange={(value) => {
+                    setTyped({ ...typed, [key]: value });
+                  }}
+                  incrementLabel={t("general.port.more")}
+                  decrementLabel={t("general.port.less")}
+                />
+              )
+            }
           </Field>
         ))}
       </div>

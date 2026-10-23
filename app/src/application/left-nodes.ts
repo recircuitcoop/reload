@@ -25,6 +25,7 @@ import {
   resourceWatchdog,
   sameProcess,
   type WatchDeps,
+  type WatchPace,
 } from "./resource-watch";
 
 type Log = WatchDeps["log"];
@@ -75,10 +76,10 @@ export function recordingWatchdog(
 
 /** The runtime's watchdog of its node processes, each recorded while it is watched. */
 export function runtimeWatchdog(
-  deps: Omit<WatchDeps, "pace"> & { readonly store: NodeRecordStore },
+  deps: Omit<WatchDeps, "pace"> & { readonly store: NodeRecordStore; readonly pace?: WatchPace },
 ): ResourceWatchdog {
-  const { store, ...watch } = deps;
-  return recordingWatchdog(resourceWatchdog({ ...watch, pace: DEFAULT_WATCH_PACE }), {
+  const { store, pace, ...watch } = deps;
+  return recordingWatchdog(resourceWatchdog({ ...watch, pace: pace ?? DEFAULT_WATCH_PACE }), {
     probe: deps.probe,
     store,
     log: deps.log,

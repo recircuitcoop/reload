@@ -112,7 +112,10 @@ function harness(samples: Record<number, ResourceSample>) {
       }
       return Promise.resolve(readings);
     },
-    settings: { readLimitDefaults: (): DeclaredLimits | undefined => settings.limits },
+    settings: {
+      readLimitDefaults: (): DeclaredLimits | undefined => settings.limits,
+      readStability: () => undefined,
+    },
     clock,
     logger: new RecordingLogger(),
     notifier,
@@ -400,7 +403,7 @@ describe("the shell's managed processes", () => {
     const h = harness({});
     const deps = managedWatch({
       ...h.parts,
-      settings: { readLimitDefaults: () => ({ memory_mb: 4096 }) },
+      settings: { readLimitDefaults: () => ({ memory_mb: 4096 }), readStability: () => undefined },
       signal: () => {
         throw Object.assign(new Error("kill ESRCH"), { code: "ESRCH" });
       },

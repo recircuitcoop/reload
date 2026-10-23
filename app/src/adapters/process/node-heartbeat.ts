@@ -9,7 +9,7 @@
 // with each stuck restart in a row, and its exit is then answered at once, the wait already
 // served. A type that says never to restart it is stopped the same way, and stays stopped.
 
-import { crashRestartDelay, DEFAULT_BACKOFF } from "../../domain/supervision/backoff";
+import { crashRestartDelay } from "../../domain/supervision/backoff";
 import { staleWindow } from "../../domain/supervision/staleness";
 import type { Cancel } from "../../ports/clock";
 import type { Logger } from "../../ports/logger";
@@ -208,7 +208,7 @@ export class NodeHeartbeat {
   /** Stuck: nothing is signalled now; the process is stopped when the backoff has run out. */
   #stale(silentForMs: number): void {
     this.#stuckInARow += 1;
-    const delay = crashRestartDelay(this.#stuckInARow, DEFAULT_BACKOFF);
+    const delay = crashRestartDelay(this.#stuckInARow, this.#deps.settings.backoff);
     const seconds = String(Math.round(silentForMs / 1000));
     const then = this.#restartable ? "restarting it" : "stopping it for good";
     this.#logger.error(`stuck: no progress for ${seconds} s; ${then} in ${String(delay)} ms`);

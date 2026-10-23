@@ -7,6 +7,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import type { IpcMain } from "electron";
 import type { DeclaredLimits } from "../../src/domain/supervision/resources";
+import type { DeclaredStability } from "../../src/domain/supervision/stability";
 import { describe, expect, it } from "vitest";
 import { JsonBoardStore } from "../../src/adapters/fs/board-store";
 import { GONE_SENTENCE, NO_STEP_SENTENCE } from "../../src/application/flows";
@@ -191,6 +192,12 @@ function harness(options: { readonly logFile?: string | null } = {}) {
     },
     writeLimitDefaults(limits: DeclaredLimits) {
       this.stored["limits"] = limits;
+    },
+    readStability() {
+      return this.stored["stability"] as DeclaredStability | undefined;
+    },
+    writeStability(stability: DeclaredStability) {
+      this.stored["stability"] = stability;
     },
     readTelemetry() {
       return this.telemetry;
@@ -913,8 +920,10 @@ describe("AppApi v2 calls, through the shell to its processes", () => {
     expect(h.revealed).toEqual([]);
   });
 
-  it("stability defaults: the documented limits until the person saves their own, each bad field refused in words, nothing written", async () => {
+  it("stability defaults: the documented numbers until the person saves their own, each bad field refused in words, nothing written", async () => {
     const h = harness();
+    // The old helper form's twelve numbers (test_helper_form_publishes_all_supervision_numbers):
+    // the supervision numbers, the restart delays as the old helper's list, and the six limits.
     const documented = {
       memory_mb: 1024,
       cpu_percent: 90,
@@ -922,31 +931,80 @@ describe("AppApi v2 calls, through the shell to its processes", () => {
       open_files: 1024,
       children: 32,
       grace_s: 60,
+      restart_backoff_s: [1, 2, 4, 8, 16],
+      check_s: 10,
+      stop_timeout_s: 10,
+      restart_attempts: 5,
+      breaker_window_s: 120,
+      breaker_count: 5,
     };
     expect(await h.api.limits()).toEqual({ ok: true, value: documented });
-    const raised = { ...documented, memory_mb: 4096, children: 64 };
+    // Saved as a group, each half under its own key, and read back as the values in force.
+    const raised = {
+      ...documented,
+      memory_mb: 4096,
+      children: 64,
+      check_s: 0.25,
+      restart_backoff_s: [1, 2.5, 4],
+      breaker_count: 9,
+    };
     expect(await h.api.setLimits(raised)).toEqual({ ok: true, value: raised });
-    expect(h.settings.stored["limits"]).toEqual(raised);
-    expect(await h.api.limits()).toEqual({ ok: true, value: raised });
-    // The old form's refusals: max_children 2.5, a zero; and nothing is written.
-    expect(await h.api.setLimits({ ...raised, children: 2.5, grace_s: 0 })).toEqual({
-      ok: false,
-      refused: {
-        reason: "invalid",
-        sentence: "general.limits.refused",
-        problems: [
-          { path: "children", message: "not-whole" },
-          { path: "grace_s", message: "not-positive" },
-        ],
-      },
+    expect(h.settings.stored["limits"]).toEqual({
+      memory_mb: 4096,
+      cpu_percent: 90,
+      cpu_window_s: 120,
+      open_files: 1024,
+      children: 64,
+      grace_s: 60,
     });
-    expect(h.settings.stored["limits"]).toEqual(raised);
-    // A number the file could not hold is refused too, never written as null.
+    expect(h.settings.stored["stability"]).toEqual({
+      restart_backoff_s: [1, 2.5, 4],
+      check_s: 0.25,
+      stop_timeout_s: 10,
+      restart_attempts: 5,
+      breaker_window_s: 120,
+      breaker_count: 9,
+    });
+    expect(await h.api.limits()).toEqual({ ok: true, value: raised });
+    const stored = () =>
+      JSON.stringify([h.settings.stored["limits"], h.settings.stored["stability"]]);
+    const before = stored();
+    // The old form's refusals, each field by name, and nothing of either half is written:
+    // tick 0, stop_timeout 0, breaker_window 0, restart_attempts 1.5, max_children 2.5.
+    for (const [path, value, message] of [
+      ["check_s", 0, "not-positive"],
+      ["stop_timeout_s", 0, "not-positive"],
+      ["breaker_window_s", 0, "not-positive"],
+      ["restart_attempts", 1.5, "not-whole"],
+      ["children", 2.5, "not-whole"],
+    ] as const) {
+      expect(await h.api.setLimits({ ...raised, [path]: value })).toEqual({
+        ok: false,
+        refused: {
+          reason: "invalid",
+          sentence: "general.limits.refused",
+          problems: [{ path, message }],
+        },
+      });
+      expect(stored()).toBe(before);
+    }
+    // A restart delay that is not a number ("1, soon, 4"), or no delay at all, is refused too.
+    for (const delays of [[1, Number.NaN, 4], []]) {
+      expect(await h.api.setLimits({ ...raised, restart_backoff_s: delays })).toMatchObject({
+        ok: false,
+        refused: { problems: [{ path: "restart_backoff_s", message: "not-a-list" }] },
+      });
+    }
+    // A number the file could not hold, or a timer could not wait, is refused, never written.
     expect(await h.api.setLimits({ ...raised, memory_mb: Infinity })).toMatchObject({
       ok: false,
       refused: { problems: [{ path: "memory_mb", message: "too-large" }] },
     });
-    expect(h.settings.stored["limits"]).toEqual(raised);
+    expect(await h.api.setLimits({ ...raised, check_s: 3_000_000 })).toMatchObject({
+      ok: false,
+      refused: { problems: [{ path: "check_s", message: "too-large" }] },
+    });
+    expect(stored()).toBe(before);
     expect(await h.raw(IPC.generalCall, { op: "limits.set", args: { limits: "lots" } })).toEqual({
       ok: false,
       refused: { reason: "invalid", sentence: "general.limits.refused", problems: [] },

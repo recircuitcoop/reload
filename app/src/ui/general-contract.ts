@@ -121,8 +121,8 @@ export interface NodeProcessRow {
 }
 
 /**
- * The person's own resource limits (plan 0031), in the units the settings file writes them:
- * General › Advanced's "Stability defaults".
+ * The person's own resource limits (plan 0031) and supervision numbers (plan 0032 group 9), in
+ * the units the settings file writes them: General › Advanced's "Stability defaults".
  */
 export interface LimitValues {
   readonly memory_mb: number;
@@ -131,6 +131,14 @@ export interface LimitValues {
   readonly open_files: number;
   readonly children: number;
   readonly grace_s: number;
+  // The supervision numbers (plan 0032 group 9), saved with them as `stability`.
+  readonly check_s: number;
+  readonly stop_timeout_s: number;
+  readonly restart_attempts: number;
+  /** The delay before each restart in a row, in seconds; the last one repeats. */
+  readonly restart_backoff_s: readonly number[];
+  readonly breaker_window_s: number;
+  readonly breaker_count: number;
 }
 
 /** The days General offers (D8); null is Forever. */

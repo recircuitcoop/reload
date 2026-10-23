@@ -683,6 +683,50 @@ test("General shows the queued reports in full, Advanced's status details, Recor
     );
     await expect(limits).toContainText(STRINGS["general.limits.notWhole"]);
     expect(storedLimits()).toMatchObject({ children: 32 });
+    // The supervision numbers (plan 0032 group 9, the old helper form): each field with its
+    // label and its explanation drawn, and the restart delays one comma-separated text field.
+    for (const key of ["check", "stopTimeout", "attempts", "backoff", "breakerWindow"] as const) {
+      await expect(limits).toContainText(STRINGS[`general.limits.${key}`]);
+      await expect(limits).toContainText(STRINGS[`general.limits.${key}.help`]);
+    }
+    await expect(limits).toContainText(STRINGS["general.limits.memory.help"]);
+    await limits.getByTestId("general-limits-children-input").fill("32");
+    const delays = limits.getByTestId("general-limits-restart_backoff_s-input");
+    await expect(delays).toHaveAttribute("type", "text");
+    await expect(delays).toHaveValue("1, 2, 4, 8, 16");
+    const storedStability = () =>
+      (
+        JSON.parse(fs.readFileSync(path.join(userData, "shell-settings.json"), "utf8")) as {
+          stability?: Record<string, unknown>;
+        }
+      ).stability;
+    const savedBefore = storedStability();
+    // A word among the delays is refused in words, with nothing written.
+    await delays.fill("1, soon, 4");
+    await limits.getByTestId("general-limits-save").click();
+    await expect(limits.getByTestId("general-limits-message")).toHaveText(
+      STRINGS["general.limits.refused"],
+    );
+    await expect(limits).toContainText(STRINGS["general.limits.notList"]);
+    expect(storedStability()).toEqual(savedBefore);
+    // A draft survives leaving General and coming back, and is not saved by it.
+    await delays.fill("1, 2.5, 4");
+    await limits.getByTestId("general-limits-check_s-input").fill("2.5");
+    const goTo = (hash: string) =>
+      window.evaluate((to) => {
+        globalThis.location.hash = to;
+      }, hash);
+    await goTo("#/configuration/flows");
+    await expect(window.getByTestId("general")).toHaveCount(0);
+    await goTo("#/configuration/general");
+    await expect(limits.getByTestId("general-limits-check_s-input")).toHaveValue("2.5");
+    await expect(delays).toHaveValue("1, 2.5, 4");
+    expect(storedStability()).toEqual(savedBefore);
+    await limits.getByTestId("general-limits-save").click();
+    await expect(limits.getByTestId("general-limits-message")).toHaveText(
+      STRINGS["general.limits.saved"],
+    );
+    expect(storedStability()).toMatchObject({ check_s: 2.5, restart_backoff_s: [1, 2.5, 4] });
     // A restart is followed: the runtime's next generation shows without a reload.
     process.kill(runtime.pid, "SIGKILL");
     const next = await waitForRunning(window, "runtime", runtime.generation + 1);

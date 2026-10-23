@@ -104,7 +104,7 @@ describe("the stable port", () => {
     supervisor.start();
     clock.advance(1);
     launcher.current.exit(1); // a crash
-    clock.advance(251);
+    clock.advance(1_001);
     expect(supervisor.restart("types")).toBe(true); // a planned restart
     clock.advance(2);
 
@@ -122,7 +122,7 @@ describe("the credential secret (WI-0018-06)", () => {
     supervisor.start();
     clock.advance(1);
     launcher.current.exit(1); // a crash
-    clock.advance(251);
+    clock.advance(1_001);
     expect(supervisor.restart("types")).toBe(true);
     clock.advance(2);
 
@@ -293,11 +293,11 @@ describe("quit", () => {
     supervisor.start();
     clock.advance(1);
     launcher.current.exit(1);
-    clock.advance(251);
+    clock.advance(1_001);
     expect(launcher.children).toHaveLength(2);
     expect(supervisor.status().state).toBe("running");
     expect(logger.lines).toContain(
-      "ERROR the runtime exited unexpectedly (code 1); restart 1 in 250 ms",
+      "ERROR the runtime exited unexpectedly (code 1); restart 1 in 1000 ms",
     );
   });
 
@@ -360,7 +360,7 @@ describe("what the child says", () => {
     clock.advance(1);
     const old = launcher.current;
     old.exit(1);
-    clock.advance(252);
+    clock.advance(1_002);
     expect(supervisor.status()).toMatchObject({ state: "running", generation: 2 });
 
     old.send({ v: 1, t: "ready", pid: 1, generation: 1, port: null });
@@ -497,7 +497,7 @@ describe("before every fork", () => {
     expect(launcher.children).toHaveLength(1);
     clock.advance(1);
     launcher.current.exit(1); // the runtime crashed
-    clock.advance(251);
+    clock.advance(1_001);
     // The backoff has run out, but the next runtime waits until the leftovers are stopped.
     expect(launcher.children).toHaveLength(1);
     cleared();

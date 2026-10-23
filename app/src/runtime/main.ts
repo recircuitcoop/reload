@@ -65,7 +65,7 @@ import { watchParent } from "../application/parent-watchdog";
 import { NodeOptions } from "../application/node-options";
 import { PeerCaller, receiveKeys } from "../application/peer-link";
 import { runtimeWatchdog } from "../application/left-nodes";
-import { readPersonalLimits } from "../application/resource-watch";
+import { readPersonalLimits, readStability, stabilityPace } from "../application/resource-watch";
 import {
   redactingShellLink,
   serveShell,
@@ -282,6 +282,7 @@ function generateNodeTypes(
             logger.warn(message);
           }),
           store: new JsonNodeRecords(config.userDir),
+          pace: stabilityPace(settings, logger),
           clock: monotonicClock,
           log: (level, message) => {
             logger[level](message);
@@ -291,7 +292,8 @@ function generateNodeTypes(
         newId: randomUUID,
         secrets: logger,
         journal: store,
-        settings: DEFAULT_NODE_PROCESS,
+        // The person's crash-loop limit and restart delays (plan 0032 group 9), read at start.
+        settings: { ...DEFAULT_NODE_PROCESS, ...readStability(settings, logger) },
         // Counted by the shell for crash reports, which the telemetry switch gates (WI-0018-22).
         crashes: shellNodeCrashes(link),
         // Every step that ended, for the usage signals, which the same switch gates (plan 0029).

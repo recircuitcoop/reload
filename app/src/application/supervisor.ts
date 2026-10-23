@@ -25,6 +25,7 @@ import type { ChildSignal } from "../domain/telemetry/reports";
 import { CrashLoopBreaker, type CrashLoopSettings } from "../domain/supervision/breaker";
 import {
   crashLoopMessage,
+  restartAttemptsMessage,
   type ChildName,
   type ChildState,
   type ChildStatus,
@@ -469,9 +470,15 @@ export class Supervisor {
 
   #onCrash(code: number, forGood: string | null): void {
     this.#crashesInARow += 1;
-    if (forGood !== null || !this.#breaker.recordCrash()) {
-      // The crash-loop limit: stop restarting, say so on the page, and raise one notice.
-      const message = forGood ?? crashLoopMessage(this.#deps.child, this.#deps.settings.crashLoop);
+    const { crashLoop, restartAttempts } = this.#deps.settings;
+    const looping = !this.#breaker.recordCrash();
+    if (forGood !== null || looping || this.#crashesInARow > restartAttempts) {
+      // The crash-loop limit or the attempts: stop restarting, say so, and raise one notice.
+      const message =
+        forGood ??
+        (looping
+          ? crashLoopMessage(this.#deps.child, crashLoop)
+          : restartAttemptsMessage(this.#deps.child, restartAttempts));
       this.#error = message;
       this.#deps.logger.error(
         `the ${this.#deps.child} exited unexpectedly (code ${String(code)}); ` +

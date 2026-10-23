@@ -135,6 +135,18 @@ settings.
   a package name, are refused naming it. 3 rows.
 - **Group 24** (same branch): an endpoint Change while the services process is not running says
   so, rather than the generic failure. 1 row.
+- **Group 9** (branch `port/0032-wave3b`): General › Advanced's Stability defaults form holds
+  the old helper form's twelve numbers: the check cadence, the stop timeout, the restart
+  attempts, the restart delays (the old helper's list, 1, 2, 4, 8 and 16 s, the last one
+  repeating, typed in one comma-separated field), the crash-loop limit's window and count, and
+  the six resource limits. Each field has a label and a line saying what it does. All twelve are
+  checked and saved together, `stability` beside `limits` in `shell-settings.json`, and the file
+  takes the same keys. If any field is refused, nothing is written. A draft survives leaving the
+  screen. The shell's supervisor, the runtime's node processes and the services process's MCP
+  child all read these numbers at start. Each process's resource watchdog reads the cadence and
+  the stop timeout again before every wait. The crash-loop limit stays 5 in 2 minutes by
+  default, and the person can now change it. The watchdog's own limit of five stops over a
+  limit is not one of these numbers. 15 rows.
 - **The `configuration.e2e.ts` flake** (same branch): a flow's switch pressed again before the
   list read after its first press came back took the press for no change and sent nothing (the
   switch compares a press with the state it is drawn in); a pressed switch is now drawn as asked

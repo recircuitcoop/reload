@@ -21,9 +21,10 @@ import {
   type Breach,
   type ResourceLimits,
 } from "../domain/supervision/resources";
+import { DEFAULT_STABILITY, stabilityOf, type Stability } from "../domain/supervision/stability";
 import type { Logger } from "../ports/logger";
 import type { Notifier } from "../ports/notifier";
-import type { LimitDefaultsSetting } from "../ports/settings-store";
+import type { LimitDefaultsSetting, StabilitySetting } from "../ports/settings-store";
 import type { Cancel, Clock } from "../ports/clock";
 import type {
   ProcessIdentity,
@@ -74,6 +75,39 @@ export function readPersonalLimits(
     notifier?.raise({ kind: "limits-unreadable", subject: "limits", detail: why });
     return personalLimits(undefined);
   }
+}
+
+/**
+ * The person's own supervision numbers, from the settings file's `stability` (the old `[helper]`
+ * numbers). Unreadable, it is said as the limits are, and the documented numbers are kept.
+ */
+export function readStability(
+  setting: StabilitySetting,
+  logger: Logger,
+  notifier?: Notifier,
+): Stability {
+  try {
+    const stability = stabilityOf(setting.readStability());
+    notifier?.clear("limits-unreadable", "stability");
+    return stability;
+  } catch (error) {
+    const why = error instanceof Error ? error.message : String(error);
+    logger.error(`${why}; the documented supervision numbers are used instead`);
+    notifier?.raise({ kind: "limits-unreadable", subject: "stability", detail: why });
+    return DEFAULT_STABILITY;
+  }
+}
+
+/** The watchdog's pace from the `stability` setting, read again before every wait. */
+export function stabilityPace(setting: StabilitySetting, logger: Logger): WatchPace {
+  return {
+    get sampleEveryMs() {
+      return readStability(setting, logger).checkEveryMs;
+    },
+    get stopTimeoutMs() {
+      return readStability(setting, logger).stopTimeoutMs;
+    },
+  };
 }
 
 /**
