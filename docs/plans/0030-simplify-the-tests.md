@@ -1,15 +1,19 @@
 ---
 type: plan
 title: Review the tests and simplify them
-status: PROPOSED
+status: APPROVED
 created: 2026-10-21
-updated: 2026-10-21
+updated: 2026-10-23
 ---
 
 # 0030 — Review the tests and simplify them
 
-Status: PROPOSED 2026-10-21. Requested by the owner: "review tests and simplify them with
+Status: APPROVED 2026-10-23. Requested by the owner: "review tests and simplify them with
 ponytail" — the least test code that still proves the same behaviour.
+
+Approved 2026-10-23, and moved ahead of every other plan. The owner: "change order and simplify
+tests first so one round of checking will not take 40 min anymore." So 0030 runs before the rest,
+and its first aim is gate time: every fix round of every builder waits on one full gate.
 
 ## What there is (main, 2026-10-21)
 
