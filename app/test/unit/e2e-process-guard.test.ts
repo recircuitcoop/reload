@@ -36,19 +36,11 @@ it("the harness takes the process once, where it launches, and nowhere else", ()
   );
 });
 
-it("a run's environment carries no Anytype key from this shell, which would stand in for the canary", async () => {
-  const { scratchDirectories } = await import("../e2e/app-harness");
-  const was = process.env["ANYTYPE_API_KEY"];
-  process.env["ANYTYPE_API_KEY"] = "a-key-set-in-this-shell";
-  const { scratch, env } = scratchDirectories();
-  try {
-    expect(env["ANYTYPE_API_KEY"]).toBeUndefined();
-  } finally {
-    fs.rmSync(scratch, { recursive: true, force: true });
-    if (was === undefined) {
-      delete process.env["ANYTYPE_API_KEY"];
-    } else {
-      process.env["ANYTYPE_API_KEY"] = was;
-    }
-  }
+it("a run's environment carries no Anytype key from this shell, which would stand in for the canary", () => {
+  // Read, not imported: loading the harness loads Electron, which writes into this home.
+  const harness = fs.readFileSync(path.join(E2E, HARNESS), "utf8");
+  expect(harness).toMatch(
+    /const inherited = Object\.entries\(process\.env\)\.filter\([^;]*entry\[0\] !== "ANYTYPE_API_KEY"/,
+  );
+  expect(harness).toMatch(/env: \{\s*\.\.\.Object\.fromEntries\(inherited\),/);
 });
