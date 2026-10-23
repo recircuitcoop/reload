@@ -277,6 +277,74 @@ describe("FsPackageRoots: recovery at the start (a crash between two renames)", 
     expect(liveVersion("other")).toBe("1");
   });
 
+  it("never throws at the start: a rollback's scrap, a broken record and an unreadable folder are said and left", () => {
+    const logger = new RecordingLogger();
+    const told = new FsPackageRoots(base, logger);
+    stageComplete("1");
+    told.swapIn("monty");
+    stageComplete("2");
+    told.swapIn("monty");
+    // A rollback cut between its renames: 2 moved aside as monty.rolled-back, 1 not yet live.
+    failRenames([2, 3], () => {
+      expect(() => told.rollBack("monty")).toThrow();
+    });
+    expect(told.installed("monty")).toBeUndefined();
+    expect(fs.existsSync(path.join(base, "previous", "monty.rolled-back"))).toBe(true);
+    // And another package whose kept copy has a record that is not JSON.
+    fs.mkdirSync(path.join(base, "previous", "other"), { recursive: true });
+    fs.writeFileSync(path.join(base, "previous", "other", "installed.json"), "{");
+    expect(told.recover()).toEqual([{ name: "monty", version: "1" }]);
+    expect(liveVersion()).toBe("1");
+    expect(logger.lines.join("\n")).toContain("other at");
+    expect(told.installed("other")).toBeUndefined();
+  });
+
+  it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+    "an unreadable previous folder is said, and the start goes on",
+    () => {
+      const logger = new RecordingLogger();
+      const told = new FsPackageRoots(base, logger);
+      fs.mkdirSync(path.join(base, "previous"), { recursive: true });
+      fs.chmodSync(path.join(base, "previous"), 0o000);
+      try {
+        expect(told.recover()).toEqual([]);
+      } finally {
+        fs.chmodSync(path.join(base, "previous"), 0o755);
+      }
+      expect(logger.lines.join("\n")).toContain("was not put back");
+    },
+  );
+
+  it("a repair's moved-aside copy, which was live last, wins over what an earlier swap kept", () => {
+    stageComplete("1");
+    roots.swapIn("monty");
+    stageComplete("2");
+    roots.swapIn("monty");
+    // previous/ holds 1; a repair of 2 is cut between its renames.
+    stageComplete("2");
+    failRenames([2, 3], () => {
+      expect(() => roots.replaceLive("monty")).toThrow();
+    });
+    expect(roots.recover()).toEqual([{ name: "monty", version: "2" }]);
+    expect(liveVersion()).toBe("2");
+    expect(roots.kept("monty")?.version).toBe("1");
+  });
+
+  it("never brings back a package the person removed, from a repair's scrap", () => {
+    stageComplete("1");
+    roots.swapIn("monty");
+    // A repair's scrap whose delete failed: the copy beside staging, no build staged.
+    const scrap = path.join(base, "staging", "monty.replaced");
+    fs.cpSync(path.join(base, "packages", "monty"), scrap, { recursive: true });
+    roots.remove("monty");
+    expect(fs.existsSync(scrap)).toBe(false);
+    // Even left there (by an older build), with no build staged it is never put back.
+    fs.mkdirSync(path.join(scrap, "package"), { recursive: true });
+    fs.writeFileSync(path.join(scrap, "installed.json"), JSON.stringify(record("1")));
+    expect(roots.recover()).toEqual([]);
+    expect(roots.installed("monty")).toBeUndefined();
+  });
+
   it("puts nothing back when nothing was cut short, or what is left is half-built", () => {
     expect(roots.recover()).toEqual([]);
     fs.mkdirSync(path.join(base, "previous", "monty"), { recursive: true });

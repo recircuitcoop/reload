@@ -241,30 +241,58 @@ export class FsPackageRoots implements PackageRoots {
 
   recover(): readonly Recovered[] {
     const recovered: Recovered[] = [];
-    // A swap or a rollback cut between its two renames leaves the version it moved aside in
-    // previous/; a repair, beside staging. Each is whole (it was live), so it goes back.
-    const candidates = [
-      ...entries(this.previous).map((name) => ({ name, from: this.#in(this.previous, name) })),
-      ...entries(this.staging)
-        .filter((entry) => entry.endsWith(".replaced"))
-        .map((entry) => ({
-          name: entry.slice(0, -".replaced".length),
-          from: path.join(this.staging, entry),
-        })),
-    ];
+    // Never stops the app starting: a candidate that cannot be read or moved is said and left.
+    const said = (what: string, error: unknown): void => {
+      this.#logger?.warn(`packages: ${what} was not put back: ${String(error)}`);
+    };
+    const listed = (folder: string): string[] => {
+      try {
+        return entries(folder);
+      } catch (error) {
+        said(`what is in ${folder}`, error);
+        return [];
+      }
+    };
+    // Per package, in the order a cut-short change is undone. A repair cut between its renames
+    // leaves what was live beside staging, with its build still staged; that one was live last,
+    // so it wins. A swap or a rollback cut between its renames leaves the version to go back to
+    // in previous/ (a rollback's moved-aside failed version, `<name>.rolled-back`, is scrap).
+    const replaced = ".replaced";
+    const names = new Set<string>();
+    const candidates: { name: string; from: string }[] = [];
+    for (const entry of listed(this.staging)) {
+      const name = entry.slice(0, -replaced.length);
+      if (entry.endsWith(replaced) && PACKAGE_NAME.test(name)) {
+        // Only in the cut state: with no build staged it is a repair's scrap, never live again.
+        if (fs.existsSync(path.join(this.staging, name))) {
+          candidates.push({ name, from: path.join(this.staging, entry) });
+        }
+      }
+    }
+    for (const name of listed(this.previous)) {
+      if (PACKAGE_NAME.test(name)) {
+        candidates.push({ name, from: path.join(this.previous, name) });
+      }
+    }
     for (const { name, from } of candidates) {
-      if (!PACKAGE_NAME.test(name) || fs.existsSync(this.#in(this.live, name))) {
+      const live = path.join(this.live, name);
+      if (names.has(name) || fs.existsSync(live)) {
         continue;
       }
-      const record = this.#recordIn(from);
-      if (record === undefined) {
-        continue;
+      try {
+        const record = this.#recordIn(from);
+        if (record === undefined) {
+          continue;
+        }
+        this.#unsealedLive(name, () => {
+          chmodOne(from, false);
+          this.#rename(from, live, name);
+        });
+        names.add(name);
+        recovered.push({ name, version: record.version });
+      } catch (error) {
+        said(`${name} at ${from}`, error);
       }
-      this.#unsealedLive(name, () => {
-        chmodOne(from, false);
-        this.#rename(from, this.#in(this.live, name), name);
-      });
-      recovered.push({ name, version: record.version });
     }
     return recovered;
   }
@@ -345,6 +373,8 @@ export class FsPackageRoots implements PackageRoots {
     const live = this.#in(this.live, name);
     const kept = this.#in(this.previous, name);
     removeTree(kept);
+    // A repair's moved-aside copy too: nothing of a removed package is ever put back.
+    removeTree(path.join(this.staging, `${name}.replaced`));
     if (!fs.existsSync(live)) {
       return;
     }
