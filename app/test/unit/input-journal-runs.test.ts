@@ -170,6 +170,34 @@ describe("the held inputs' bound (spec 7.6), in the runtime's own process", () =
     ]);
   });
 
+  it("stays cut off when inputs fail without the node finishing them, until none is outstanding", () => {
+    const { journal, logs, notifier } = stuck(2);
+    journal.admit(message, delivery(), 2);
+    journal.admit(message, delivery(), 2);
+    journal.admit(message, delivery(), 2); // over the held bound: cut off
+    // Its process exited: the first of its two inputs fails here, the other is still out.
+    journal.failing("in-1", new Error("node process exited (signal SIGKILL)"), 2);
+    journal.finished("in-1", new Error("node process exited (signal SIGKILL)"));
+    expect(journal.nextHeld()).toBeUndefined();
+    const meanwhile = delivery();
+    journal.admit(message, meanwhile, 2); // its bound still full: held, so cut off
+    expect(meanwhile.ends.map((end) => end?.message)).toEqual([NOT_KEEPING_UP]);
+    // The last one fails too: nothing could ever finish now, so inputs are taken again, said
+    // as it is; the notice stays, since the node finished nothing.
+    journal.failing("in-2", new Error("node process exited (signal SIGKILL)"), 1);
+    journal.finished("in-2", new Error("node process exited (signal SIGKILL)"));
+    expect(journal.nextHeld()).toBeUndefined();
+    expect(logs.some((line) => line.includes("the node finished an input"))).toBe(false);
+    expect(logs).toContain(
+      "info none of its inputs is outstanding any more, the last failed without the node " +
+        "finishing it (node process exited (signal SIGKILL)); inputs are held at the bound again",
+    );
+    expect(notifier.cleared).toEqual([]);
+    const later = delivery();
+    expect(journal.admit(message, later, 2)).toBeNull();
+    expect(later.ends).toEqual([]);
+  });
+
   it("holds again once the node finishes one, and the notice is withdrawn", () => {
     const { journal, notifier } = stuck(1);
     journal.admit(message, delivery(), 1); // held

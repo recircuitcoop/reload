@@ -102,61 +102,96 @@ export const LEFT_NODE_WAIT_MS = 5_000;
 /** How often a stopped process is looked at again while it is waited for. */
 const LOOK_EVERY_MS = 100;
 
+/** One process of a left node's tree, as first read: the leader, a group member or a stray. */
+interface Member {
+  readonly pid: number;
+  readonly identity: NodeRecord["identity"];
+  /** The node process whose tree it is; its own pid for the node process. */
+  readonly leader: number;
+  /** In the leader's process group, which a signal to the group reaches. */
+  readonly inGroup: boolean;
+}
+
 /**
- * Stop every recorded node process that is still itself, politely and then forcibly; resolves
- * once each is gone or has outlived its kill. Rejects, signalling nothing, when the process
- * table cannot be read.
+ * Stop every recorded node process that is still itself, and what it started, politely and then
+ * forcibly; resolves once each is gone or has outlived its kill. Rejects, signalling nothing,
+ * when the process table cannot be read.
  */
 export async function stopLeftNodes(deps: LeftNodesDeps): Promise<void> {
   const recorded = deps.store.read();
   if (recorded.length === 0) {
     return;
   }
-  let left = await stillThemselves(recorded, deps);
-  if (left.length > 0) {
-    deps.logger.warn(
-      `stopping ${String(left.length)} node process(es) the last runtime left running: ` +
-        left.map((record) => String(record.pid)).join(", "),
-    );
-    left = await signalAndWait(left, "SIGTERM", deps);
-  }
-  if (left.length > 0) {
-    left = await signalAndWait(left, "SIGKILL", deps);
-  }
-  for (const record of left) {
-    deps.logger.error(`node process ${String(record.pid)} is still running after a forced kill`);
-  }
-  // A survivor keeps its record: forgotten, it would be a process nothing here can stop.
-  deps.store.write(left);
-}
-
-/** The records whose pid is still the process recorded. */
-async function stillThemselves(
-  records: readonly NodeRecord[],
-  deps: LeftNodesDeps,
-): Promise<NodeRecord[]> {
-  const readings = await deps.probe(records.map((record) => record.pid));
-  return records.filter((record) => {
+  const readings = await deps.probe(recorded.map((record) => record.pid));
+  const leaders = recorded.filter((record) => {
     const now = readings.get(record.pid)?.identity;
     return now !== undefined && sameProcess(now, record.identity);
   });
+  if (leaders.length > 0) {
+    deps.logger.warn(
+      `stopping ${String(leaders.length)} node process(es) the last runtime left running: ` +
+        leaders.map((record) => String(record.pid)).join(", "),
+    );
+  }
+  // Each leader with its tree as read now: the group a signal to it reaches, and the strays that
+  // left it, which are signalled one by one.
+  const members: Member[] = leaders.flatMap((record) => {
+    const reading = readings.get(record.pid);
+    const leader = record.pid;
+    return [
+      { ...record, leader, inGroup: true },
+      ...(reading?.group ?? []).map((one) => ({ ...one, leader, inGroup: true })),
+      ...(reading?.strays ?? []).map((one) => ({ ...one, leader, inGroup: false })),
+    ];
+  });
+  let left = await signalAndWait(members, "SIGTERM", deps);
+  if (left.length > 0) {
+    left = await signalAndWait(left, "SIGKILL", deps);
+  }
+  for (const member of left) {
+    deps.logger.error(`node process ${String(member.pid)} is still running after a forced kill`);
+  }
+  // A survivor keeps its record: forgotten, it would be a process nothing here can stop.
+  const survivors = new Set(left.map((member) => member.pid));
+  deps.store.write(recorded.filter((record) => survivors.has(record.pid)));
 }
 
-/** Signal each group, then wait up to `waitMs` for them to go; the ones still themselves. */
+/** The members still surely themselves. */
+async function stillThemselves(members: readonly Member[], deps: LeftNodesDeps): Promise<Member[]> {
+  const readings = await deps.probe(members.map((member) => member.pid));
+  return members.filter((member) => {
+    const now = readings.get(member.pid)?.identity;
+    return now !== undefined && sameProcess(now, member.identity);
+  });
+}
+
+/**
+ * Signal each member still itself: a leader through its group, the others by pid. Then wait up to
+ * `waitMs` for them to go; the ones still themselves.
+ */
 async function signalAndWait(
-  records: readonly NodeRecord[],
+  members: readonly Member[],
   signal: "SIGTERM" | "SIGKILL",
   deps: LeftNodesDeps,
-): Promise<NodeRecord[]> {
-  for (const record of records) {
+): Promise<Member[]> {
+  // Read again just before: a member gone since is never signalled by its pid.
+  const now = await stillThemselves(members, deps);
+  const leaders = new Set(now.filter((m) => m.pid === m.leader).map((m) => m.pid));
+  for (const member of now) {
+    const leads = member.pid === member.leader;
+    // A member of a group whose leader is still itself is reached by the group's signal; one
+    // whose leader went is signalled by its own pid, read again just now.
+    if (!leads && member.inGroup && leaders.has(member.leader)) {
+      continue;
+    }
     try {
-      deps.signal(-record.pid, signal);
+      deps.signal(leads ? -member.pid : member.pid, signal);
     } catch {
       // ESRCH: gone already, which is what was asked for.
     }
   }
   const deadline = deps.clock.now() + (deps.waitMs ?? LEFT_NODE_WAIT_MS);
-  let left = [...records];
+  let left = now;
   while (left.length > 0 && deps.clock.now() < deadline) {
     await new Promise<void>((resolve) => deps.clock.after(LOOK_EVERY_MS, resolve));
     left = await stillThemselves(left, deps);

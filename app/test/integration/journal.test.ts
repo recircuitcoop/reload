@@ -227,6 +227,32 @@ describe("the bounded queue (spec 7.6)", () => {
     expect(node.notifier.notices.map((notice) => notice.kind)).toEqual(["node-overloaded"]);
   });
 
+  it("hold: a node cut off stays cut off when its process is killed, and is never said to have finished", async () => {
+    const node = raw(new MemoryJournal(), queueSettings(2, "hold", 2));
+    send(node.node, { do: "slow" });
+    send(node.node, { do: "slow" });
+    await waitFor(
+      "both running",
+      () => node.logger.has(/working/) || node.host.statuses.length > 1,
+    );
+    const echoes = [0, 1, 2, 3].map((value) => send(node.node, { do: "echo", value })[1]);
+    expect(echoes.map((echo) => echo.ends[0]?.message)).toEqual([
+      NOT_KEEPING_UP,
+      NOT_KEEPING_UP,
+      NOT_KEEPING_UP,
+      NOT_KEEPING_UP,
+    ]);
+    const cleared = node.notifier.cleared.length;
+    const pid = node.node.pid as number;
+    process.kill(pid, "SIGKILL");
+    await waitFor("both failed", () => node.node.queue().outstanding === 0);
+    expect(node.logger.has(/the node finished an input/)).toBe(false);
+    expect(node.logger.has(/none of its inputs is outstanding any more, the last failed/)).toBe(
+      true,
+    );
+    expect(node.notifier.cleared.slice(cleared)).toEqual([]);
+  });
+
   it("fail: at the bound further inputs fail with 'queue full', counted and logged", () => {
     const node = raw(new MemoryJournal(), queueSettings(1, "fail"));
     send(node.node, { do: "present" });

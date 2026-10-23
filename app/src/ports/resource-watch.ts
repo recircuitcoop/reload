@@ -23,6 +23,8 @@ export interface ProcessReading {
    * them, so they are stopped one by one (the old host's descendant sweep). Known by start time.
    */
   readonly strays: readonly { readonly pid: number; readonly identity: ProcessIdentity }[];
+  /** Its descendants still in its process group, which a signal to the group reaches. */
+  readonly group?: readonly { readonly pid: number; readonly identity: ProcessIdentity }[];
 }
 
 /**

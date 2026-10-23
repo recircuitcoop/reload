@@ -542,7 +542,7 @@ class ChildNodeProcess implements NodeProcess {
   }
 
   #fail(inputId: string, error: Error): void {
-    this.#log("error", `input ${inputId} failed: ${error.message}`);
+    this.#journal.failing(inputId, error, this.#inputs.size);
     this.#finish(inputId, error);
   }
 

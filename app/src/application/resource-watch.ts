@@ -77,13 +77,21 @@ export function readPersonalLimits(
 }
 
 /**
- * Whether two readings are one process: the same start time, and the same executable where both
- * reads could say (a read that could not name it does not make it someone else).
+ * Whether two readings are surely one process, enough to send it a signal: the same start time
+ * and the same executable, both read. A read that could not name the executable is never enough.
  */
 export function sameProcess(a: ProcessIdentity, b: ProcessIdentity): boolean {
+  return a.started === b.started && a.executable !== null && a.executable === b.executable;
+}
+
+/**
+ * Whether a reading is surely another process: another start time, or another executable where
+ * both reads could name it. A read that could not name it proves neither.
+ */
+export function otherProcess(a: ProcessIdentity, b: ProcessIdentity): boolean {
   return (
-    a.started === b.started &&
-    (a.executable === null || b.executable === null || a.executable === b.executable)
+    a.started !== b.started ||
+    (a.executable !== null && b.executable !== null && a.executable !== b.executable)
   );
 }
 
@@ -155,11 +163,16 @@ export function resourceWatchdog(deps: WatchDeps): ResourceWatchdog {
     if (
       reading === undefined ||
       entry.identity === null ||
-      !sameProcess(reading.identity, entry.identity)
+      otherProcess(reading.identity, entry.identity)
     ) {
       log("warn", `process ${String(pid)} is gone or is another process now; nothing is sent`);
       drop(entry);
       return "ended";
+    }
+    if (!sameProcess(reading.identity, entry.identity)) {
+      // Its executable could not be read, now or at first: not sure enough to signal by pid.
+      log("warn", `process ${String(pid)} could not be named surely; nothing is sent this time`);
+      return "unknown";
     }
     return reading;
   };
@@ -291,12 +304,15 @@ export function resourceWatchdog(deps: WatchDeps): ResourceWatchdog {
       if (ended(entry) || reading === undefined) {
         continue; // gone, or not measured: nothing is judged from no reading
       }
-      if (entry.identity !== null && !sameProcess(entry.identity, reading.identity)) {
+      if (entry.identity !== null && otherProcess(entry.identity, reading.identity)) {
         log("warn", `process ${String(entry.target.pid)} is another process now; not watched`);
         drop(entry);
         continue;
       }
-      entry.identity ??= reading.identity;
+      // Its executable is learnt from the first read that could name it.
+      if (entry.identity === null || entry.identity.executable === null) {
+        entry.identity = reading.identity;
+      }
       const breaches = entry.judge.observe(reading.sample, now);
       for (const breach of breaches) {
         if (breach.durationMs === 0) {

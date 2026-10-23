@@ -59,6 +59,12 @@ export interface Input {
   readonly at?: number;
 }
 
+/** An input failed by Reload, not finished by the node: why, and how many stay outstanding. */
+interface FailedHere {
+  readonly why: string;
+  readonly remaining: number;
+}
+
 /** An input held at the bound: not journaled yet, not sent (spec 7.6 "hold"). */
 export interface Held {
   readonly message: JournaledMessage;
@@ -126,6 +132,12 @@ export class InputJournal {
   #refused = 0;
   /** Cut off at the held bound: every input fails until the node finishes one again. */
   #cutOff = false;
+  /** The cut-off's notice is up: withdrawn only once the node itself finishes an input. */
+  #overloadSaid = false;
+  /** The input about to be finished was failed here: why, and how many stay outstanding. */
+  #failingHere: FailedHere | null = null;
+  /** How the last finished input ended: by the node, or failed here. */
+  #lastEnd: "node" | FailedHere = "node";
 
   constructor(deps: InputJournalDeps) {
     this.#deps = deps;
@@ -240,6 +252,7 @@ export class InputJournal {
           `is not keeping up, so ${String(failed + 1)} inputs failed, and each further one ` +
           `fails until it finishes one`,
       );
+      this.#overloadSaid = true;
       this.#deps.notifier?.raise({
         kind: "node-overloaded",
         subject: this.#deps.label,
@@ -251,13 +264,35 @@ export class InputJournal {
     delivery.done(error);
   }
 
-  /** The oldest held input, when there is one. Called as an input finishes. */
+  /**
+   * An outstanding input is failed here, not by the node (its process exited, a cancel, a frame
+   * refused): logged, and remembered for `finished`; `outstanding` still counts it.
+   */
+  failing(inputId: string, error: Error, outstanding: number): void {
+    this.#deps.log("error", `input ${inputId} failed: ${error.message}`);
+    this.#failingHere = { why: error.message, remaining: outstanding - 1 };
+  }
+
+  /**
+   * The oldest held input, when there is one. Called as an input finishes. A cut-off ends when
+   * the node itself finished one, or when an input failed here leaves none outstanding (nothing
+   * could ever finish then); one failed here while others are outstanding leaves it in place.
+   */
   nextHeld(): Held | undefined {
-    if (this.#cutOff) {
-      // It finished one: it is keeping up again, and inputs are held at the bound again.
-      this.#cutOff = false;
-      this.#deps.log("info", "the node finished an input; inputs are held at the bound again");
+    const end = this.#lastEnd;
+    if (end === "node" && this.#overloadSaid) {
+      this.#overloadSaid = false;
       this.#deps.notifier?.clear("node-overloaded", this.#deps.label);
+    }
+    if (this.#cutOff && (end === "node" || end.remaining === 0)) {
+      this.#cutOff = false;
+      this.#deps.log(
+        "info",
+        end === "node"
+          ? "the node finished an input; inputs are held at the bound again"
+          : "none of its inputs is outstanding any more, the last failed without the node " +
+              `finishing it (${end.why}); inputs are held at the bound again`,
+      );
     }
     // A held input of a run deleted from Run history (plan 0022 §E) fails here and gives the
     // place to the next: it is never admitted, so never journaled nor sent.
@@ -381,6 +416,8 @@ export class InputJournal {
    * failing store is logged.
    */
   finished(inputId: string, error?: Error, outcome?: StepOutcome): void {
+    this.#lastEnd = this.#failingHere ?? "node";
+    this.#failingHere = null;
     const at = this.#deps.clock.now();
     try {
       this.#deps.store.clear(

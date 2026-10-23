@@ -224,8 +224,8 @@ export function resourceProbeFor(
       if (!warned) {
         warned = true;
         warn(
-          `lsof could not run (${String(error)}): open files are not judged, and a process is ` +
-            "known by its start time alone, until it can",
+          `lsof could not run (${String(error)}): open files are not judged, and no process ` +
+            "can be named surely enough to be signalled, until it can",
         );
       }
       return { files: new Map(), executables: new Map() };
@@ -246,12 +246,23 @@ export function resourceProbeFor(
       const own = rows.get(pid);
       return own === undefined ? [] : [{ pid, own }];
     });
+    const families = present.map(({ pid, own }) => ({
+      pid,
+      own,
+      descendants: descendantsOf(pid, rows, hosts.has(pid)),
+    }));
+    // The descendants' executables are read too: one is signalled only once surely itself.
     const { files, executables } =
       present.length === 0
         ? { files: new Map<number, number>(), executables: new Map<number, string>() }
-        : await listed(present.map((p) => p.pid));
-    for (const { pid, own } of present) {
-      const descendants = descendantsOf(pid, rows, hosts.has(pid));
+        : await listed([
+            ...new Set(families.flatMap(({ pid, descendants }) => [pid, ...descendants])),
+          ]);
+    const known = (child: number, started: string) => ({
+      pid: child,
+      identity: { started, executable: executables.get(child) ?? null },
+    });
+    for (const { pid, own, descendants } of families) {
       readings.set(pid, {
         identity: { started: own.started, executable: executables.get(pid) ?? null },
         sample: {
@@ -262,9 +273,11 @@ export function resourceProbeFor(
         },
         strays: descendants.flatMap((child) => {
           const row = rows.get(child);
-          return row === undefined || row.pgid === own.pgid
-            ? []
-            : [{ pid: child, identity: { started: row.started, executable: null } }];
+          return row === undefined || row.pgid === own.pgid ? [] : [known(child, row.started)];
+        }),
+        group: descendants.flatMap((child) => {
+          const row = rows.get(child);
+          return row === undefined || row.pgid !== own.pgid ? [] : [known(child, row.started)];
         }),
       });
     }

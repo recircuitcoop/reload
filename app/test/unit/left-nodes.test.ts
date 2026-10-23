@@ -51,28 +51,38 @@ function machine() {
   const stubborn = new Set<number>(); // ignores SIGTERM
   const unkillable = new Set<number>(); // survives SIGKILL too
   const events: string[] = [];
-  const reading = (who: ProcessIdentity): ProcessReading => ({
+  const groups = new Map<number, number[]>(); // a leader's members in its group
+  const strays = new Map<number, number[]>(); // what it started outside its group
+  const known = (pid: number) => {
+    const who = running.get(pid);
+    return who === undefined ? [] : [{ pid, identity: who }];
+  };
+  const reading = (pid: number, who: ProcessIdentity): ProcessReading => ({
     identity: who,
     sample: { memoryMb: 1, cpuSeconds: 0, openFiles: 1, children: 0 },
-    strays: [],
+    strays: (strays.get(pid) ?? []).flatMap(known),
+    group: (groups.get(pid) ?? []).flatMap(known),
   });
   const probe: ResourceProbe = (pids) =>
     Promise.resolve(
       new Map(
         pids.flatMap((pid) => {
           const who = running.get(pid);
-          return who === undefined ? [] : [[pid, reading(who)] as const];
+          return who === undefined ? [] : [[pid, reading(pid, who)] as const];
         }),
       ),
     );
   const signal = (target: number, name: "SIGTERM" | "SIGKILL"): void => {
     events.push(`${name} ${String(target)}`);
-    const pid = -target;
-    if (name === "SIGTERM" ? !stubborn.has(pid) : !unkillable.has(pid)) {
-      running.delete(pid);
+    // A negative pid is the group: its leader and every member still in it.
+    const reached = target < 0 ? [-target, ...(groups.get(-target) ?? [])] : [target];
+    for (const pid of reached) {
+      if (name === "SIGTERM" ? !stubborn.has(pid) : !unkillable.has(pid)) {
+        running.delete(pid);
+      }
     }
   };
-  return { running, stubborn, unkillable, events, probe, signal };
+  return { running, stubborn, unkillable, groups, strays, events, probe, signal };
 }
 
 /** Let the stop run to its end, moving the fake clock through its waits. */
@@ -98,6 +108,29 @@ describe("node processes a crashed runtime left behind", () => {
     await drive(clock, () => finished);
     expect(m.events).toEqual(["SIGTERM -501", "SIGKILL -501"]);
     expect(m.running.has(501)).toBe(false);
+    expect(store.records).toEqual([]);
+  });
+
+  it("kills what a left node started that stayed when the node went, each by its own pid", async () => {
+    const m = machine();
+    m.running.set(501, identity(501)); // goes when asked
+    m.running.set(511, identity(511)); // in its group, ignores SIGTERM
+    m.running.set(512, identity(512)); // left its group, ignores SIGTERM
+    m.running.set(513, identity(513)); // in its group, goes when asked
+    m.groups.set(501, [511, 513]);
+    m.strays.set(501, [512]);
+    m.stubborn.add(511);
+    m.stubborn.add(512);
+    const store = new MemoryRecords([record(501)]);
+    const clock = new FakeClock();
+    let finished = false;
+    void stopLeftNodes({ ...m, store, clock, logger: new RecordingLogger() }).then(() => {
+      finished = true;
+    });
+    await drive(clock, () => finished);
+    // The group asked once through its leader, the stray by pid; then the two that stayed.
+    expect(m.events).toEqual(["SIGTERM -501", "SIGTERM 512", "SIGKILL 511", "SIGKILL 512"]);
+    expect([...m.running.keys()]).toEqual([]);
     expect(store.records).toEqual([]);
   });
 

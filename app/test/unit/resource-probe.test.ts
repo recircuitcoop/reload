@@ -86,11 +86,14 @@ describe("a sample", () => {
         pid,
         identity: { started: STARTED, executable: null },
       })),
+      // And those in it, which a signal to the group reaches.
+      group: [101, 102].map((pid) => ({ pid, identity: { started: STARTED, executable: null } })),
     });
     expect(readings.get(300)).toEqual({
       identity: { started: STARTED, executable: null },
       sample: { memoryMb: 2, cpuSeconds: 0.1, openFiles: 1, children: 2 },
       strays: [{ pid: 302, identity: { started: STARTED, executable: null } }],
+      group: [{ pid: 301, identity: { started: STARTED, executable: null } }],
     });
   });
 
@@ -99,7 +102,8 @@ describe("a sample", () => {
     await resourceProbeFor("darwin", runner(MAC, calls))([100, 101, 102, 300, 301]);
     expect(calls).toEqual([
       "/bin/ps -A -o pid=,ppid=,pgid=,rss=,time=,lstart=",
-      "/usr/sbin/lsof -n -P -w -p 100,101,102,300,301 -F fn",
+      // Their descendants too, once each: a descendant is signalled only once surely itself.
+      "/usr/sbin/lsof -n -P -w -p 100,101,102,300,301,302 -F fn",
     ]);
   });
 

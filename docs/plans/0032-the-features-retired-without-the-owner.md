@@ -99,15 +99,19 @@ settings.
   deploy and comes back when declared again. 1 row.
 
 - **Group 32** (branch `port/0032-wave1-rest`): the inputs held for a node at its queue bound
-  are bounded too, by a number of their own (1024, a runtime setting; far above the queue's
-  64, since a node waiting on a person may rightly hold many). One more cuts the node off, as the old bus cut off a
-  subscriber that fell behind: what was held and every further input fail with `done(err)`
+  are bounded too, by a number of their own (1024, far above the queue's 64, since a node
+  waiting on a person may rightly hold many). One more cuts the node off, as the old bus cut off
+  a subscriber that fell behind: what was held and every further input fail with `done(err)`
   ("queue full: the node is not keeping up"), said in the log and once as a notice, until the
-  node finishes an input again (`adapters/process/input-journal.ts`, spec 7.6). 4 rows.
+  node itself finishes an input (the notice is withdrawn then), or until inputs failed by Reload
+  (its process exited, a cancel) leave none outstanding, said as such
+  (`adapters/process/input-journal.ts`, spec 7.6). 4 rows.
 - **Group 33** (same branch): the runtime records each node process it starts with its identity
   (`node-processes.json` in user data, 0600); before every start of the runtime the shell stops
-  each recorded process that is still itself, SIGTERM to its group and SIGKILL after 5 s, and
-  never signals a pid that is someone else's now (`application/left-nodes.ts`). Windows is not
+  each recorded process that is still itself, SIGTERM to its group and SIGKILL after 5 s, with
+  what it started (a member that stayed when its node went is killed by its own pid), and never
+  signals a pid that is not surely the process read: start time and executable, both read
+  (`application/left-nodes.ts`). Windows is not
   measured, so nothing is recorded there. 2 rows.
 - **Group 34** (same branch): after a node process exits, its group is signalled only while a
   member is left (one `ps` read), and nothing on Windows; the close and ready deadlines signal

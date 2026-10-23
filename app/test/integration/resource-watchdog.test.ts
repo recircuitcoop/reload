@@ -165,6 +165,44 @@ describe.skipIf(process.platform === "win32")(
       return { child, gone };
     }
 
+    it("and what a left node started is killed too when the node itself went when asked", async () => {
+      const userDir = fs.mkdtempSync(path.join(os.tmpdir(), "reload-left-"));
+      const probe = resourceProbeFor(process.platform);
+      // The node goes on SIGTERM; a child it started in its group ignores it.
+      const script = '(trap "" TERM; while :; do sleep 1; done) & echo $!; wait';
+      const node = spawn("/bin/sh", ["-c", script], {
+        detached: true,
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+      const child = await new Promise<number>((resolve) => {
+        node.stdout.once("data", (chunk: Buffer) => {
+          resolve(Number(chunk.toString().trim()));
+        });
+      });
+      const pid = node.pid as number;
+      const reading = (await probe([pid])).get(pid);
+      expect(reading?.group?.map((member) => member.pid)).toContain(child);
+      new JsonNodeRecords(userDir).write([
+        { pid, identity: reading?.identity ?? { started: "", executable: null } },
+      ]);
+      const signals: string[] = [];
+      await stopLeftNodes({
+        store: new JsonNodeRecords(userDir),
+        probe,
+        signal: (target, signal) => {
+          signals.push(`${signal} ${String(target)}`);
+          process.kill(target, signal);
+        },
+        clock: systemClock,
+        logger: new RecordingLogger(),
+        waitMs: 1_000,
+      });
+      // Asked through its group; then the child that stayed, by its own pid, read again just now.
+      expect(signals).toEqual([`SIGTERM -${String(pid)}`, `SIGKILL ${String(child)}`]);
+      await waitFor("the child gone", () => !alive(child), 3_000);
+      fs.rmSync(userDir, { recursive: true, force: true });
+    });
+
     it("are recorded by the runtime, and stopped by the shell before the next one: politely, then killed", async () => {
       const userDir = fs.mkdtempSync(path.join(os.tmpdir(), "reload-left-"));
       const probe = resourceProbeFor(process.platform);

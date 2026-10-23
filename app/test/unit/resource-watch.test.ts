@@ -70,7 +70,7 @@ function harness(reading: (pid: number) => ResourceSample | null) {
           strays: strays.get(pid) ?? [],
           identity: {
             started: identities.get(pid) ?? `started-${String(pid)}`,
-            executable: executables.get(pid) ?? "/usr/bin/python3",
+            executable: executables.has(pid) ? (executables.get(pid) ?? null) : "/usr/bin/python3",
           },
         });
       }
@@ -320,6 +320,33 @@ describe("the resource watchdog", () => {
     expect(h.signals()).toEqual(["SIGTERM 10"]);
   });
 
+  it("sends nothing to a process whose executable could not be read, and stops it once it can be", async () => {
+    const h = harness(() => HUNGRY);
+    h.executables.set(10, null); // lsof could not say, from the first read on
+    h.watchdog(h.target(10));
+    await h.tick(8);
+    expect(h.signals()).toEqual([]);
+    expect(h.logger.has(/process 10 could not be named surely; nothing is sent this time/)).toBe(
+      true,
+    );
+    h.executables.set(10, "/usr/bin/python3");
+    await h.tick(2);
+    expect(h.signals()[0]).toBe("SIGTERM 10");
+  });
+
+  it("sweeps no stray whose executable could not be read", async () => {
+    const h = harness((pid) => (pid === 10 ? HUNGRY : QUIET));
+    h.strays.set(10, [{ pid: 41, identity: { started: "started-41", executable: null } }]);
+    h.executables.set(41, null);
+    h.watchdog(h.target(10));
+    await h.tick(8);
+    expect(h.sent).toEqual(["SIGTERM 41"]); // asked, as read in the same pass as its parent
+    h.exit(10);
+    h.clock.advance(STOP);
+    await settle();
+    expect(h.sent).toEqual(["SIGTERM 41"]); // never killed: not surely itself
+  });
+
   it("takes a read that could not name the executable as the same process, a different one as another", async () => {
     const h = harness(() => QUIET);
     h.watchdog(h.target(10));
@@ -338,7 +365,7 @@ describe("the resource watchdog", () => {
     const h = harness((pid) => (pid === 10 ? HUNGRY : QUIET));
     const stray = (pid: number) => ({
       pid,
-      identity: { started: `started-${String(pid)}`, executable: null },
+      identity: { started: `started-${String(pid)}`, executable: "/usr/bin/python3" },
     });
     h.strays.set(10, [stray(41), stray(42), stray(666)]);
     h.watchdog(h.target(10));
