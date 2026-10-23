@@ -370,6 +370,20 @@ export class Supervisor {
     this.#onCrash(code, forGood);
   }
 
+  /**
+   * Run `work` now when no child process exists (never started, between a crash and its next
+   * fork, down for good, gone on quit), so nothing of the old generation can see what it changes;
+   * false, running nothing, while one does.
+   */
+  runIfStopped(work?: () => void): boolean {
+    if (this.#handle !== null) {
+      return false;
+    }
+    this.#whileStopped = work ?? null;
+    this.#runWhileStopped();
+    return true;
+  }
+
   /** What a planned restart asked to do between the old child's exit and the next fork. */
   #runWhileStopped(): void {
     const work = this.#whileStopped;

@@ -67,6 +67,10 @@ let settings: JsonSettingsStore;
 let clock: FakeClock;
 /** What the old runtime's node processes do as their stop arrives. */
 let stopping: () => void;
+/** What the next runtime generation does as it starts. */
+let starting: () => void;
+/** False: a restart that never stops the runtime (one that will not stop), so nothing between. */
+let stops: boolean;
 
 beforeEach(() => {
   base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "reload-update-")));
@@ -85,6 +89,8 @@ beforeEach(() => {
   settings = new JsonSettingsStore(path.join(base, "shell-settings.json"));
   clock = new FakeClock();
   stopping = () => undefined;
+  starting = () => undefined;
+  stops = true;
 });
 
 afterEach(() => {
@@ -211,8 +217,11 @@ function setUp(overrides: Partial<PackageUpdatesPorts> = {}) {
   // work while stopped runs, then the next one starts.
   const restartRuntime = (reason: string, whileStopped?: () => void) => {
     restarts.push(reason);
-    stopping();
-    whileStopped?.();
+    if (stops) {
+      stopping();
+      whileStopped?.();
+    }
+    starting();
     return Promise.resolve(restartTook);
   };
   const one = new OneAtATime();
@@ -534,6 +543,32 @@ describe("applying an update", () => {
     fs.rmdirSync(path.join(base, "content-hashes.json.tmp"));
     expect(await drive(updates.apply("pinger", "person"))).toMatchObject({ ok: true });
     expect(roots.installed("pinger")?.version).toBe("0.2.0");
+  });
+
+  it("the next runtime generation starts on the new version, never the old", async () => {
+    // test_the_swap_happens_between_the_stop_and_the_start.
+    const { updates } = await installed("pinger", "0.1.0");
+    publish("pinger", "0.2.0");
+    await updates.check();
+    const atStart: (string | undefined)[] = [];
+    starting = () => atStart.push(roots.installed("pinger")?.version);
+    expect(await updates.apply("pinger", "person")).toMatchObject({ ok: true });
+    expect(atStart).toEqual(["0.2.0"]);
+  });
+
+  it("a runtime that could not be stopped is not swapped under: Not updated, and true", async () => {
+    const { updates } = await installed("pinger", "0.1.0");
+    publish("pinger", "0.2.0");
+    await updates.check();
+    stops = false;
+    restartTook = null;
+    expect(await updates.apply("pinger", "person")).toMatchObject({
+      ok: false,
+      error: expect.stringContaining(
+        "the runtime could not be stopped to make the change",
+      ) as unknown,
+    });
+    expect(roots.installed("pinger")?.version).toBe("0.1.0");
   });
 
   it("a failed version is swapped back only once its instances have stopped", async () => {

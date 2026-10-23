@@ -15,7 +15,13 @@ import {
   wirePackages,
 } from "../../src/shell/packages";
 import type { PackageSettingsStore } from "../../src/ports/settings-store";
-import { obedient, RecordingLogger, RecordingNotifier, type Behaviour } from "../fakes/children";
+import {
+  exitsAtOnce,
+  obedient,
+  RecordingLogger,
+  RecordingNotifier,
+  type Behaviour,
+} from "../fakes/children";
 import { supervised } from "../fakes/supervised";
 
 let scratch: string;
@@ -102,6 +108,40 @@ describe("restarting only the runtime", () => {
     clock.advance(10);
     expect(await took).not.toBeNull();
     expect(forks).toEqual([1]);
+  });
+
+  it("never changes anything under a runtime still starting: it restarts it once it runs", async () => {
+    const { clock, supervisor, logger, launcher } = supervised(obedient);
+    supervisor.start();
+    // Forked, not yet ready: a generation that may already read the packages.
+    const seen: { oldExited: boolean | undefined; forks: number }[] = [];
+    const took = runtimeRestarter(
+      supervisor,
+      clock,
+      logger,
+    )("x", () =>
+      seen.push({ oldExited: launcher.children[0]?.exited, forks: launcher.children.length }),
+    );
+    expect(seen).toEqual([]);
+    clock.advance(10);
+    expect(await took).not.toBeNull();
+    expect(seen).toEqual([{ oldExited: true, forks: 1 }]);
+    expect(supervisor.status()).toMatchObject({ state: "running", generation: 2 });
+  });
+
+  it("does the work at once while no runtime process exists, between crashes or down for good", async () => {
+    const { clock, supervisor, logger, launcher } = supervised(exitsAtOnce);
+    supervisor.start();
+    clock.advance(0);
+    // Crashed, waiting out its backoff: no process to see the change.
+    expect(launcher.current.exited).toBe(true);
+    let ran = 0;
+    expect(await runtimeRestarter(supervisor, clock, logger)("x", () => (ran += 1))).toBeNull();
+    expect(ran).toBe(1);
+    clock.advance(10 * 60_000);
+    expect(supervisor.status().state).toBe("down-for-good");
+    expect(await runtimeRestarter(supervisor, clock, logger)("y", () => (ran += 1))).toBeNull();
+    expect(ran).toBe(2);
   });
 
   it("resolves null, and says so, when the runtime does not come back", async () => {

@@ -90,7 +90,8 @@ export function runtimeRestarter(
   });
   return (reason, whileStopped) =>
     new Promise((resolve) => {
-      const before = runtime.status().generation;
+      // The generation the planned restart replaces; null until the runtime took the restart.
+      let before: number | null = null;
       const started = clock.now();
       let cancel = (): void => undefined;
       const done = (took: number | null): void => {
@@ -100,7 +101,31 @@ export function runtimeRestarter(
         cancel();
         resolve(took);
       };
+      const ask = (): boolean => {
+        const generation = runtime.status().generation;
+        if (!runtime.restart("types", undefined, whileStopped)) {
+          return false;
+        }
+        before = generation;
+        return true;
+      };
+      // No runtime process at all (never started, between a crash and its next fork, down for
+      // good): the work is done now, and the next start reads the packages.
+      const settledStopped = (): boolean => {
+        if (!runtime.runIfStopped(whileStopped)) {
+          return false;
+        }
+        done(null);
+        return true;
+      };
       const waiter = (status: Contract.ChildStatus): void => {
+        if (before === null) {
+          // Starting or restarting when asked: restart once it runs, or work once none does.
+          if (status.state !== "running" || !ask()) {
+            settledStopped();
+          }
+          return;
+        }
         if (status.generation > before && status.state === "running") {
           done(clock.now() - started);
         } else if (status.state === "down-for-good") {
@@ -113,10 +138,8 @@ export function runtimeRestarter(
         done(null);
       });
       logger.info(`restarting only the runtime: ${reason}`);
-      if (!runtime.restart("types", undefined, whileStopped)) {
-        // Not running: it reads the packages when it next starts.
-        whileStopped?.();
-        done(null);
+      if (!ask() && !settledStopped()) {
+        logger.info("the runtime is starting: it restarts once it runs");
       }
     });
 }

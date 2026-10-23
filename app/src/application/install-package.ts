@@ -103,31 +103,34 @@ export type RestartRuntime = (reason: string, whileStopped?: () => void) => Prom
 /**
  * Restart the runtime with `change` made while it is stopped, so the old processes close on the
  * files they started with (test_plugin_update_apply.py: the plugin is still on its old version
- * when the stop arrives). `change` runs once: between the generations, or straight after when
- * nothing was running to wait for. Resolves with how long the restart took, and what `change`
- * threw, if anything.
+ * when the stop arrives). `change` runs once, between the generations or while none runs, and
+ * never under a live runtime: a restart that never stopped one leaves it unmade, and says so.
+ * Resolves with how long the restart took, and what `change` threw or why it was not made.
  */
 export async function restartAround(
   restartRuntime: RestartRuntime,
   reason: string,
   change: () => void,
 ): Promise<{ readonly took: number | null; readonly refused: string | null }> {
-  let done = false;
-  let refused: string | null = null;
+  // A holder, not two lets: the restart sets them from a callback the compiler cannot follow.
+  const made: { done: boolean; refused: string | null } = { done: false, refused: null };
   const once = (): void => {
-    if (done) {
+    if (made.done) {
       return;
     }
-    done = true;
+    made.done = true;
     try {
       change();
     } catch (error) {
-      refused = (error as Error).message;
+      made.refused = (error as Error).message;
     }
   };
   const took = await restartRuntime(reason, once);
-  once();
-  return { took, refused };
+  if (!made.done) {
+    made.done = true;
+    made.refused = "the runtime could not be stopped to make the change, so nothing was changed";
+  }
+  return { took, refused: made.refused };
 }
 
 export interface PackageInstallerPorts extends CatalogueReads {

@@ -46,6 +46,8 @@ let now: number;
 let restarts: string[];
 /** What the old runtime's node processes do as their stop arrives. */
 let stopping: () => void;
+/** How long the fake restart took; null: the runtime was not running to restart. */
+let took: number | null;
 let types: readonly string[] | null;
 
 beforeEach(() => {
@@ -60,6 +62,7 @@ beforeEach(() => {
   manifest = {};
   restarts = [];
   stopping = () => undefined;
+  took = 100;
   types = [];
 });
 
@@ -171,7 +174,7 @@ function setUp(shipped: { name: string; version: string; folder: string }[] = []
     restarts.push(reason);
     stopping();
     whileStopped?.();
-    return Promise.resolve(100);
+    return Promise.resolve(took);
   };
   const reads = {
     catalogue: () => {
@@ -491,6 +494,19 @@ describe("update and Go back (D5)", () => {
     expect(await board.goBack("monty")).toEqual({ ok: true });
     // The 0.2.0 instances closed on 0.2.0's files; 0.1.0 was live for the next start.
     expect(atStop).toEqual(["0.2.0"]);
+    expect(roots.installed("monty")?.version).toBe("0.1.0");
+  });
+
+  it("Go back with the runtime down is done once the version is back on disk", async () => {
+    const folder = writeFolder("monty", "0.1.0");
+    const { board } = setUp();
+    await board.start();
+    await board.installFolder(folder);
+    writeFolder("monty", "0.2.0");
+    await board.checkFolder("monty");
+    expect(await board.update("monty")).toEqual({ ok: true });
+    took = null;
+    expect(await board.goBack("monty")).toEqual({ ok: true });
     expect(roots.installed("monty")?.version).toBe("0.1.0");
   });
 

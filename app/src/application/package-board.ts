@@ -507,10 +507,8 @@ export class PackageBoard {
       if (notBack !== null) {
         throw new Error(notBack);
       }
-      const problem =
-        took === null
-          ? "the runtime did not come back running, so its instances could not be confirmed"
-          : await updates.waitForReady(name);
+      // Back on disk is done: a runtime that is not running starts on it when it next starts.
+      const problem = took === null ? null : await updates.waitForReady(name);
       if (problem !== null) {
         logger.warn(`packages: ${name} went back to ${offer.previous}, but ${problem}`);
         return { ok: false, failed: "go-back", version: offer.previous };
