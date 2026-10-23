@@ -8,11 +8,12 @@ export default defineConfig({
   testMatch: "**/*.e2e.ts",
   grepInvert: /@machine/,
   // Every test runs its own app on its own scratch home, userData and ports (app-harness.ts),
-  // and counts only the processes naming its own userData, so tests run side by side. Four:
-  // more apps at once load the machine until the specs' own waits run out (6 and 8 flaked).
-  workers: 4,
+  // and counts only the processes naming its own userData, so tests run side by side. Six: eight
+  // loaded the machine until the specs' own waits ran out.
+  workers: 6,
   fullyParallel: true,
-  timeout: 60_000,
+  // A ceiling, never a wait: tests side by side each take up to twice their time alone.
+  timeout: 120_000,
   forbidOnly: true,
   // The JSON report is what the parity stage checks ported ids against (plan 0018 §5.3).
   reporter: [["list"], ["json", { outputFile: "../.gate/playwright.json" }]],

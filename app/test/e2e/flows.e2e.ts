@@ -394,7 +394,8 @@ test("(c) delete removes the tab and its runs, and is refused while the canvas i
         await new Promise((resolve) => setTimeout(resolve, 300));
         return RED.nodes.dirty();
       });
-    await expect.poll(markDirty, { timeout: 10_000 }).toBe(true);
+    // As quit-question.e2e allows: tens of seconds on a loaded machine.
+    await expect.poll(markDirty, { timeout: 30_000 }).toBe(true);
 
     expect(await app(window).call("deleteFlow", FLOW)).toEqual({
       ok: false,

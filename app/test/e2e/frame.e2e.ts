@@ -196,14 +196,22 @@ test("the quit question shows and is answered even when Setup's state cannot be 
         answers.push(choice);
       });
     });
-    // A quit whose Save failed asks again, saying why (shell/quit-question.ts ask(problem)).
-    await app.evaluate(({ BrowserWindow }) => {
-      BrowserWindow.getAllWindows()[0]?.webContents.send("reload:quit-question", {
-        problem: "The deploy <b>failed</b>.",
-      });
-    });
+    // A quit whose Save failed asks again, saying why (shell/quit-question.ts ask(problem)). Sent
+    // until it shows: a send before the page has started listening is lost, as on a slow start.
     const question = window.getByTestId("quit-question");
-    await expect(question).toBeVisible({ timeout: 15_000 });
+    await expect
+      .poll(
+        async () => {
+          await app.evaluate(({ BrowserWindow }) => {
+            BrowserWindow.getAllWindows()[0]?.webContents.send("reload:quit-question", {
+              problem: "The deploy <b>failed</b>.",
+            });
+          });
+          return question.isVisible();
+        },
+        { timeout: 15_000 },
+      )
+      .toBe(true);
     // The problem is shown as text, escaped: no element is made of it.
     const problem = question.getByTestId("quit-problem");
     await expect(problem).toHaveText("The deploy <b>failed</b>.");
