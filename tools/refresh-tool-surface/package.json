@@ -1,0 +1,5 @@
+{
+  "//": "Not a workspace. Marks cli.ts as an ES module.",
+  "private": true,
+  "type": "module"
+}
