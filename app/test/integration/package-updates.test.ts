@@ -8,6 +8,7 @@
 // tests/test_plugin_update_apply.py's per-package rows, the window's update rows
 // (test_application_window.py, test_plugin_page.py, test_toolkit_desktop.py) through the page's
 // state, and plan 0013's moved version.
+import { FsArchiveCache } from "../../src/adapters/fs/catalogue-cache";
 import fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -242,6 +243,7 @@ function setUp(overrides: Partial<PackageUpdatesPorts> = {}) {
     {
       ...reads(),
       environment,
+      archives: new FsArchiveCache(path.join(base, "updates")),
       policy: () => parsePackagePolicy(settings.readPackages()),
       restartRuntime,
       readiness: (packages) => readiness(packages),
@@ -350,6 +352,68 @@ describe("the version check", () => {
     // Apply verified the kept file again, and fetched nothing more.
     expect(archives()).toHaveLength(1);
     expect(roots.installed("pinger")?.version).toBe("0.2.0");
+  });
+
+  it("keeps one archive per package on disk, deletes a refused one, and none once installed", async () => {
+    const { updates } = await installed("pinger", "0.1.0");
+    const archives = () =>
+      fs.existsSync(path.join(base, "updates"))
+        ? fs.readdirSync(path.join(base, "updates")).filter((file) => file.endsWith(".tgz"))
+        : [];
+    // A catalogue that keeps bumping its version: still one file.
+    for (const version of ["0.2.0", "0.3.0", "0.4.0"]) {
+      publish("pinger", version);
+      await updates.check();
+    }
+    expect(archives()).toEqual(["official~pinger.tgz"]);
+    // A refused release leaves no file.
+    publish("pinger", "0.5.0", { declares: "0.5.1" });
+    await updates.check();
+    expect(archives()).toEqual([]);
+    // Installed: neither its file nor its verdict is kept.
+    publish("pinger", "0.6.0");
+    await updates.check();
+    expect(await updates.apply("pinger", "person")).toMatchObject({ ok: true });
+    expect(archives()).toEqual([]);
+    expect(fs.readFileSync(path.join(base, "updates", "verdicts.json"), "utf8")).not.toContain(
+      "pinger",
+    );
+  });
+
+  it("a relaunch does not download a pending release again, nor a refused one, until its entry changes", async () => {
+    await installed("pinger", "0.1.0");
+    publish("pinger", "0.2.0");
+    const first = setUp();
+    await first.updates.check();
+    const archive = (version: string) => () =>
+      fetched.filter((url) => url === archiveUrl("pinger", version)).length;
+    expect(archive("0.2.0")()).toBe(1);
+    // The next launch: a new process, the same disk.
+    const second = setUp();
+    await second.updates.check();
+    expect(archive("0.2.0")()).toBe(1);
+    expect((await line(second.installer, second.updates, "pinger"))?.update).toMatchObject({
+      kind: "newer",
+      version: "0.2.0",
+    });
+    // A refused release stays refused, unfetched, across a relaunch.
+    publish("pinger", "0.3.0", { declares: "0.3.1" });
+    await second.updates.check();
+    const third = setUp();
+    await third.updates.check();
+    expect(archive("0.3.0")()).toBe(1);
+    expect((await line(third.installer, third.updates, "pinger"))?.update?.detail).toContain(
+      "its archive declares pinger 0.3.1",
+    );
+    // The publisher fixes it under the same version, at a new address: judged again, offered.
+    const fixed = "https://catalogue.test/packages/pinger-0.3.0-fixed.tgz";
+    served.set(fixed, signedArchive(packageFiles("pinger", "0.3.0"), signer));
+    entries = entries.map((entry) => ({ ...entry, archive: fixed }));
+    await third.updates.check();
+    expect((await line(third.installer, third.updates, "pinger"))?.update).toMatchObject({
+      kind: "newer",
+      version: "0.3.0",
+    });
   });
 
   it("a release that fails to download is checked again next time, and offered once it verifies", async () => {
@@ -703,8 +767,10 @@ describe("applying an update", () => {
     // The kept file and the served one both went bad after the check verified them.
     const bad = new TextEncoder().encode("not an archive");
     served.set(archiveUrl("pinger", "0.2.0"), bad);
-    for (const file of fs.readdirSync(path.join(base, "downloads"))) {
-      fs.writeFileSync(path.join(base, "downloads", file), bad);
+    for (const file of fs
+      .readdirSync(path.join(base, "updates"))
+      .filter((f) => f.endsWith(".tgz"))) {
+      fs.writeFileSync(path.join(base, "updates", file), bad);
     }
     expect(await updates.apply("pinger", "person")).toMatchObject({
       ok: false,
@@ -721,8 +787,10 @@ describe("applying an update", () => {
     publish("pinger", "0.2.0");
     await updates.check();
     // After the check, the kept file is replaced, and the server now serves another version.
-    for (const file of fs.readdirSync(path.join(base, "downloads"))) {
-      fs.writeFileSync(path.join(base, "downloads", file), "tampered");
+    for (const file of fs
+      .readdirSync(path.join(base, "updates"))
+      .filter((f) => f.endsWith(".tgz"))) {
+      fs.writeFileSync(path.join(base, "updates", file), "tampered");
     }
     served.set(
       archiveUrl("pinger", "0.2.0"),

@@ -39,7 +39,7 @@ import {
   credentialSecretFile,
   OwnerOnlyFileStore,
 } from "../adapters/fs/owner-only-files";
-import { FileCatalogueCache } from "../adapters/fs/catalogue-cache";
+import { catalogueStores } from "../adapters/fs/catalogue-cache";
 import { FsBlockedUpdates } from "../adapters/fs/blocked-updates";
 import { FsContentHashes } from "../adapters/fs/content-hashes";
 import { DeclaredPackageStore } from "../adapters/fs/declared-package-store";
@@ -419,7 +419,7 @@ async function start(): Promise<DesktopWired["notices"] | null> {
     // A release's build settings (WI-0018-23): package.json's "reload"; RELOAD_CATALOGUE_URL/_KEY override it outside an installed build only.
     ...catalogue,
     http: httpsClient,
-    catalogueCache: new FileCatalogueCache(path.join(userDir, "catalogues")),
+    ...catalogueStores(userDir),
     notifier: notices,
     settings: new JsonSettingsStore(path.join(userDir, "shell-settings.json")),
     blocked: new FsBlockedUpdates(path.join(packageBase, "blocked-updates.json")),

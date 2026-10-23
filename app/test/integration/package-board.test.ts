@@ -3,6 +3,7 @@
 // content re-hashed, kept versions pruned after seven days, and the `packages.unregistered`
 // setting in a real settings file. The runtime's restart, its loaded types and its readiness
 // are stand-ins; wall-clock time is a number the test moves.
+import { FsArchiveCache } from "../../src/adapters/fs/catalogue-cache";
 import fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -226,6 +227,7 @@ function setUp(shipped: { name: string; version: string; folder: string }[] = []
     {
       ...reads,
       environment,
+      archives: new FsArchiveCache(path.join(base, "updates")),
       policy: () => parsePackagePolicy(settings.readPackages()),
       restartRuntime,
       readiness: () => Promise.resolve({ deployed: ["n1"], ready: ["n1"] }),

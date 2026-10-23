@@ -23,6 +23,7 @@ import {
   type PackageCatalogue,
 } from "../domain/packages/catalogue";
 import { judgeCatalogueVersion, type VersionFinding } from "../domain/packages/versions";
+import type { ArchiveCache } from "../ports/archive-cache";
 import type { HttpClient } from "../ports/http-client";
 import type { InstalledOrigin, InstalledRecord } from "../ports/package-roots";
 import {
@@ -36,6 +37,12 @@ export type ArchiveChecks = Pick<
   PackageEnvironmentPorts,
   "source" | "verifier" | "validator" | "sha256"
 >;
+
+/** Judging an update's archive: the checks, and where its archive and verdict are kept. */
+export interface UpdateArchives {
+  readonly environment: ArchiveChecks;
+  readonly cache: ArchiveCache;
+}
 
 /** One archive's verdict: the verified file, or why it is not offered. */
 export type ArchiveVerdict =
@@ -146,8 +153,6 @@ const reasonOf = (error: unknown): string =>
 
 export class PackageCatalogues {
   readonly #reads: CatalogueReads;
-  /** Each archive's verdict, by (source, package, version), for as long as this process runs. */
-  readonly #verdicts = new Map<string, ArchiveVerdict>();
 
   constructor(reads: CatalogueReads) {
     this.#reads = reads;
@@ -232,7 +237,7 @@ export class PackageCatalogues {
   async judge(
     record: InstalledRecord,
     from: Extract<InstalledOrigin, { kind: "catalogue" }>,
-    environment: ArchiveChecks,
+    checks: UpdateArchives,
   ): Promise<VersionFinding> {
     let resolved: ResolvedCatalogue;
     try {
@@ -258,7 +263,8 @@ export class PackageCatalogues {
       };
     }
     const archive = { name: record.package, source: from.source, version: finding.version };
-    const verdict = await this.verifiedArchive(archive, entry, resolved.key, environment, false);
+    const offered = { ...entry, archive: entry.archive };
+    const verdict = await this.verifiedArchive(archive, offered, resolved.key, checks, false);
     return verdict.ok
       ? finding
       : {
@@ -268,39 +274,54 @@ export class PackageCatalogues {
   }
 
   /**
-   * The archive of one (source, package, version), fetched once, verified with `key` and found
-   * to declare that package at that version; or why not. A refusal is kept, a failure to fetch
-   * is not (it may pass). `again`: Apply's, which verifies the kept file once more, and fetches
-   * it afresh when that fails, so what is installed is always what verified.
+   * The archive of one (source, package, version), verified with `key` and found to declare that
+   * package at that version; or why not. Fetched once per catalogue entry (its version and its
+   * archive's address): the verdict is kept on disk across launches, and a refusal stays one
+   * until the entry changes. A failure to fetch is not kept (it may pass). One archive file per
+   * (source, package), overwritten by the next release and deleted when refused, so a catalogue
+   * that keeps bumping its versions never grows the disk. `again`: Apply's, which verifies the
+   * kept file once more and fetches it afresh when that fails, so what is installed is what
+   * verified.
    */
   async verifiedArchive(
     archive: { readonly name: string; readonly source: string; readonly version: string },
-    entry: CatalogueEntry,
+    entry: CatalogueEntry & { readonly archive: string },
     key: string | null,
-    environment: ArchiveChecks,
+    checks: UpdateArchives,
     again: boolean,
   ): Promise<ArchiveVerdict> {
     const { name, source, version } = archive;
-    const id = JSON.stringify([source, name, version]);
-    const known = this.#verdicts.get(id);
-    if (known !== undefined && !(again && known.ok)) {
-      return known;
-    }
-    if (known?.ok === true) {
-      const kept = await this.#verdictOf(known.path, archive, key, environment);
-      if (kept.ok) {
-        return kept;
+    const { cache } = checks;
+    const kept = cache.verdict(source, name);
+    if (kept !== undefined && kept.version === version && kept.archive === entry.archive) {
+      if (!kept.ok) {
+        return { ok: false, reason: kept.reason };
       }
-      this.#verdicts.delete(id);
+      const path = cache.path(source, name);
+      if (!again) {
+        return { ok: true, path };
+      }
+      const still = await this.#verdictOf(path, archive, key, checks.environment);
+      if (still.ok) {
+        return still;
+      }
     }
-    let path: string;
-    try {
-      path = await this.download(`${name}@${encodeURIComponent(version)}`, entry);
-    } catch (error) {
-      return { ok: false, reason: reasonOf(error) };
+    const fetched = await this.#reads.http.get(entry.archive, { maxBytes: MAX_ARCHIVE_BYTES });
+    if (!fetched.ok) {
+      return { ok: false, reason: `its archive could not be fetched: ${fetched.detail}` };
     }
-    const verdict = await this.#verdictOf(path, archive, key, environment);
-    this.#verdicts.set(id, verdict);
+    const path = cache.write(source, name, fetched.body);
+    const verdict = await this.#verdictOf(path, archive, key, checks.environment);
+    cache.keep(
+      source,
+      name,
+      verdict.ok
+        ? { version, archive: entry.archive, ok: true }
+        : { version, archive: entry.archive, ok: false, reason: verdict.reason },
+    );
+    if (!verdict.ok) {
+      cache.discard(source, name, { verdict: false });
+    }
     return verdict;
   }
 
@@ -336,7 +357,7 @@ export class PackageCatalogues {
     name: string,
     from: Extract<InstalledOrigin, { kind: "catalogue" }>,
     version: string,
-    environment: ArchiveChecks,
+    checks: UpdateArchives,
   ): Promise<PackageOrigin> {
     const { catalogue, key } = await this.resolve(from.source);
     const entry = entryFor(catalogue, from.id);
@@ -349,9 +370,13 @@ export class PackageCatalogues {
           "check for updates again",
       );
     }
+    if (entry.archive === undefined) {
+      throw new Error(`the ${from.source} catalogue names no archive of ${name} ${version}`);
+    }
     // The archive the check verified, verified again; or fetched afresh and verified.
     const archive = { name, source: from.source, version };
-    const verdict = await this.verifiedArchive(archive, entry, key, environment, true);
+    const offered = { ...entry, archive: entry.archive };
+    const verdict = await this.verifiedArchive(archive, offered, key, checks, true);
     if (!verdict.ok) {
       throw new Error(verdict.reason);
     }

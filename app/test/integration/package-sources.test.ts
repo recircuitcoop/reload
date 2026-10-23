@@ -7,6 +7,7 @@
 // catalogue leaving the others intact, entries naming their source with only a keyless one
 // unverified, and an install recording its source's policy. A source is in the settings file;
 // registering, removing and switching one in the window went with the 0.3.0 cutover.
+import { FsArchiveCache } from "../../src/adapters/fs/catalogue-cache";
 import fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -190,6 +191,7 @@ function setUp() {
     {
       ...reads,
       environment,
+      archives: new FsArchiveCache(path.join(base, "updates")),
       policy: () => parsePackagePolicy(settings.readPackages()),
       restartRuntime,
       readiness: () => Promise.resolve({ deployed: [], ready: [] }),

@@ -29,6 +29,7 @@ import {
   type UpdateMode,
   type VersionFinding,
 } from "../domain/packages/versions";
+import type { ArchiveCache } from "../ports/archive-cache";
 import { UNREAD_BLOCKS, type BlockedUpdates } from "../ports/blocked-updates";
 import type { Clock } from "../ports/clock";
 import type { Logger } from "../ports/logger";
@@ -44,7 +45,7 @@ import {
   type RestartRuntime,
   type UpdateLine,
 } from "./install-package";
-import { PackageCatalogues, type CatalogueReads } from "./package-catalogues";
+import { PackageCatalogues, type CatalogueReads, type UpdateArchives } from "./package-catalogues";
 import {
   inspectPackage,
   stagePackageEnvironment,
@@ -79,6 +80,8 @@ export interface PackageUpdatesPorts extends CatalogueReads {
   /** Wall-clock time, epoch ms: when the last check ran, as the page says it. */
   readonly now: () => number;
   readonly logger: Logger;
+  /** Where the check keeps a newer release's archive and verdict, across launches. */
+  readonly archives: ArchiveCache;
 }
 
 /** What the last check found about one package. */
@@ -215,7 +218,7 @@ export class PackageUpdates {
       };
     }
     if (origin.kind === "catalogue") {
-      return this.#catalogues.judge(record, origin, this.#ports.environment);
+      return this.#catalogues.judge(record, origin, this.#archives());
     }
     try {
       const now = await inspectPackage(fileOrigin(origin.path), this.#ports.environment);
@@ -367,6 +370,9 @@ export class PackageUpdates {
           `${String(took)} ms`,
       );
       this.#found.set(name, { finding: { kind: "current" }, installed: built });
+      if (from.kind === "catalogue") {
+        this.#ports.archives.discard(from.source, name, { verdict: true });
+      }
       this.#ports.notifier.clear("package-update-available", name);
       this.#ports.notifier.clear("package-update-refused", name);
       return { ok: true, message: `${name} is updated from ${record.version} to ${built}.` };
@@ -374,12 +380,16 @@ export class PackageUpdates {
     return this.#rollBack(record, built, problem, took !== null);
   }
 
+  #archives(): UpdateArchives {
+    return { environment: this.#ports.environment, cache: this.#ports.archives };
+  }
+
   /** Where the new version is read from: the downloaded archive, or the file it came from. */
   async #fetch(name: string, from: InstalledOrigin, version: string): Promise<PackageOrigin> {
     if (from.kind === "file") {
       return fileOrigin(from.path);
     }
-    return this.#catalogues.offeredArchive(name, from, version, this.#ports.environment);
+    return this.#catalogues.offeredArchive(name, from, version, this.#archives());
   }
 
   /**

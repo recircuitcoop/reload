@@ -730,19 +730,28 @@ Corrections to the brief:
 
 ### 36. Update offers and notices that are not true
 
-- **Old app / now:** An archive with a different version from its catalogue entry, or an entry naming a newer version with no archive, was not offered; the 'ready, installs when you quit' notice came only after staging. Now such an entry is offered and fails at Apply, and the notice appears before staging and stays when staging fails.
-- **Size:** S. Lives in: `application/update-check.ts:166-171`, `domain/packages/catalogue` checks.
-- **Owner decision:** port the old behaviour (team lead, 2026-10-23: "a release whose archive
-  declares another version than the catalogue is NOT offered").
+- **Old app / now:** An archive with a different version from its catalogue entry, or an entry
+  naming a newer version with no archive, was not offered; the 'ready, installs when you quit'
+  notice came only after staging. Now the same: neither is offered, and the notice comes only once
+  the release is staged.
+- **Size:** S. Lives in: `application/update-check.ts`, `application/package-catalogues.ts`.
+- **Owner decision:** none; the default is Port (the standing rule above), and it is ported.
 - **Ported (port/0032-small-safety):** the "ready, installs when you quit" notice comes only once
   staging has completed. An entry naming a newer version but no archive is not offered. A newer
   version is offered only once its archive has been downloaded, its signature verified, and its
   declaration found to name that package at that version; otherwise the page says why.
 - **Cost, in plain words:** each new release of an installed package is downloaded once (up to
-  256 MB), when a check first sees it, not on every check or every refresh of the Packages page;
-  Apply then installs that same file, verified again, or downloads it afresh if it no longer
-  verifies. Downloading it tells the catalogue's host that this machine has the package installed
-  and has seen the new version, as Apply always did, only earlier: at the check.
+  256 MB), when a check first sees it: not on every check, every refresh of the Packages page or
+  every launch, since the verdict is kept on disk; a refused release is not downloaded again until
+  its catalogue entry changes. One archive file per package is kept, overwritten by the next
+  release, deleted when refused and once installed, so a catalogue that keeps bumping its
+  versions cannot grow the disk. Apply installs that same file, verified again, or downloads it
+  afresh if it no longer verifies. Downloading it tells the catalogue's host that this machine has
+  the package installed and has seen the new version, as Apply always did, only earlier.
+- **Left as it was:** an install of a new package and "Install again" (a repair) still swap their
+  folder in before the runtime restarts, not while it is stopped. A new package has no old
+  instances to close; a repair is refused unless its content is byte for byte what is live, so the
+  closing instances read the same files either way.
 - **Rows (3):**
 
 - `tests/test_plugin_version_check.py::test_a_git_manifest_that_disagrees_with_its_tag_is_not_offered`

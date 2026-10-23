@@ -7,6 +7,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { FsArchiveCache } from "../../src/adapters/fs/catalogue-cache";
 import { FsPackageRoots, unsealTree } from "../../src/adapters/fs/package-roots";
 import {
   catalogueSource,
@@ -56,6 +57,7 @@ export class MemoryPackageSettings implements PackageSettingsStore {
 const UPDATES_UNUSED = () => ({
   settings: new MemoryPackageSettings(),
   blocked: { reason: () => null, block: () => undefined },
+  archives: new FsArchiveCache(path.join(scratch, "updates")),
   notifier: new RecordingNotifier(),
 });
 

@@ -19,6 +19,7 @@ import {
   type PackageInstallerPorts,
   type RestartRuntime,
 } from "../application/install-package";
+import type { ArchiveCache } from "../ports/archive-cache";
 import type { CatalogueReads } from "../application/package-catalogues";
 import { readSources } from "../application/package-sources";
 import { PackageBoard } from "../application/package-board";
@@ -62,6 +63,8 @@ export interface ShellPackagesOptions extends Omit<
   readonly settings: PackageSettingsStore;
   /** The versions whose update failed here and was rolled back. */
   readonly blocked: BlockedUpdates;
+  /** Where the update check keeps a newer release's archive and verdict, across launches. */
+  readonly archives: ArchiveCache;
   /** Where "update available" and "rolled back" are told, once (WI-0018-21's NoticeBoard). */
   readonly notifier: Notifier;
   /** This app build's shipped-package manifest (application/shipped-manifest.ts). */
