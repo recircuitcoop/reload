@@ -71,7 +71,7 @@ class ChildNodeProcess implements NodeProcess {
   #child: ChildProcess | null = null;
   ready = false;
   #statusSeen = false;
-  #closing = false;
+  #closing: CloseReason | null = null; // why it is closing, while it is
   #closedAck = false;
   /** Why no process starts again (an input's refusal), or null while one may. */
   stopped: string | null = null;
@@ -196,7 +196,7 @@ class ChildNodeProcess implements NodeProcess {
     if (this.#closing) {
       return gone;
     }
-    this.#closing = true;
+    this.#closing = reason;
     if (reason === "removed") {
       clearNodeNotices(this.#deps.notifier, this.#subject);
     }
@@ -245,6 +245,7 @@ class ChildNodeProcess implements NodeProcess {
       graceMs: this.#deps.settings.exitGraceMs,
       after: this.#after.bind(this),
       tree: this.#deps.tree,
+      urgent: () => this.#closing === "quit" || this.#closing === "types",
       log: this.#log.bind(this, "error"),
       exited: this.#onExit.bind(this, child),
     });

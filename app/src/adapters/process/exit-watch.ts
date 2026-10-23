@@ -36,6 +36,12 @@ export interface ExitWatch {
   readonly after: (ms: number, callback: () => void) => void;
   /** Its process group: whatever the process started goes with it. */
   readonly tree: Pick<ProcessTree, "sweep">;
+  /**
+   * Whether the runtime is stopping and exits once its nodes have closed: what the process
+   * started is then killed at once, and its exit handled only after, since the runtime's exit
+   * would leave a later kill unsent.
+   */
+  readonly urgent: () => boolean;
   readonly log: (message: string) => void;
   /**
    * Called once, with how it ended: `code N`, `signal S` or "failed to start"; for a process
@@ -65,14 +71,23 @@ export function watchExit(child: ChildProcess, watch: ExitWatch): void {
   let how: string | null = null;
   let failure: string | undefined;
   let handled = false;
+  let sweeping: Promise<void> | null = null;
   const handle = (): void => {
-    if (!handled) {
-      handled = true;
+    if (handled) {
+      return;
+    }
+    handled = true;
+    const report = (): void => {
       if (how === null) {
         watch.exited("failed to start", failure ?? "it did not start");
       } else {
         watch.exited(how);
       }
+    };
+    if (sweeping === null) {
+      report();
+    } else {
+      void sweeping.then(report);
     }
   };
   child.on("error", (error) => {
@@ -87,7 +102,8 @@ export function watchExit(child: ChildProcess, watch: ExitWatch): void {
     // The node is gone; whatever it started goes too, on close and on crash alike. Its number
     // may be reused once its group is empty, so the sweep signals only a group with a member.
     if (child.pid !== undefined) {
-      watch.tree.sweep(child.pid).then(
+      const urgent = watch.urgent();
+      const swept = watch.tree.sweep(child.pid, !urgent).then(
         (survivors) => {
           if (survivors.length > 0) {
             watch.log(`still running beneath it after a forced kill: ${survivors.join(", ")}`);
@@ -99,6 +115,9 @@ export function watchExit(child: ChildProcess, watch: ExitWatch): void {
           );
         },
       );
+      if (urgent) {
+        sweeping = swept;
+      }
     }
     watch.after(watch.graceMs, handle);
   });

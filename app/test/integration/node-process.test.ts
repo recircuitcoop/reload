@@ -989,6 +989,26 @@ describe("no orphan: a node's grandchildren end with it", () => {
     expect(signals).toEqual([`SIGTERM -${String(leader)}`, `SIGKILL -${String(leader)}`]);
   }, 20_000);
 
+  it("on quit, kills what ignores a polite stop before the close ends, so a runtime that exits then leaves none", async () => {
+    const signals: string[] = [];
+    const tree = processTreeFor(process.platform, (pid, signal) => {
+      signals.push(`${signal} ${String(pid)}`);
+      process.kill(pid, signal);
+    });
+    const node = raw({ tree });
+    await ready(node);
+    const leader = node.node.pid as number;
+    const [, stubborn] = send(node.node, { do: "stubborn-grandchild" });
+    await waitFor("the stubborn one", () => stubborn.finished);
+    const pid = stubborn.outputs[0]?.message.payload as number;
+    await node.node.close("quit");
+    // The runtime exits now: whatever it has not sent by this point is never sent.
+    const sent = [...signals];
+    expect(sent).toEqual([`SIGKILL -${String(leader)}`]);
+    await waitFor("the stubborn one to go", () => !alive(pid), 3_000);
+    expect(signals).toEqual(sent);
+  });
+
   it("and a node that exited with nothing left behind is forgotten: nothing is signalled at its pid", async () => {
     // Every signal any part of the tree sends, its sweep after the exit included.
     const signals: number[] = [];
@@ -999,8 +1019,8 @@ describe("no orphan: a node's grandchildren end with it", () => {
     const swept: number[] = [];
     const tree: ProcessTree = {
       ...real,
-      sweep: async (pid) => {
-        const survivors = await real.sweep(pid);
+      sweep: async (pid, polite) => {
+        const survivors = await real.sweep(pid, polite);
         swept.push(pid);
         return survivors;
       },

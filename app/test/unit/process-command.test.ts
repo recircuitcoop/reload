@@ -186,7 +186,7 @@ describe("the process tree", () => {
       [52, 42],
       [420, 420],
     ]);
-    expect(await processTreeFor("darwin", m.signal, m.run, m.pace).sweep(42)).toEqual([]);
+    expect(await processTreeFor("darwin", m.signal, m.run, m.pace).sweep(42, true)).toEqual([]);
     expect(m.signals).toEqual([[-42, "SIGTERM"]]);
     expect(m.reads[0]).toEqual(["/bin/ps", "-A", "-o", "pid=,pgid="]);
   });
@@ -194,15 +194,24 @@ describe("the process tree", () => {
   it("kills one that ignores the polite stop, and names one that outlives the kill", async () => {
     const stubborn = machine([[51, 42]], [51]);
     expect(
-      await processTreeFor("darwin", stubborn.signal, stubborn.run, stubborn.pace).sweep(42),
+      await processTreeFor("darwin", stubborn.signal, stubborn.run, stubborn.pace).sweep(42, true),
     ).toEqual([]);
     expect(stubborn.signals).toEqual([
       [-42, "SIGTERM"],
       [-42, "SIGKILL"],
     ]);
+    // The runtime about to exit: killed at once, since a kill after the wait would never be sent.
+    const quitting = machine([[51, 42]], [51]);
+    expect(
+      await processTreeFor("darwin", quitting.signal, quitting.run, quitting.pace).sweep(42, false),
+    ).toEqual([]);
+    expect(quitting.signals).toEqual([[-42, "SIGKILL"]]);
     const unkillable = machine([[51, 42]], [], [51]);
     expect(
-      await processTreeFor("darwin", unkillable.signal, unkillable.run, unkillable.pace).sweep(42),
+      await processTreeFor("darwin", unkillable.signal, unkillable.run, unkillable.pace).sweep(
+        42,
+        true,
+      ),
     ).toEqual([51]);
   });
 
@@ -212,11 +221,11 @@ describe("the process tree", () => {
       [1, 1],
       [4200, 420],
     ]);
-    expect(await processTreeFor("linux", m.signal, m.run, m.pace).sweep(42)).toEqual([]);
+    expect(await processTreeFor("linux", m.signal, m.run, m.pace).sweep(42, true)).toEqual([]);
     expect(m.signals).toEqual([]);
     // Windows: the bare pid of a process that is gone; no table is read, nothing is sent.
     const w = machine([[51, 42]]);
-    expect(await processTreeFor("win32", w.signal, w.run, w.pace).sweep(42)).toEqual([]);
+    expect(await processTreeFor("win32", w.signal, w.run, w.pace).sweep(42, true)).toEqual([]);
     expect([...w.signals, ...w.reads]).toEqual([]);
   });
 
@@ -224,7 +233,7 @@ describe("the process tree", () => {
     const signals: number[] = [];
     const broken: CommandRunner = () => Promise.reject(new Error("ps ended with code 1"));
     const tree = processTreeFor("darwin", (pid) => signals.push(pid), broken);
-    await expect(tree.sweep(42)).rejects.toThrow("ps ended with code 1");
+    await expect(tree.sweep(42, true)).rejects.toThrow("ps ended with code 1");
     expect(signals).toEqual([]);
   });
 
@@ -265,11 +274,43 @@ describe("a node process's exit", () => {
           return Promise.resolve([51, 52]);
         },
       },
+      urgent: () => false,
       log: (line) => lines.push(line),
       exited: () => undefined,
     });
     child.emit("exit", null, "SIGKILL");
     await done;
     expect(lines).toEqual(["still running beneath it after a forced kill: 51, 52"]);
+  });
+
+  it("while the runtime stops, is handled only once what it started is killed", async () => {
+    const child = Object.assign(new EventEmitter(), { pid: 42 });
+    const events: string[] = [];
+    let killed: () => void = () => undefined;
+    watchExit(child as unknown as ChildProcessWithoutNullStreams, {
+      graceMs: 0,
+      after: () => undefined,
+      tree: {
+        sweep: (_pid, polite) => {
+          events.push(polite ? "polite sweep" : "kill at once");
+          return new Promise((resolve) => {
+            killed = () => {
+              events.push("killed");
+              resolve([]);
+            };
+          });
+        },
+      },
+      urgent: () => true,
+      log: () => undefined,
+      exited: (how) => events.push(`exited (${how})`),
+    });
+    child.emit("exit", 0, null);
+    child.emit("close");
+    await new Promise(setImmediate);
+    expect(events).toEqual(["kill at once"]);
+    killed();
+    await new Promise(setImmediate);
+    expect(events).toEqual(["kill at once", "killed", "exited (code 0)"]);
   });
 });

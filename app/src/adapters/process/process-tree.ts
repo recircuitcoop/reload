@@ -6,7 +6,8 @@
 // group unless it leaves it. A forced end (`kill`) ends the node itself; what it started is
 // ended by the sweep after its exit, as the old host ended a child's descendants
 // (children.py `_end_descendants`): asked politely first (SIGTERM to the group), killed after
-// the stop timeout if still there, and named when one outlives even that. The group outlives
+// the stop timeout if still there, and named when one outlives even that. While the runtime
+// stops to exit, it is killed at once: the runtime would be gone before the timeout. The group outlives
 // its leader while any member is alive, so it can still be signalled after the node exited.
 //
 // Windows: BLOCKED(WI-0025-01). The equivalent is a Job Object with
@@ -30,12 +31,13 @@ export interface ProcessTree {
   /** Ask the whole tree to stop (SIGTERM), politely. Safe when it is already gone. */
   stop(pid: number): void;
   /**
-   * After the process `pid` exited: end what is left of its tree, politely and then forcibly;
-   * the pids still running after the kill. Never signals a group with no member left, whose
+   * After the process `pid` exited: end what is left of its tree, politely and then forcibly,
+   * or forcibly at once when not `polite` (the runtime is about to exit, and a later kill would
+   * never be sent); the pids still running after the kill. Never signals a group with no member left, whose
    * number may be another program's by now. Rejects when the process table could not be read;
    * nothing more is signalled then.
    */
-  sweep(pid: number): Promise<readonly number[]>;
+  sweep(pid: number, polite: boolean): Promise<readonly number[]>;
   /** Why this platform cannot end the whole tree, or null when it can. */
   readonly blocked: string | null;
 }
@@ -108,7 +110,7 @@ export function processTreeFor(
   return {
     detached: true,
     blocked: null,
-    sweep: async (pid) => {
+    sweep: async (pid, polite) => {
       // Each signal follows a read that found a member: the number is the group's still.
       const left = async (): Promise<number[]> => {
         const deadline = Date.now() + pace.waitMs;
@@ -119,7 +121,7 @@ export function processTreeFor(
         }
         return members;
       };
-      for (const name of ["SIGTERM", "SIGKILL"] as const) {
+      for (const name of polite ? (["SIGTERM", "SIGKILL"] as const) : (["SIGKILL"] as const)) {
         if ((await groupMembers(pid, run)).length === 0) {
           return [];
         }
