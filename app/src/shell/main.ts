@@ -211,12 +211,7 @@ let updates: UpdateCheck | null = null;
 let telemetry: ShellTelemetry | null = null;
 // ── quit (WI-0018-12): undeployed edits are put to the person, then both children stop ──
 const editor = new EditorFrame({
-  frames: () => {
-    const window = appWindow.current;
-    return window === null || window.isDestroyed()
-      ? []
-      : window.webContents.mainFrame.framesInSubtree;
-  },
+  frames: () => appWindow.frames(),
   editorUrl: () => editorUrl,
   clock: systemClock,
 });

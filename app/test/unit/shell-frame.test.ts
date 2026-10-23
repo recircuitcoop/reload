@@ -26,6 +26,9 @@ class FakeWindow extends EventEmitter {
   openHandler: ((details: { url: string }) => { action: string }) | undefined;
   readonly webContents = Object.assign(new EventEmitter(), {
     send: (...args: unknown[]) => this.sent.push(args),
+    mainFrame: {
+      framesInSubtree: [{ url: "reload-app://app/" }, { url: "http://127.0.0.1/red/" }],
+    },
     setWindowOpenHandler: (handler: (details: { url: string }) => { action: string }) => {
       this.openHandler = handler;
     },
@@ -133,6 +136,20 @@ describe("the app window", () => {
       [{ kind: "file", node: "n2", field: "a.0.b" }, made[0]],
     ]);
     expect(opened).toEqual([]);
+  });
+
+  it("lists the open window's frames, the editor's among them, and none once it closes", () => {
+    const { window, made } = appWindow();
+    expect(window.frames()).toEqual([]);
+    window.open();
+    expect(window.frames().map((frame) => frame.url)).toEqual([
+      "reload-app://app/",
+      "http://127.0.0.1/red/",
+    ]);
+    const first = made[0];
+    if (first === undefined) throw new Error("no window");
+    first.destroyed = true;
+    expect(window.frames()).toEqual([]);
   });
 
   it("brings the one window forward, opening one when there is none", () => {

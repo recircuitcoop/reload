@@ -89,6 +89,14 @@ export class AppWindow {
     window.focus();
   };
 
+  /** Every frame of the open window (the editor's among them); none when it is closed. */
+  readonly frames = (): BrowserWindow["webContents"]["mainFrame"]["framesInSubtree"] => {
+    const window = this.#window;
+    return window === null || window.isDestroyed()
+      ? []
+      : window.webContents.mainFrame.framesInSubtree;
+  };
+
   /** Send to the app page, when it is open. */
   readonly toPage = (channel: string, ...args: unknown[]): void => {
     const window = this.#window;
