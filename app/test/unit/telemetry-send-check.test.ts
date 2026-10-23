@@ -3,7 +3,7 @@
 // vouched-for ones asked again of the store and the build, and nothing named like a credential.
 import { describe, expect, it } from "vitest";
 import { WITHHELD } from "../../src/domain/telemetry/redact";
-import { checkAtSend } from "../../src/domain/telemetry/send-check";
+import { checkAtSend, vouchedFields } from "../../src/domain/telemetry/send-check";
 import { RULES_VERSION } from "../../src/domain/telemetry/vocabulary";
 import { TEST_VOUCH } from "../fakes/telemetry";
 
@@ -141,6 +141,10 @@ describe("the check at send", () => {
       expect(
         usage({ event: "package_updated", package: pkg, version: "1.2.3", from_version: "1.0.0" }),
       ).toMatchObject({ package: pkg, version: null, from_version: null });
+      // At queue time too, before any rule turns a value that is not text into a string.
+      expect(
+        vouchedFields({ package: pkg, version: 5, from_version: { v: 1 } }, TEST_VOUCH),
+      ).toEqual({ package: pkg, version: null, from_version: null });
     }
   });
 
