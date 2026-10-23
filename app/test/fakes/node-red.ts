@@ -78,11 +78,19 @@ export class FakeRed implements NodeRedNodeApi {
       this.constructors.set(type, constructor);
       this.options.set(type, options);
     },
+    eachNode: (visit: (node: { readonly id: string }) => void): void => {
+      for (const id of this.deployed) {
+        visit({ id });
+      }
+    },
   };
+  /** The ids of the nodes in the flows now deployed (Node-RED's `eachNode`). */
+  readonly deployed = new Set<string>();
   readonly util = { cloneMessage: <T>(message: T): T => structuredClone(message) };
 
   /** Node-RED constructing an instance of `type` from its flow config and credentials. */
   create(type: string, config: Message, credentials: Message = {}): FakeNode {
+    this.deployed.add(String(config["id"]));
     const node = new FakeNode();
     node.credentials = credentials;
     const constructor = this.constructors.get(type);

@@ -730,7 +730,9 @@ Every frame is a JSON object with a string field `t`.
    Setup, which say only that it is set. A record that cannot be read (damaged, or sealed under
    another credential secret) is kept as it is: every later write is refused ("could not be
    kept") and the person told once. A write from an instance whose `close` was sent is refused
-   ("the step is closing"). The record goes when its node is deleted.
+   ("the step is closing"), and a write from an instance started before the person's change was
+   deployed never overrules that change. The record goes when its node is deleted from the
+   flows, never when its node or its flow is only turned off.
 4. At every `start` the recorded values are merged over the deployed config (a secret into
    `credentials`), each only where it was written by the instance's own package, the current
    schema still lets the package set it, and it is newer than the person's own last change of

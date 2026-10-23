@@ -437,6 +437,8 @@ describe("a generated type's instance", () => {
       expect(kept["written"]?.["volumes"]).toEqual({
         by: "everycontrol",
         at: expect.stringMatching(/^\d{4}-\d\d-\d\dT/) as string,
+        // When the instance that wrote it started: it never overrules a later deploy.
+        since: expect.stringMatching(/^\d{4}-/) as string,
       });
       expect(kept["values"]).toEqual({ volumes: rows });
       // The secret is never in the file as it was written, nor in the node's flow config.
@@ -463,6 +465,20 @@ describe("a generated type's instance", () => {
         ],
       });
       expect(fs.existsSync(file("w2"))).toBe(false);
+    });
+
+    it("keeps what it wrote while its flow is turned off and on, and forgets it once the node is deleted", async () => {
+      setUp(undefined, undefined, writable);
+      const first = create(PROBE, probeConfig("w4"), { token: "t" });
+      await wrote(first, { write: { apikey: SECRET } });
+      // Turned off: Node-RED closes it as removed, but it is still in the flows.
+      await first.close(true);
+      expect(fs.existsSync(file("w4"))).toBe(true);
+      const again = create(PROBE, probeConfig("w4"), { token: "t" });
+      // Deleted: gone from the flows, and what it wrote goes with it.
+      red.deployed.delete("w4");
+      await again.close(true);
+      expect(fs.existsSync(file("w4"))).toBe(false);
     });
 
     it("hands what it wrote to its node at the next start, its secret as a credential, unless the person changed it since", async () => {

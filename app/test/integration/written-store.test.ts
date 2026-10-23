@@ -170,10 +170,8 @@ describe("one instance's write, judged and recorded", () => {
       });
       expect(fs.readFileSync(file, "utf8")).toBe(before);
     }
-    expect(notices.map((notice) => notice.kind)).toEqual([
-      "written-unreadable",
-      "written-unreadable",
-    ]);
+    // Told once while it stays unreadable, however often it is read.
+    expect(notices.map((notice) => notice.kind)).toEqual(["written-unreadable"]);
     expect(JSON.stringify(notices)).not.toContain(SECRET);
     // And it starts with what was deployed, said in the log.
     expect(startingValues(deps(), { ...instance, node: {} }, { a: 1 }, {})).toEqual({

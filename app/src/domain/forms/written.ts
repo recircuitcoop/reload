@@ -19,6 +19,12 @@ const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
 export interface WrittenBy {
   readonly by: string;
   readonly at: string;
+  /**
+   * When the instance that wrote it started: a write from an instance started before the
+   * person's change was deployed (which it outlived for a moment, while being replaced) never
+   * overrules that change.
+   */
+  readonly since?: string;
 }
 
 /** The person, as the record names them. */
@@ -119,6 +125,7 @@ export function recorded(
   accepted: Readonly<Record<string, unknown>>,
   by: string,
   at: string,
+  since?: string,
 ): WrittenRecord {
   const declared = new Map(propertiesOf(schema));
   const secret = (key: string): boolean => isSecret(declared.get(key) ?? {});
@@ -135,7 +142,9 @@ export function recorded(
   ]);
   const written = {
     ...record.written,
-    ...Object.fromEntries(keys.map((key) => [key, { by, at }])),
+    ...Object.fromEntries(
+      keys.map((key) => [key, since === undefined ? { by, at } : { by, at, since }]),
+    ),
   };
   return { values, secrets, written };
 }
@@ -224,8 +233,13 @@ function inForce(record: WrittenRecord, schema: JsonSchema, own: string): string
 /** Whether the node's write of `key` is later than the person's own last change of it. */
 const later = (record: WrittenRecord, person: Readonly<Record<string, string>>, key: string) => {
   const theirs = person[key];
-  const at = record.written[key]?.at ?? "";
-  return theirs === undefined || theirs <= at;
+  const written = record.written[key];
+  if (theirs === undefined) {
+    return true;
+  }
+  // Written by an instance started before the person's change was deployed: theirs stands.
+  const since = written?.since;
+  return theirs <= (written?.at ?? "") && (since === undefined || since >= theirs);
 };
 
 /**

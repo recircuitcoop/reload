@@ -257,6 +257,40 @@ describe("the record of who wrote what", () => {
     });
   });
 
+  it("never lets an instance started before the person's deploy overrule it, even writing after it", () => {
+    const deploy = { shared: "2026-10-23T10:30:00.000Z" };
+    // The old instance, started at 10:00, writes at 10:31 while it is being replaced.
+    const old = recorded(
+      NO_RECORD,
+      SCHEMA,
+      { shared: 40 },
+      "monty",
+      "2026-10-23T10:31:00.000Z",
+      "2026-10-23T10:00:00.000Z",
+    );
+    expect(withWritten({ shared: 25 }, {}, old, deploy, SCHEMA, "monty").config).toEqual({
+      shared: 25,
+    });
+    expect(attributionOf(old, deploy, SCHEMA, "monty")["shared"]?.by).toBe(USER);
+    // Its replacement, started at 10:31, writes at 10:32: that one is in force.
+    const next = recorded(
+      old,
+      SCHEMA,
+      { shared: 41 },
+      "monty",
+      "2026-10-23T10:32:00.000Z",
+      "2026-10-23T10:31:00.000Z",
+    );
+    expect(next.written["shared"]).toEqual({
+      by: "monty",
+      at: "2026-10-23T10:32:00.000Z",
+      since: "2026-10-23T10:31:00.000Z",
+    });
+    expect(withWritten({ shared: 25 }, {}, next, deploy, SCHEMA, "monty").config).toEqual({
+      shared: 41,
+    });
+  });
+
   it("keeps the package's value in force, sent back unchanged, the node's own", () => {
     const at = "2026-10-23T10:00:00.000Z";
     const record = recorded(NO_RECORD, SCHEMA, { shared: 30 }, "monty", at);

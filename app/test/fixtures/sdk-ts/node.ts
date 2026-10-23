@@ -134,6 +134,13 @@ async function runKitchen(): Promise<void> {
         );
         emit("out", { failed }, id);
         done(id);
+      } else if (action === "write-close") {
+        // A write still waiting when the node is closed fails then, said on stderr (C28).
+        writeSettings({ root: "/x" }).catch((caught: unknown) => {
+          console.error(
+            `write failed: ${caught instanceof Error ? caught.message : String(caught)}`,
+          ); // eslint-disable-line no-console -- said where the test reads it
+        });
       } else if (action === "noise") {
         // console.log is redirected to stderr, redacted, once the SDK has started (C3): it
         // never reaches the frame channel the runtime decodes.

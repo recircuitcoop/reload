@@ -34,22 +34,36 @@ export interface WritingInstance {
   readonly who: string;
   readonly own: string;
   readonly schema: JsonSchema;
+  /** When this instance started (ISO 8601): its writes never overrule a later deploy. */
+  readonly since?: string;
 }
+
+/** The instances whose unreadable record the person was told of: told once while it lasts. */
+const told = new Set<string>();
 
 /** The instance's record; null when it cannot be read, which is said, never written over. */
 function recordOf(deps: WrittenSettingsDeps, instance: WritingInstance): WrittenRecord | null {
+  const { store } = deps;
+  if (store === undefined) {
+    return NO_RECORD;
+  }
   try {
-    return deps.store?.read(instance.id) ?? NO_RECORD;
+    const record = store.read(instance.id);
+    told.delete(instance.id);
+    return record;
   } catch (error) {
     deps.logger.error(
       `${instance.who} the settings it wrote cannot be read, so none are used and none are ` +
         `kept: ${String(error)}`,
     );
-    deps.notify?.({
-      kind: "written-unreadable",
-      subject: instance.who,
-      detail: "Its file of settings it wrote cannot be read",
-    });
+    if (!told.has(instance.id)) {
+      told.add(instance.id);
+      deps.notify?.({
+        kind: "written-unreadable",
+        subject: instance.who,
+        detail: "Its file of settings it wrote cannot be read",
+      });
+    }
     return null;
   }
 }
@@ -106,7 +120,7 @@ export function writeSettings(
   }
   try {
     const at = new Date(deps.now()).toISOString();
-    store.write(instance.id, recorded(before, schema, accepted, own, at));
+    store.write(instance.id, recorded(before, schema, accepted, own, at, instance.since));
   } catch (error) {
     deps.logger.error(`${instance.who} the settings it wrote could not be kept: ${String(error)}`);
     return refusedAll(outcome, "could not be kept");

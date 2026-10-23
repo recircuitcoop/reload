@@ -118,6 +118,12 @@ def run_kitchen() -> None:
                 failed = str(caught)
             node.emit("out", {"failed": failed}, input_id)
             node.done(input_id)
+        elif action == "write-close":
+            # A write still waiting when the node is closed fails then, said on stderr (C28).
+            try:
+                node.write_settings({"root": "/x"})
+            except RuntimeError as caught:
+                print(f"write failed: {caught}", file=sys.stderr)  # noqa: T201
         elif action == "noise":
             # A stray print cannot reach the frame channel at all once the SDK has started
             # (C3): it lands on stderr, redacted, not on the stdout the runtime decodes.

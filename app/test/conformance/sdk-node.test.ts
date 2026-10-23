@@ -399,6 +399,22 @@ describe.each(SDK_LANGUAGES)("conformance: the %s SDK's kitchen reference node",
     expect(node.rejected).toEqual([]);
   });
 
+  it("C28 settings (revision 2.3): a write still waiting when the node is closed fails then", async () => {
+    const node = session(language);
+    node.start();
+    node.send({
+      t: "input",
+      id: "c",
+      event: { type: "x.v1", data: { do: "write-close" }, run: "r" },
+    });
+    await waitFor("its write", () => node.frames.some((f) => f.t === "settings"));
+    node.send({ t: "close" });
+    await waitFor("its failure said", () =>
+      node.stderr.includes("write failed: the node closed before the runtime answered its write"),
+    );
+    expect(node.rejected).toEqual([]);
+  });
+
   it("C13 credentials: a credential value never appears on stdout or stderr, even where a handler logs it outright", async () => {
     const canary = "reload-canary-5f2c9a71e0d34b8c";
     const node = session(language);

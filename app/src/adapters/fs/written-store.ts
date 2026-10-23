@@ -50,7 +50,8 @@ export class FsWrittenStore implements WrittenStore {
         (entry): entry is [string, WrittenBy] =>
           isRecord(entry[1]) &&
           typeof entry[1]["by"] === "string" &&
-          typeof entry[1]["at"] === "string",
+          typeof entry[1]["at"] === "string" &&
+          (entry[1]["since"] === undefined || typeof entry[1]["since"] === "string"),
       ),
     );
     return { values: parsed["values"], secrets, written };

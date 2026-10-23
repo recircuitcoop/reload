@@ -68,6 +68,8 @@ export interface NodeRedNodeApi {
       constructor: (this: NodeRedNode, config: Message) => void,
       options?: { credentials?: Record<string, { type: "password" | "text" }> },
     ): void;
+    /** Every node of the flows now deployed, a disabled one or one on a disabled tab too. */
+    eachNode(visit: (node: { readonly id: string }) => void): void;
   };
   readonly util: { cloneMessage<T>(message: T): T };
 }
@@ -164,6 +166,18 @@ export interface RegistrationDeps {
   readonly notifier?: Notifier;
 }
 
+/**
+ * Whether node `id` is in the flows now deployed. Node-RED closes a node as removed when its tab
+ * or the node itself is turned off too; only one gone from the flows is really deleted.
+ */
+function deployedNow(RED: NodeRedNodeApi, id: string): boolean {
+  let found = false;
+  RED.nodes.eachNode((node) => {
+    found ||= node.id === id;
+  });
+  return found;
+}
+
 /** Node-RED's `wires` of an instance's config: for each output port, the nodes it feeds. */
 function wiresOf(raw: Message): string[][] {
   const wires = raw["wires"];
@@ -235,7 +249,9 @@ export class TypeRegistration {
             },
           }),
     };
-    const writing = { id: node.id, who, own: loaded.declaration.package, schema };
+    // When this instance started: its writes never overrule a deploy made after it (spec 4.6).
+    const since = new Date().toISOString();
+    const writing = { id: node.id, who, own: loaded.declaration.package, schema, since };
     // Set once its close is sent: a write arriving after it is never kept (spec 4.6).
     let closing = false;
     const { config, credentials } = startingValues(
@@ -273,7 +289,9 @@ export class TypeRegistration {
     }
     if (refusal !== null || command === null) {
       this.#refuse(node, who, refusal ?? "it cannot start", () => {
-        forgetWritten(written, writing);
+        if (!deployedNow(RED, node.id)) {
+          forgetWritten(written, writing);
+        }
       });
       return;
     }
@@ -427,8 +445,8 @@ export class TypeRegistration {
       detachSource();
       const reason: CloseReason = removed ? "removed" : this.#deps.closeReason();
       closing = true;
-      if (removed) {
-        forgetWritten(written, writing); // deleted: what it wrote goes with it
+      if (removed && !deployedNow(RED, node.id)) {
+        forgetWritten(written, writing); // deleted, not only turned off: what it wrote goes too
       }
       const closed = (): void => {
         if (isView) {
