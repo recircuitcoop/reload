@@ -70,6 +70,21 @@ const TYPES: Record<string, Record<string, unknown>> = {
       },
     },
   },
+  "reload-demo-minimum": {
+    type: "object",
+    properties: {
+      volumes: {
+        type: "array",
+        title: "Recorders",
+        maxItems: 1,
+        items: {
+          type: "object",
+          title: "recorder",
+          properties: { label: { type: "string", title: "Name" } },
+        },
+      },
+    },
+  },
   "reload-demo-takes": {
     type: "object",
     required: ["volumes"],
@@ -235,8 +250,18 @@ describe("the canvas form, as it opens", () => {
     const above = empty.querySelectorAll("[data-testid='reload-error-volumes']");
     expect(above).toHaveLength(1);
     expect(above[0]?.textContent).toContain("is required and holds no recorder");
-    // Before the table's rows and its Add, never after them.
-    expect(above[0]?.nextElementSibling?.getAttribute("data-reload-table")).toBe("volumes");
+    // First in the table, before its rows and its Add, never after them.
+    expect(above[0]?.parentElement?.getAttribute("data-reload-table")).toBe("volumes");
+    expect(above[0]?.previousElementSibling).toBeNull();
+  });
+
+  it("reads a table back whole while its own reason is drawn above its rows", () => {
+    const node: Record<string, unknown> = { id: "n10", volumes: [{ label: "a" }, { label: "b" }] };
+    const form = opened("reload-demo-minimum", node);
+    expect(reasons(form)["volumes"]).toContain("Recorders");
+    // Read as an empty table, the save would pass maxItems and lose both rows.
+    forms().save("reload-demo-minimum", node);
+    expect(node["volumes"]).toEqual([{ label: "a" }, { label: "b" }]);
   });
 
   it("places the table's own reason and a cell's reason independently", () => {

@@ -301,12 +301,13 @@ function draw(container: HTMLElement, fields: readonly Field[], values: Values, 
     }
     const reason = reasonBeside(path);
     if (reason !== null) {
-      // A table's own reason stands above its rows, once; any other field's after its control.
+      // A table's own reason stands first in it, above its rows, once (inside the table, so the
+      // row's control stays the one read back); any other field's after its control.
       const table = field.control === "table" ? row.querySelector(".reload-table") : null;
       if (table === null) {
         row.append(reason);
       } else {
-        table.before(reason);
+        table.prepend(reason);
       }
     }
     if (field.reload !== undefined) {
