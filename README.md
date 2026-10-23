@@ -36,6 +36,8 @@ opening a window:
   again with `--start`.
 - `--restart <package>…`: each node of the packages named onto a new process.
 - `--release <package>…`: starts again a node Reload stopped for good after repeated crashes.
+- `--kill services` (or `runtime`): kills that Reload process itself; nothing restarts it until
+  `--start services`.
 
 A package name Reload has no running node of refuses the whole command, and anything not done
 ends the command with exit code 1.

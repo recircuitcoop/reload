@@ -1162,3 +1162,42 @@ describe("reload --status and the packages", () => {
     );
   });
 });
+
+describe("reload --kill and --start for the shell's own children", () => {
+  it("kills the services child through its supervisor, starts it again, and refuses any other verb", async () => {
+    const calls: string[] = [];
+    const services = {
+      ...child("services", 4243),
+      kill: () => (calls.push("kill"), true),
+      recover: () => (calls.push("recover"), calls.length < 3),
+    };
+    const { answer } = deps({
+      running: running({ supervisors: new Map([["services", services]]) }),
+    });
+    const ask = async (command: string, id: string) => {
+      writePrivateFile(
+        questionFile(userData, id),
+        JSON.stringify({ command, id, ...ASKER, names: ["services"] }),
+      );
+      takeQuestions(userData, answer, Date.now());
+      return replyFor(id);
+    };
+    expect(await ask("kill", "a".repeat(32))).toEqual({
+      code: 0,
+      text: "  services: killed; `reload --start` starts it again\n",
+    });
+    expect(await ask("start", "b".repeat(32))).toEqual({
+      code: 0,
+      text: "  services: started again\n",
+    });
+    expect(await ask("start", "c".repeat(32))).toEqual({
+      code: 1,
+      text: "  services: not done (--start): it is not in that state\n",
+    });
+    expect(await ask("stop", "d".repeat(32))).toEqual({
+      code: 1,
+      text: "  services: not done (--stop): only --kill and --start apply to it\n",
+    });
+    expect(calls).toEqual(["kill", "recover", "recover"]);
+  });
+});

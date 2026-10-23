@@ -71,6 +71,9 @@ export interface SupervisorDeps {
   readonly beforeFork?: () => Promise<void>;
 }
 
+/** Why a child a person killed is down: said on its line and in Configuration › General. */
+export const KILLED = "Killed from a terminal. `reload --start` starts it again.";
+
 export class Supervisor {
   readonly #deps: SupervisorDeps;
   readonly #breaker: CrashLoopBreaker;
@@ -98,6 +101,8 @@ export class Supervisor {
   #quitting = false;
   /** Set by a last stop over a resource limit: the crash it causes is the end. */
   #overLimitForGood: string | null = null;
+  /** Killed by a person from a terminal: its exit is no crash, and nothing restarts it. */
+  #killed = false;
 
   constructor(deps: SupervisorDeps) {
     this.#deps = deps;
@@ -236,6 +241,21 @@ export class Supervisor {
     }
     this.#deps.logger.warn(`stopping the ${this.#deps.child}: it is over its resource limits`);
     this.#overLimitForGood = forGood;
+    this.#handle.kill();
+    return true;
+  }
+
+  /**
+   * A person's `reload --kill services` (the old helper's kill of its MCP child, through the
+   * supervisor that owns it): killed now, never asked, and not restarted until `recover` (a
+   * person's Restart, or `reload --start`). False, and nothing done, when it is not running.
+   */
+  kill(): boolean {
+    if (this.#state !== "running" || this.#handle === null) {
+      return false;
+    }
+    this.#deps.logger.warn(`killing the ${this.#deps.child}: a person's command from a terminal`);
+    this.#killed = true;
     this.#handle.kill();
     return true;
   }
@@ -392,6 +412,8 @@ export class Supervisor {
     // planned restart that came first leaves the next ordinary crash ordinary.
     const forGood = this.#overLimitForGood;
     this.#overLimitForGood = null;
+    const killed = this.#killed;
+    this.#killed = false;
     this.#cancelKill?.();
     this.#cancelKill = null;
     this.#calls.failAll("stopped");
@@ -406,6 +428,12 @@ export class Supervisor {
       this.#state = "restarting";
       this.#runWhileStopped();
       this.#fork();
+      return;
+    }
+    if (killed) {
+      this.#deps.logger.info(`the ${this.#deps.child} was killed from a terminal; not restarted`);
+      this.#error = KILLED;
+      this.#setState("down-for-good");
       return;
     }
     this.#onCrash(code, forGood);

@@ -6,7 +6,7 @@
 import { ANYTYPE_UNUSED } from "../fakes/anytype";
 import { VIEWS_UNUSED } from "../fakes/views";
 import { describe, expect, it } from "vitest";
-import { Supervisor } from "../../src/application/supervisor";
+import { KILLED, Supervisor } from "../../src/application/supervisor";
 import {
   crashLoopMessage,
   DEFAULT_SUPERVISION,
@@ -221,5 +221,33 @@ describe("the crash-loop limit", () => {
     supervisor.start();
     clock.advance(1);
     expect(supervisor.recover()).toBe(false);
+  });
+});
+
+// The old helper's kill of its MCP child (test_host_children.py): `reload --kill services`
+// goes through the supervisor that owns the child, never around it.
+describe("a person's kill of a child from a terminal", () => {
+  it("kills it unasked, restarts nothing, raises nothing, and recover starts it again", () => {
+    const { clock, launcher, notifier, supervisor } = supervised(obedient, { child: "services" });
+    supervisor.start();
+    clock.advance(1);
+    const first = launcher.children[0];
+    if (first === undefined) throw new Error("no child forked");
+
+    expect(supervisor.kill()).toBe(true);
+    expect(first.kills).toBe(1);
+    expect(first.posted.some((message) => message.t === "stop")).toBe(false);
+    first.exit(137);
+    clock.advance(60_000);
+
+    expect(launcher.children).toHaveLength(1);
+    expect(supervisor.status()).toMatchObject({ state: "down-for-good", error: KILLED });
+    expect(notifier.notices).toEqual([]);
+    expect(supervisor.kill()).toBe(false);
+    // Its supervisor let go of it, so the start command can start it again.
+    expect(supervisor.recover()).toBe(true);
+    clock.advance(1);
+    expect(launcher.children).toHaveLength(2);
+    expect(supervisor.status().state).toBe("running");
   });
 });

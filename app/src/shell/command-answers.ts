@@ -11,11 +11,13 @@ import type { Supervisor } from "../application/supervisor";
 import type { ChildName, ChildStatus } from "../domain/supervision/child-state";
 import type { NodeRow } from "../application/instance-readiness";
 import type { Logger } from "../ports/logger";
+import type { NodeVerb } from "../ports/node-process";
 import type { Notice } from "../domain/notices/notices";
 import { unregisteredOf } from "../domain/packages/versions";
 import type { Notifier } from "../ports/notifier";
 import {
   isQuestion,
+  isVerb,
   noticeLines,
   PICKUP_MS,
   QUESTION_POLL_MS,
@@ -32,7 +34,7 @@ export interface Running {
   /** The runtime's `call` asks it for its node processes (`reload --list`, `--stop` …). */
   readonly supervisors: ReadonlyMap<
     ChildName,
-    Pick<Supervisor, "status" | "onStatus"> & Partial<Pick<Supervisor, "call">>
+    Pick<Supervisor, "status" | "onStatus"> & Partial<Pick<Supervisor, "call" | "kill" | "recover">>
   >;
   readonly anytype: Pick<AnytypeApp, "state" | "startedPid" | "onStarted">;
   readonly notices: CommandFiles["notices"];
@@ -235,6 +237,34 @@ async function replyTo(question: Question, deps: AnswerDeps): Promise<Reply> {
   }
 }
 
+const isChildName = (name: string): name is ChildName => name === "runtime" || name === "services";
+
+/**
+ * `reload --kill services` (or `runtime`): the shell's own child, killed through the supervisor
+ * that owns it, and `--start` it again (the old helper's kill of its MCP child). No other verb
+ * applies to a child; each refusal is said, and the exit code is 1.
+ */
+function childReply(verb: NodeVerb, names: readonly ChildName[], running: Running): Reply {
+  let code = 0;
+  const lines = names.map((name) => {
+    const supervisor = running.supervisors.get(name);
+    const did =
+      verb === "kill"
+        ? supervisor?.kill?.()
+        : verb === "start" || verb === "release"
+          ? supervisor?.recover?.()
+          : undefined;
+    if (did === true) {
+      return `  ${name}: ${verb === "kill" ? "killed; `reload --start` starts it again" : "started again"}`;
+    }
+    code = 1;
+    const why =
+      did === undefined ? "only --kill and --start apply to it" : "it is not in that state";
+    return `  ${name}: not done (--${verb}): ${why}`;
+  });
+  return { code, text: lines.join("\n") + "\n" };
+}
+
 /**
  * `reload --list`, and a verb for the named packages' instances (the old helper's list, start,
  * stop, kill, restart and release), answered by the runtime. Exit code 0 only when the verb
@@ -243,6 +273,10 @@ async function replyTo(question: Question, deps: AnswerDeps): Promise<Reply> {
 async function nodesReply(question: Question, running: Running): Promise<Reply> {
   const runtime = running.supervisors.get("runtime");
   const verb = question.command === "list" ? null : question.command;
+  const names = question.names ?? [];
+  if (isVerb(verb) && names.length > 0 && names.every(isChildName)) {
+    return childReply(verb, names, running);
+  }
   const result =
     runtime?.call === undefined
       ? { ok: false as const, error: "the Reload runtime cannot be asked" }
