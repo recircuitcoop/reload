@@ -820,7 +820,7 @@ describe("the package author's workflow (plan 0032 group 7): a linked folder, th
     expect(roots.installed("pinger")?.version).toBe("0.2.0");
   });
 
-  it("Replace takes the place of an installation from anywhere else; without it the install is refused", async () => {
+  it("Replace takes the place of an installation from anywhere else, and without it the install is refused", async () => {
     const { installer } = setUp();
     await installer.installFromFile(folderOf(packageFiles()), true);
     const other = folderOf(packageFiles("pinger", "0.5.0"));
