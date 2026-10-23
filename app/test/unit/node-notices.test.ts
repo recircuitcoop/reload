@@ -24,20 +24,22 @@ describe("a node instance's notices", () => {
     ]);
   });
 
-  it("a stop is one notice: stuck and unhealthy are withdrawn as it is said", () => {
+  it("a stop is one notice on the node's flow: stuck and unhealthy are withdrawn as it is said", () => {
     const notifier = new RecordingNotifier();
     const { notice } = stoppedFor("raw", LOOP, {
       restartable: true,
       how: "signal SIGKILL",
       stuck: true,
     });
-    raiseStopped(notifier, notice);
+    raiseStopped(notifier, notice, "tab1");
     expect(notifier.cleared).toEqual(["node-stuck raw", "node-unhealthy raw"]);
+    // A click on it opens Live on the node's own flow (plan 0032, group 38).
     expect(notifier.notices).toEqual([
       {
         kind: "node-stopped",
         subject: "raw",
         detail: "Its process stopped after 5 exits in 120 s",
+        flowId: "tab1",
       },
     ]);
   });

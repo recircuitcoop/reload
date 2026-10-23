@@ -169,6 +169,7 @@ describe("a node process's heartbeat", () => {
         kind: "node-unhealthy",
         subject: "raw",
         detail: "Its own health check says it is not working",
+        flowId: "flow-1",
       },
     ]);
     expect(h.logger.has(/its health check says it is not working$/)).toBe(true);
@@ -201,6 +202,7 @@ describe("a node process's heartbeat", () => {
         kind: "node-stuck",
         subject: "raw",
         detail: "Its process made no progress, so Reload restarts it",
+        flowId: "flow-1",
       },
     ]);
     h.clock.advance(249);

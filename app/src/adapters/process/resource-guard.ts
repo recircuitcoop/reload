@@ -96,6 +96,7 @@ export class NodeResourceGuard {
         kind: "node-over-limit",
         subject: identity.id,
         detail: `The node ${name} used ${this.#stoppedFor}, so Reload stopped it and started it again`,
+        flowId: identity.flowId,
       });
       this.#stoppedFor = null;
     }

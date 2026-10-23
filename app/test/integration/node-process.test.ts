@@ -127,7 +127,7 @@ describe("a node process", () => {
     expect(output?.message.reload.cause).toBeUndefined();
   });
 
-  it("refuses every emit on an undeclared port, and tells it once: one log line, one notice", async () => {
+  it("refuses every emit on an undeclared port, and tells it once: one log line, one notice on its flow, drawn on the node", async () => {
     const node = raw();
     for (let n = 0; n < 5; n += 1) {
       const [, delivery] = send(node.node, { do: "undeclared" });
@@ -139,11 +139,17 @@ describe("a node process", () => {
       line.text.includes('refused an emit on undeclared port "nope"'),
     );
     expect(told).toHaveLength(1);
+    // Drawn on the node itself, as the old window drew a refused kind on its plugin's tab.
+    expect(node.host.errors).toEqual([
+      'refused what it sent on port "nope": Its package does not declare that port, so what it ' +
+        "sent there went nowhere",
+    ]);
     expect(node.notifier.notices).toEqual([
       {
         kind: "emit-refused",
         subject: 'raw (port "nope")',
         detail: "Its package does not declare that port, so what it sent there went nowhere",
+        flowId: "flow-1",
       },
     ]);
     const [notice] = node.notifier.notices;
@@ -516,13 +522,20 @@ describe("an unexpected exit of a node process", () => {
     expect(node.host.statuses.at(-1)).toEqual({ fill: "red", shape: "dot", text });
     // Worded for a type never restarted, not as a crash loop it never had.
     expect(node.notifier.notices).toEqual([
-      { kind: "node-not-restarted", subject: "raw", detail: "Its process exited (signal SIGKILL)" },
+      {
+        kind: "node-not-restarted",
+        subject: "raw",
+        detail: "Its process exited (signal SIGKILL)",
+        flowId: "flow-1",
+      },
     ]);
     expect(compose(node.notifier.notices[0] ?? { kind: "node-stuck", subject: "" })).toEqual({
       title: "The node raw stopped",
       body:
         "Its process exited (signal SIGKILL). Its type asks never to restart it. Redeploy the " +
         "flow to start it again.",
+      // A click on it opens Live on the node's own flow (plan 0032, group 38).
+      flowId: "flow-1",
     });
     expect(node.crashes).toEqual([true]);
     // Nothing is started again, however long the wait.
@@ -709,6 +722,7 @@ describe("a node process whose type declares a heartbeat (spec 2.4.2)", () => {
           kind: "node-stuck",
           subject: "raw",
           detail: "Its process made no progress, so Reload restarts it",
+          flowId: "flow-1",
         },
       ]);
       expect(compose(node.notifier.notices[0] ?? { kind: "node-stuck", subject: "" }).title).toBe(
@@ -751,6 +765,7 @@ describe("a node process whose type declares a heartbeat (spec 2.4.2)", () => {
           kind: "node-not-restarted",
           subject: "raw",
           detail: "Its process made no progress, so Reload stopped it",
+          flowId: "flow-1",
         },
       ]);
       expect(compose(node.notifier.notices[0] ?? { kind: "node-stuck", subject: "" })).toEqual({
@@ -758,6 +773,8 @@ describe("a node process whose type declares a heartbeat (spec 2.4.2)", () => {
         body:
           "Its process made no progress, so Reload stopped it. Its type asks never to restart " +
           "it. Redeploy the flow to start it again.",
+        // A click on it opens Live on the node's own flow (plan 0032, group 38).
+        flowId: "flow-1",
       });
       await new Promise((resolve) => setTimeout(resolve, 1_500));
       expect(node.node.pid).toBeNull();
@@ -803,6 +820,7 @@ describe("a node process whose type declares a heartbeat (spec 2.4.2)", () => {
         kind: "node-unhealthy",
         subject: "raw",
         detail: "Its own health check says it is not working",
+        flowId: "flow-1",
       },
     ]);
     expect(compose(node.notifier.notices[0] ?? { kind: "node-unhealthy", subject: "" }).title).toBe(

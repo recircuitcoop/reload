@@ -99,7 +99,7 @@ class ChildNodeProcess implements NodeProcess {
     });
     // Created again (a redeploy): nothing said about the old instance holds any more.
     clearNodeNotices(deps.notifier, this.#subject);
-    this.#refused = new RefusedPorts(spec, deps.notifier, (message) => {
+    this.#refused = new RefusedPorts(spec, deps.notifier, host, (message) => {
       this.#log("error", message);
     });
     this.#spawn();
@@ -330,7 +330,7 @@ class ChildNodeProcess implements NodeProcess {
     }
     this.#journal.failHeld(new Error(`the node process ${text}`));
     try {
-      raiseStopped(this.#deps.notifier, notice);
+      raiseStopped(this.#deps.notifier, notice, this.#spec.identity.flowId);
     } catch (error) {
       this.#log("error", `the crash-loop notice could not be raised: ${String(error)}`);
     }

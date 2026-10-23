@@ -50,6 +50,7 @@ export class NodeHeartbeat {
   readonly #logger: Logger;
   readonly #watch: HeartbeatWatch;
   readonly #subject: string;
+  readonly #flowId: string;
   readonly #restartable: boolean;
   readonly #window: number;
   /** The pings sent and not yet answered. */
@@ -76,6 +77,7 @@ export class NodeHeartbeat {
     this.#deps = deps;
     this.#target = target;
     this.#subject = spec.identity.name || spec.identity.typeId;
+    this.#flowId = spec.identity.flowId;
     this.#restartable = spec.restartable !== false;
     this.#window = staleWindow(spec.stability) ?? 0;
     const line = (message: string): string => `${target.who} ${message}`;
@@ -227,7 +229,8 @@ export class NodeHeartbeat {
 
   #raise(kind: "node-stuck" | "node-unhealthy", detail: string): void {
     try {
-      this.#deps.notifier.raise({ kind, subject: this.#subject, detail });
+      // A click on it opens Live on the node's own flow (plan 0032, group 38).
+      this.#deps.notifier.raise({ kind, subject: this.#subject, detail, flowId: this.#flowId });
     } catch (error) {
       this.#logger.error(`a notice could not be raised: ${String(error)}`);
     }

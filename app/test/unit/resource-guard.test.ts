@@ -98,6 +98,7 @@ describe("a node instance's resource guard", () => {
         detail:
           'The node "Summarize" (raw) used memory 2048 MB, over its limit of 1024 MB, for 70 s, ' +
           "so Reload stopped it and started it again",
+        flowId: "flow-1",
       },
     ]);
     guard.watch(4444, () => true);

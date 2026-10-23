@@ -10,7 +10,9 @@ import {
   type RunNews,
 } from "../../src/application/run-watch";
 import type { OpResult } from "../../src/domain/channel/messages";
+import { compose } from "../../src/domain/notices/notices";
 import { fold, type Run, type RunEvent } from "../../src/domain/runs/run";
+import { raiseStopped, stoppedFor } from "../../src/adapters/process/node-notices";
 import { cardOf } from "../../src/shell/run-calls";
 import {
   noticeHandlers,
@@ -304,6 +306,31 @@ describe("the run notices, worded", () => {
       "live f2",
       "live null",
     ]);
+  });
+
+  it("a click on a notice about a step opens Live on that step's flow, and one about the app opens the window", () => {
+    const opened: (string | null)[] = [];
+    const handlers = noticeHandlers({
+      openView: () => undefined,
+      openLive: (flowId) => opened.push(flowId),
+      openExternal: () => undefined,
+    });
+    const notifier = new RecordingNotifier();
+    const { notice } = stoppedFor(
+      "monty",
+      { maxCrashes: 5, windowMs: 120_000 },
+      {
+        restartable: true,
+        how: "code 1",
+        stuck: false,
+      },
+    );
+    raiseStopped(notifier, notice, "rec");
+    const [raised] = notifier.notices;
+    if (raised === undefined) throw new Error("no notice");
+    handlers.onClick(compose(raised));
+    handlers.onClick(compose({ kind: "core-update-available", subject: "Reload", version: "2.0" }));
+    expect(opened).toEqual(["rec", null]);
   });
 
   it("wired: each piece of news is raised once and not kept as a condition; every flow is read on each start", async () => {
