@@ -51,7 +51,7 @@ test("reload --status and --quit act on the running instance from a second proce
     const logFile = /^Log file: (.+)$/m.exec(unwritten.stdout)?.[1] ?? "";
     expect(logFile.startsWith(scratch)).toBe(true);
 
-    const { app, window, output } = await launchApp(env);
+    const { app, window } = await launchApp(env);
     apps.push(app);
     const runtime = await waitForRunning(window, "runtime");
     await waitForRunning(window, "services");
@@ -91,8 +91,9 @@ test("reload --status and --quit act on the running instance from a second proce
     expect(await exited).toBe(0);
     await expect.poll(() => processesNaming(userData), { timeout: 10_000 }).toEqual([]);
     expect(fs.existsSync(runState)).toBe(false);
-    // Started from a terminal, it said there what it came up without, and still exited 0.
-    expect(output.join("")).toContain("Reload starts without it");
+    // It came up without Anytype, said so in its log, and still exited 0. Read from the file:
+    // the first lines can be written before the harness listens to the terminal.
+    expect(fs.readFileSync(logFile, "utf8")).toContain("Reload starts without it");
 
     expect(await reload("--quit", env)).toEqual({ code: 1, stdout: "Reload is not running.\n" });
     expect(await reload("--status", env)).toEqual({ code: 0, stdout: nothing });
