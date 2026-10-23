@@ -20,6 +20,9 @@ export const PROTOCOL = 2;
 /** Spec 2.4: output ports that would shadow a Node-RED message field. */
 const RESERVED_PORTS: readonly string[] = ["_msgid", "topic"];
 
+/** A package's name (the declaration schema's `package` pattern). */
+export const PACKAGE_NAME_RULE = /^[a-z][a-z0-9_]{1,39}$/;
+
 /** The owner reserved for created event types (spec 5.2.1, 5.2.3). */
 const USER_OWNER = "user";
 

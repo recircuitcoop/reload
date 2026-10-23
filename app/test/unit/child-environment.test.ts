@@ -7,6 +7,7 @@ import { childEnvironment } from "../../src/shell/child-environment";
 const ENV = {
   RELOAD_LOG_CANARY: "canary",
   ANYTYPE_API_BASE_URL: "http://127.0.0.1:9",
+  ANYTYPE_API_KEY: "fake-env-key",
   RELOAD_MCP_PORT: "",
   RELOAD_TEMPLATES_DIR: "/fixtures/templates",
   PATH: "/usr/bin",
@@ -20,6 +21,8 @@ describe("childEnvironment", () => {
       HOME: "/h",
       RELOAD_LOG_CANARY: "canary",
       ANYTYPE_API_BASE_URL: "http://127.0.0.1:9",
+      // The key, for the MCP child the services process starts; never the runtime's.
+      ANYTYPE_API_KEY: "fake-env-key",
     });
   });
 

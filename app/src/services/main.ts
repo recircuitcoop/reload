@@ -36,7 +36,7 @@ import { mcpDispatch } from "../application/mcp-dispatch";
 import { McpEndpoint, serveEndpointCall, stopServing } from "../application/mcp-endpoint";
 import { watchParent } from "../application/parent-watchdog";
 import { answerPeerCalls, KeyPublisher } from "../application/peer-link";
-import { readOrCreate, registering } from "../application/secrets";
+import { environmentKeyFirst, readOrCreate, registering } from "../application/secrets";
 import {
   redactingShellLink,
   serveShell,
@@ -134,8 +134,15 @@ link.onPeer((peer) => {
  * key from any other without the log ever holding one.
  */
 function keyStore(files: SecretPaths): SecretStore {
-  const store = registering(new OwnerOnlyFileStore(files), logger);
-  logger.info(`the Anytype key is read from ${keyLocation(files)}`);
+  // ANYTYPE_API_KEY, when set, is the key read, as the old app read it first.
+  const fromEnvironment = process.env["ANYTYPE_API_KEY"];
+  const store = registering(
+    environmentKeyFirst(new OwnerOnlyFileStore(files), fromEnvironment),
+    logger,
+  );
+  logger.info(
+    `the Anytype key is read from ${fromEnvironment?.trim() ? "ANYTYPE_API_KEY" : keyLocation(files)}`,
+  );
   return {
     read: (name) => {
       const value = store.read(name);

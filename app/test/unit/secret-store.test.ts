@@ -22,6 +22,7 @@ import {
   openSecretStore,
   credentialSecretOf,
   readOrCreate,
+  environmentKeyFirst,
   registering,
   type KeychainFacts,
 } from "../../src/application/secrets";
@@ -308,6 +309,29 @@ describe("registering", () => {
     const { registry } = redactor();
     expect(inner.read("anytype-api-key")).toBe("fake-anytype-key-read-back");
     expect(registry.redact("fake-anytype-key-read-back")).toBe("fake-anytype-key-read-back");
+  });
+});
+
+describe("the Anytype key from the environment", () => {
+  it("comes first: ANYTYPE_API_KEY is the key read, never written, and a pairing still writes", () => {
+    const inner = new MemoryStore();
+    inner.values.set("anytype-api-key", "fake-key-in-the-file");
+    const store = environmentKeyFirst(inner, " fake-key-from-the-environment \n");
+    expect(store.read("anytype-api-key")).toBe("fake-key-from-the-environment");
+    expect(store.read("mcp-proxy-token")).toBeNull();
+    store.write("anytype-api-key", "fake-key-paired");
+    expect(inner.values.get("anytype-api-key")).toBe("fake-key-paired");
+    expect(store.read("anytype-api-key")).toBe("fake-key-from-the-environment");
+    // Unset or blank: the file's key, as before.
+    expect(environmentKeyFirst(inner, undefined).read("anytype-api-key")).toBe("fake-key-paired");
+    expect(environmentKeyFirst(inner, "  ").read("anytype-api-key")).toBe("fake-key-paired");
+  });
+
+  it("is registered with the redactor like a key read from the file", () => {
+    const { registry, sink } = redactor();
+    const store = registering(environmentKeyFirst(new MemoryStore(), "fake-env-key-123"), sink);
+    expect(store.read("anytype-api-key")).toBe("fake-env-key-123");
+    expect(registry.redact("fake-env-key-123")).toBe(REDACTED);
   });
 });
 

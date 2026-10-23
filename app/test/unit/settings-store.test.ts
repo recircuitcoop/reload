@@ -28,4 +28,25 @@ describe("JsonSettingsStore", () => {
     }).toThrow(`${file} is not UTF-8 text`);
     expect(fs.readFileSync(file)).toEqual(bytes);
   });
+
+  it("refuses an mcp setting it cannot read, a mistyped key named, and never ignores it", () => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "reload-settings-"));
+    const file = path.join(dir, "settings.json");
+    const store = new JsonSettingsStore(file);
+    const stored = (mcp: unknown) => {
+      fs.writeFileSync(file, JSON.stringify({ mcp }));
+    };
+    stored({ host: "127.0.0.1", port: 32010 });
+    expect(store.readEndpoint()).toEqual({ host: "127.0.0.1", port: 32010 });
+    stored({ address: "127.0.0.1" });
+    expect(() => store.readEndpoint()).toThrow(
+      `the mcp setting in ${file} holds unknown keys: address`,
+    );
+    stored({ host: 127 });
+    expect(() => store.readEndpoint()).toThrow("must hold a host (text)");
+    stored({ port: "32010" });
+    expect(() => store.readEndpoint()).toThrow("a port (a whole number)");
+    stored({ port: true });
+    expect(() => store.readEndpoint()).toThrow("a port (a whole number)");
+  });
 });

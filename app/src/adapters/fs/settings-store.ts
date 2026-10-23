@@ -35,6 +35,9 @@ type Document = Record<string, unknown>;
 const isObject = (value: unknown): value is Document =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+/** The mcp setting's only keys: a mistyped one is refused, never quietly ignored. */
+const ENDPOINT_KEYS = new Set(["host", "port"]);
+
 export class JsonSettingsStore
   implements
     SettingsStore,
@@ -57,6 +60,12 @@ export class JsonSettingsStore
     const mcp = this.#read()["mcp"];
     if (mcp === undefined) {
       return {};
+    }
+    const unknown = isObject(mcp) ? Object.keys(mcp).filter((key) => !ENDPOINT_KEYS.has(key)) : [];
+    if (unknown.length > 0) {
+      throw new SettingsFileError(
+        `the mcp setting in ${this.#file} holds unknown keys: ${unknown.join(", ")}`,
+      );
     }
     const { host, port } = isObject(mcp) ? mcp : { host: null, port: null };
     if (

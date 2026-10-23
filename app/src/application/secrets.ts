@@ -66,6 +66,23 @@ export function registering(store: SecretStore, sink: SecretSink): SecretStore {
   };
 }
 
+/**
+ * The Anytype key from the environment first (the old ANYTYPE_API_KEY), else from `store`: set,
+ * it is the key read, and never written anywhere. A pairing still writes its key to `store`.
+ */
+export function environmentKeyFirst(
+  store: SecretStore,
+  fromEnvironment: string | undefined,
+): SecretStore {
+  const key = fromEnvironment?.trim() ?? "";
+  return {
+    read: (name) => (name === "anytype-api-key" && key !== "" ? key : store.read(name)),
+    write: (name, value) => {
+      store.write(name, value);
+    },
+  };
+}
+
 export interface OpenSecretStoreDeps {
   readonly facts: KeychainFacts;
   /** Built only when it is chosen: safeStorage is not touched on the file path. */

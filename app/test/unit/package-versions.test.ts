@@ -65,6 +65,11 @@ describe("the packages settings", () => {
     ["an override that is not an object", { overrides: { monty: "auto" } }, "is not an object"],
     ["an override with an unknown key", { overrides: { monty: { pinned: true } } }, "unknown keys"],
     [
+      "an override named by something that is not a package name",
+      { overrides: { "Who Dunnit": { update_mode: "pinned" } } },
+      '"Who Dunnit", which is not a package name',
+    ],
+    [
       "an override with a misspelled mode",
       { overrides: { monty: { update_mode: "never" } } },
       "packages.overrides.monty.update_mode",

@@ -28,6 +28,7 @@ import {
   type CatalogueRelease,
   type CatalogueSource,
 } from "./catalogue";
+import { PACKAGE_NAME_RULE } from "./declaration";
 
 export type UpdateMode = "auto" | "manual" | "pinned" | "off";
 
@@ -140,6 +141,12 @@ export function parsePackagePolicy(section: unknown): PackagePolicy {
   }
   const overrides = new Map<string, PackageOverride>();
   for (const [name, value] of Object.entries(listed)) {
+    // Overrides are by package name: anything else could never name a package, so it is a typo.
+    if (!PACKAGE_NAME_RULE.test(name)) {
+      throw new PackageSettingsError(
+        `packages.overrides names ${JSON.stringify(name)}, which is not a package name`,
+      );
+    }
     const where = `packages.overrides.${name}`;
     if (!isRecord(value)) {
       throw new PackageSettingsError(`${where} is not an object`);

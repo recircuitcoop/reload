@@ -6,9 +6,10 @@ import * as path from "node:path";
 
 import type { ForkSpec } from "../ports/process-launcher";
 
-/** What the services process is handed besides HOME: Anytype's local API address, the e2e gate's substitutes, the MCP endpoint's variables (WI-0018-18, -19), and XDG_RUNTIME_DIR for the old helper.lock path (WI-0018-25). */
+/** What the services process is handed besides HOME: Anytype's local API address and key, the e2e gate's substitutes, the MCP endpoint's variables (WI-0018-18, -19), and XDG_RUNTIME_DIR for the old helper.lock path (WI-0018-25). */
 export const SERVICES_VARIABLES = [
   "ANYTYPE_API_BASE_URL",
+  "ANYTYPE_API_KEY",
   "RELOAD_TEST_ANYTYPE",
   "RELOAD_MCP_HOST",
   "RELOAD_MCP_PORT",

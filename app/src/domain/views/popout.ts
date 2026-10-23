@@ -9,6 +9,8 @@
 //
 // Pure: the constants and the placement rules. Electron is the adapter's.
 
+import { PACKAGE_NAME_RULE } from "../packages/declaration";
+
 /** The scheme of the app pages, and the one host they are served on. */
 export const APP_SCHEME = "reload-app";
 export const APP_HOST = "app";
@@ -73,12 +75,11 @@ export interface PopoutTarget {
 export const popoutKey = (target: PopoutTarget): string => `${target.kind}:${target.id}`;
 
 /** Spec 2.1: a package name, which is also its view origin's host. */
-const PACKAGE_NAME = /^[a-z][a-z0-9_]{1,39}$/;
 /** A custom element's name: lower case, with a hyphen (HTML's valid custom element name). */
 const ELEMENT_NAME = /^[a-z][a-z0-9]*-[a-z0-9-]*$/;
 
 export const isPackageHost = (host: string): boolean =>
-  host !== VIEW_HOST && PACKAGE_NAME.test(host);
+  host !== VIEW_HOST && PACKAGE_NAME_RULE.test(host);
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
