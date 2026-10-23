@@ -96,7 +96,7 @@ describe("the controls of the old settings window", () => {
     expect(formats).toMatchObject({ control: "multiselect", default: ["mp3"] });
   });
 
-  it("a list of choice keeps its order and its repeats; distinct options are ticked", () => {
+  it("a list of choice keeps its order and its repeats, and distinct options are ticked", () => {
     const { fields } = formModel({
       properties: {
         order: { type: "array", items: { enum: ["low", "high"] } },
