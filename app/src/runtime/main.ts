@@ -59,7 +59,12 @@ import {
   readPersonalLimits,
   resourceWatchdog,
 } from "../application/resource-watch";
-import { serveShell, shellNodeCrashes, shellNotifier } from "../application/serve-shell";
+import {
+  redactingShellLink,
+  serveShell,
+  shellNodeCrashes,
+  shellNotifier,
+} from "../application/serve-shell";
 import { printCanary, sourceLog } from "../application/source-log";
 import { ViewService } from "../application/views";
 import { enabledNodes, InstanceReadiness } from "../application/instance-readiness";
@@ -492,7 +497,8 @@ async function startNodeRed(config: InitConfig): Promise<void> {
 
 // The Anytype key reaches the redactor from the services process, over the direct channel the
 // shell hands every generation (§2.2, WI-0018-18); the same end carries the options calls.
-const link = shellLinkOver(process.parentPort);
+// Every notice, reply and reason told to the shell is redacted with the same secrets.
+const link = redactingShellLink(shellLinkOver(process.parentPort), (text) => registry.redact(text));
 link.onPeer((peer) => {
   receiveKeys(peer, logger, logger);
   services.connect(peer);

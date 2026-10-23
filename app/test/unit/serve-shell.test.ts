@@ -332,6 +332,21 @@ describe("redactingShellLink: what the services process tells the shell", () => 
     );
   });
 
+  it("is the only way the runtime reaches the shell too (runtime/main.ts)", () => {
+    // The runtime holds the nodes' credentials and learns the Anytype key; read, not run, as
+    // services/main.ts is above.
+    const root = fs.readFileSync(
+      path.join(__dirname, "..", "..", "src", "runtime", "main.ts"),
+      "utf8",
+    );
+    expect(root).toContain(
+      "const link = redactingShellLink(shellLinkOver(process.parentPort), (text) => registry.redact(text));",
+    );
+    expect(root.match(/shellLinkOver\(/g)).toHaveLength(1);
+    expect(root.match(/process\.parentPort/g)).toHaveLength(1);
+    expect(root).toContain("const registry = new SecretRegistry();");
+  });
+
   it("walks plain objects and arrays only; bytes and numbers pass as they are, and so do peers", () => {
     const wire = new FakeLink();
     const link = redactingShellLink(wire, (text) => text.replaceAll("s3cret", REDACTED));
