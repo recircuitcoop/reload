@@ -34,6 +34,11 @@ export interface LifecycleDeps {
   /** The start; it hands back the notices (null when a quit came before it got that far). */
   readonly start: () => Promise<Notifier | null>;
   readonly logger: Logger;
+  /**
+   * Hand this start over to the watcher (shell/watcher.ts), once the lock is held: true when it
+   * did, and this shell is quitting; false under the watcher, which runs the shell as before.
+   */
+  readonly handOff?: () => boolean;
 }
 
 /** Runs the shell, or exits at once when another instance already runs. */
@@ -41,6 +46,9 @@ export function runShell(deps: LifecycleDeps): void {
   const { app, quitFlow, bringForward, logger } = deps;
   if (!app.requestSingleInstanceLock()) {
     app.exit(0);
+    return;
+  }
+  if (deps.handOff?.() === true) {
     return;
   }
   removeStaleReplies(app.getPath("userData"), Date.now());

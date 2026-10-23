@@ -1,5 +1,6 @@
 // Starting the real app for an e2e spec, and looking at its processes the way the spike's
 // P11d and P11e runs did: by pid, and with pgrep scoped to this run's temporary userData.
+import { UNDER_WATCHER_VARIABLE } from "../../src/domain/supervision/relaunch";
 import { execFileSync, type ChildProcess } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
@@ -26,8 +27,16 @@ const shells = new WeakMap<ElectronApplication, ChildProcess>();
 
 /** Launch Electron and keep its main process. Every e2e launch goes through here. */
 export async function launchTracked(
-  options: Parameters<typeof electron.launch>[0],
+  given: Parameters<typeof electron.launch>[0],
 ): Promise<ElectronApplication> {
+  // Playwright holds the process it launched: one that handed its start over to the watcher
+  // and quit would leave it nothing (shell/watcher.ts). The launched shell is the shell under
+  // test, as if the watcher had started it; watcher.e2e.ts starts Reload without this.
+  const inherited = Object.entries(process.env).filter(
+    (entry): entry is [string, string] => entry[1] !== undefined,
+  );
+  const env = { ...(given?.env ?? Object.fromEntries(inherited)), [UNDER_WATCHER_VARIABLE]: "1" };
+  const options = { ...given, env };
   const app = await electron.launch(options);
   shells.set(app, app.process());
   return app;
@@ -309,6 +318,8 @@ export function scratchDirectories(): {
       LOCALAPPDATA: path.join(scratch, "AppData", "Local"),
       RELOAD_USER_DATA: userData,
       RELOAD_HIDDEN_WINDOWS: "1",
+      // A Reload started from here runs as the shell under test, never handed to a watcher.
+      [UNDER_WATCHER_VARIABLE]: "1",
       // safeStorage against Chromium's in-memory mock keychain: no run writes to this
       // user's real one (WI-0018-06).
       RELOAD_MOCK_KEYCHAIN: "1",

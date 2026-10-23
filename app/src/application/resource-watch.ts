@@ -22,6 +22,7 @@ import {
   type ResourceLimits,
 } from "../domain/supervision/resources";
 import { DEFAULT_STABILITY, stabilityOf, type Stability } from "../domain/supervision/stability";
+import { supervisionSettings, type SupervisionSettings } from "../domain/supervision/child-state";
 import type { Logger } from "../ports/logger";
 import type { Notifier } from "../ports/notifier";
 import type { LimitDefaultsSetting, StabilitySetting } from "../ports/settings-store";
@@ -96,6 +97,15 @@ export function readStability(
     notifier?.raise({ kind: "limits-unreadable", subject: "stability", detail: why });
     return DEFAULT_STABILITY;
   }
+}
+
+/** The shell supervisor's numbers, the person's own where they may set them. */
+export function readSupervision(
+  setting: StabilitySetting,
+  logger: Logger,
+  notifier?: Notifier,
+): SupervisionSettings {
+  return supervisionSettings(readStability(setting, logger, notifier));
 }
 
 /** The watchdog's pace from the `stability` setting, read again before every wait. */

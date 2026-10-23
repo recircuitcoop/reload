@@ -197,7 +197,7 @@ afterAll(() => {
   fs.rmSync(scratch, { recursive: true, force: true });
 });
 
-function lifecycle(lock = true) {
+function lifecycle(lock = true, handOff?: () => boolean) {
   const app = Object.assign(new EventEmitter(), {
     exits: [] as number[],
     quits: 0,
@@ -222,7 +222,7 @@ function lifecycle(lock = true) {
       return Promise.resolve("quit" as never);
     },
   };
-  const state = { forward: 0, open: false, startFails: false };
+  const state = { forward: 0, open: false, startFails: false, started: false };
   const supervisors = new Map<ChildName, Pick<Supervisor, "status" | "onStatus">>([
     [
       "runtime",
@@ -243,8 +243,12 @@ function lifecycle(lock = true) {
       anytype: { state: null, startedPid: null, onStarted: () => undefined },
       notices: "notices.json",
     },
-    start: () => (state.startFails ? Promise.reject(new Error("no")) : Promise.resolve(null)),
+    start: () => {
+      state.started = true;
+      return state.startFails ? Promise.reject(new Error("no")) : Promise.resolve(null);
+    },
     logger,
+    ...(handOff === undefined ? {} : { handOff }),
   });
   return { app, signals, quitFlow, requests, state, supervisors, logger };
 }
@@ -255,6 +259,28 @@ describe("the shell's life", () => {
     expect(app.exits).toEqual([0]);
     expect(app.listenerCount("before-quit")).toBe(0);
     expect(requests).toEqual([]);
+  });
+
+  it("hands a start not under the watcher over to it once the lock is held, and starts nothing itself", () => {
+    let asked = 0;
+    const handedOver = lifecycle(true, () => {
+      asked += 1;
+      return true;
+    });
+    expect(asked).toBe(1);
+    expect(handedOver.state.started).toBe(false);
+    expect(handedOver.app.listenerCount("second-instance")).toBe(0);
+    // A second launch of a running Reload never reaches the watcher: the running one answers.
+    let askedSecond = 0;
+    lifecycle(false, () => {
+      askedSecond += 1;
+      return true;
+    });
+    expect(askedSecond).toBe(0);
+    // Under the watcher the shell runs as it always did.
+    const watched = lifecycle(true, () => false);
+    expect(watched.state.started).toBe(true);
+    expect(watched.app.listenerCount("second-instance")).toBe(1);
   });
 
   it("brings the window forward on a second launch, and on a dock click with none open", () => {

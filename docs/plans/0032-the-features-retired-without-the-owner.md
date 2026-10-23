@@ -147,6 +147,20 @@ settings.
   the stop timeout again before every wait. The crash-loop limit stays 5 in 2 minutes by
   default, and the person can now change it. The watchdog's own limit of five stops over a
   limit is not one of these numbers. 15 rows.
+- **Group 11** (branch `port/0032-wave3b`): the watcher is the shell's parent
+  (`shell/watcher.ts`). A shell started without it, as a person or the login item starts Reload,
+  takes the single-instance lock, then releases it, starts the watcher detached and quits. A
+  second start of a running Reload is answered by the running one, as before. The watcher runs on
+  the node a JS node runs on: the bundled Node in an installed build, where the RunAsNode fuse is
+  off, and Electron as node otherwise. Its script is passed with `-e`, since node cannot read
+  app.asar, and its config arrives on stdin, never on the command line. The watcher starts the
+  real shell with its arguments and `RELOAD_UNDER_WATCHER=1`. A crash (a non-zero exit, SIGSEGV,
+  SIGABRT, SIGBUS, SIGILL or SIGFPE) is relaunched after the person's restart delay, under their
+  crash-loop limit. A kill, any other signal, or a quit ends the watcher too. The run-state file,
+  `reload --status/--quit` and the login item stay the shell's. Playwright's launches set the
+  marker, since Playwright must hold the shell itself, and `watcher.e2e.ts` starts the real
+  binary without it. No packaging change: `dist/shell/watcher-main.cjs` ships with the rest of
+  `dist/`. 5 rows.
 - **The `configuration.e2e.ts` flake** (same branch): a flow's switch pressed again before the
   list read after its first press came back took the press for no change and sent nothing (the
   switch compares a press with the state it is drawn in); a pressed switch is now drawn as asked

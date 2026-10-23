@@ -86,12 +86,9 @@ import type { UpdateCheck } from "../application/update-check";
 import { APP_HOST, APP_SCHEME, VIEW_PARTITION } from "../domain/views/popout";
 import { chosenLevel } from "../domain/logging/record";
 import { SecretRegistry } from "../domain/redaction/registry";
-import {
-  CHILD_NAMES,
-  supervisionSettings,
-  type ChildName,
-} from "../domain/supervision/child-state";
-import { readStability } from "../application/resource-watch";
+import { CHILD_NAMES, type ChildName } from "../domain/supervision/child-state";
+import { readStability, readSupervision } from "../application/resource-watch";
+import { handOffToWatcher, watcherScript } from "../adapters/process/watcher-handoff";
 import type { ForkSpec } from "../ports/process-launcher";
 import type * as Contract from "../ui/contract";
 import packageJson from "../../package.json";
@@ -351,7 +348,7 @@ async function start(): Promise<DesktopWired["notices"] | null> {
           ? // The key's path only, for the first-party Anytype nodes (WI-0018-20, §4.2).
             { port, userDir, credentialSecret, secretFiles: keyFileOnly(anytypeSecrets) }
           : { port: null, userDir, secretFiles: anytypeSecrets },
-      settings: supervisionSettings(readStability(shellSettings, logger, notices)),
+      settings: readSupervision(shellSettings, logger, notices),
       launcher,
       clock: systemClock,
       logger,
@@ -588,13 +585,14 @@ async function start(): Promise<DesktopWired["notices"] | null> {
 // ── single instance; a quit, by the window or a signal, goes through the one QuitFlow ─────
 if (firstStart.problem === null) {
   runShell({
-    app,
-    signals: process,
-    quitFlow,
-    bringForward,
+    ...{ app, signals: process, quitFlow, bringForward, start, logger },
     windowOpen: () => appWindow.current !== null,
     running: { supervisors, anytype: anytypeApp, notices: NOTICES_FILENAME },
-    start,
-    logger,
+    // Not under the watcher: this start is handed to one, which relaunches a crash (group 11).
+    handOff: () =>
+      handOffToWatcher({
+        ...{ app, env: process.env, runtimesDir: RUNTIMES_DIR, script: watcherScript(__dirname) },
+        stability: () => readStability(shellSettings, logger),
+      }),
   });
 }
