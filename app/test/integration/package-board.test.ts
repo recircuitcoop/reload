@@ -464,7 +464,7 @@ describe("from the catalogue", () => {
 });
 
 describe("update and Go back (D5)", () => {
-  it("a newer folder version is updated; Go back within seven days returns it and offers the left version again", async () => {
+  it("a newer folder version is updated, and Go back within seven days returns it and offers the left version again", async () => {
     const folder = writeFolder("monty", "0.1.0");
     const { board } = setUp();
     await board.start();
@@ -616,7 +616,7 @@ describe("update and Go back (D5)", () => {
 });
 
 describe("register and unregister (D6)", () => {
-  it("unregister is refused while used, naming every use; otherwise stored, and only the runtime restarts", async () => {
+  it("unregister is refused while used, naming every use, and otherwise stored, and only the runtime restarts", async () => {
     const { board } = await withShipped("reload_anytype");
     await board.start();
     types = ["reload-reload_anytype-create", "inject"];
