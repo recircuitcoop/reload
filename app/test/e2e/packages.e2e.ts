@@ -777,7 +777,7 @@ test("no state without checked-when", async () => {
   }
 });
 
-test("a package whose record is broken is shown with why, and removed", async () => {
+test("a package whose record is broken is shown with why, and its Remove removes nothing blind", async () => {
   test.setTimeout(3 * 60_000);
   const { scratch, userData, env } = scratchDirectories();
   const apps: ElectronApplication[] = [];
@@ -796,9 +796,14 @@ test("a package whose record is broken is shown with why, and removed", async ()
       "its record could not be read",
     );
     await expect(row.getByTestId("package-remove")).toBeEnabled();
+    // Removed nothing blind: a record nobody can read leaves nothing to walk, so it is refused
+    // and said, and the row stays with its reason.
     await row.getByTestId("package-remove").click();
-    await expect(row).toHaveCount(0, { timeout: 30_000 });
-    expect(fs.existsSync(live)).toBe(false);
+    await expect(general.getByTestId("packages-message")).toContainText(STRINGS["refused.failed"], {
+      timeout: 30_000,
+    });
+    await expect(row).toHaveCount(1);
+    expect(fs.existsSync(live)).toBe(true);
     await quit(app);
   } finally {
     await cleanUp(apps, scratch, () => {

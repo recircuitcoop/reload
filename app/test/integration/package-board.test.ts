@@ -324,7 +324,7 @@ describe("from a folder (plan 0013)", () => {
 });
 
 describe("a broken package (plan 0032, group 29)", () => {
-  it("is shown with why and a Remove, never hidden, and the others as usual", async () => {
+  it("is shown with why and a Remove that removes nothing blind, never hidden, and the others as usual", async () => {
     const { board } = setUp();
     await board.start();
     await board.installFolder(writeFolder("monty", "0.1.0"));
@@ -340,8 +340,13 @@ describe("a broken package (plan 0032, group 29)", () => {
     });
     expect(broken.version).toBe("");
     expect(rowActions(broken, new Date(now))).toEqual({ enabled: ["remove"], disabled: [] });
-    expect(await board.remove("monty", [])).toEqual({ ok: true });
-    expect((await board.board()).rows.map((each) => each.package.name)).toEqual(["whodunnit"]);
+    // Its Remove is wired to the remover, which removes nothing blind: a record nobody can
+    // read leaves nothing to walk (tests/test_addons_remove.py), so the row stays, saying why.
+    expect(await board.remove("monty", [])).toMatchObject({ ok: false, failed: "remove" });
+    expect((await board.board()).rows.map((each) => each.package.name)).toEqual([
+      "whodunnit",
+      "monty",
+    ]);
   });
 });
 
