@@ -51,6 +51,38 @@ describe("the secret registry", () => {
 describe("redactStrings: a whole message bound for another process", () => {
   const redact = (text: string): string => text.replaceAll("s3cret", REDACTED);
 
+  it("fails closed: a Map, a Set, a null-prototype object and a class instance are walked", () => {
+    class Holder {
+      readonly token = "s3cret";
+      readonly nested = { deeper: ["s3cret"] };
+    }
+    const bare = Object.create(null) as Record<string, unknown>;
+    bare["key"] = "the s3cret";
+    const bytes = new Uint8Array([1, 2]);
+    const out = redactStrings(
+      {
+        map: new Map([["s3cret", "s3cret"]]),
+        set: new Set(["s3cret"]),
+        bare,
+        holder: new Holder(),
+        bytes,
+        n: 3,
+        nothing: null,
+      },
+      redact,
+    );
+    expect(JSON.stringify(out)).not.toContain("s3cret");
+    expect(out).toEqual({
+      map: [[REDACTED, REDACTED]],
+      set: [REDACTED],
+      bare: { key: `the ${REDACTED}` },
+      holder: { token: REDACTED, nested: { deeper: [REDACTED] } },
+      bytes,
+      n: 3,
+      nothing: null,
+    });
+  });
+
   it("redacts an Error's message, name and stack, and leaves the original as it was", () => {
     const original = new Error("the key s3cret was refused");
     original.name = "s3cretError";

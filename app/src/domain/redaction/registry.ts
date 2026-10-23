@@ -60,13 +60,21 @@ export class SecretRegistry {
 
 /**
  * `value` with every string in it, keys included, passed through `redact`: a message bound for
- * another process, redacted whole. Plain objects and arrays are walked, and an Error is posted as
- * a new one with its message and stack redacted; bytes, numbers and anything else pass as they
- * are.
+ * another process, redacted whole. Fail closed: strings, numbers, booleans, null, undefined and
+ * bytes pass; an Error is posted as a new one with its message, name and stack redacted; a Map
+ * or a Set as an array of its (redacted) entries; any other object as a plain object of its
+ * own enumerable properties, each redacted, whatever its prototype. Nothing is passed on unread.
  */
 export function redactStrings(value: unknown, redact: (text: string) => string): unknown {
   if (typeof value === "string") {
     return redact(value);
+  }
+  if (typeof value !== "object" || value === null) {
+    // A bigint, symbol or function cannot cross the channel; numbers and the rest carry no text.
+    return value;
+  }
+  if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) {
+    return value;
   }
   if (value instanceof Error) {
     const copy = new Error(redact(value.message));
@@ -81,14 +89,10 @@ export function redactStrings(value: unknown, redact: (text: string) => string):
   if (Array.isArray(value)) {
     return value.map((item: unknown) => redactStrings(item, redact));
   }
-  if (
-    typeof value === "object" &&
-    value !== null &&
-    Object.getPrototypeOf(value) === Object.prototype
-  ) {
-    return Object.fromEntries(
-      Object.entries(value).map(([key, item]) => [redact(key), redactStrings(item, redact)]),
-    );
+  if (value instanceof Map || value instanceof Set) {
+    return [...value].map((item: unknown) => redactStrings(item, redact));
   }
-  return value;
+  return Object.fromEntries(
+    Object.entries(value).map(([key, item]) => [redact(key), redactStrings(item, redact)]),
+  );
 }
