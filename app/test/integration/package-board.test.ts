@@ -350,6 +350,43 @@ describe("a broken package (plan 0032, group 29)", () => {
   });
 });
 
+describe("a package this release refuses at load (plan 0032, groups 26 and 29)", () => {
+  it("is shown broken at the next start, naming the field, never just left unloaded", async () => {
+    const first = setUp();
+    await first.board.start();
+    await first.board.installFolder(writeFolder("monty", "0.1.0"));
+    // As an older release accepted it: a table whose row has no title.
+    const live = roots.list()[0]?.folder.packageDir ?? "";
+    unsealTree(roots.live);
+    const declaration = path.join(live, "reload-package.json");
+    const document = JSON.parse(fs.readFileSync(declaration, "utf8")) as {
+      types: { config: Record<string, unknown> }[];
+    };
+    const [type] = document.types;
+    if (type === undefined) throw new Error("no type");
+    type.config = {
+      type: "object",
+      properties: {
+        rows: {
+          type: "array",
+          title: "Rows",
+          items: { type: "object", properties: { a: { type: "string", title: "A" } } },
+        },
+      },
+    };
+    fs.writeFileSync(declaration, JSON.stringify(document));
+    const next = setUp();
+    await next.board.start();
+    const shown = row(await next.board.board(), "monty");
+    expect(shown.installation).toMatchObject({
+      state: "failed-check",
+      reason: "declaration",
+      broken: expect.stringContaining("types/0/config/properties/rows/items/title") as string,
+    });
+    expect(rowActions(shown, new Date(now)).enabled).toContain("remove");
+  });
+});
+
 describe("shipped packages and install phases", () => {
   it("a shipped package is checked at start against this build's manifest, never against what this machine saw first", async () => {
     const shipped = shippedPackage("reload_anytype");

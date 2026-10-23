@@ -49,7 +49,11 @@ export async function contentCheck(
       : { state: "failed-check", reason: "content-moved", verifiedAt: at };
   } catch (error) {
     const reason = error instanceof PackageRefusal ? error.reason : "unreadable";
-    return { state: "failed-check", reason, verifiedAt: at };
+    // A declaration this release refuses (its config by the form's rules, plan 0032) is shown
+    // broken, naming the field, never just left unloaded.
+    return reason === "declaration"
+      ? { state: "failed-check", reason, broken: (error as Error).message, verifiedAt: at }
+      : { state: "failed-check", reason, verifiedAt: at };
   }
 }
 
