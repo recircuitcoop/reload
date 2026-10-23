@@ -391,6 +391,36 @@ describe("the archive: signature, then per-file hashes, then the content hash", 
     const old = await refusal(folderOf({ [OLD_DECLARATION_FILE]: "{}" }), portsWith(unreachable));
     expect(old.message).toContain("rename the file to reload-package.json");
   });
+
+  it("refuses a config the form cannot draw, and a property named twice, naming the field", async () => {
+    const config = (properties: string): string =>
+      declaration("monty", "1.0.0", { kind: "uv-python", python: "3.13" }).replace(
+        '"config":{"type":"object"}',
+        `"config":{"type":"object","properties":{${properties}}}`,
+      );
+    const twice = await refusal(
+      folderOf({
+        "reload-package.json": config(
+          '"folder":{"type":"string","title":"A"},"folder":{"type":"string","title":"B"}',
+        ),
+      }),
+      portsWith(unreachable),
+    );
+    expect(twice.reason).toBe("declaration");
+    expect(twice.message).toBe(
+      "reload-package.json: types/0/config/properties/folder: is declared twice in one object, " +
+        "and JSON keeps only the last; give each its own name",
+    );
+    const broken = await refusal(
+      archiveOf({
+        "reload-package.json": config('"n":{"type":"number","title":"N","minimum":2,"default":1}'),
+      }),
+      portsWith(unreachable),
+    );
+    expect(broken.message).toBe(
+      "reload-package.json: types/0/config/properties/n/default: default must be >= 2",
+    );
+  });
 });
 
 describe("plan 0013: one version, one content", () => {

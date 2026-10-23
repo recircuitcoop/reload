@@ -78,6 +78,31 @@ export class AjvSchemaValidator implements SchemaValidator {
     return this.#declaration(value) ? [] : problemsOf(this.#declaration.errors);
   }
 
+  /** What is wrong with `schema` by the JSON Schema 2020-12 meta-schema, a value named. */
+  meta(schema: JsonSchema): readonly FieldProblem[] {
+    if (this.#lenient.validateSchema(schema) === true) {
+      return [];
+    }
+    // The meta-schema's `anyOf` (a type, or a list of types) sums up the errors before it.
+    const errors = (this.#lenient.errors ?? []).filter((error) => error.keyword !== "anyOf");
+    return problemsOf(errors).map((problem) => {
+      if (!problem.message.startsWith("must be one of")) {
+        return problem;
+      }
+      const found = problem.path
+        .split("/")
+        .slice(1)
+        .reduce<unknown>(
+          (at, key) =>
+            typeof at === "object" && at !== null
+              ? (at as Record<string, unknown>)[key]
+              : undefined,
+          schema,
+        );
+      return { ...problem, message: `${problem.message}, not ${JSON.stringify(found)}` };
+    });
+  }
+
   check(schema: JsonSchema, value: unknown): readonly FieldProblem[] {
     const validate = this.#compile(schema);
     if (typeof validate === "string") {

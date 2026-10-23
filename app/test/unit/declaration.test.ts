@@ -24,8 +24,7 @@ import { DEFAULT_LIMITS, typeLimits } from "../../src/domain/supervision/resourc
 const REPOSITORY = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
 const validator = new AjvSchemaValidator();
-const parse = (value: unknown): ParsedDeclaration =>
-  parseDeclaration(value, (v) => validator.declaration(v));
+const parse = (value: unknown): ParsedDeclaration => parseDeclaration(value, validator);
 
 /** The problems of a refused declaration; fails the test when it was accepted. */
 function refused(value: unknown): readonly string[] {

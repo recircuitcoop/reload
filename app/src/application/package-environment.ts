@@ -18,6 +18,7 @@
 // remove, hot-add), which calls this with `admit`: judged on the verified declaration, before
 // anything is written.
 
+import { duplicateKeyProblems } from "../domain/packages/duplicate-keys";
 import {
   DECLARATION_FILE,
   FILES_MANIFEST,
@@ -149,15 +150,21 @@ function declarationOf(
     throw new PackageRefusal("declaration", `the package has no ${DECLARATION_FILE}`);
   }
   let document: unknown;
+  let text: string;
   try {
-    document = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+    text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    document = JSON.parse(text);
   } catch (error) {
     throw new PackageRefusal(
       "declaration",
       `${DECLARATION_FILE} is not JSON: ${(error as Error).message}`,
     );
   }
-  const parsed = parseDeclaration(document, (value) => validator.declaration(value));
+  const repeated = duplicateKeyProblems(text);
+  if (repeated.length > 0) {
+    throw new PackageRefusal("declaration", `${DECLARATION_FILE}: ${repeated.join("; ")}`);
+  }
+  const parsed = parseDeclaration(document, validator);
   if (!parsed.ok) {
     throw new PackageRefusal("declaration", `${DECLARATION_FILE}: ${parsed.problems.join("; ")}`);
   }

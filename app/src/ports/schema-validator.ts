@@ -16,6 +16,8 @@ export interface SchemaFailure {
 export interface SchemaValidator {
   /** What is wrong with a declaration by the spec's §2.6 schema; empty when nothing is. */
   declaration(value: unknown): readonly FieldProblem[];
+  /** What is wrong with `schema` itself, by the JSON Schema 2020-12 meta-schema; empty when nothing is. */
+  meta(schema: JsonSchema): readonly FieldProblem[];
   /** What is wrong with `value` by `schema`; empty when nothing is. */
   check(schema: JsonSchema, value: unknown): readonly FieldProblem[];
   /** Where `value` first fails `schema`, naming nothing of the value; null when it passes. */

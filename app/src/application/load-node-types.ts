@@ -34,7 +34,7 @@ export function loadNodeTypes(
       logger.info(`node package ${name} is unregistered: its types are not loaded`);
       continue;
     }
-    const parsed = parseDeclaration(document, (value) => validator.declaration(value));
+    const parsed = parseDeclaration(document, validator);
     if (!parsed.ok) {
       logger.error(
         `node package ${name} (${folder}) is refused and not loaded: ${parsed.problems.join("; ")}`,

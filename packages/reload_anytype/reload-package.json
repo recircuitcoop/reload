@@ -82,6 +82,7 @@
             "title": "Properties",
             "items": {
               "type": "object",
+              "title": "Property",
               "required": ["key", "value_field"],
               "properties": {
                 "key": { "type": "string", "title": "Property key" },

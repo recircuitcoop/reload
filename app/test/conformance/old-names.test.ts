@@ -55,7 +55,7 @@ describe("a package still written for InnyTypes is refused, naming the new names
     };
     const validator = new AjvSchemaValidator();
 
-    const parsed = parseDeclaration(old, (value) => validator.declaration(value));
+    const parsed = parseDeclaration(old, validator);
 
     expect(parsed.ok).toBe(false);
     expect(parsed.ok ? [] : parsed.problems).toEqual([

@@ -284,6 +284,19 @@ A type MAY set its own limits in `reload.limits`:
    deploy, at the top; by Setup's Continue, which keeps the groups, tables and lists it does not
    draw) except where the schema forbids them, where a save leaves them out and says so; such a
    value never reaches the node. An empty text nobody filled is unset, unless it is required.
+
+   A `config` the form cannot draw is refused when its package is read (at install, at load and
+   by `reload-pack`), naming the field by its path (plan 0032): a schema the JSON Schema 2020-12
+   meta-schema refuses; a keyword JSON Schema does not define (other than `x-secret` and
+   `reload`); a keyword that judges another type than the property's (`minimum` on a string,
+   `items` on a number); a property with no name, no `title`, or nothing saying what its values
+   are; a minimum above its maximum; an `enum` that is empty, repeats an option, offers `""`, or
+   offers a value its own schema refuses; a `default` its own schema refuses (each column's own
+   default filled in), naming a table's row by its `items.title` and place ("default › recorder 2
+   › language"); a table's empty default, or a default row holding an undeclared key; an array
+   with no `items`; a list of lists or of tables (a list of secrets at any depth excepted); a
+   table whose row has no properties or no `title` (the noun of its **Add** button); and, in the
+   declaration's text, a key repeated in one object, which JSON would silently drop.
 2. Secret properties MUST become Node-RED credentials, stored encrypted in `flows_cred.json` with
    the runtime's credential secret. They MUST NOT appear in `flows.json`. A secret inside a nested
    object is a credential named by its path (`"account.token"`), drawn in its group and delivered
@@ -383,14 +396,26 @@ A type MAY set its own limits in `reload.limits`:
         },
         "advanced": { "const": true },
         "multiline": { "const": true },
-        "path": { "enum": ["file", "folder"] }
+        "path": { "enum": ["file", "folder"] },
+        "unique": { "type": "boolean" },
+        "shown": {
+          "type": "object",
+          "required": ["when", "equals"],
+          "properties": {
+            "when": { "type": "string", "minLength": 1 },
+            "equals": { "type": ["string", "number", "boolean"] }
+          },
+          "additionalProperties": false
+        }
       },
       "anyOf": [
         { "required": ["spaces"] },
         { "required": ["types"] },
         { "required": ["advanced"] },
         { "required": ["multiline"] },
-        { "required": ["path"] }
+        { "required": ["path"] },
+        { "required": ["unique"] },
+        { "required": ["shown"] }
       ],
       "not": { "required": ["spaces", "types"] }
     },
@@ -494,7 +519,7 @@ A type MAY set its own limits in `reload.limits`:
         "required": ["folder"],
         "properties": {
           "folder": { "type": "string", "title": "Folder" },
-          "extensions": { "type": "string", "default": ".wav" }
+          "extensions": { "type": "string", "title": "Extensions", "default": ".wav" }
         }
       },
       "outputs": [

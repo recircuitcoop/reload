@@ -245,6 +245,35 @@ describe("reload-pack build and verify", () => {
     expect(fs.existsSync(out)).toBe(false);
   });
 
+  it("BREAK IT: a config the form cannot draw, or a property named twice, is refused before signing, naming the field", async () => {
+    const keys = tempDir("reload-pack-keys-");
+    await quietly(keygen(keys, "author"));
+    for (const [properties, refusal] of [
+      [
+        '"a":{"type":"string","title":"A"},"a":{"type":"string","title":"B"}',
+        /types\/0\/config\/properties\/a: is declared twice/,
+      ],
+      [
+        '"a":{"type":"string","title":"A","placeholder":"x"}',
+        /properties\/a\/placeholder: is not a JSON Schema keyword/,
+      ],
+    ] as const) {
+      const pkgDir = tempDir("reload-pack-config-");
+      fs.writeFileSync(
+        path.join(pkgDir, "reload-package.json"),
+        '{"protocol":2,"package":"badconfig","version":"0.0.0","environment":{"kind":"node"},' +
+          '"types":[{"id":"t","kind":"node","label":"T","command":["{node}","{package}/n.js"],' +
+          `"config":{"type":"object","properties":{${properties}}},"outputs":[]}]}`,
+      );
+      fs.writeFileSync(path.join(pkgDir, "n.js"), "");
+      const out = path.join(tempDir("reload-pack-out-"), "badconfig-0.0.0.tgz");
+      await expect(
+        quietly(() => cmdBuild([pkgDir, "--key", path.join(keys, "author.key"), "--out", out])),
+      ).rejects.toThrow(refusal);
+      expect(fs.existsSync(out)).toBe(false);
+    }
+  });
+
   it("view schemas and folder are checked: the widget kit builds; an answer schema that does not compile, or props with no view/component.js, are refused before signing", async () => {
     const keys = tempDir("reload-pack-keys-");
     await quietly(keygen(keys, "author"));

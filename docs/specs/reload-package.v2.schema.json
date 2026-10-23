@@ -79,14 +79,26 @@
         },
         "advanced": { "const": true },
         "multiline": { "const": true },
-        "path": { "enum": ["file", "folder"] }
+        "path": { "enum": ["file", "folder"] },
+        "unique": { "type": "boolean" },
+        "shown": {
+          "type": "object",
+          "required": ["when", "equals"],
+          "properties": {
+            "when": { "type": "string", "minLength": 1 },
+            "equals": { "type": ["string", "number", "boolean"] }
+          },
+          "additionalProperties": false
+        }
       },
       "anyOf": [
         { "required": ["spaces"] },
         { "required": ["types"] },
         { "required": ["advanced"] },
         { "required": ["multiline"] },
-        { "required": ["path"] }
+        { "required": ["path"] },
+        { "required": ["unique"] },
+        { "required": ["shown"] }
       ],
       "not": { "required": ["spaces", "types"] }
     },

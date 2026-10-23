@@ -132,7 +132,7 @@ beforeAll(async () => {
   installed = path.join(built.live, "package");
   const parsed = parseDeclaration(
     JSON.parse(fs.readFileSync(path.join(installed, "reload-package.json"), "utf8")),
-    (value) => new AjvSchemaValidator().declaration(value),
+    new AjvSchemaValidator(),
   );
   if (!parsed.ok) {
     throw new Error(parsed.problems.join("; "));

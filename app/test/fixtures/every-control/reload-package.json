@@ -90,6 +90,7 @@
             "minItems": 1,
             "items": {
               "type": "object",
+              "title": "Volume",
               "required": ["name", "path"],
               "properties": {
                 "name": { "type": "string", "title": "Name", "minLength": 1 },

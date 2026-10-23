@@ -41,6 +41,7 @@ import {
   type FileManifest,
 } from "../../app/src/domain/packages/archive.ts";
 import { parseDeclaration, type Declaration } from "../../app/src/domain/packages/declaration.ts";
+import { duplicateKeyProblems } from "../../app/src/domain/packages/duplicate-keys.ts";
 import { planEnvironment, type Target } from "../../app/src/domain/packages/environment.ts";
 import {
   checkPublicKeyDer,
@@ -115,13 +116,22 @@ function readDeclaration(files: ReadonlyMap<string, Uint8Array>): Declaration {
     throw new BuildError(`no ${DECLARATION_FILE}`);
   }
   let value: unknown;
+  let text: string;
   try {
-    value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+    text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    value = JSON.parse(text);
   } catch (error) {
     throw new BuildError(`${DECLARATION_FILE} is not JSON: ${(error as Error).message}`);
   }
+  const repeated = duplicateKeyProblems(text);
+  if (repeated.length > 0) {
+    throw new BuildError(
+      `${DECLARATION_FILE} is invalid, the way the app would refuse it:\n` +
+        repeated.map((problem) => `  - ${problem}`).join("\n"),
+    );
+  }
   const validator = new AjvSchemaValidator();
-  const parsed = parseDeclaration(value, (declaration) => validator.declaration(declaration));
+  const parsed = parseDeclaration(value, validator);
   if (!parsed.ok) {
     throw new BuildError(
       `${DECLARATION_FILE} is invalid, the way the app would refuse it:\n` +

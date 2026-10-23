@@ -10,6 +10,7 @@
 
 import type { DeclaredLimits } from "../supervision/resources";
 import type { StabilityProfile } from "../supervision/staleness";
+import { configProblems, type ConfigJudge } from "./config-lint";
 import { oldKeywordAt, oldKeywordProblem } from "./old-names";
 
 /** The one protocol version this runtime implements (spec 1.2). */
@@ -406,15 +407,19 @@ function beyondTheSchema(declaration: Declaration): string[] {
   return problems;
 }
 
+/** The validator a declaration is judged with: the spec 2.6 schema, and each type's config. */
+export interface DeclarationJudge extends ConfigJudge {
+  /** What is wrong with a declaration by the spec's §2.6 schema; empty when nothing is. */
+  declaration(value: unknown): readonly FieldProblem[];
+}
+
 /**
  * Parse a declaration (any JSON value). The protocol is judged first, so a package written for
  * another version is refused naming both versions (spec 1.3) rather than with a schema error.
- * Then `check` (the spec 2.6 schema, through a real validator), then the rules beyond it.
+ * Then the spec 2.6 schema (through a real validator), then the rules beyond it, then each
+ * type's config as the form draws it (config-lint.ts).
  */
-export function parseDeclaration(
-  value: unknown,
-  check: (value: unknown) => readonly FieldProblem[],
-): ParsedDeclaration {
+export function parseDeclaration(value: unknown, judge: DeclarationJudge): ParsedDeclaration {
   if (!isRecord(value)) {
     return { ok: false, problems: ["the declaration: must be a JSON object"] };
   }
@@ -432,7 +437,7 @@ export function parseDeclaration(
   if (oldKeyword !== null) {
     return { ok: false, problems: [oldKeywordProblem(oldKeyword, "reload")] };
   }
-  const schemaProblems = check(value);
+  const schemaProblems = judge.declaration(value);
   if (schemaProblems.length > 0) {
     return { ok: false, problems: schemaProblems.map(said) };
   }
@@ -441,6 +446,12 @@ export function parseDeclaration(
   const problems = beyondTheSchema(declaration);
   if (problems.length > 0) {
     return { ok: false, problems };
+  }
+  const configs = declaration.types.flatMap((type, index) =>
+    configProblems(type.config, `/types/${String(index)}/config`, judge).map(said),
+  );
+  if (configs.length > 0) {
+    return { ok: false, problems: configs };
   }
   return { ok: true, declaration: deepFreeze(declaration) };
 }

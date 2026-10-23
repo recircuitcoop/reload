@@ -141,9 +141,7 @@ const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 describe("packages/reload_folder: the declaration and how it ships", () => {
   it("declares one source, watch, on reload_folder.file.created.v1, run from the file the build writes", () => {
     const text = fs.readFileSync(path.join(FOLDER_PACKAGE_SOURCE, "reload-package.json"), "utf8");
-    const parsed = parseDeclaration(JSON.parse(text), (value) =>
-      new AjvSchemaValidator().declaration(value),
-    );
+    const parsed = parseDeclaration(JSON.parse(text), new AjvSchemaValidator());
     if (!parsed.ok) {
       throw new Error(parsed.problems.join("; "));
     }

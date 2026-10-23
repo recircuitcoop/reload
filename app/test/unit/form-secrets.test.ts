@@ -70,13 +70,18 @@ function declarationWith(config: unknown): unknown {
 }
 
 const problemsOf = (config: unknown): readonly string[] => {
-  const parsed = parseDeclaration(declarationWith(config), (value) => validator.declaration(value));
+  const parsed = parseDeclaration(declarationWith(config), validator);
   return parsed.ok ? [] : parsed.problems;
 };
 
 const RECORDER_ROW = (more: Record<string, unknown>) => ({
   type: "array",
-  items: { type: "object", properties: { label: { type: "string" }, ...more } },
+  title: "Recorders",
+  items: {
+    type: "object",
+    title: "Recorder",
+    properties: { label: { type: "string", title: "Name" }, ...more },
+  },
 });
 
 describe("a secret in a group", () => {
@@ -176,7 +181,9 @@ describe("a secret that cannot be a credential", () => {
   it("a table with a secret column is accepted, and a value for it is refused rather than kept", () => {
     const config: JsonSchema = {
       type: "object",
-      properties: { volumes: RECORDER_ROW({ token: { type: "string", writeOnly: true } }) },
+      properties: {
+        volumes: RECORDER_ROW({ token: { type: "string", title: "Token", writeOnly: true } }),
+      },
     };
     expect(problemsOf(config)).toEqual([]);
     const [volumes] = formModel(config).fields;
@@ -191,7 +198,7 @@ describe("a secret that cannot be a credential", () => {
   });
 
   it("a secret column in a nested row is named by its path through the declaration", () => {
-    const takes = RECORDER_ROW({ token: { type: "string", "x-secret": true } });
+    const takes = RECORDER_ROW({ token: { type: "string", title: "Token", "x-secret": true } });
     const config: JsonSchema = { type: "object", properties: { volumes: RECORDER_ROW({ takes }) } };
     expect(problemsOf(config)).toEqual([]);
     const node = { volumes: [{ label: "Zoom H6", takes: [{ token: "hunter2" }] }] };
@@ -255,7 +262,9 @@ describe("a secret that cannot be a credential", () => {
     expect(unkeptSecretsOfNode(config, { keys: ["a"] })).toEqual(["keys"]);
     expect(unkeptSecretsOfNode(config, { keys: [] })).toEqual([]);
     // A secret in a group, at any depth, is a credential and accepted.
-    const nested = { properties: { a: { type: "object", properties: CONFIG["properties"] } } };
+    const nested = {
+      properties: { a: { type: "object", title: "A", properties: CONFIG["properties"] } },
+    };
     expect(problemsOf(nested)).toEqual([]);
     expect(secretKeys(nested)).toEqual(["a.token", "a.account.password"]);
   });
@@ -269,7 +278,7 @@ describe("a secret that cannot be a credential", () => {
           title: "Keyring",
           items: { type: "array", items: { type: "string", writeOnly: true } },
         },
-        label: { type: "string" },
+        label: { type: "string", title: "Label" },
       },
     };
     expect(problemsOf(config)).toEqual([]);
@@ -317,7 +326,7 @@ describe("a secret that cannot be a credential", () => {
   });
 
   it("a secret in a shape the forms do not draw is refused at install, naming its path", () => {
-    const secret = { type: "string", writeOnly: true };
+    const secret = { type: "string", title: "Secret", writeOnly: true };
     const shapes: [string, Record<string, unknown>, string][] = [
       ["a list typed with a type list", { type: ["array", "null"], items: secret }, "/items"],
       [
@@ -352,10 +361,14 @@ describe("a secret that cannot be a credential", () => {
       type: "object",
       properties: {
         direct: secret,
-        group: { type: "object", properties: { inner: secret } },
-        list: { type: "array", items: secret },
-        keyring: { type: "array", items: { type: "array", items: secret } },
-        rows: { type: "array", items: { type: "object", properties: { cell: secret } } },
+        group: { type: "object", title: "Group", properties: { inner: secret } },
+        list: { type: "array", title: "List", items: secret },
+        keyring: { type: "array", title: "Keyring", items: { type: "array", items: secret } },
+        rows: {
+          type: "array",
+          title: "Rows",
+          items: { type: "object", title: "Row", properties: { cell: secret } },
+        },
       },
     };
     expect(problemsOf(known)).toEqual([]);
