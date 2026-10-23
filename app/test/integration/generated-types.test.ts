@@ -11,6 +11,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { FsWrittenStore } from "../../src/adapters/fs/written-store";
 import { TypeRegistration } from "../../src/adapters/nodered/registration";
 import { resolveCommand } from "../../src/adapters/process/command";
 import { DEFAULT_NODE_PROCESS, nodeProcessLauncher } from "../../src/adapters/process/node-process";
@@ -149,6 +150,7 @@ function setUp(
         env: rawNodeEnv(),
       })),
     dataDirFor: (id) => path.join(scratch, "instances", id),
+    written: new FsWrittenStore(path.join(scratch, "instances"), () => "a-credential-secret"),
     closeReason: () => closeReason,
     personalLimits: PERSONAL,
   });
@@ -390,6 +392,113 @@ describe("a generated type's instance", () => {
     const fast = create(PROBE, probeConfig("shown", { mode: "fast" }));
     expect(fast.errors[0]).toContain("token is required");
     expect(started).toEqual(["hidden"]);
+  });
+
+  describe("a node writing its own settings (spec 4.6, revision 2.2)", () => {
+    const writable = (config: { properties: Record<string, Record<string, unknown>> }) => {
+      const { apikey, volumes } = config.properties;
+      if (apikey !== undefined && volumes !== undefined) {
+        apikey["reload"] = { writtenBy: "plugin" };
+        volumes["reload"] = { writtenBy: "both" };
+      }
+    };
+    const SECRET = "ya29-a-token-an-oauth-exchange-returned";
+    const rows = [
+      { name: "one", path: "/one" },
+      { name: "two", path: "/two" },
+    ];
+    /** What the runtime answered the node's write, as the probe emits it. */
+    async function wrote(node: FakeNode, data: Message): Promise<Record<string, unknown>> {
+      const answer = node.input({ payload: data, topic: "everycontrol.tick.v1", _msgid: "m" });
+      await waitFor("the write's answer", () => answer.ends.length === 1);
+      const [, second] = answer.outputs[0] ?? [];
+      return (second as { payload: Record<string, unknown> }).payload;
+    }
+    const file = (id: string) => path.join(scratch, "instances", `${id}.settings.json`);
+
+    it("records what the package may set, refuses the rest by name, and keeps a secret encrypted, out of the flows", async () => {
+      setUp(undefined, undefined, writable);
+      const node = create(PROBE, probeConfig("w1"), { token: "t" });
+      const answer = await wrote(node, {
+        write: { apikey: SECRET, volumes: rows, count: 7, nope: 1 },
+      });
+      expect(answer).toMatchObject({
+        t: "written",
+        recorded: ["apikey", "volumes"],
+        refused: [
+          { path: "/count", message: "is left to the person: its package may not set it" },
+          { path: "/nope", message: "is not a declared property" },
+        ],
+      });
+      // One record per property, however many rows: the package, and when.
+      const text = fs.readFileSync(file("w1"), "utf8");
+      const kept = JSON.parse(text) as Record<string, Record<string, unknown>>;
+      expect(Object.keys(kept["written"] ?? {})).toEqual(["apikey", "volumes"]);
+      expect(kept["written"]?.["volumes"]).toEqual({
+        by: "everycontrol",
+        at: expect.stringMatching(/^\d{4}-\d\d-\d\dT/) as string,
+      });
+      expect(kept["values"]).toEqual({ volumes: rows });
+      // The secret is never in the file as it was written, nor in the node's flow config.
+      expect(text).not.toContain(SECRET);
+      expect(logger.lines.map((line) => line.text).join("\n")).not.toContain(SECRET);
+      if (process.platform !== "win32") {
+        expect(fs.statSync(file("w1")).mode & 0o777).toBe(0o600);
+      }
+    });
+
+    it("refuses a write in another package's name whole, and a row holding a key its row does not declare", async () => {
+      setUp(undefined, undefined, writable);
+      const node = create(PROBE, probeConfig("w2"), { token: "t" });
+      expect(await wrote(node, { write: { volumes: rows }, by: "whodunnit" })).toMatchObject({
+        recorded: [],
+        refused: [{ path: "", message: expect.stringContaining('"whodunnit"') as string }],
+      });
+      expect(fs.existsSync(file("w2"))).toBe(false);
+      const colour = [rows[0], { name: "two", path: "/two", colour: "red" }];
+      expect(await wrote(node, { write: { volumes: colour } })).toMatchObject({
+        recorded: [],
+        refused: [
+          { path: "/volumes/1", message: 'holds "colour", which its row does not declare' },
+        ],
+      });
+      expect(fs.existsSync(file("w2"))).toBe(false);
+    });
+
+    it("hands what it wrote to its node at the next start, its secret as a credential, unless the person changed it since", async () => {
+      setUp(undefined, undefined, writable);
+      const first = create(PROBE, probeConfig("w3"), { token: "t" });
+      await wrote(first, { write: { apikey: SECRET, volumes: rows } });
+      await first.close(false);
+      const started = path.join(scratch, "instances", "w3", "start.json");
+      fs.rmSync(started);
+      const again = create(PROBE, probeConfig("w3"), { token: "t" });
+      await waitFor(
+        "the next start",
+        () => fs.existsSync(started) && fs.readFileSync(started, "utf8").endsWith("}"),
+      );
+      const frame = startFrame("w3");
+      expect((frame["config"] as Record<string, unknown>)["volumes"]).toEqual(rows);
+      expect((frame["credentials"] as Record<string, unknown>)["apikey"]).toBe(SECRET);
+      await again.close(false);
+      // Changed by the person after the package wrote it: the person's rows win.
+      const later = new Date(Date.now() + 60_000).toISOString();
+      const theirs = [{ name: "mine", path: "/mine" }];
+      fs.rmSync(path.join(scratch, "instances", "w3", "start.json"));
+      create(PROBE, probeConfig("w3", { volumes: theirs, "reload.written": { volumes: later } }), {
+        token: "t",
+      });
+      await waitFor("the start after the person's change", () =>
+        fs.existsSync(path.join(scratch, "instances", "w3", "start.json")),
+      );
+      await waitFor("the whole frame", () =>
+        fs.readFileSync(path.join(scratch, "instances", "w3", "start.json"), "utf8").endsWith("}"),
+      );
+      expect((startFrame("w3")["config"] as Record<string, unknown>)["volumes"]).toMatchObject(
+        theirs,
+      );
+      expect((startFrame("w3")["credentials"] as Record<string, unknown>)["apikey"]).toBe(SECRET);
+    });
   });
 
   it("starts nothing when its command cannot run here, and says why", () => {

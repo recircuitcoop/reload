@@ -193,8 +193,9 @@ export function stamped(
   saved: Readonly<Record<string, unknown>>,
   at: string,
 ): Record<string, string> | undefined {
+  // A field nobody filled reads back as empty text: no change of the person's.
   const changed = Object.keys(saved).filter(
-    (key) => JSON.stringify(old[key]) !== JSON.stringify(saved[key]),
+    (key) => JSON.stringify(old[key] ?? "") !== JSON.stringify(saved[key] ?? ""),
   );
   return changed.length === 0
     ? undefined

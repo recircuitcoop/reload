@@ -1508,6 +1508,7 @@ Plan 0031 adds:
 |---|---|---|
 | C25 | heartbeat | each `ping` gets one `pong` with its `id`, also while an input is running; on the runtime side, a type that declares `reload.heartbeat` and stops answering is killed, restarted under the usual rules and the person told once, and a type that declares none is never pinged |
 | C26 | health | a node's health check answers in the `pong` as `healthy`, and a check that fails answers `false`; on the runtime side, `healthy: false` tells the person once, without killing anything, and `healthy: true` withdraws it |
+| C28 | settings (2.2) | a node's write of its own settings goes out as one `settings` frame of its schema, its values as given, never redacted, under an id of its own; the `written` answer with that id is what the handler gets, and a secret it recorded is the node's credential at once. On the runtime side (app integration tests): only a property declaring `reload.writtenBy` is recorded, each value judged by its own schema, a row's undeclared key refused, a write in another package's name refused whole; a secret is kept encrypted, never in the flows file; the next `start` carries what it wrote unless the person changed it since |
 | C27 | progress | each `pong` carries `progress`; it moves while the node is idle and with every frame a handler sends but `log`, and stays still while a handler sends nothing; on the runtime side, a node whose marker stays still for its window while it answers is judged stuck, and one sending `status` or `progress` never is |
 
 C15 binds the runtime, not SDKs. Of these, C1, C4 to C8, C10 to C12, C14 and C15 were exercised
@@ -1538,6 +1539,9 @@ class Node:
     def log(self, message: str, level: str = "info") -> None: ...
     def present(self, input_id: str, content: dict) -> None: ...
     def snapshot(self, content: dict, state, input_id: str | None = None) -> None: ...
+    # 2.2 (4.6): blocks until the runtime answers; call it from a handler while run() reads.
+    def write_settings(self, values: dict) -> dict: ...  # {"recorded": [...], "refused": [...]}
+    def credential(self, name: str) -> str | None: ...   # one it wrote, else the start frame's
 
     def run(self, on_input=None, on_cancel=None, on_action=None,
             on_trigger=None, on_fire=None, on_close=None) -> None:
@@ -1597,6 +1601,12 @@ export declare function status(text: string, fill?: "red" | "green" | "yellow" |
 export declare function log(msg: string, level?: "debug" | "info" | "warn" | "error"): void;
 export declare function present(inputId: string, content: { title?: string; text?: string; fields?: Record<string, unknown>; form?: object }): void;
 export declare function snapshot(content: object, state: unknown, inputId?: string): void;
+// 2.2 (4.6): resolves with the runtime's answer; one never answered recorded nothing.
+export declare function writeSettings(
+  values: Record<string, unknown>,
+): Promise<{ recorded: string[]; refused: { path: string; message: string }[] }>;
+// A credential: one this node wrote and the runtime recorded, else the start frame's.
+export declare function credential(name: string, info: StartInfo): string | undefined;
 export declare function run(handlers: Handlers): Promise<void>; // resolves after close/EOF
 ```
 

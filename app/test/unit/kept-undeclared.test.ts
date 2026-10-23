@@ -9,7 +9,7 @@ import express from "express";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { keepUndeclared } from "../../src/adapters/nodered/guard-middleware";
-import { withUndeclaredKept } from "../../src/domain/forms/kept-undeclared";
+import { declaredKeys, withUndeclaredKept } from "../../src/domain/forms/kept-undeclared";
 
 const TYPE = "reload-monty-watch";
 /** The type now declares `interval` only: it stopped declaring `quality`. */
@@ -121,5 +121,16 @@ describe("the editor deploy's middleware", () => {
     // Express's own error answer: Node-RED is never handed the deployment.
     expect(answer.status).toBe(500);
     expect(await answer.text()).toContain("no flows");
+  });
+});
+
+describe("a generated type's declared properties", () => {
+  it("are its config's own keys, and a type that is not a generated one has none", () => {
+    const config = {
+      type: "object",
+      properties: { a: { type: "string" }, b: { type: "integer" } },
+    };
+    expect([...(declaredKeys(config) ?? [])]).toEqual(["a", "b"]);
+    expect(declaredKeys(undefined)).toBeNull();
   });
 });
