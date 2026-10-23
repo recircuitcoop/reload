@@ -37,7 +37,8 @@ export interface PackageRemoverPorts {
   readonly restartRuntime: RestartRuntime;
   readonly logger: Logger;
   /** Where the removal event goes (plan 0029): the usage signals, behind consent. */
-  readonly signal?: (signal: Signal) => void;
+  /** With the verified record it is about, which vouches for the package's name (plan 0029). */
+  readonly signal?: (signal: Signal, record?: InstalledRecord) => void;
 }
 
 /** The types of `types` that belong to package `name` (`reload-<name>-<id>`, spec 2.1). */
@@ -99,7 +100,7 @@ export class PackageRemover {
       }
 
       roots.remove(name);
-      this.#ports.signal?.(packageRemoved(recordFacts(record)));
+      this.#ports.signal?.(packageRemoved(recordFacts(record)), record);
       this.#ports.forgetGenerated(name);
       const took = await this.#ports.restartRuntime(`${name} was removed`);
       logger.info(

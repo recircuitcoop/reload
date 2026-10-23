@@ -143,7 +143,8 @@ export async function restartAround(
 export interface PackageInstallerPorts extends CatalogueReads {
   readonly environment: PackageEnvironmentPorts;
   /** Where the install events go (plan 0029): the usage signals, behind consent. */
-  readonly signal?: (signal: Signal) => void;
+  /** With the verified record it is about, which vouches for the package's name (plan 0029). */
+  readonly signal?: (signal: Signal, record?: InstalledRecord) => void;
   /** The packages shipped with the app, whose names an install never takes. */
   readonly shipped: () => readonly { readonly name: string; readonly version: string }[];
   readonly restartRuntime: RestartRuntime;
@@ -494,7 +495,10 @@ export class PackageInstaller {
       this.#ports.signal?.(packageInstallFailed(where, code));
       return { ok: false, error: `Not installed: ${(error as Error).message}` };
     }
-    this.#ports.signal?.(packageInstalled(recordFacts(built.record), where, nodeTypes));
+    this.#ports.signal?.(
+      packageInstalled(recordFacts(built.record), where, nodeTypes),
+      built.record,
+    );
     const { package: name, version, signed } = built.record;
     const took = await this.#ports.restartRuntime(`${name} was installed`);
     const restart =

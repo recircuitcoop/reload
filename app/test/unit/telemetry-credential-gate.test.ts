@@ -40,7 +40,7 @@ import { unpairedFiles } from "../fakes/anytype";
 import { RecordingLogger } from "../fakes/children";
 import { FakeClock } from "../fakes/clock";
 import { everySignal, startPayload } from "../fakes/signals";
-import { telemetryWorld } from "../fakes/telemetry";
+import { telemetryWorld, memoryVouched, TEST_SIGNAL_DEPS } from "../fakes/telemetry";
 
 // ── the fakes ────────────────────────────────────────────────────────────────────────────
 
@@ -213,6 +213,8 @@ const SIGNAL_ROWS: readonly BuilderFixture[] = SIGNALS.flatMap((name) =>
 /** The shell's mapper over `pipeline`, its version fields planted too, its store knowing one package. */
 const usage = (pipeline: TelemetryPipeline, planted: string): UsageSignals =>
   new UsageSignals({
+    ...TEST_SIGNAL_DEPS,
+    vouched: memoryVouched(),
     record: (event, payload) => pipeline.recordUsage(event, payload),
     versions: versionsOf(planted),
     packages: () => [
@@ -421,6 +423,8 @@ describe.each(HOOKS)("the credential gate, through the hook: $name", ({ facts })
     }
     const pipeline = new TelemetryPipeline(world.deps);
     const signals = new UsageSignals({
+      ...TEST_SIGNAL_DEPS,
+      vouched: memoryVouched(),
       record: (event, payload) => pipeline.recordUsage(event, payload),
       versions: { appVersion: "1.0.0", os: "darwin", osVersion: "25.3.0", arch: "arm64" },
       packages: () => [

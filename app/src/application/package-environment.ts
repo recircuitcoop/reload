@@ -247,6 +247,10 @@ async function judgeAndBuild(
     // The source files its signed files.json listed, read now, never from the live folder: the
     // only `file` and `line` a failed step's event may name (plan 0029).
     sources: heldSources(packageFiles),
+    // Whose key vouched for its files: telemetry names only the official catalogue's packages.
+    ...(origin.kind === "archive" && origin.publicKey !== null
+      ? { signerKey: ports.sha256(new TextEncoder().encode(origin.publicKey)) }
+      : {}),
     // Relative to the package's folder, which moves when it is swapped in.
     ...(built.python === undefined ? {} : { python: `environment/${built.python}` }),
     ...(repairing === undefined

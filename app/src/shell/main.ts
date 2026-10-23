@@ -71,6 +71,8 @@ import { MinisignVerifier } from "../adapters/signature/minisign";
 import { JsonBoardStore } from "../adapters/fs/board-store";
 import { JsonPlacementStore } from "../adapters/fs/placement-store";
 import { pickFreeLoopbackPort } from "../adapters/net/free-port";
+import { parseToolSurface } from "../adapters/anytype/tool-surface";
+import committedSurface from "../adapters/anytype/tool_surface.json";
 import { monotonicClock, systemClock } from "../adapters/system/clock";
 import { ElectronUpdaterInstaller } from "../adapters/update/electron-updater-installer";
 import { AnytypeApp } from "../application/anytype-app";
@@ -116,8 +118,7 @@ import { runShell } from "./lifecycle";
 import { runCommandLine } from "./command-line";
 import { wireChildCalls } from "./child-calls";
 
-// The e2e gate runs the real app against a temporary userData directory, so no test ever touches
-// this user's own. Set before `ready` and before the single-instance lock, which lives in it.
+// The e2e gate runs the real app against a temporary userData directory, so no test ever touches this user's own. Set before `ready` and before the single-instance lock, which lives in it.
 const userData = process.env["RELOAD_USER_DATA"];
 if (userData !== undefined && userData !== "") {
   app.setPath("userData", userData);
@@ -133,8 +134,7 @@ if (firstStart.problem !== null) app.exit(1);
 // The gate runs with hidden windows (§6, e2e stage), so a run never steals focus.
 const hiddenWindows = process.env["RELOAD_HIDDEN_WINDOWS"] === "1";
 
-// The app pages and the pop-outs are served by the shell on schemes of its own (§2.2), which
-// must be privileged before Electron is ready.
+// The app pages and the pop-outs are served by the shell on schemes of its own (§2.2), which must be privileged before Electron is ready.
 registerSchemes(protocol);
 /** Where what ships with the app lives: this file is bundled to app/dist/shell/main.cjs. */
 const APP_DIR = path.join(__dirname, "..", "..");
@@ -153,8 +153,7 @@ if (process.env["RELOAD_MOCK_KEYCHAIN"] === "1") {
 }
 
 // ── the one log (WI-0018-04): the shell is its only writer ──────────────────────────────
-// A value registered as a secret and then printed by every process, so the e2e gate and the
-// `log` machine proof can show it never reaches the file (plan 0018 §5.4). Unset ordinarily.
+// A value registered as a secret and then printed by every process, so the e2e gate and the `log` machine proof can show it never reaches the file (plan 0018 §5.4). Unset ordinarily.
 const logCanary = process.env[LOG_CANARY_VARIABLE];
 let logLevel = DEFAULT_LEVEL;
 let levelProblem: string | null = null;
@@ -426,7 +425,7 @@ async function start(): Promise<DesktopWired["notices"] | null> {
     notifier: notices,
     settings: new JsonSettingsStore(path.join(userDir, "shell-settings.json")),
     blocked: new FsBlockedUpdates(path.join(packageBase, "blocked-updates.json")),
-    signal: (signal) => telemetry?.signal(signal),
+    signal: (signal, record) => telemetry?.signal(signal, record),
     providers: (seen) => telemetry?.providers(seen),
     forgetGenerated: (name) =>
       forgetGeneratedTypes(path.join(userDir, "node-red", "generated"), name),
@@ -567,6 +566,7 @@ async function start(): Promise<DesktopWired["notices"] | null> {
     sink: oneLog,
     supervisors,
     packages: withShippedSources(() => packageStore.documents(), APP_DIR, logger),
+    tools: parseToolSurface(committedSurface),
     clock: systemClock,
     logger,
   });

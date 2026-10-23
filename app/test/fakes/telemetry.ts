@@ -6,7 +6,7 @@ import type { TelemetryDeps } from "../../src/application/telemetry";
 import { SecretRegistry } from "../../src/domain/redaction/registry";
 import type { JsonObject } from "../../src/domain/telemetry/redact";
 import type { QueuedReport, ReportKind, TelemetryAnswer } from "../../src/domain/telemetry/reports";
-import type { Vouch } from "../../src/domain/telemetry/send-check";
+import type { Vouch, VouchedPackage } from "../../src/domain/telemetry/send-check";
 import type { Endpoints, Outgoing } from "../../src/domain/telemetry/transports";
 import type {
   PostResult,
@@ -146,6 +146,7 @@ export const TEST_VOUCH: Vouch = {
   lines: (pkg, file) =>
     pkg !== "probekit" ? null : file === "src/probe.py" ? 40 : file === "src/node.py" ? 40 : null,
   host: (host) => host === "catalogue.recircu.it",
+  tool: (name) => ["api-get-object", "api-list-spaces", "get_object"].includes(name),
 };
 
 /** A pipeline's whole world, with a switch answered `answer`. */
@@ -234,3 +235,23 @@ export class MemoryMarks implements TelemetryMarks {
     this.memory = memory;
   }
 }
+
+/** The vouched packages a test's UsageSignals keeps, in memory. */
+export function memoryVouched(): {
+  read: () => Readonly<Record<string, VouchedPackage>>;
+  write: (vouched: Readonly<Record<string, VouchedPackage>>) => void;
+} {
+  let vouched: Readonly<Record<string, VouchedPackage>> = {};
+  return {
+    read: () => vouched,
+    write: (next) => {
+      vouched = { ...next };
+    },
+  };
+}
+
+/** What UsageSignals needs of the build beside the store: no official key, the served tools. */
+export const TEST_SIGNAL_DEPS = {
+  officialKey: "f".repeat(64),
+  tools: new Set(["api-get-object", "api-list-spaces", "get_object"]),
+};

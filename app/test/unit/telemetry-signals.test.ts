@@ -623,7 +623,7 @@ describe("the launch marker and the telemetry memory on disk", () => {
       providers: { official: { host: "c.example", official: true } },
     };
     marks.writeMemory(memory);
-    expect(marks.readMemory()).toEqual(memory);
+    expect(marks.readMemory()).toEqual({ ...memory, vouched: {} });
   });
 
   it("tightens a file and a folder that already existed wider to 0600 and 0700", () => {
@@ -669,11 +669,12 @@ describe("the launch marker and the telemetry memory on disk", () => {
       reached: [],
       told: [],
       providers: { c: { host: "c.example", official: false }, d: { host: null, official: true } },
+      vouched: {},
     });
     fs.writeFileSync(file, JSON.stringify({ providers: [] }));
-    expect(marks.readMemory()).toEqual({ reached: [], told: [], providers: {} });
+    expect(marks.readMemory()).toEqual({ reached: [], told: [], providers: {}, vouched: {} });
     fs.writeFileSync(file, "null");
-    expect(marks.readMemory()).toEqual({ reached: [], told: [], providers: {} });
+    expect(marks.readMemory()).toEqual({ reached: [], told: [], providers: {}, vouched: {} });
     const blocked = path.join(scratch, "a-file");
     fs.writeFileSync(blocked, "");
     new FsTelemetryMarks(path.join(blocked, "inside"), logger).writeRunning("1.0.0");

@@ -39,6 +39,7 @@ import type { Endpoints } from "../domain/telemetry/transports";
 import type { TelemetryMarks, TelemetryMemory } from "../ports/telemetry";
 import type { TelemetryReport, TelemetryStatus } from "../ui/contract";
 import type { Logger } from "../ports/logger";
+import type { InstalledRecord } from "../ports/package-roots";
 import { IPC } from "./ipc";
 
 /** A package as the package store lists it, as far as an event looks at it. */
@@ -53,7 +54,11 @@ export interface TelemetryWiring extends Pick<
    * The build's endpoints, as released (package.json's "reload"), and its own catalogue's
    * address: the one provider whose host is ever sent.
    */
-  readonly built: Endpoints & { readonly catalogueUrl: string };
+  readonly built: Endpoints & {
+    readonly catalogueUrl: string;
+    /** The build's catalogue key: the only signer whose packages telemetry names. */
+    readonly catalogueKey: string | null;
+  };
   /**
    * Where development and the e2e gate point the endpoints elsewhere; empty in an installed
    * build, which always sends where it was built to.
@@ -73,6 +78,11 @@ export interface TelemetryWiring extends Pick<
     Pick<Supervisor, "onStatus" | "onNodeCrash" | "onSignal">
   >;
   readonly packages: () => readonly ListedPackage[];
+  /**
+   * The tools the served Anytype MCP child lists (the committed surface it must list exactly
+   * before anything is served): only these are named in mcp_call.
+   */
+  readonly tools: { readonly tools: Readonly<Record<string, unknown>> };
   /** The launch marker and the telemetry memory (plan 0029). */
   readonly marks: TelemetryMarks;
   /** How long this process has run, in ms: app_start's startup time and app_stop's uptime. */
@@ -133,8 +143,11 @@ export function reportedPackages(listed: readonly ListedPackage[]): {
 /** What the rest of the shell reports through: the usage signals, every one behind consent. */
 export interface ShellTelemetry {
   readonly pipeline: TelemetryPipeline;
-  /** One signal a package, update or setup path built. */
-  signal(signal: Signal): void;
+  /**
+   * One signal a package, update or setup path built; with the installer's verified record of
+   * the package it is about, which vouches for its name even once it is removed.
+   */
+  signal(signal: Signal, record?: InstalledRecord): void;
   /** A decided quit, before the children stop: app_stop, and the marker cleared. */
   stopping(reason: StopReason): void;
   /** A first-run step reached: told once, on this launch or the first one allowed to. */
@@ -214,6 +227,17 @@ export function wireTelemetry(deps: TelemetryWiring): ShellTelemetry {
     record: (name, payload): unknown => pipeline.recordUsage(name, payload),
     versions,
     packages,
+    officialKey:
+      deps.built.catalogueKey === null
+        ? null
+        : createHash("sha256").update(deps.built.catalogueKey).digest("hex"),
+    tools: new Set(Object.keys(deps.tools.tools).map((name) => name.toLowerCase())),
+    vouched: {
+      read: () => remembered.vouched ?? {},
+      write: (vouched) => {
+        remember({ ...remembered, vouched });
+      },
+    },
   });
   const pipeline: TelemetryPipeline = new TelemetryPipeline({
     ...deps,
@@ -339,14 +363,23 @@ export function wireTelemetry(deps: TelemetryWiring): ShellTelemetry {
     pipeline.pending().map((report) => ({ kind: report.kind, payload: report.payload })),
   );
 
+  // With no report waiting, a package removed since no longer needs vouching for.
+  guarded("forget the packages no report waits for", () => {
+    if (pipeline.state().queued === 0) {
+      signals.prune();
+    }
+  });
   reached("launched");
   guarded("start the sender", () => {
     pipeline.start();
   });
   return {
     pipeline,
-    signal: (signal) => {
+    signal: (signal, record) => {
       guarded(`tell ${signal.name}`, () => {
+        if (record !== undefined) {
+          signals.vouchRecord(record);
+        }
         signals.record(signal);
       });
     },

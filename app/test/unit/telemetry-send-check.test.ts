@@ -96,6 +96,51 @@ describe("the check at send", () => {
     expect(usage({ event: "app_stop", reason: "bob hunter2" })?.["reason"]).toBe(WITHHELD);
   });
 
+  it("sends a tool's name only when Reload's own Anytype tools list it", () => {
+    const call = { event: "mcp_call", package: "reload_anytype", method: "tools/call" };
+    expect(usage({ ...call, tool: "api-get-object" })?.["tool"]).toBe("api-get-object");
+    expect(usage({ ...call, tool: "my-own-tool" })?.["tool"]).toBe(WITHHELD);
+  });
+
+  it("drops a report whose machine id is not this pipeline's own, or whose ids are not hex", () => {
+    const report = { rules: RULES_VERSION, kind: "usage", event: "app_start", ...STAMPS };
+    expect(checkAtSend(report, "usage", TEST_VOUCH, MACHINE)).not.toBeNull();
+    expect(checkAtSend(report, "usage", TEST_VOUCH, null)).toBeNull();
+    expect(checkAtSend(report, "usage", TEST_VOUCH, "c".repeat(64))).toBeNull();
+    const upper = "A".repeat(64);
+    expect(checkAtSend({ ...report, machine_id: upper }, "usage", TEST_VOUCH, upper)).toBeNull();
+    expect(
+      checkAtSend({ ...report, report_id: "g".repeat(32) }, "usage", TEST_VOUCH, MACHINE),
+    ).toBeNull();
+    expect(
+      checkAtSend({ ...report, report_id: "b".repeat(31) }, "usage", TEST_VOUCH, MACHINE),
+    ).toBeNull();
+  });
+
+  it("names no package the build does not vouch for: signed is custom, unsigned is unsigned", () => {
+    const error = {
+      event: "package_error",
+      version: "1.0.0",
+      node_id: "probe",
+      file: "src/probe.py",
+      line: 7,
+    };
+    expect(usage({ ...error, package: "acme_nodes", signed: true })).toMatchObject({
+      package: "custom",
+      version: null,
+      node_id: "custom",
+      file: WITHHELD,
+      line: WITHHELD,
+    });
+    expect(usage({ ...error, package: "acme_nodes", signed: false })).toMatchObject({
+      package: "unsigned",
+      version: null,
+      node_id: null,
+      file: WITHHELD,
+      line: WITHHELD,
+    });
+  });
+
   it("asks the store and the build again for package, node_id, file, line and host", () => {
     expect(
       usage({

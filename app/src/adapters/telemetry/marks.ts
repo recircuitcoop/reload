@@ -11,6 +11,8 @@
 
 import fs from "node:fs";
 import * as path from "node:path";
+import type { VouchedPackage } from "../../domain/telemetry/send-check";
+import { heldFrom } from "../../domain/telemetry/sources";
 import type { Logger } from "../../ports/logger";
 import type { RememberedProvider, TelemetryMarks, TelemetryMemory } from "../../ports/telemetry";
 
@@ -76,6 +78,7 @@ export class FsTelemetryMarks implements TelemetryMarks {
       reached: isStringList(memory["reached"]) ? memory["reached"] : [],
       told: isStringList(memory["told"]) ? memory["told"] : [],
       providers: remembered,
+      vouched: vouchedIn(memory["vouched"]),
     };
   }
 
@@ -103,4 +106,19 @@ export class FsTelemetryMarks implements TelemetryMarks {
       this.#logger.warn(`${path.basename(file)} could not be written: ${String(error)}`);
     }
   }
+}
+
+/** The vouched packages as they may be trusted when read back: names, type ids, held sources. */
+function vouchedIn(value: unknown): Record<string, VouchedPackage> {
+  const vouched: Record<string, VouchedPackage> = {};
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return vouched;
+  }
+  for (const [name, entry] of Object.entries(value as Record<string, unknown>)) {
+    const { nodeTypes, held } = (entry ?? {}) as Record<string, unknown>;
+    if (isStringList(nodeTypes)) {
+      vouched[name] = { nodeTypes, held: heldFrom(held) };
+    }
+  }
+  return vouched;
 }

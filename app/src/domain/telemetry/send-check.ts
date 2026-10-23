@@ -31,7 +31,10 @@ import {
 
 /** What the app vouches for at send: the package store's and the build's own answers. */
 export interface Vouch {
-  /** A package the store lists as shipped or signed. */
+  /**
+   * A package shipped with the app or signed by the build's own catalogue's key, as the store
+   * lists it now or listed it when a report about it was queued.
+   */
   readonly package: (name: string) => boolean;
   /** A type id the signed package `pkg` declares. */
   readonly nodeType: (pkg: string, id: string) => boolean;
@@ -39,6 +42,14 @@ export interface Vouch {
   readonly lines: (pkg: string, file: string) => number | null;
   /** The build's own catalogue's host. */
   readonly host: (host: string) => boolean;
+  /** A tool the served Anytype MCP child lists (the committed surface), lowercased. */
+  readonly tool: (name: string) => boolean;
+}
+
+/** What a package the build's catalogue vouched for keeps vouched until its reports are sent. */
+export interface VouchedPackage {
+  readonly nodeTypes: readonly string[];
+  readonly held: Readonly<Record<string, number>>;
 }
 
 /** The pipeline's own stamps, which no builder makes and the scrub would take for keys. */
@@ -149,7 +160,7 @@ const CRASH_FIELDS = ["exception_type", "crashed", "stopped_for_good", "crashes"
 const CRASH_COUNTS = ["runtime", "services", "node", "node_stopped"];
 
 /** Package names that are no package's own: Node-RED's nodes, and what is never named. */
-const NAMED_NOWHERE = ["unsigned", "node-red"];
+const NAMED_NOWHERE = ["unsigned", "custom", "node-red"];
 
 /** One value by its rule: what does not fit is WITHHELD; null stays null. */
 function held(rule: Rule, value: Json | undefined): Json {
@@ -181,22 +192,35 @@ function crashCounts(value: Json | undefined): Json {
   return Object.fromEntries(CRASH_COUNTS.map((name) => [name, held(COUNT, value[name])]));
 }
 
-/** The vouched-for fields asked again: what the store or the build does not vouch for falls back. */
-function vouched(report: JsonObject, vouch: Vouch): JsonObject {
-  const checked = { ...report };
+/**
+ * The vouched-for fields asked of the package store, the build's catalogue and the served tools:
+ * what they do not vouch for falls back. A package the build's own catalogue did not sign keeps
+ * no name, version, type or file: `custom` when another catalogue signed it, `unsigned` when
+ * nobody did. Applied when a report is queued and again when it is sent.
+ */
+export function vouchedFields<T extends Readonly<Record<string, unknown>>>(
+  report: T,
+  vouch: Vouch,
+): T {
+  const checked: Record<string, unknown> = { ...report };
   const pkg = checked["package"];
   if (typeof pkg === "string" && !NAMED_NOWHERE.includes(pkg) && !vouch.package(pkg)) {
-    checked["package"] = "unsigned";
+    checked["package"] = checked["signed"] === true ? "custom" : "unsigned";
+    for (const field of ["version", "from_version"]) {
+      if (typeof checked[field] === "string") {
+        checked[field] = null;
+      }
+    }
   }
   const owner = typeof checked["package"] === "string" ? checked["package"] : null;
   const named = owner !== null && !NAMED_NOWHERE.includes(owner) ? owner : null;
   const id = checked["node_id"];
-  if (
-    typeof id === "string" &&
-    id !== "unsigned" &&
-    (named === null || !vouch.nodeType(named, id))
-  ) {
-    checked["node_id"] = named === null ? null : "unsigned";
+  if (typeof id === "string" && !NAMED_NOWHERE.includes(id)) {
+    if (named === null) {
+      checked["node_id"] = owner === "custom" ? "custom" : null;
+    } else if (!vouch.nodeType(named, id)) {
+      checked["node_id"] = "unsigned";
+    }
   }
   const file = checked["file"];
   const lines = typeof file === "string" && named !== null ? vouch.lines(named, file) : null;
@@ -207,11 +231,15 @@ function vouched(report: JsonObject, vouch: Vouch): JsonObject {
   if (typeof line === "number" && (lines === null || lines === 0 || line > lines)) {
     checked["line"] = WITHHELD;
   }
+  const tool = checked["tool"];
+  if (typeof tool === "string" && !vouch.tool(tool)) {
+    checked["tool"] = WITHHELD;
+  }
   const host = checked["provider_host"];
   if (typeof host === "string" && host !== "custom" && host !== "file" && !vouch.host(host)) {
     checked["provider_host"] = "custom";
   }
-  return checked;
+  return checked as T;
 }
 
 /**
@@ -262,5 +290,5 @@ export function checkAtSend(
     report[name] =
       name === "crashes" ? crashCounts(value) : rule === undefined ? WITHHELD : held(rule, value);
   }
-  return scrubPayload(vouched(report, vouch), OWN_IDENTIFIERS);
+  return scrubPayload(vouchedFields(report, vouch), OWN_IDENTIFIERS);
 }

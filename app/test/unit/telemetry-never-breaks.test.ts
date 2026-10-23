@@ -103,6 +103,7 @@ function brokenShell(answer: "on" | "off" | "unset"): {
       ["services", services],
     ]),
     packages: () => [],
+    tools: { tools: {} },
     marks: new BrokenMarks(),
   });
   return { telemetry, runtime, logger };

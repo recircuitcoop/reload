@@ -44,7 +44,12 @@ import {
   type Endpoints,
   type Outgoing,
 } from "../domain/telemetry/transports";
-import { checkAtSend, OWN_IDENTIFIERS, type Vouch } from "../domain/telemetry/send-check";
+import {
+  checkAtSend,
+  OWN_IDENTIFIERS,
+  vouchedFields,
+  type Vouch,
+} from "../domain/telemetry/send-check";
 import { RULES_VERSION } from "../domain/telemetry/vocabulary";
 import type { Cancel, Clock } from "../ports/clock";
 import type { Logger, SecretSink } from "../ports/logger";
@@ -392,8 +397,10 @@ export class TelemetryPipeline {
       return null;
     }
     try {
+      // Vouched for now, as the package store and the build answer while the package is there;
+      // the check at send asks again (domain/telemetry/send-check).
       const stamped = {
-        ...payload,
+        ...vouchedFields(payload, this.#deps.vouch),
         kind,
         machine_id: this.#identity(),
         report_id: this.#deps.newId(),

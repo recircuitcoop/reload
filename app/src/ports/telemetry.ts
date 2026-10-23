@@ -5,6 +5,7 @@
 
 import type { JsonObject } from "../domain/telemetry/redact";
 import type { QueuedReport, ReportKind, TelemetryAnswer } from "../domain/telemetry/reports";
+import type { VouchedPackage } from "../domain/telemetry/send-check";
 import type { Outgoing } from "../domain/telemetry/transports";
 
 /** The telemetry switch, in a file only the shell writes. */
@@ -85,6 +86,11 @@ export interface TelemetryMemory {
   readonly told: readonly string[];
   /** The providers the last listing saw, by name: their host and whether official. */
   readonly providers: Readonly<Record<string, RememberedProvider>>;
+  /**
+   * The packages the build's catalogue vouched for while reports about them may still wait: their
+   * declared types and verified source files, so one removed meanwhile keeps its name at send.
+   */
+  readonly vouched?: Readonly<Record<string, VouchedPackage>>;
 }
 
 /**

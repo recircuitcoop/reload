@@ -29,6 +29,12 @@ export interface InstalledRecord {
    */
   readonly sources?: Readonly<Record<string, number>>;
   /**
+   * The sha256 (hex) of the public key that verified its files.json; absent for a package
+   * nobody signed, and from a record written before. Telemetry names only the packages the
+   * build's own catalogue key signed (plan 0029).
+   */
+  readonly signerKey?: string;
+  /**
    * Where it was installed from, which is where the update check asks (WI-0018-17). Absent from
    * a record written before the check existed, whose package is then not checked.
    */

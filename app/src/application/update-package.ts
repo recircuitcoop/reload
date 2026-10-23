@@ -84,8 +84,8 @@ export interface PackageUpdatesPorts extends CatalogueReads {
   readonly logger: Logger;
   /** Where the check keeps a newer release's archive and verdict, across launches. */
   readonly archives: ArchiveCache;
-  /** Where the update event goes (plan 0029): the usage signals, behind consent. */
-  readonly signal?: (signal: Signal) => void;
+  /** Where the update event goes (plan 0029), with the verified record that vouches for it. */
+  readonly signal?: (signal: Signal, record?: InstalledRecord) => void;
 }
 
 /** What the last check found about one package. */
@@ -379,7 +379,8 @@ export class PackageUpdates {
       const live = environment.roots.installed(name);
       const where = this.#catalogues.installOrigin(from);
       if (live !== undefined) {
-        this.#ports.signal?.(packageUpdated(recordFacts(live), where, nodeTypes, record.version));
+        const updated = packageUpdated(recordFacts(live), where, nodeTypes, record.version);
+        this.#ports.signal?.(updated, live);
       }
       logger.info(
         `update: ${name} ${record.version} → ${built} is live; only the runtime restarted, in ` +
