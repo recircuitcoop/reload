@@ -39,6 +39,10 @@ Windows is where the spike expected trouble: paths, SIGKILL emulation, Job Objec
 - `reload --status`, `--quit` and `--log` print through `fs.writeSync(1, …)`
   (`app/src/shell/command-line.ts` runCommandLine), which a GUI Electron process may not have a
   console for on Windows.
+- The shell's report of what it came up without (`app/src/shell/desktop.ts`, NoticeBoard's
+  `report`) goes through `process.stdout.write`, which Node makes synchronous for pipes on
+  Windows: there a reader that does not drain the pipe can stall the shell, as `fs.writeSync`
+  did on macOS.
 
 The design is plan 0018 §5.4 and its WI-0018-30 entry; this plan does not restate it.
 

@@ -91,8 +91,8 @@ test("reload --status and --quit act on the running instance from a second proce
     expect(await exited).toBe(0);
     await expect.poll(() => processesNaming(userData), { timeout: 10_000 }).toEqual([]);
     expect(fs.existsSync(runState)).toBe(false);
-    // It came up without Anytype, said so in its log, and still exited 0. Read from the file:
-    // the first lines can be written before the harness listens to the terminal.
+    // It found no Anytype desktop app, warned so in its log, and still exited 0. Read from the
+    // file: the first lines can be written before the harness listens to the terminal.
     expect(fs.readFileSync(logFile, "utf8")).toContain("Reload starts without it");
 
     expect(await reload("--quit", env)).toEqual({ code: 1, stdout: "Reload is not running.\n" });
