@@ -193,8 +193,13 @@ export function createStores(api: AppApi): Stores {
   });
   api.onChildStatus((status) => {
     const now = children.getSnapshot();
-    const known = now.status === "ready" ? now.value : [];
-    children.set([...known.filter((other) => other.child !== status.child), status]);
+    // A push is one child's status: before the whole list was read it is read whole instead (by
+    // the first subscriber, or again now), or the other child would be missing until it changed.
+    if (now.status !== "ready") {
+      children.changed();
+      return;
+    }
+    children.set([...now.value.filter((other) => other.child !== status.child), status]);
   });
   return {
     runs: (flowId) => runs.get(flowId),

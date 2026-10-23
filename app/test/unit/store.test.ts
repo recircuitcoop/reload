@@ -240,6 +240,30 @@ describe("the children's store (General › Advanced)", () => {
     });
     expect(asked).toEqual([["childStatus"]]);
   });
+
+  it("a status pushed before General reads the children leaves every child to the first read", async () => {
+    const { api, asked, emit } = fakeApi();
+    const stores = createStores(api);
+    // The services process says it runs while no page has read the children yet.
+    emit("childStatus", {
+      child: "services",
+      state: "running",
+      generation: 1,
+      pid: 11,
+      port: null,
+      error: null,
+    });
+    expect(asked).toEqual([]);
+    stores.children.subscribe(() => undefined);
+    await settle();
+    expect(asked).toEqual([["childStatus"]]);
+    expect(stores.children.getSnapshot()).toEqual({
+      status: "ready",
+      value: [
+        { child: "runtime", state: "running", generation: 1, pid: 10, port: 20, error: null },
+      ],
+    });
+  });
 });
 
 describe("the hooks, through React", () => {
