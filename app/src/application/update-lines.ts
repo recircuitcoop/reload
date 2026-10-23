@@ -50,7 +50,12 @@ export function updateLine(
       return {
         kind: "newer",
         version: finding.version,
-        detail: mode === "pinned" ? `${record.package} is pinned at ${record.version}` : null,
+        detail:
+          mode === "pinned"
+            ? `${record.package} is pinned at ${record.version}`
+            : finding.beyond === undefined
+              ? null
+              : `${finding.beyond.version} is offered too, and ${finding.beyond.reason}`,
         // One rule for "waiting for the person": manual only. An auto one is the machine's to
         // apply at its next check, and a pinned one nobody's (window.py pending_update_row).
         apply: mode === "manual",

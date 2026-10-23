@@ -16,6 +16,7 @@
 // archives checked against that key, as the official one is against the key shipped with the app.
 
 import {
+  STABLE_CHANNEL,
   entryFor,
   OFFICIAL_SOURCE_NAME,
   type CatalogueEntry,
@@ -23,7 +24,13 @@ import {
   type PackageCatalogue,
 } from "../domain/packages/catalogue";
 import type { InstallOrigin } from "../domain/telemetry/reports";
-import { judgeCatalogueVersion, type VersionFinding } from "../domain/packages/versions";
+import {
+  channelFor,
+  judgeCatalogueVersion,
+  newerReleases,
+  type PackagePolicy,
+  type VersionFinding,
+} from "../domain/packages/versions";
 import type { ArchiveCache } from "../ports/archive-cache";
 import type { HttpClient } from "../ports/http-client";
 import type { InstalledOrigin, InstalledRecord } from "../ports/package-roots";
@@ -77,6 +84,8 @@ export interface CatalogueReads {
    * settings could not be read, so a source is never taken for removed on a bad read.
    */
   readonly providers?: (seen: readonly SeenProvider[]) => void;
+  /** The `packages` settings, for the channel each package follows (plan 0032 group 6). */
+  readonly policy?: () => PackagePolicy;
 }
 
 /** A provider (catalogue) as a listing saw it. */
@@ -320,6 +329,9 @@ export class PackageCatalogues {
     if (entry === null) {
       return { kind: "unchecked", reason: `the ${from.source} catalogue no longer lists it` };
     }
+    if (entry.releases !== undefined) {
+      return this.#judgeReleases(record, from, entry, resolved.key, checks);
+    }
     const finding = judgeCatalogueVersion(record.version, entry.version);
     if (finding.kind !== "newer") {
       return finding;
@@ -338,6 +350,49 @@ export class PackageCatalogues {
       : {
           kind: "unchecked",
           reason: `the catalogue offers version ${finding.version}, and ${verdict.reason}`,
+        };
+  }
+
+  /**
+   * An entry that lists several releases (plan 0032 group 6): the newest on the package's channel
+   * that verifies and that this Reload can run is the one offered; a newer one it cannot take is
+   * still named with why (the old "reported, not hidden"). None that verifies is unchecked.
+   */
+  async #judgeReleases(
+    record: InstalledRecord,
+    from: Extract<InstalledOrigin, { kind: "catalogue" }>,
+    entry: CatalogueEntry,
+    key: string | null,
+    checks: UpdateArchives,
+  ): Promise<VersionFinding> {
+    let channel = STABLE_CHANNEL;
+    try {
+      channel =
+        this.#reads.policy === undefined
+          ? channel
+          : channelFor(this.#reads.policy(), record.package);
+    } catch {
+      // Settings that cannot be read follow the stable releases; the check itself says why.
+    }
+    let refused: { readonly version: string; readonly reason: string } | null = null;
+    for (const release of newerReleases(entry, channel, record.version)) {
+      const archive = { name: record.package, source: from.source, version: release.version };
+      const offered = { ...entry, version: release.version, archive: release.archive };
+      const verdict = await this.verifiedArchive(archive, offered, key, checks, false);
+      if (verdict.ok) {
+        return {
+          kind: "newer",
+          version: release.version,
+          ...(refused === null ? {} : { beyond: refused }),
+        };
+      }
+      refused ??= { version: release.version, reason: verdict.reason };
+    }
+    return refused === null
+      ? { kind: "current" }
+      : {
+          kind: "unchecked",
+          reason: `the catalogue offers version ${refused.version}, and ${refused.reason}`,
         };
   }
 
@@ -428,10 +483,13 @@ export class PackageCatalogues {
     checks: UpdateArchives,
   ): Promise<PackageOrigin> {
     const { catalogue, key } = await this.resolve(from.source);
-    const entry = entryFor(catalogue, from.id);
-    if (entry === null) {
+    const listed = entryFor(catalogue, from.id);
+    if (listed === null) {
       throw new Error(`the ${from.source} catalogue no longer lists ${from.id}`);
     }
+    // An entry of several releases: the one of that version, whichever channel it is on.
+    const release = listed.releases?.find((one) => one.version === version);
+    const entry = release === undefined ? listed : { ...listed, version, archive: release.archive };
     if (entry.version !== version) {
       throw new Error(
         `the ${from.source} catalogue now offers ${entry.version ?? "no version"}, not ${version}; ` +

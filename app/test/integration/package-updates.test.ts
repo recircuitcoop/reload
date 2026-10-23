@@ -579,6 +579,88 @@ describe("the version check", () => {
   });
 });
 
+describe("several releases in one entry, on channels (plan 0032 group 6)", () => {
+  /** Publish `name` at each version (an archive each, protocol 2 unless said), in one entry. */
+  function releases(
+    name: string,
+    own: string,
+    listed: { version: string; channel?: string; protocol?: number }[],
+  ): void {
+    publish(name, own);
+    for (const { version, protocol } of listed) {
+      served.set(
+        archiveUrl(name, version),
+        signedArchive(packageFiles(name, version, "// v\n", protocol), signer),
+      );
+    }
+    entries = entries.map((entry) =>
+      entry.packageId !== name
+        ? entry
+        : {
+            ...entry,
+            releases: [
+              { version: own, archive: archiveUrl(name, own), channel: "stable" },
+              ...listed.map(({ version, channel }) => ({
+                version,
+                archive: archiveUrl(name, version),
+                channel: channel ?? "stable",
+              })),
+            ],
+          },
+    );
+  }
+
+  it("a channel can be chosen, and an entry's channel is honoured: beta takes the beta release", async () => {
+    // test_an_update_channel_can_be_chosen, test_a_named_index_entry_and_a_channel_are_both_honoured.
+    const { installer, updates } = await installed("pinger", "0.1.0");
+    releases("pinger", "0.3.0", [{ version: "0.2.0", channel: "beta" }]);
+    await updates.check();
+    expect((await line(installer, updates, "pinger"))?.update).toMatchObject({
+      kind: "newer",
+      version: "0.3.0",
+    });
+    writePackages({ overrides: { pinger: { channel: "beta" } } });
+    await updates.check();
+    expect((await line(installer, updates, "pinger"))?.update).toMatchObject({
+      kind: "newer",
+      version: "0.2.0",
+    });
+    expect(await drive(updates.apply("pinger", "person"))).toMatchObject({ ok: true });
+    expect(roots.installed("pinger")?.version).toBe("0.2.0");
+    writePackages({ overrides: { pinger: { channel: "Not a channel" } } });
+    expect(await updates.check()).toMatchObject({
+      ok: false,
+      error: expect.stringContaining("packages.overrides.pinger.channel") as unknown,
+    });
+  });
+
+  it("a pre-release is skipped on the stable channel, and its archive never fetched", async () => {
+    // test_a_package_index_prerelease_is_skipped_on_the_stable_channel.
+    const { installer, updates } = await installed("pinger", "0.1.0");
+    releases("pinger", "0.1.0", [{ version: "0.2.0-rc.1" }]);
+    fetched = [];
+    await updates.check();
+    expect((await line(installer, updates, "pinger"))?.update).toBeNull();
+    expect(fetched).not.toContain(archiveUrl("pinger", "0.2.0-rc.1"));
+  });
+
+  it("the newest this Reload can run is offered, and a newer one it cannot is named with why", async () => {
+    // test_a_published_version_needing_a_newer_host_is_reported_not_hidden: 2.0.0 is taken, and
+    // 3.0.0 is still named with what keeps it out.
+    const { installer, updates } = await installed("pinger", "0.1.0");
+    releases("pinger", "0.1.0", [{ version: "3.0.0", protocol: 3 }, { version: "2.0.0" }]);
+    await updates.check();
+    const update = (await line(installer, updates, "pinger"))?.update;
+    expect(update).toMatchObject({ kind: "newer", version: "2.0.0", apply: true });
+    expect(update?.detail).toBe(
+      "3.0.0 is offered too, and its archive did not verify: reload-package.json: it needs a " +
+        "newer Reload: protocol: 3 is not implemented by this runtime, which implements protocol 2",
+    );
+    expect(await drive(updates.apply("pinger", "person"))).toMatchObject({ ok: true });
+    expect(roots.installed("pinger")?.version).toBe("2.0.0");
+  });
+});
+
 describe("applying an update", () => {
   it("the package is still on its old version when the stop arrives", async () => {
     const { updates } = await installed("pinger", "0.1.0");

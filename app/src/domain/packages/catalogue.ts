@@ -18,7 +18,11 @@
 //
 // with the detached minisign signature published beside it at the same URL plus `.minisig`.
 // An entry may also name `"archive"`: the package's signed `.tgz`, an HTTPS URL or a path
-// relative to the catalogue (WI-0018-16); it is what General › Packages installs from.
+// relative to the catalogue (WI-0018-16); it is what General › Packages installs from. And it
+// may list more `"releases"`, each `{version, archive, channel?}` (plan 0032 group 6): several
+// versions, on the `stable` channel unless they name another. The entry's own version and
+// archive are a stable release too, so a catalogue written before is read as it was, and a build
+// from before, which ignores a key it does not know inside an entry, reads it as it did.
 //
 // Unknown keys inside an entry are ignored (an entry may grow a field); unknown top-level keys
 // are refused (the shape of the document is what `catalogue` versions). A rejected document
@@ -141,6 +145,25 @@ export interface CatalogueEntry {
    * installed. Absent from an entry that does not say, whose package is then not checked.
    */
   readonly version?: string;
+  /** Every release the entry lists, its own version and archive first when it has both. */
+  readonly releases?: readonly CatalogueRelease[];
+}
+
+/** One version a catalogue entry offers, on its channel (plan 0032 group 6). */
+export interface CatalogueRelease {
+  readonly version: string;
+  readonly archive: string;
+  readonly channel: string;
+}
+
+/** The channel a release is on unless it names one, and a package follows unless set. */
+export const STABLE_CHANNEL = "stable";
+
+const CHANNEL = /^[a-z][a-z0-9-]{0,31}$/;
+
+/** Whether `text` is a channel name: lowercase letters, digits and hyphens. */
+export function isChannel(text: string): boolean {
+  return CHANNEL.test(text);
 }
 
 /** One source's whole listing, as read. `fetchedAt` is epoch milliseconds. */
@@ -278,6 +301,13 @@ function parseEntry(
   const archive =
     "archive" in published ? archiveUrl(published["archive"], where, catalogueUrl) : undefined;
   const version = "version" in published ? requiredText(published, "version", where) : undefined;
+  const own =
+    archive === undefined || version === undefined
+      ? []
+      : [{ version, archive, channel: STABLE_CHANNEL }];
+  const listed =
+    "releases" in published ? releasesOf(published["releases"], where, catalogueUrl) : [];
+  const releases = [...own, ...listed];
   return {
     packageId,
     summary,
@@ -285,7 +315,35 @@ function parseEntry(
     ...options,
     ...(archive === undefined ? {} : { archive }),
     ...(version === undefined ? {} : { version }),
+    ...(listed.length === 0 ? {} : { releases }),
   };
+}
+
+/** An entry's `releases`: each a version, an archive and a channel; one version once. */
+function releasesOf(
+  value: unknown,
+  where: string,
+  catalogueUrl: string | undefined,
+): CatalogueRelease[] {
+  if (!Array.isArray(value)) {
+    throw invalid(`${where}: \`releases\` must be a list of releases`);
+  }
+  const releases = value.map((release: unknown, index): CatalogueRelease => {
+    const at = `${where}, release ${String(index)}`;
+    if (!isRecord(release)) {
+      throw invalid(`${at} is not a JSON object`);
+    }
+    const channel = "channel" in release ? requiredText(release, "channel", at) : STABLE_CHANNEL;
+    if (!isChannel(channel)) {
+      throw invalid(`${at}: \`channel\` is "${channel}", which is not a channel name`);
+    }
+    return {
+      version: requiredText(release, "version", at),
+      archive: archiveUrl(release["archive"], at, catalogueUrl),
+      channel,
+    };
+  });
+  return releases;
 }
 
 /** The entry's archive as an absolute HTTPS URL, resolved against the catalogue's URL. */

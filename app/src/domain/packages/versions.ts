@@ -21,7 +21,13 @@
 // F2): the package's own mode, then the auto-update switch of the source it was installed from,
 // then the global default. Pure: parsing and judging; the reads are the application's.
 
-import type { CatalogueSource } from "./catalogue";
+import {
+  isChannel,
+  STABLE_CHANNEL,
+  type CatalogueEntry,
+  type CatalogueRelease,
+  type CatalogueSource,
+} from "./catalogue";
 
 export type UpdateMode = "auto" | "manual" | "pinned" | "off";
 
@@ -41,9 +47,11 @@ export class PackageSettingsError extends Error {
   override name = "PackageSettingsError";
 }
 
-/** One package's own settings: its mode, when it chose one. */
+/** One package's own settings: its mode and its channel, when it chose them. */
 export interface PackageOverride {
   readonly mode: UpdateMode | null;
+  /** The releases it follows (plan 0032 group 6); null: the stable ones. */
+  readonly channel?: string | null;
 }
 
 /** The `packages` settings: the update policy, and whether and how often versions are checked. */
@@ -136,15 +144,22 @@ export function parsePackagePolicy(section: unknown): PackagePolicy {
     if (!isRecord(value)) {
       throw new PackageSettingsError(`${where} is not an object`);
     }
-    const extra = Object.keys(value).filter((key) => key !== "update_mode");
+    const extra = Object.keys(value).filter((key) => key !== "update_mode" && key !== "channel");
     if (extra.length > 0) {
       throw new PackageSettingsError(`${where} holds unknown keys: ${extra.join(", ")}`);
+    }
+    const channel = value["channel"];
+    if (channel !== undefined && (typeof channel !== "string" || !isChannel(channel))) {
+      throw new PackageSettingsError(
+        `${where}.channel is ${JSON.stringify(channel)}; it must be a channel name, as stable or beta`,
+      );
     }
     overrides.set(name, {
       mode:
         value["update_mode"] === undefined
           ? null
           : modeOf(value["update_mode"], `${where}.update_mode`),
+      ...(channel === undefined ? {} : { channel }),
     });
   }
   // Judged here so a misspelt list refuses the setting whole, as every other key does.
@@ -241,6 +256,11 @@ export function modeFor(
   return { mode: policy.defaultMode, level: "default" };
 }
 
+/** The channel `name` follows: its own, else the stable releases. */
+export function channelFor(policy: PackagePolicy, name: string): string {
+  return policy.overrides.get(name)?.channel ?? STABLE_CHANNEL;
+}
+
 // --- versions ----------------------------------------------------------------------------------
 
 interface ParsedVersion {
@@ -318,8 +338,15 @@ export function compareVersions(a: string, b: string): number | null {
 export type VersionFinding =
   /** What is installed is what its source says it should be. */
   | { readonly kind: "current" }
-  /** A newer version: from the catalogue's entry, or the folder's declaration. */
-  | { readonly kind: "newer"; readonly version: string }
+  /**
+   * A newer version: from the catalogue's entry, or the folder's declaration. `beyond`: a still
+   * newer one the catalogue offers and this machine cannot take, and why (plan 0032 group 6).
+   */
+  | {
+      readonly kind: "newer";
+      readonly version: string;
+      readonly beyond?: { readonly version: string; readonly reason: string };
+    }
   /**
    * Plan 0013: the folder's content changed and its declared version did not. Never applied;
    * the publisher must give it a new version.
@@ -345,6 +372,30 @@ export function judgeCatalogueVersion(
   }
   // An older published version is never a candidate: a catalogue going back is not an update.
   return order > 0 ? { kind: "newer", version: offered } : { kind: "current" };
+}
+
+/**
+ * The releases of `entry` newer than `installed` on `channel`, newest first (plan 0032 group 6;
+ * the old index's channels): on the stable channel only stable releases, and never a
+ * pre-release; on another, only that channel's releases. A version that cannot be ordered is
+ * left out.
+ */
+export function newerReleases(
+  entry: CatalogueEntry,
+  channel: string,
+  installed: string,
+): CatalogueRelease[] {
+  const listed: readonly CatalogueRelease[] =
+    entry.releases ??
+    (entry.version === undefined || entry.archive === undefined
+      ? []
+      : [{ version: entry.version, archive: entry.archive, channel: STABLE_CHANNEL }]);
+  const prerelease = (version: string) => /^[^+]*-/.test(version);
+  return listed
+    .filter((release) => release.channel === channel)
+    .filter((release) => channel !== STABLE_CHANNEL || !prerelease(release.version))
+    .filter((release) => (compareVersions(release.version, installed) ?? 0) > 0)
+    .sort((a, b) => compareVersions(b.version, a.version) ?? 0);
 }
 
 /**

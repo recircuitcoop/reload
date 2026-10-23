@@ -332,3 +332,50 @@ describe("an entry's version (WI-0018-17)", () => {
     ).toContain("`version` is empty");
   });
 });
+
+describe("an entry's releases, on channels (plan 0032 group 6)", () => {
+  const at = { catalogue: "official", verified: true, url: "https://cat.test/a/catalogue.json" };
+  const own = { ...entry("monty"), version: "1.0.0", archive: "monty-1.0.0.tgz" };
+
+  it("lists the entry's own release first, on stable, then each one listed, stable unless named", () => {
+    const [parsed] = parseCatalogue(
+      document([
+        {
+          ...own,
+          releases: [
+            { version: "2.0.0-rc.1", archive: "monty-2.0.0-rc.1.tgz", channel: "beta" },
+            { version: "1.1.0", archive: "https://mirror.test/monty-1.1.0.tgz" },
+          ],
+        },
+      ]),
+      at,
+    );
+    expect(parsed?.releases).toEqual([
+      { version: "1.0.0", archive: "https://cat.test/a/monty-1.0.0.tgz", channel: "stable" },
+      {
+        version: "2.0.0-rc.1",
+        archive: "https://cat.test/a/monty-2.0.0-rc.1.tgz",
+        channel: "beta",
+      },
+      { version: "1.1.0", archive: "https://mirror.test/monty-1.1.0.tgz", channel: "stable" },
+    ]);
+    // A catalogue written before is read as it was: one version, no releases list.
+    const [plain] = parseCatalogue(document([own]), at);
+    expect(plain).not.toHaveProperty("releases");
+    expect(plain?.version).toBe("1.0.0");
+  });
+
+  it("refuses releases that are not a list, a release that is not an object, a bad channel or a missing field", () => {
+    const refused = (releases: unknown) =>
+      refusedWith(() => parseCatalogue(document([{ ...own, releases }]), at));
+    expect(refused("1.1.0")).toContain("`releases` must be a list of releases");
+    expect(refused([3])).toContain("release 0 is not a JSON object");
+    expect(refused([{ version: "1.1.0", archive: "m.tgz", channel: "Beta!" }])).toContain(
+      '`channel` is "Beta!", which is not a channel name',
+    );
+    expect(refused([{ archive: "m.tgz" }])).toContain("`version` is missing");
+    expect(refused([{ version: "1.1.0", archive: "http://cat.test/m.tgz" }])).toContain(
+      "never fetched in the clear",
+    );
+  });
+});

@@ -32,6 +32,7 @@ the same URL plus `.minisig` (`minisign -Sm catalogue.json`, or your own key fro
 | `source` | `index`, `index:<name>`, `pypi:<project>`, or `git+https://...` (HTTPS only). Legacy install kinds; a modern listing uses `archive` instead (below) and this can be `"index"`. |
 | `archive` | The signed `.tgz` `reload-pack build` produced, as an HTTPS URL or a path resolved against the catalogue's own URL. What the Packages page installs from. |
 | `version` | The version the archive holds — compared against what is installed to offer an update. |
+| `releases` | Optional: more versions of the package, each `{"version", "archive", "channel"}` (`channel` defaults to `stable`). The entry's own `version` and `archive` are a stable release too. A person sets the channel a package follows as `packages.overrides.<name>.channel` (`stable` by default): stable takes stable releases and never a pre-release; another channel takes only that channel's. The newest one that verifies and that their Reload can run is offered; a newer one it cannot run is named with why. Builds from before ignore this key. |
 
 Unknown keys inside an entry are ignored (a future field can be added without breaking old
 readers); unknown top-level keys are refused outright, and a bad catalogue is refused whole —

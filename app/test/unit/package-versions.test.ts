@@ -13,7 +13,9 @@ import {
   DEFAULT_POLICY,
   judgeCatalogueVersion,
   judgeFolder,
+  channelFor,
   modeFor,
+  newerReleases,
   PackageSettingsError,
   parsePackagePolicy,
   unregisteredOf,
@@ -229,5 +231,60 @@ describe("a package's own mode, set (plan 0032, group 8)", () => {
     expect(() => withMode({ update_mode: "sometimes" }, "monty", "pinned")).toThrow(
       PackageSettingsError,
     );
+  });
+});
+
+describe("the releases a package's channel offers (plan 0032 group 6)", () => {
+  const entry = (fields: Record<string, unknown>) => ({
+    packageId: "monty",
+    summary: "s",
+    installSource: "index",
+    catalogue: "official",
+    verified: true,
+    ...fields,
+  });
+  const release = (version: string, channel = "stable") => ({
+    version,
+    archive: `a/${version}`,
+    channel,
+  });
+
+  it("on stable: the newer stable releases, newest first, never a pre-release nor an unorderable one", () => {
+    const offered = entry({
+      releases: [
+        release("1.0.0"),
+        release("1.2.0"),
+        release("1.1.0"),
+        release("2.0.0-rc.1"),
+        release("2.0.0", "beta"),
+        release("x.y"),
+      ],
+    });
+    expect(newerReleases(offered, "stable", "1.0.0").map((one) => one.version)).toEqual([
+      "1.2.0",
+      "1.1.0",
+    ]);
+    expect(newerReleases(offered, "beta", "1.0.0").map((one) => one.version)).toEqual(["2.0.0"]);
+  });
+
+  it("an entry with no releases list offers its own version, or nothing without an archive", () => {
+    expect(newerReleases(entry({ version: "1.1.0", archive: "a" }), "stable", "1.0.0")).toEqual([
+      { version: "1.1.0", archive: "a", channel: "stable" },
+    ]);
+    expect(newerReleases(entry({ version: "1.1.0" }), "stable", "1.0.0")).toEqual([]);
+  });
+
+  it("a package follows its own channel, else stable", () => {
+    const policy = parsePackagePolicy({
+      overrides: { monty: { channel: "beta" }, other: { update_mode: "auto" } },
+    });
+    expect(channelFor(policy, "monty")).toBe("beta");
+    expect(channelFor(policy, "other")).toBe("stable");
+    expect(() => parsePackagePolicy({ overrides: { monty: { channel: 3 } } })).toThrow(
+      "packages.overrides.monty.channel is 3",
+    );
+    expect(withMode({ overrides: { monty: { channel: "beta" } } }, "monty", "pinned")).toEqual({
+      overrides: { monty: { channel: "beta", update_mode: "pinned" } },
+    });
   });
 });
