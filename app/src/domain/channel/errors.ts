@@ -25,7 +25,7 @@ export function isChannelError(result: CallResult): result is ChannelError {
 
 const WORDING: Readonly<Record<ChannelErrorCode, (child: ChildName) => string>> = {
   restarting: (child) => `the Reload ${child} is restarting; try again in a moment`,
-  down: (child) => `the Reload ${child} stopped unexpectedly and is not back yet`,
+  down: (child) => `the Reload ${child} stopped and is not restarted until you ask`,
   timeout: (child) => `the Reload ${child} did not answer in time`,
   stopped: (child) => `the Reload ${child} stopped before it answered`,
 };
@@ -36,7 +36,9 @@ export function channelError(code: ChannelErrorCode, child: ChildName): ChannelE
 
 /**
  * The code a call answers with at once, without being sent, in a state that is not `running`;
- * null in `running`, when the call goes to the child.
+ * null in `running`, when the call goes to the child. A child the supervisor brings back by
+ * itself (starting, a planned restart, a crash in its backoff or recovering) is `restarting`:
+ * asking again shortly is worth it. Only one it no longer restarts is `down`.
  */
 export function refusalFor(state: ChildState): ChannelErrorCode | null {
   switch (state) {
@@ -45,9 +47,9 @@ export function refusalFor(state: ChildState): ChannelErrorCode | null {
     case "starting":
     case "restarting-planned":
     case "restarting":
-      return "restarting";
     case "down":
     case "recovering":
+      return "restarting";
     case "down-for-good":
       return "down";
     case "stopped":
