@@ -47,10 +47,11 @@ export function stoppedFor(
     /** The resource watchdog's words once its stops reached their limit (plan 0031 A). */
     readonly overLimits?: string | null;
   },
-): { readonly text: string; readonly notice: Notice } {
+): { readonly text: string; readonly refusal: string; readonly notice: Notice } {
   if (exit.failure !== undefined) {
     return {
       text: `could not start: ${exit.failure}`,
+      refusal: "the node process is stopped: it could not start",
       notice: {
         kind: "node-not-started",
         subject,
@@ -63,11 +64,16 @@ export function stoppedFor(
     const text =
       exit.overLimits ??
       `stopped after ${String(maxCrashes)} exits in ${String(windowMs / 1000)} s`;
-    return { text, notice: { kind: "node-stopped", subject, detail: `Its process ${text}` } };
+    return {
+      text,
+      refusal: "the node process is stopped after repeated exits",
+      notice: { kind: "node-stopped", subject, detail: `Its process ${text}` },
+    };
   }
   const why = exit.stuck ? "made no progress, so Reload stopped it" : `exited (${exit.how})`;
   return {
     text: `${why}, and its type says never to restart it`,
+    refusal: "the node process is stopped: this kind is never restarted",
     notice: { kind: "node-not-restarted", subject, detail: `Its process ${why}` },
   };
 }

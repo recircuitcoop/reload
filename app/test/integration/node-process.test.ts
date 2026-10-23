@@ -479,7 +479,9 @@ describe("an unexpected exit of a node process", () => {
     expect(node.node.pid).toBeNull();
     expect(node.logger.lines.filter((line) => /spawned pid/.test(line.text))).toHaveLength(1);
     const [, refused] = send(node.node, { do: "echo" });
-    expect(refused.ends[0]?.message).toBe("the node process is stopped after repeated exits");
+    expect(refused.ends[0]?.message).toBe(
+      "the node process is stopped: this kind is never restarted",
+    );
   });
 
   it("an instance stopped for good leaves every other alone: another still comes back after an exit", async () => {
@@ -537,7 +539,7 @@ describe("an unexpected exit of a node process", () => {
     expect(node.logger.lines.filter((line) => /spawned pid/.test(line.text))).toHaveLength(1);
     expect(queued.finished).toBe(true);
     const [, refused] = send(node.node, { do: "echo" });
-    expect(refused.ends[0]?.message).toBe("the node process is stopped after repeated exits");
+    expect(refused.ends[0]?.message).toBe("the node process is stopped: it could not start");
     expect(node.notifier.notices).toHaveLength(1);
   });
 

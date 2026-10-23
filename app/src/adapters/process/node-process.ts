@@ -24,7 +24,6 @@ import type {
   StepOutcome,
   ViewContent,
 } from "../../ports/node-process";
-import type { Notice } from "../../ports/notifier";
 import {
   decodeFrame,
   encodeFrame,
@@ -74,7 +73,8 @@ class ChildNodeProcess implements NodeProcess {
   #statusSeen = false;
   #closing = false;
   #closedAck = false;
-  #stopped = false;
+  /** Why no process starts again (an input's refusal), or null while one may. */
+  #stopped: string | null = null;
   #timers: Cancel[] = [];
 
   constructor(spec: NodeProcessSpec, host: NodeProcessHost, deps: NodeProcessDeps) {
@@ -113,8 +113,8 @@ class ChildNodeProcess implements NodeProcess {
 
   input(message: InputMessage, delivery: InputDelivery): string | null {
     const replayed = this.#journal.claim(message);
-    if (this.#closing || this.#stopped) {
-      const why = `the node process is ${this.#closing ? "closing" : "stopped after repeated exits"}`;
+    if (this.#closing || this.#stopped !== null) {
+      const why = this.#closing ? "the node process is closing" : (this.#stopped ?? "");
       this.#log(
         "warn",
         `refused ${replayed === undefined ? "an input" : `input ${replayed}`}: ${why}`,
@@ -321,8 +321,8 @@ class ChildNodeProcess implements NodeProcess {
   }
 
   /** The crash-loop limit, or a type never restarted: no more processes until re-created. */
-  #stop({ text, notice }: { readonly text: string; readonly notice: Notice }): void {
-    this.#stopped = true;
+  #stop({ text, refusal, notice }: ReturnType<typeof stoppedFor>): void {
+    this.#stopped = refusal;
     this.#log("error", `${text}; no more restarts until it is redeployed`);
     this.#host.status({ fill: "red", shape: "dot", text });
     for (const [id, input] of this.#inputs) {
@@ -532,7 +532,7 @@ class ChildNodeProcess implements NodeProcess {
     this.#journal.finished(inputId, error, outcome);
     input.delivery.done(error, outcome);
     // A place under the bound: the oldest held input goes next (spec 7.6).
-    const next = this.#closing || this.#stopped ? undefined : this.#journal.nextHeld();
+    const next = this.#closing || this.#stopped !== null ? undefined : this.#journal.nextHeld();
     if (next !== undefined) {
       const admitted = this.#journal.admit(next.message, next.delivery, this.#inputs.size);
       if (admitted !== null) {

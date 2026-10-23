@@ -51,6 +51,7 @@ describe("a node instance's notices", () => {
       }),
     ).toEqual({
       text: "could not start: spawn x ENOENT",
+      refusal: "the node process is stopped: it could not start",
       notice: {
         kind: "node-not-started",
         subject: "raw",
@@ -62,12 +63,14 @@ describe("a node instance's notices", () => {
   it("words a type never restarted by how it ended: an exit, or no progress", () => {
     expect(stoppedFor("raw", LOOP, { restartable: false, how: "code 3", stuck: false })).toEqual({
       text: "exited (code 3), and its type says never to restart it",
+      refusal: "the node process is stopped: this kind is never restarted",
       notice: { kind: "node-not-restarted", subject: "raw", detail: "Its process exited (code 3)" },
     });
     expect(
       stoppedFor("raw", LOOP, { restartable: false, how: "signal SIGKILL", stuck: true }),
     ).toEqual({
       text: "made no progress, so Reload stopped it, and its type says never to restart it",
+      refusal: "the node process is stopped: this kind is never restarted",
       notice: {
         kind: "node-not-restarted",
         subject: "raw",
