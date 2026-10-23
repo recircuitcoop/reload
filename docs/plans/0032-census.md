@@ -260,7 +260,7 @@ Corrections to the brief:
 
 ### 9. Edit the stability numbers (restart attempts, delay, stop timeout, breaker window, check cadence, limits) in the app
 
-- **Old app / now:** A Helper tab let the person edit the supervision numbers, validated and saved as a group, and a config file set the same. Now they are fixed. The watchdog branch makes the resource limits editable in `shell-settings.json` only; no window form.
+- **Old app / now:** A Helper tab let the person edit the supervision numbers, validated and saved as a group, and a config file set the same. Now the six resource limits are editable in General › Advanced's Stability defaults form (plan 0031 A, `ui/screens/GeneralAdvanced.tsx` `LimitsForm`, saved as `limits` in `shell-settings.json`, each bad field refused in words, nothing written). Still fixed: the check cadence (10 s), the stop timeout, the restart attempts and backoff, and the breaker's window and count.
 - **Size:** M. Lives in: `ui/screens/GeneralAdvanced.tsx` form and `adapters/fs/settings-store.ts` keys for restart attempts, delay, stop timeout, breaker window, sample interval; read by `domain/supervision/child-state.ts`.
 - **Owner decision:** none. owner-review.md flags 'Helper supervision settings tab removed' as YES. docs/plans/0018-the-new-application.md:1166-1168 lists node-instance killing, rollback and the CLI as owner_ack items still to ask; that list is the plan author's, and plan 0031 later overruled it (0031:11).
 - **Check:** Row 'Defaults differ': the crash-loop is 5 in 2 min (was 5 interventions in 10 min). The first-check spread (supervision branch) and resource limits (watchdog branch) are on branches; the crash-loop window is not.

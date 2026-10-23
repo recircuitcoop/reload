@@ -117,6 +117,29 @@ settings.
   member is left (one `ps` read), and nothing on Windows; the close and ready deadlines signal
   only a process that has not exited (`adapters/process/process-tree.ts`, `exit-watch.ts`). 1 row.
 
+- **Group 12** (branch `port/0032-wave3`): what a node started is stopped as the old host
+  stopped a child's descendants: after the node's exit its group is asked to stop (SIGTERM),
+  killed after 5 s if still there, and a process that outlives the kill is named in the log; a
+  forced end of the node itself (close or ready deadline, stuck, over a limit) signals only the
+  node. A quit stops in the reverse of the start: the runtime, then the services process, then
+  the Anytype Reload started. 6 rows.
+- **Group 13** (same branch): General › Advanced lists each node process of the runtime with its
+  state (running, starting, restarting, stopped for good with why), beside the runtime, the
+  services process and the MCP child. 2 rows.
+- **Group 14** (same branch): every emit on a declared port is recorded (event, port, field
+  names, never values), at another level and in other words than a refused one; the log's
+  verbosity is `logging.level` in `shell-settings.json`, RELOAD_LOG_LEVEL over it. 4 rows.
+- **Group 23** (same branch): ANYTYPE_API_KEY is the Anytype key read when set, never written;
+  an `mcp` setting with a key it does not know, and a package override under a name that is not
+  a package name, are refused naming it. 3 rows.
+- **Group 24** (same branch): an endpoint Change while the services process is not running says
+  so, rather than the generic failure. 1 row.
+- **The `configuration.e2e.ts` flake** (same branch): a flow's switch pressed again before the
+  list read after its first press came back took the press for no change and sent nothing (the
+  switch compares a press with the state it is drawn in); a pressed switch is now drawn as asked
+  until that list is read. And an exported flow is written whole or not at all, so it is never
+  read half written.
+
 Each ported row moves to `ported` with the id of the test that proves the old behaviour. Each
 row an audit called `internal` or `equivalent` gets its new evidence in `reason`, and keeps no
 `owner_ack`.
