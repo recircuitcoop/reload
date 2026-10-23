@@ -1,6 +1,6 @@
 // What a node wrote of its own settings, kept on disk (adapters/fs/written-store.ts), judged and
 // recorded for one instance (adapters/nodered/written-settings.ts), and read by the canvas form
-// (adapters/nodered/written-route.ts): spec 4.6, revision 2.2; plan 0032, WI-0032-41.
+// (adapters/nodered/written-route.ts): spec 4.6, revision 2.3; plan 0032, WI-0032-41.
 
 import express from "express";
 import fs from "node:fs";

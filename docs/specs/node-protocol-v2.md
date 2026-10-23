@@ -74,9 +74,9 @@ package authors.
      config schema properties (2.4.1).
    - **Revision 2.2** adds `requires` on the declaration (2.1.6), optional, and reserves the
      package name `services` (2.1.2).
-   - **Revision 2.2** (plan 0032, WI-0032-41) adds, every one of them optional: the
+   - **Revision 2.3** (plan 0032, WI-0032-41) adds, every one of them optional: the
      `reload.writtenBy` key (2.4.1), the node's `settings` frame and the runtime's `written`
-     answer (4.6). A node written for 2.1 never sends `settings`; a 2.1 runtime warns about it
+     answer (4.6). A node written for an earlier revision never sends `settings`; an earlier runtime warns about it
      and ignores it, so the SDKs say a write that is never answered is not recorded.
 4. Version 1 (the pre-0017 plugin contract, `{kind, payload}`, fire-and-forget) is not supported.
    There is no bridge; plan 0017's cutover converts packages in one wave.
@@ -208,7 +208,7 @@ Two keys say how a `type: "string"` property is typed, and may stand alone (plan
 text input with a **Browse…** button that chooses a file or a folder. The value stays the text.
 Either may annotate an array's `items`, so a list of paths has Browse… on each element.
 
-`writtenBy` (`"plugin"` or `"both"`, revision 2.2) says who sets a property of the top level of
+`writtenBy` (`"plugin"` or `"both"`, revision 2.3) says who sets a property of the top level of
 `config`: absent, the person only; `"plugin"`, the node only, through its `settings` frame (4.6),
 and the editor and Setup draw it read-only, "Set by <package>, <time>"; `"both"`, either, the
 later write winning. It may stand alone, and stands only on a property of the top level: a
@@ -627,7 +627,7 @@ Every frame is a JSON object with a string field `t`.
 | `trigger` | `action` (port id), `snapshot: {id, state}`, `values` | Snapshot views only: an action was pressed. | Emit on the port named `action` WITHOUT `in` (a new run), carrying the snapshot state and `values`. |
 | `fire` | `data` (object, already validated) | Created event sources: the person fired the event from the app. | Emit on its one port without `in`. |
 | `close` | — | On redeploy, removal, quit or runtime restart. | Stop its work, send `closed`, and exit with code 0. Deadline: 5 s (6.3). |
-| `written` | `id`, `recorded` (array of property names), `refused` (array of `{path, message}`) | Revision 2.2: in answer to the node's `settings` frame with that `id` (4.6). | Nothing: it is the outcome of its own write. |
+| `written` | `id`, `recorded` (array of property names), `refused` (array of `{path, message}`) | Revision 2.3: in answer to the node's `settings` frame with that `id` (4.6). | Nothing: it is the outcome of its own write. |
 | `ping` | `id` | Only to a type that declares `reload.heartbeat` (2.4.2), once per interval after `ready`. | Answer `pong` with the same `id`, whatever its handlers are doing, never held by them. A health check, when the node has one, runs on its own thread (or, in JavaScript, its own promise) bounded by 0.5 s, never on the loop that reads frames; one check at a time, and a ping that comes while one still runs is answered `healthy: false`. A node whose type declares no heartbeat MAY ignore it. |
 
 ### 4.2 Node → runtime
@@ -643,7 +643,7 @@ Every frame is a JSON object with a string field `t`.
 | `present` | `in`, `content` | Action views: show this to the person. | Set the journal entry to `awaiting` with `content`, and apply section 8. |
 | `snapshot` | `content`, `state`, optional `in` | Snapshot views: record this. | Store the snapshot with the type's actions, the instance id and the time. |
 | `closed` | — | In answer to `close`. | Stop waiting for the acknowledgement. |
-| `settings` | `id` (the node's own), `values` (object); optional `by` | Revision 2.2: the node writes values of its own settings (4.6). | Judge and record each value, and answer `written` with the same `id`. |
+| `settings` | `id` (the node's own), `values` (object); optional `by` | Revision 2.3: the node writes values of its own settings (4.6). | Judge and record each value, and answer `written` with the same `id`. |
 | `pong` | `id`, optional `healthy` (boolean), optional `progress` (number) | In answer to `ping`. `healthy` is the node's own health check's answer: `false` when the check said so, failed or took too long; absent when the node has no check. `progress` is when, on the node's own clock, it last did real work: an SDK moves it with every frame a handler sends but `log`, and keeps it at "now" while no input is in flight (an idle node is not wedged). | Record a heartbeat for the process (2.4.2), whatever `healthy` says. Its progress is `progress` when sent, else the answer itself; only a value that MOVES is progress, so a node whose frame loop answers while a handler is wedged is judged stuck. Carry `healthy` as it is: when it turns `false`, log it and tell the person once that the node says it is not working; when it turns `true` again, withdraw that notice. Absent changes nothing. A `pong` for an `id` it did not send is ignored. |
 
 #### 4.2.1 Notes and results on `done` (revision 2.1)
@@ -708,7 +708,7 @@ Every frame is a JSON object with a string field `t`.
 | `start` → `ready` | 30 s | **[UNPROVEN]** |
 | A runtime `stop` for quit | 10 s, then the shell kills the runtime | proven as code, not exercised |
 
-### 4.6 A node writes its own settings (revision 2.2)
+### 4.6 A node writes its own settings (revision 2.3)
 
 ```json
 {"t": "settings", "id": "w1", "values": {"token": "ya29-…", "volumes": [{"label": "one"}]}}
@@ -743,7 +743,7 @@ Every frame is a JSON object with a string field `t`.
    is the package's, the editor and Setup show it, with "Set by <package>, <time>"; sent back
    unchanged, it stays the package's, never written into the flows as the person's.
 6. A write is answered or it fails: the SDKs reject one with no answer within 30 s (a runtime
-   older than 2.2 never answers, and nothing was recorded) and one still waiting at `close`.
+   older than 2.3 never answers, and nothing was recorded) and one still waiting at `close`.
 
 ### 4.5 JSON Schemas for the frames
 
@@ -1519,7 +1519,7 @@ Plan 0031 adds:
 |---|---|---|
 | C25 | heartbeat | each `ping` gets one `pong` with its `id`, also while an input is running; on the runtime side, a type that declares `reload.heartbeat` and stops answering is killed, restarted under the usual rules and the person told once, and a type that declares none is never pinged |
 | C26 | health | a node's health check answers in the `pong` as `healthy`, and a check that fails answers `false`; on the runtime side, `healthy: false` tells the person once, without killing anything, and `healthy: true` withdraws it |
-| C28 | settings (2.2) | a node's write of its own settings goes out as one `settings` frame of its schema, its values as given, never redacted, under an id of its own; the `written` answer with that id is what the handler gets, and a secret it recorded is the node's credential at once. On the runtime side (app integration tests): only a property declaring `reload.writtenBy` is recorded, each value judged by its own schema, a row's undeclared key refused, a write in another package's name refused whole; a secret is kept encrypted, never in the flows file; the next `start` carries what it wrote unless the person changed it since |
+| C28 | settings (2.3) | a node's write of its own settings goes out as one `settings` frame of its schema, its values as given, never redacted, under an id of its own; the `written` answer with that id is what the handler gets, and a secret it recorded is the node's credential at once. On the runtime side (app integration tests): only a property declaring `reload.writtenBy` is recorded, each value judged by its own schema, a row's undeclared key refused, a write in another package's name refused whole; a secret is kept encrypted, never in the flows file; the next `start` carries what it wrote unless the person changed it since |
 | C27 | progress | each `pong` carries `progress`; it moves while the node is idle and with every frame a handler sends but `log`, and stays still while a handler sends nothing; on the runtime side, a node whose marker stays still for its window while it answers is judged stuck, and one sending `status` or `progress` never is |
 
 C15 binds the runtime, not SDKs. Of these, C1, C4 to C8, C10 to C12, C14 and C15 were exercised
@@ -1550,7 +1550,7 @@ class Node:
     def log(self, message: str, level: str = "info") -> None: ...
     def present(self, input_id: str, content: dict) -> None: ...
     def snapshot(self, content: dict, state, input_id: str | None = None) -> None: ...
-    # 2.2 (4.6): blocks until the runtime answers; call it from a handler while run() reads.
+    # 2.3 (4.6): blocks until the runtime answers; call it from a handler while run() reads.
     def write_settings(self, values: dict) -> dict: ...  # {"recorded": [...], "refused": [...]}
     def credential(self, name: str) -> str | None: ...   # one it wrote, else the start frame's
 
@@ -1612,7 +1612,7 @@ export declare function status(text: string, fill?: "red" | "green" | "yellow" |
 export declare function log(msg: string, level?: "debug" | "info" | "warn" | "error"): void;
 export declare function present(inputId: string, content: { title?: string; text?: string; fields?: Record<string, unknown>; form?: object }): void;
 export declare function snapshot(content: object, state: unknown, inputId?: string): void;
-// 2.2 (4.6): resolves with the runtime's answer; one never answered recorded nothing.
+// 2.3 (4.6): resolves with the runtime's answer; one never answered recorded nothing.
 export declare function writeSettings(
   values: Record<string, unknown>,
 ): Promise<{ recorded: string[]; refused: { path: string; message: string }[] }>;

@@ -232,12 +232,12 @@ class Node:
             if isinstance(value, str):
                 protect(value)
 
-        # Revision 2.2 (spec 4.6): the writes waiting for their answer, and the secrets written.
+        # Revision 2.3 (spec 4.6): the writes waiting for their answer, and the secrets written.
         self._writes = 0
         self._pending_writes: dict[str, tuple[threading.Event, list[dict[str, Any]]]] = {}
         self._written: dict[str, str] = {}
 
-    # ── a node writes its own settings (spec 4.6, revision 2.2) ──────────────────────────
+    # ── a node writes its own settings (spec 4.6, revision 2.3) ──────────────────────────
 
     def write_settings(
         self, values: dict[str, Any], timeout: float = WRITE_TIMEOUT_S
@@ -246,7 +246,7 @@ class Node:
         set (``reload.writtenBy``). Returns what the runtime recorded and refused, as
         ``{"recorded": [names], "refused": [{"path", "message"}]}``, once it answers; call it
         from a handler, while ``run()`` reads the answer. Raises ``TimeoutError`` when no
-        answer comes within ``timeout`` seconds (a runtime older than revision 2.2 never
+        answer comes within ``timeout`` seconds (a runtime older than revision 2.3 never
         answers: nothing was recorded), and ``RuntimeError`` when the node is closed first. A
         secret recorded is kept for ``credential()`` at once, and protected like any
         credential. The frame is never redacted: a value is written as it is given.
@@ -264,7 +264,7 @@ class Node:
             self._pending_writes.pop(write_id, None)
             raise TimeoutError(
                 f"the runtime did not answer the write in {timeout} s, so nothing was recorded "
-                "(a runtime older than protocol revision 2.2 never answers)"
+                "(a runtime older than protocol revision 2.3 never answers)"
             )
         if not box:
             raise RuntimeError("the node closed before the runtime answered its write")

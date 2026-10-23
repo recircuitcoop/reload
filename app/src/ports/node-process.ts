@@ -114,7 +114,7 @@ export interface NodeProcessHost {
   snapshot(content: ViewContent, state: unknown, inputId: string | null): void;
   /** An `error` frame with no `in`: `node.error()`, no Catch (spec 4.2). */
   nodeError(message: string): void;
-  /** Revision 2.2: the node writes its own settings; judged and recorded (spec 4.6). */
+  /** Revision 2.3: the node writes its own settings; judged and recorded (spec 4.6). */
   writeSettings(values: Readonly<Record<string, unknown>>, by: unknown): WriteOutcome;
 }
 

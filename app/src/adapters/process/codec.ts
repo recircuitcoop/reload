@@ -52,7 +52,7 @@ export type RuntimeFrame =
   | { t: "close" }
   /** Only to a type that declares `reload.heartbeat` (spec 2.4.2). */
   | { t: "ping"; id: string }
-  /** Revision 2.2: the outcome of the node's own `settings` write (spec 4.6). */
+  /** Revision 2.3: the outcome of the node's own `settings` write (spec 4.6). */
   | {
       t: "written";
       id: string;
@@ -97,7 +97,7 @@ export type NodeFrame =
    * node's own clock, it last did real work (spec 4.2).
    */
   | { t: "pong"; id: string; healthy?: boolean; progress?: number }
-  /** Revision 2.2: the node writes values of its own settings (spec 4.6). */
+  /** Revision 2.3: the node writes values of its own settings (spec 4.6). */
   | { t: "settings"; id: string; values: Record<string, unknown>; by?: string };
 
 const RUNTIME_FRAMES = [
@@ -264,7 +264,7 @@ export function outputOf(
   return { index: at.index, port: at.port, message: { payload, topic: at.event, reload } };
 }
 
-/** The answer to a node's `settings` write (spec 4.6, revision 2.2). */
+/** The answer to a node's `settings` write (spec 4.6, revision 2.3). */
 export function writtenFrame(id: string, outcome: WriteOutcome): RuntimeFrame {
   return { t: "written", id, recorded: outcome.recorded, refused: outcome.refused };
 }

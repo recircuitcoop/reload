@@ -103,14 +103,14 @@ def run_kitchen() -> None:
             node.log(f"used a credential: {token}")
             node.done(input_id)
         elif action == "write":
-            # Revision 2.2 (spec 4.6): writes its own settings, then says what was recorded and
+            # Revision 2.3 (spec 4.6): writes its own settings, then says what was recorded and
             # whether the secret it wrote is its credential now, never the secret itself (C28).
             outcome = node.write_settings({"token": "ya29-written", "root": "/x"})
             same = node.credential("token") == "ya29-written"
             node.emit("out", {"recorded": outcome["recorded"], "credential": same}, input_id)
             node.done(input_id)
         elif action == "write-unanswered":
-            # A runtime older than 2.2 never answers: the write fails in its time (C28).
+            # A runtime older than 2.3 never answers: the write fails in its time (C28).
             try:
                 node.write_settings({"root": "/x"}, timeout=0.05)
                 failed = ""

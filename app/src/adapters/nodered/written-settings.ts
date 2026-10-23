@@ -1,4 +1,4 @@
-// What a node writes of its own settings (spec 4.6, revision 2.2; plan 0032, WI-0032-41), for
+// What a node writes of its own settings (spec 4.6, revision 2.3; plan 0032, WI-0032-41), for
 // the registration (registration.ts) of one instance: its write judged and recorded in the
 // instance's store, and what it wrote merged over the deployed config at every start. Apart
 // from registration.ts, which stays under the 600-line limit (plan 0018 §2.3).

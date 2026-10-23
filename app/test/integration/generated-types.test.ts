@@ -394,7 +394,7 @@ describe("a generated type's instance", () => {
     expect(started).toEqual(["hidden"]);
   });
 
-  describe("a node writing its own settings (spec 4.6, revision 2.2)", () => {
+  describe("a node writing its own settings (spec 4.6, revision 2.3)", () => {
     const writable = (config: { properties: Record<string, Record<string, unknown>> }) => {
       const { apikey, volumes } = config.properties;
       if (apikey !== undefined && volumes !== undefined) {

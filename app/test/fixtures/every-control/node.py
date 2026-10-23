@@ -5,7 +5,7 @@
 ``probe`` (a node) writes the start frame it was given to ``<data_dir>/start.json``, so a test
 can read the config exactly as the runtime coerced and validated it, and answers each input by
 emitting on its SECOND port, so a test can see that port order reaches the right wire. An input
-whose data holds ``write`` writes those values of its own settings (spec 4.6, revision 2.2,
+whose data holds ``write`` writes those values of its own settings (spec 4.6, revision 2.3,
 with ``by`` when it names one) and emits the runtime's ``written`` answer instead.
 """
 

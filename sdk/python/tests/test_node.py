@@ -780,7 +780,7 @@ def test_run_ignores_malformed_json_lines(monkeypatch: pytest.MonkeyPatch) -> No
     assert frames_of(out)[-1] == {"t": "closed"}
 
 
-# ── a node writes its own settings (spec 4.6, revision 2.2) ─────────────────────────────
+# ── a node writes its own settings (spec 4.6, revision 2.3) ─────────────────────────────
 
 
 def test_a_node_writes_its_settings_and_keeps_a_recorded_secret_for_its_credentials(

@@ -1,4 +1,4 @@
-// domain/forms/written.ts: a node writing its own settings (spec 4.6, revision 2.2; plan 0032,
+// domain/forms/written.ts: a node writing its own settings (spec 4.6, revision 2.3; plan 0032,
 // WI-0032-41), as the old settings store let a plugin record a value and said who set it, and
 // when (tests/test_settings_store.py, test_table_store.py, test_settings_form.py).
 

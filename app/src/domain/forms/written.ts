@@ -1,4 +1,4 @@
-// A node writes its own settings (spec 2.4.1 `reload.writtenBy`, 4.6; revision 2.2, plan 0032
+// A node writes its own settings (spec 2.4.1 `reload.writtenBy`, 4.6; revision 2.3, plan 0032
 // WI-0032-41), as the old settings store let a plugin record a value it found while running (an
 // OAuth token it obtained) and said who set it, and when (tests/test_settings_store.py,
 // test_addon_settings_runtime.py, test_plugin_secrets.py).

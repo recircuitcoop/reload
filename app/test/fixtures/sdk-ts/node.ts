@@ -120,14 +120,14 @@ async function runKitchen(): Promise<void> {
         log(`used a credential: ${token}`);
         done(id);
       } else if (action === "write") {
-        // Revision 2.2 (spec 4.6): writes its own settings, then says what was recorded and
+        // Revision 2.3 (spec 4.6): writes its own settings, then says what was recorded and
         // whether the secret it wrote is its credential now, never the secret itself (C28).
         const outcome = await writeSettings({ token: "ya29-written", root: "/x" });
         const same = credential("token", info) === "ya29-written";
         emit("out", { recorded: outcome.recorded, credential: same }, id);
         done(id);
       } else if (action === "write-unanswered") {
-        // A runtime older than 2.2 never answers: the write fails in its time (C28).
+        // A runtime older than 2.3 never answers: the write fails in its time (C28).
         const failed = await writeSettings({ root: "/x" }, 50).then(
           () => "",
           (caught: unknown) => (caught instanceof Error ? caught.message : String(caught)),

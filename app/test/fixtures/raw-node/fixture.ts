@@ -183,7 +183,7 @@ export class RecordingHost implements NodeProcessHost {
   nodeError(message: string): void {
     this.errors.push(message);
   }
-  /** Revision 2.2 (spec 4.6): every write is recorded whole, as a test sets `answer`. */
+  /** Revision 2.3 (spec 4.6): every write is recorded whole, as a test sets `answer`. */
   readonly writes: { values: Readonly<Record<string, unknown>>; by: unknown }[] = [];
   answer: (values: Readonly<Record<string, unknown>>) => WriteOutcome = (values) => ({
     recorded: Object.keys(values),

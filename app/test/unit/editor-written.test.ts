@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 //
 // Who set a property, in the canvas form (adapters/nodered/editor-written.ts; spec 4.6,
-// revision 2.2; plan 0032, WI-0032-41): a property whose value in force is its package's shows
+// revision 2.3; plan 0032, WI-0032-41): a property whose value in force is its package's shows
 // that value and says so beside it, a property only its package sets is drawn read-only, and
 // the package's value sent back unchanged stays the node's own, never the person's. The
 // person's change is stamped at the deploy (guard-middleware, kept-undeclared.test.ts), not at

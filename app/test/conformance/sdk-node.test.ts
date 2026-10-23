@@ -355,7 +355,7 @@ describe.each(SDK_LANGUAGES)("conformance: the %s SDK's kitchen reference node",
     expect(node.rejected).toEqual([]);
   });
 
-  it("C28 settings (revision 2.2): a node's write goes out as one valid settings frame, and its answer is what the handler gets", async () => {
+  it("C28 settings (revision 2.3): a node's write goes out as one valid settings frame, and its answer is what the handler gets", async () => {
     const node = session(language);
     node.start();
     node.send({ t: "input", id: "w", event: { type: "x.v1", data: { do: "write" }, run: "r" } });
@@ -383,7 +383,7 @@ describe.each(SDK_LANGUAGES)("conformance: the %s SDK's kitchen reference node",
     expect(node.rejected).toEqual([]);
   });
 
-  it("C28 settings (revision 2.2): a write the runtime never answers fails in its time, recording nothing", async () => {
+  it("C28 settings (revision 2.3): a write the runtime never answers fails in its time, recording nothing", async () => {
     const node = session(language);
     node.start();
     node.send({

@@ -1,4 +1,4 @@
-// Who set a property, in the canvas form (spec 4.6, revision 2.2; plan 0032, WI-0032-41): as
+// Who set a property, in the canvas form (spec 4.6, revision 2.3; plan 0032, WI-0032-41): as
 // the form opens, what the node wrote of its own settings is read from /red/reload/written,
 // and each property whose value in force is its package's says so beside it, "Set by
 // <package>, <time>", and shows that value; a property only its package sets is drawn

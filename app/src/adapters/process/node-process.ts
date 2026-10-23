@@ -451,7 +451,7 @@ class ChildNodeProcess implements NodeProcess {
       case "pong":
         this.#heartbeat?.pong(frame.id, frame.healthy, frame.progress);
         return;
-      case "settings": // revision 2.2 (spec 4.6): answered with its outcome
+      case "settings": // revision 2.3 (spec 4.6): answered with its outcome
         this.#write(writtenFrame(frame.id, this.#host.writeSettings(frame.values, frame.by)));
         return;
     }

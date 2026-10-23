@@ -1,4 +1,4 @@
-// What a node wrote of its own settings, for the canvas form (spec 4.6, revision 2.2):
+// What a node wrote of its own settings, for the canvas form (spec 4.6, revision 2.3):
 // `GET /red/reload/written?node=<id>` answers `{values, written, set}`: the values it wrote, who
 // wrote each property and when, and the names of the secrets it wrote, never their values. The
 // form draws such a property read-only, "Set by <package>, <time>".

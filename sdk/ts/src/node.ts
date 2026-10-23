@@ -279,7 +279,7 @@ export function ready(): void {
   send({ t: "ready" });
 }
 
-// ── a node writes its own settings (spec 4.6, revision 2.2) ────────────────────────────────
+// ── a node writes its own settings (spec 4.6, revision 2.3) ────────────────────────────────
 
 /** What the runtime made of a write: the properties recorded, and those refused, with why. */
 export interface WriteOutcome {
@@ -300,7 +300,7 @@ let writes = 0;
 /**
  * Write values of this node's own settings: only properties its type lets the node set
  * (`reload.writtenBy`). Resolves with what the runtime recorded and refused. It rejects when no
- * answer comes within `timeoutMs` (a runtime older than revision 2.2 never answers: nothing was
+ * answer comes within `timeoutMs` (a runtime older than revision 2.3 never answers: nothing was
  * recorded), and when the node is closed before the answer. A secret recorded is kept for
  * `credential()` at once, and protected like any credential. The frame is never redacted: a
  * value is written as it is given.
@@ -317,7 +317,7 @@ export function writeSettings(
       reject(
         new Error(
           `the runtime did not answer the write in ${String(timeoutMs)} ms, so nothing was ` +
-            "recorded (a runtime older than protocol revision 2.2 never answers)",
+            "recorded (a runtime older than protocol revision 2.3 never answers)",
         ),
       );
     }, timeoutMs);
