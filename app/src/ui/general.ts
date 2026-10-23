@@ -168,10 +168,16 @@ export function aiAppsLine(status: McpEndpointStatus): string {
  * A refused Change in words. The services process judges the host by the endpoint's one rule
  * (domain/endpoint/address.ts) before anything moves, and its refusal says "the MCP address must
  * be …": that is the host line. It refuses a port another program holds by naming the address it
- * could not bind (`127.0.0.1:<port>`): that is "Port … is used by another app"; anything else
- * (the setting could not be saved) is the generic line.
+ * could not bind (`127.0.0.1:<port>`): that is "Port … is used by another app". A services process
+ * that is not running answers with the channel's own sentence: that is its own line. Anything
+ * else (the setting could not be saved) is the generic line.
  */
 export function moveRefusal(reason: string, port: number): string {
+  // The channel's own failure (domain/channel/errors.ts): the call was never sent, so nothing
+  // was half done and nothing was saved; said as that, not as a generic failure.
+  if (reason.includes("the Reload services ")) {
+    return t("general.aiApps.servicesDown");
+  }
   if (reason.includes("the MCP address must be")) {
     return t("general.aiApps.hostRefused");
   }

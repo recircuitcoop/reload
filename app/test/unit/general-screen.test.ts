@@ -43,6 +43,7 @@ import type { NodeOptions } from "../../src/ui/flow-contract";
 import type { PackagesView } from "../../src/ui/general-contract";
 import { wordChecked } from "../../src/ui/words";
 import { checkedAddress } from "../../src/domain/endpoint/address";
+import { channelError } from "../../src/domain/channel/errors";
 import {
   INSTALLATION_STATES,
   PACKAGE_UPDATE_STATES,
@@ -256,6 +257,17 @@ describe("the AI apps section", () => {
     expect(moveRefusal("Error: the MCP endpoint setting could not be saved", 40001)).toBe(
       STRINGS["refused.failed"],
     );
+  });
+
+  it("names a services process that is not running, rather than the generic failure", () => {
+    // Every failure the channel answers with, unsent, when the services process is not running.
+    for (const code of ["restarting", "down", "timeout", "stopped"] as const) {
+      const error = `Error: Error invoking remote method 'reload:mcp-endpoint-move': Error: ${
+        channelError(code, "services").error
+      }`;
+      expect(moveRefusal(error, 40001)).toBe(STRINGS["general.aiApps.servicesDown"]);
+    }
+    expect(channelError("down", "runtime").error).not.toContain("the Reload services ");
   });
 });
 

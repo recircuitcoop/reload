@@ -376,6 +376,8 @@ export const STRINGS = {
   // Which Anytype tools exist (plan 0032, group 16): the recorded list, read with Anytype down too.
   "general.aiApps.tools.see": "See the Anytype tools", // decided
   "general.aiApps.tools.hide": "Hide the Anytype tools", // decided
+  "general.aiApps.servicesDown":
+    "Reload's link to Anytype isn't running right now, so nothing changed. Try again in a moment.", // decided: the endpoint's move with the services process down (the old "no host is connected")
   // Set up ChatGPT (WI-0022-30; owner, 2026-10-15: "a process inside the chatgpt application"):
   // the steps in ChatGPT's own Settings, and the two values they ask for, each copied on a press.
   // The token is never drawn: only Copy token puts it on the clipboard.
