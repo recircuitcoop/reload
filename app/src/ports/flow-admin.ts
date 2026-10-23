@@ -7,6 +7,7 @@
 //   tab's `disabled` flag is the on/off switch's truth; nothing mirrors it (plan 0022 §C);
 // * TemplateSource: `app/templates`, checked at build (tools/templates/check.mjs).
 
+import type { WrittenRecord } from "../domain/forms/written";
 import type { TabNode } from "../domain/flows/tab";
 import type { JsonSchema, Kind } from "../domain/packages/declaration";
 
@@ -51,6 +52,8 @@ export interface FlowEngine {
   deleteFlow(id: string): Promise<void>;
   /** The names of the node's secrets that are set: never their values. */
   secretsSet(node: TabNode): Promise<ReadonlySet<string>>;
+  /** What the node wrote of its own settings (spec 4.6); absent where nothing records it. */
+  written?(nodeId: string): WrittenRecord;
 }
 
 /** What `flows-meta.json` keeps of a flow: which template made it, and when it was made. */

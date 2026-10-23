@@ -460,6 +460,12 @@ function properties(schema: JsonSchema, path: string, context: Context): void {
       say(`${at}/title`, "is the label the person reads: give the property a title");
     }
     const annotation = annotationOf(property);
+    if ("writtenBy" in annotation && path !== "") {
+      say(
+        `${at}/reload/writtenBy`,
+        "only a property of the config's top level can be set by its package (spec 4.6)",
+      );
+    }
     if (annotation["unique"] === true) {
       unique.push(key);
       uniqueColumn(property, at, schema === context.row, say);

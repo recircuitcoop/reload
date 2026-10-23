@@ -8,6 +8,13 @@ import { health, type FlowHealth } from "../domain/flows/health";
 import { wireOrder, type TabNode } from "../domain/flows/tab";
 import { configOf, emptyRequired, missingSecrets } from "../domain/forms/coerce";
 import { hiddenPaths, unhidden } from "../domain/forms/hidden";
+import {
+  attributionOf,
+  NO_RECORD,
+  personWrites,
+  withWritten,
+  type WrittenBy,
+} from "../domain/forms/written";
 import { uniqueClashes } from "../domain/forms/unique";
 import { secretKeys, withoutSecrets } from "../domain/forms/form-model";
 import type { FieldProblem, JsonSchema, LoadedType } from "../domain/packages/declaration";
@@ -154,6 +161,27 @@ export function recentRuns(flowId: string, store: Pick<RunStore, "list">): Run[]
     cursor = page.next;
   } while (cursor !== null && runs.length < HEALTH_RUNS);
   return runs;
+}
+
+/**
+ * A step's values for Setup (`flow.node.form`), with what its node wrote of its own settings
+ * merged in where it is the later write, who set each property and when, and which secrets are
+ * set, its own or written by it: never a secret's value (spec 4.6).
+ */
+export async function formValues(
+  engine: Pick<FlowEngine, "secretsSet" | "written">,
+  node: TabNode,
+  type: FlowNodeType,
+): Promise<{
+  values: Record<string, unknown>;
+  secretsSet: string[];
+  written: Record<string, WrittenBy>;
+}> {
+  const record = engine.written?.(node.id) ?? NO_RECORD;
+  const stamps = personWrites(node);
+  const { config } = withWritten(configOf(type.config, node), {}, record, stamps);
+  const set = new Set([...(await engine.secretsSet(node)), ...Object.keys(record.secrets)]);
+  return { values: config, secretsSet: [...set].sort(), written: attributionOf(record, stamps) };
 }
 
 /**

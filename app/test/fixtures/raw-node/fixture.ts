@@ -16,6 +16,7 @@ import {
 } from "../../../src/adapters/process/node-process";
 import { processTreeFor, type ProcessTree } from "../../../src/adapters/process/process-tree";
 import { systemClock } from "../../../src/adapters/system/clock";
+import type { WriteOutcome } from "../../../src/domain/forms/written";
 import type { ResourceLimits } from "../../../src/domain/supervision/resources";
 import type { ChildSignal } from "../../../src/domain/telemetry/reports";
 import type { Clock } from "../../../src/ports/clock";
@@ -181,6 +182,16 @@ export class RecordingHost implements NodeProcessHost {
   }
   nodeError(message: string): void {
     this.errors.push(message);
+  }
+  /** Revision 2.2 (spec 4.6): every write is recorded whole, as a test sets `answer`. */
+  readonly writes: { values: Readonly<Record<string, unknown>>; by: unknown }[] = [];
+  answer: (values: Readonly<Record<string, unknown>>) => WriteOutcome = (values) => ({
+    recorded: Object.keys(values),
+    refused: [],
+  });
+  writeSettings(values: Readonly<Record<string, unknown>>, by: unknown): WriteOutcome {
+    this.writes.push({ values, by });
+    return this.answer(values);
   }
 }
 

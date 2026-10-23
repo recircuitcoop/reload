@@ -17,6 +17,8 @@ import type { CallOp, OpResult } from "../domain/channel/messages";
 import { remapIds, withoutCredentials, type TabNode } from "../domain/flows/tab";
 import { configOf, missingSecrets } from "../domain/forms/coerce";
 import { hiddenPaths, unhidden } from "../domain/forms/hidden";
+import { isReadOnly } from "../domain/forms/reload-keyword";
+import { personRefusals, personStamp } from "../domain/forms/written";
 import { REFUSED_KEY } from "../domain/forms/kept-on-save";
 import {
   describedProblems,
@@ -39,7 +41,7 @@ import type { RequestGuard } from "../ports/request-guard";
 import type { RunStore } from "../ports/run-store";
 import type { SchemaValidator } from "../ports/schema-validator";
 import { FLOWS_FILE_REFUSED } from "./deploy-guard";
-import { flowSummary, stepName, valueProblems, type FlowSummary } from "./flow-summary";
+import { flowSummary, formValues, stepName, valueProblems, type FlowSummary } from "./flow-summary";
 
 export { flowNodeTypeOf, type FlowSummary } from "./flow-summary";
 
@@ -329,8 +331,7 @@ export class FlowAdmin {
       stepName: stepName(node, type),
       description: type.description ?? null,
       schema: type.config,
-      values: configOf(type.config, node),
-      secretsSet: [...(await this.#deps.engine.secretsSet(node))].sort(),
+      ...(await formValues(this.#deps.engine, node, type)),
     };
   }
 
@@ -542,18 +543,16 @@ export class FlowAdmin {
     const secrets = new Set(secretKeys(type.config));
     const plainSchema = withoutSecrets(type.config);
     const declared = propertiesOf(plainSchema);
-    const undrawn = (property: JsonSchema) =>
-      property["type"] === "object" || property["type"] === "array";
+    // What Continue keeps of the node's own: a read-only value (never typed over), and a group, a
+    // table or a list Setup does not draw.
+    const keeps = (property: JsonSchema) =>
+      isReadOnly(property) || property["type"] === "object" || property["type"] === "array";
     const plain = Object.fromEntries(
       declared.flatMap(([key, property]): [string, unknown][] => {
-        // A read-only value is shown, never typed over: Continue keeps the node's own.
-        if (key in values && property["readOnly"] !== true) {
-          return [[key, values[key]]];
+        if (isReadOnly(property) || !(key in values)) {
+          return keeps(property) && key in node ? [[key, node[key]]] : [];
         }
-        if (property["readOnly"] === true) {
-          return key in node ? [[key, node[key]]] : [];
-        }
-        return undrawn(property) && key in node ? [[key, node[key]]] : [];
+        return [[key, values[key]]];
       }),
     );
     const given = Object.fromEntries(
@@ -562,12 +561,9 @@ export class FlowAdmin {
         return typeof value === "string" && value !== "" ? [[key, value]] : [];
       }),
     );
-    const known = new Set([...declared.map(([key]) => key), ...secrets]);
     const config = configOf(type.config, plain);
     const found = [
-      ...Object.keys(values)
-        .filter((key) => !known.has(key))
-        .map((key) => ({ path: `/${key}`, message: "is not a declared property" })),
+      ...personRefusals(type.config, values, secrets),
       ...valueProblems(this.#deps.validator, plainSchema, config),
     ];
     if (secrets.size > 0) {
@@ -593,6 +589,7 @@ export class FlowAdmin {
       ...plain,
       // A refused canvas save is answered by this one: never shown again over what Setup saved.
       ...(REFUSED_KEY in node ? { [REFUSED_KEY]: null } : {}),
+      ...personStamp(node, plain, new Date(this.#deps.clock.now()).toISOString()),
       ...(Object.keys(given).length === 0 ? {} : { credentials: given }),
     } as TabNode;
   }

@@ -10,7 +10,15 @@
 //
 // Pure: no I/O, no library.
 
+import type { JsonSchema } from "../packages/declaration";
+import { propertiesOf } from "./form-model";
+
 type Node = Readonly<Record<string, unknown>>;
+
+/** A generated type's declared properties, by its config; null for a type that is not one. */
+export function declaredKeys(config: JsonSchema | undefined): ReadonlySet<string> | null {
+  return config === undefined ? null : new Set(propertiesOf(config).map(([key]) => key));
+}
 
 /** The fields Node-RED itself gives a node, which a deployment may rightly leave out. */
 const NODE_RED_FIELDS: ReadonlySet<string> = new Set([

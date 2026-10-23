@@ -13,6 +13,7 @@ import { processHostOver, shellLinkOver } from "../adapters/electron/parent-port
 import { DeclaredPackageStore } from "../adapters/fs/declared-package-store";
 import { keepBrokenFlowFiles } from "../adapters/fs/flow-files";
 import { FsTemplateSource } from "../adapters/fs/flow-templates";
+import { writtenStore } from "../adapters/fs/written-store";
 import { JsonFlowMetaStore } from "../adapters/fs/flows-meta-store";
 import { JsonSettingsStore } from "../adapters/fs/settings-store";
 import { JsonEventTypeStore, writeDeclaration } from "../adapters/fs/event-type-store";
@@ -53,7 +54,7 @@ import { EventTypeService, isEventOp } from "../application/event-types";
 import { FlowFiles } from "../application/flow-files";
 import { deployCounts, FlowAdmin, flowNodeTypeOf, isFlowOp } from "../application/flows";
 import { Heartbeat } from "../application/heartbeat";
-import { propertiesOf } from "../domain/forms/form-model";
+import { declaredKeys } from "../domain/forms/kept-undeclared";
 import { JournalReplay } from "../application/journal-replay";
 import { isRunActionOp, RunActions } from "../application/run-actions";
 import { isRunOp, RunService } from "../application/runs";
@@ -330,6 +331,7 @@ function generateNodeTypes(
       env: process.env,
     }),
     dataDirFor: (id) => path.join(config.userDir, "instances", id),
+    written: writtenStore(config.userDir, config.credentialSecret),
     closeReason: () => (stopping === null ? "redeploy" : CLOSE_REASON[stopping]),
   });
   (globalThis as Record<symbol, unknown>)[Symbol.for(REGISTER_GLOBAL)] = (
@@ -402,7 +404,7 @@ async function startNodeRed(config: InitConfig): Promise<void> {
   const created = createdEventTypes(config.userDir);
   const actions = new RunActions({
     store,
-    engine: new NodeRedFlows(),
+    engine: new NodeRedFlows(writtenStore(config.userDir, config.credentialSecret)),
     // The replay is constructed with Node-RED, below; a delete is never asked before it is.
     replay: { cancelRun: (runId) => replay?.cancelRun(runId) ?? 0 },
     deleteSnapshots: (runIds) => snapshots.deleteRuns(runIds),
@@ -443,17 +445,15 @@ async function startNodeRed(config: InitConfig): Promise<void> {
     }),
     guard,
     nodeOptions: (query) => nodeOptions.resolve(query),
-    declared: (type) => {
-      const config = flowNodeType(type)?.config;
-      return config === undefined ? null : new Set(propertiesOf(config).map(([key]) => key));
-    },
+    written: writtenStore(config.userDir, credentialSecret),
+    declared: (type) => declaredKeys(flowNodeType(type)?.config),
   });
   nodeRed = engine;
   // Listening before Node-RED starts, so the first `flows:started` is not missed (spec 7.2).
   const journalReplay = new JournalReplay({ store, logger, events: engine.events });
   replay = journalReplay;
   const admin = new FlowAdmin({
-    engine: new NodeRedFlows(),
+    engine: new NodeRedFlows(writtenStore(config.userDir, config.credentialSecret)),
     guard,
     runs: store,
     // The inputs a node holds now, each cancelled (spec 4.1), as Run history's Delete asks.

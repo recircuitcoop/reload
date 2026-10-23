@@ -74,6 +74,10 @@ package authors.
      config schema properties (2.4.1).
    - **Revision 2.2** adds `requires` on the declaration (2.1.6), optional, and reserves the
      package name `services` (2.1.2).
+   - **Revision 2.2** (plan 0032, WI-0032-41) adds, every one of them optional: the
+     `reload.writtenBy` key (2.4.1), the node's `settings` frame and the runtime's `written`
+     answer (4.6). A node written for 2.1 never sends `settings`; a 2.1 runtime warns about it
+     and ignores it, so the SDKs say a write that is never answered is not recorded.
 4. Version 1 (the pre-0017 plugin contract, `{kind, payload}`, fire-and-forget) is not supported.
    There is no bridge; plan 0017's cutover converts packages in one wave.
 
@@ -204,6 +208,12 @@ Two keys say how a `type: "string"` property is typed, and may stand alone (plan
 text input with a **Browse…** button that chooses a file or a folder. The value stays the text.
 Either may annotate an array's `items`, so a list of paths has Browse… on each element.
 
+`writtenBy` (`"plugin"` or `"both"`, revision 2.2) says who sets a property of the top level of
+`config`: absent, the person only; `"plugin"`, the node only, through its `settings` frame (4.6),
+and the editor and Setup draw it read-only, "Set by <package>, <time>"; `"both"`, either, the
+later write winning. It may stand alone, and stands only on a property of the top level: a
+nested one is refused at the declaration.
+
 Two more keys may stand alone (plan 0032). `shown` (`{"when": "<property>", "equals": v}`)
 draws the property only while the sibling property `when` (of the same object: the form's
 top, a group, or one table row) holds `v`, compared strictly, so the number 1 is not a switch
@@ -223,7 +233,7 @@ table's row; a save refuses each row repeating another's, naming the other.
 ```
 
 1. A `reload` MUST declare at least one of `spaces`, `types`, `advanced`, `multiline`, `path`,
-   `unique` and `shown`, and never both `spaces` and `types`: an empty object, or both, is refused. A property
+   `unique`, `writtenBy` and `shown`, and never both `spaces` and `types`: an empty object, or both, is refused. A property
    whose `reload` declares `spaces`, `types`, `multiline` or `path` MUST be `"type": "string"`. This holds at every depth the form
    draws: top-level properties, the properties of a nested object, and those of an array's
    `items`. The declaration schema (2.6) refuses each case.
@@ -436,6 +446,7 @@ A type MAY set its own limits in `reload.limits`:
         "multiline": { "const": true },
         "path": { "enum": ["file", "folder"] },
         "unique": { "type": "boolean" },
+        "writtenBy": { "enum": ["plugin", "both"] },
         "shown": {
           "type": "object",
           "required": ["when", "equals"],
@@ -453,6 +464,7 @@ A type MAY set its own limits in `reload.limits`:
         { "required": ["multiline"] },
         { "required": ["path"] },
         { "required": ["unique"] },
+        { "required": ["writtenBy"] },
         { "required": ["shown"] }
       ],
       "not": { "required": ["spaces", "types"] }
@@ -615,6 +627,7 @@ Every frame is a JSON object with a string field `t`.
 | `trigger` | `action` (port id), `snapshot: {id, state}`, `values` | Snapshot views only: an action was pressed. | Emit on the port named `action` WITHOUT `in` (a new run), carrying the snapshot state and `values`. |
 | `fire` | `data` (object, already validated) | Created event sources: the person fired the event from the app. | Emit on its one port without `in`. |
 | `close` | — | On redeploy, removal, quit or runtime restart. | Stop its work, send `closed`, and exit with code 0. Deadline: 5 s (6.3). |
+| `written` | `id`, `recorded` (array of property names), `refused` (array of `{path, message}`) | Revision 2.2: in answer to the node's `settings` frame with that `id` (4.6). | Nothing: it is the outcome of its own write. |
 | `ping` | `id` | Only to a type that declares `reload.heartbeat` (2.4.2), once per interval after `ready`. | Answer `pong` with the same `id`, whatever its handlers are doing, never held by them. A health check, when the node has one, runs on its own thread (or, in JavaScript, its own promise) bounded by 0.5 s, never on the loop that reads frames; one check at a time, and a ping that comes while one still runs is answered `healthy: false`. A node whose type declares no heartbeat MAY ignore it. |
 
 ### 4.2 Node → runtime
@@ -630,6 +643,7 @@ Every frame is a JSON object with a string field `t`.
 | `present` | `in`, `content` | Action views: show this to the person. | Set the journal entry to `awaiting` with `content`, and apply section 8. |
 | `snapshot` | `content`, `state`, optional `in` | Snapshot views: record this. | Store the snapshot with the type's actions, the instance id and the time. |
 | `closed` | — | In answer to `close`. | Stop waiting for the acknowledgement. |
+| `settings` | `id` (the node's own), `values` (object); optional `by` | Revision 2.2: the node writes values of its own settings (4.6). | Judge and record each value, and answer `written` with the same `id`. |
 | `pong` | `id`, optional `healthy` (boolean), optional `progress` (number) | In answer to `ping`. `healthy` is the node's own health check's answer: `false` when the check said so, failed or took too long; absent when the node has no check. `progress` is when, on the node's own clock, it last did real work: an SDK moves it with every frame a handler sends but `log`, and keeps it at "now" while no input is in flight (an idle node is not wedged). | Record a heartbeat for the process (2.4.2), whatever `healthy` says. Its progress is `progress` when sent, else the answer itself; only a value that MOVES is progress, so a node whose frame loop answers while a handler is wedged is judged stuck. Carry `healthy` as it is: when it turns `false`, log it and tell the person once that the node says it is not working; when it turns `true` again, withdraw that notice. Absent changes nothing. A `pong` for an `id` it did not send is ignored. |
 
 #### 4.2.1 Notes and results on `done` (revision 2.1)
@@ -693,6 +707,32 @@ Every frame is a JSON object with a string field `t`.
 | An action view waiting | NONE; it survives restarts | proven |
 | `start` → `ready` | 30 s | **[UNPROVEN]** |
 | A runtime `stop` for quit | 10 s, then the shell kills the runtime | proven as code, not exercised |
+
+### 4.6 A node writes its own settings (revision 2.2)
+
+```json
+{"t": "settings", "id": "w1", "values": {"token": "ya29-…", "volumes": [{"label": "one"}]}}
+{"t": "written", "id": "w1", "recorded": ["token", "volumes"], "refused": []}
+```
+
+1. A node writes only properties of the top level of its `config` that declare
+   `reload.writtenBy` `"plugin"` or `"both"` (2.4.1); a value for any other, or for a property
+   nobody declares, is refused by its path ("is left to the person", "is not a declared
+   property"). Each value is judged by its own property's schema, a table's row also refusing a
+   key its row does not declare; what passes is recorded, what fails is refused, value by value.
+2. A write is always the node's own package's: a frame whose `by` names any other package is
+   refused whole, and nothing of it is recorded.
+3. What is recorded is kept per instance, beside its `data_dir` and never in the flows file:
+   each value with who wrote it (the package) and when, one record per property however many
+   rows a table holds. A secret's value is kept apart, encrypted with the runtime's credential
+   secret, and never read back by anyone but the node: it is not in `config`, not in the editor,
+   not in Setup, which say only that it is set.
+4. At every `start` the recorded values are merged over the deployed config (a secret into
+   `credentials`), each where it is newer than the person's own last change of that property
+   (`reload.written` on the node, which the editor and Setup stamp); a write needs no redeploy.
+   The SDKs keep a secret the node wrote for its `credentials` at once.
+5. The person may not change a `"plugin"` property: the editor and Setup draw it read-only, and
+   a save keeps it as it was.
 
 ### 4.5 JSON Schemas for the frames
 
@@ -837,6 +877,33 @@ The schemas state the shape a frame has once the runtime has applied the revisio
         "id": { "$ref": "#/$defs/id" },
         "healthy": { "type": "boolean" },
         "progress": { "type": "number" }
+      }
+    },
+    "settings": {
+      "type": "object",
+      "required": ["t", "id", "values"],
+      "properties": {
+        "t": { "const": "settings" },
+        "id": { "$ref": "#/$defs/id" },
+        "values": { "type": "object" },
+        "by": { "type": "string" }
+      }
+    },
+    "written": {
+      "type": "object",
+      "required": ["t", "id", "recorded", "refused"],
+      "properties": {
+        "t": { "const": "written" },
+        "id": { "$ref": "#/$defs/id" },
+        "recorded": { "type": "array", "items": { "type": "string" } },
+        "refused": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["path", "message"],
+            "properties": { "path": { "type": "string" }, "message": { "type": "string" } }
+          }
+        }
       }
     },
     "viewContent": {

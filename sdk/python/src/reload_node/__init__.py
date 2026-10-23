@@ -229,6 +229,63 @@ class Node:
             if isinstance(value, str):
                 protect(value)
 
+        # Revision 2.2 (spec 4.6): the writes waiting for their answer, and the secrets written.
+        self._writes = 0
+        self._pending_writes: dict[str, tuple[threading.Event, list[dict[str, Any]]]] = {}
+        self._written: dict[str, str] = {}
+
+    # ── a node writes its own settings (spec 4.6, revision 2.2) ──────────────────────────
+
+    def write_settings(self, values: dict[str, Any]) -> dict[str, Any]:
+        """Writes values of this node's own settings: only properties its type lets the node
+        set (``reload.writtenBy``). Returns what the runtime recorded and refused, as
+        ``{"recorded": [names], "refused": [{"path", "message"}]}``, once it answers; call it
+        from a handler, while ``run()`` reads the answer. A runtime older than revision 2.2
+        never answers, and then nothing was recorded. A secret recorded is kept for
+        ``credential()`` at once, and protected like any credential. The frame is never
+        redacted: a value is written as it is given.
+        """
+        with self._write_lock:
+            self._writes += 1
+            write_id = f"w{self._writes}"
+            answered = threading.Event()
+            box: list[dict[str, Any]] = []
+            self._pending_writes[write_id] = (answered, box)
+            frame = {"t": "settings", "id": write_id, "values": values}
+            self._out.write(json.dumps(frame, separators=(",", ":")) + "\n")
+            self._out.flush()
+        answered.wait()
+        outcome = box[0]
+        for name in outcome["recorded"]:
+            value = values.get(name)
+            if isinstance(value, str):
+                self._written[name] = value
+                protect(value)
+        return outcome
+
+    def credential(self, name: str) -> str | None:
+        """A credential: one this node wrote and the runtime recorded, else the start frame's."""
+        return self._written.get(name, self.credentials.get(name))
+
+    def _answer_write(self, frame: dict[str, Any]) -> None:
+        pending = self._pending_writes.pop(str(frame.get("id")), None)
+        if pending is None:
+            return
+        answered, box = pending
+        recorded = frame.get("recorded")
+        refused = frame.get("refused")
+        box.append(
+            {
+                "recorded": [n for n in recorded if isinstance(n, str)]
+                if isinstance(recorded, list)
+                else [],
+                "refused": [r for r in refused if isinstance(r, dict)]
+                if isinstance(refused, list)
+                else [],
+            }
+        )
+        answered.set()
+
     # ── outgoing frames ──────────────────────────────────────────────────────────────────
 
     def send(self, frame: dict[str, Any]) -> None:
@@ -487,6 +544,8 @@ class Node:
                 data = frame.get("data")
                 if isinstance(data, dict):
                     self._dispatch(on_fire, (data,), input_id=None)
+            elif t == "written":
+                self._answer_write(frame)
             elif t == "ping":
                 # Answered whatever the handlers are doing (spec 2.4.2, 4.1): at once without a
                 # health check; with one, on a thread of its own bounded by HEALTH_TIMEOUT_S, so

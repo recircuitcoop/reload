@@ -18,11 +18,13 @@ import registry from "@node-red/registry";
 import express from "express";
 import RED from "node-red";
 import type { OptionsAnswer, OptionsQuery } from "../../domain/forms/node-options";
+import type { WrittenStore } from "../../ports/written-store";
 import type { NodeRedEditorEvents, NodeSet, NodeSetSummary } from "../../ports/node-red-engine";
 import type { RequestGuard } from "../../ports/request-guard";
 import { deployGuard, hostCheck, keepUndeclared, upgradeHostCheck } from "./guard-middleware";
 import { packageModuleName } from "./generator";
 import { optionsRoute } from "./options-route";
+import { writtenRoute } from "./written-route";
 import { ADMIN_ROOT } from "./settings";
 
 /** The one loopback address the server listens on (spec 11.6). */
@@ -38,6 +40,8 @@ export interface EmbeddedNodeRedOptions {
   readonly guard: RequestGuard;
   /** A step's dynamic options, for the canvas form's `/red/reload/options` (plan 0022 §B). */
   readonly nodeOptions?: (query: OptionsQuery) => Promise<OptionsAnswer>;
+  /** What nodes wrote of their own settings, for the canvas form's `/red/reload/written`. */
+  readonly written?: WrittenStore;
   /** A generated type's declared properties; null for any other type (kept-undeclared.ts). */
   readonly declared?: (type: string) => ReadonlySet<string> | null;
 }
@@ -68,6 +72,9 @@ export class EmbeddedNodeRed implements NodeRedEditorEvents {
     // Behind the Host check like the admin API, and answered before Node-RED sees the path.
     if (options.nodeOptions !== undefined) {
       web.use(optionsRoute(ADMIN_ROOT, options.nodeOptions));
+    }
+    if (options.written !== undefined) {
+      web.use(writtenRoute(ADMIN_ROOT, options.written));
     }
     web.use(ADMIN_ROOT, RED.httpAdmin);
   }

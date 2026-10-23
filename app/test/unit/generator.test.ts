@@ -262,8 +262,10 @@ describe("a generated editor definition", () => {
       "rows",
       "nested",
       "reload.refused",
+      "reload.written",
     ]);
     expect(defaults["reload.refused"]?.value).toBeNull();
+    expect(defaults["reload.written"]?.value).toBeNull();
     expect(defaults["limit"]?.value).toBe(10);
     expect(defaults["rows"]?.value).toEqual([]);
     expect(defaults["nested"]?.value).toEqual({});

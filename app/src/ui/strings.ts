@@ -476,6 +476,7 @@ export const STRINGS = {
   "packages.unsigned.body": "Nobody vouches for this code. It will run with your permissions.",
   "packages.installAnyway": "Install anyway",
   "packages.checked": "checked {when}",
+  "setup.form.setBy": "Set by {package}, {when}",
   "packages.checkedAt": "{day} {time}", // decided (WI-0022-19): "today 09:14", as Updates says it
   // What a package action came to when it did not happen (WI-0022-19): decided.
   "packages.busy": "Another package is being installed or updated. Try again once it's done.", // decided

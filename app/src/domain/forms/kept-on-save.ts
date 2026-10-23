@@ -19,6 +19,7 @@
 import type { JsonSchema } from "../packages/declaration";
 import { coerceObject } from "./coerce";
 import { describedProblems, propertiesOf, rowSchemaOf } from "./form-model";
+import { isReadOnly } from "./reload-keyword";
 import { withoutSecretValues } from "./unkept";
 
 /** One refusal: the JSON Pointer of the value, and what is wrong with it. */
@@ -145,7 +146,7 @@ function keptObject(
   }
   for (const [key, property] of declared) {
     // A read-only value is shown, never typed over: what it had stays.
-    if (!(key in submitted) || property["readOnly"] === true) {
+    if (!(key in submitted) || isReadOnly(property)) {
       continue;
     }
     const path = `${at}/${key}`;

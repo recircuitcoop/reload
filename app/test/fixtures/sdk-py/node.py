@@ -102,6 +102,13 @@ def run_kitchen() -> None:
             node.emit("out", len(token), input_id)
             node.log(f"used a credential: {token}")
             node.done(input_id)
+        elif action == "write":
+            # Revision 2.2 (spec 4.6): writes its own settings, then says what was recorded and
+            # whether the secret it wrote is its credential now, never the secret itself (C28).
+            outcome = node.write_settings({"token": "ya29-written", "root": "/x"})
+            same = node.credential("token") == "ya29-written"
+            node.emit("out", {"recorded": outcome["recorded"], "credential": same}, input_id)
+            node.done(input_id)
         elif action == "noise":
             # A stray print cannot reach the frame channel at all once the SDK has started
             # (C3): it lands on stderr, redacted, not on the stdout the runtime decodes.

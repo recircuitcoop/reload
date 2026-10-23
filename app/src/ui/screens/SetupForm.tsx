@@ -30,7 +30,7 @@ import {
   type SetupField,
 } from "../setup-form";
 import { t } from "../strings";
-import { wordRefusal } from "../words";
+import { wordRefusal, wordSetBy } from "../words";
 
 /** A line whose names (ux-writing's `*…*`) are drawn in italics. */
 export function Marked({ parts }: { readonly parts: readonly MarkedPart[] }) {
@@ -123,6 +123,7 @@ export function SetupForm(props: SetupFormProps) {
               field={field}
               draft={draft}
               problem={problems[field.key]}
+              setBy={setByOf(form?.ok === true ? form.value.written : undefined, field.key)}
               onConnect={onConnect}
               onChange={(value) => {
                 setDraft((before) => ({ ...before, [field.key]: value }));
@@ -153,11 +154,21 @@ interface FieldProps {
   readonly field: SetupField;
   readonly draft: Draft;
   readonly problem: string | undefined;
+  /** "Set by monty, today 09:14", when its package set it last (spec 4.6). */
+  readonly setBy: string | null;
   readonly onConnect: () => void;
   readonly onChange: (value: string | boolean) => void;
 }
 
-function SetupFormField({ api, field, draft, problem, onConnect, onChange }: FieldProps) {
+/** Who set `key` last, worded, when it was its package and not the person. */
+function setByOf(written: NodeForm["written"], key: string): string | null {
+  const who = written?.[key];
+  return who === undefined || who.by === "user"
+    ? null
+    : wordSetBy(who.by, new Date(who.at), new Date());
+}
+
+function SetupFormField({ api, field, draft, problem, setBy, onConnect, onChange }: FieldProps) {
   const value = draft[field.key];
   const text = typeof value === "string" ? value : "";
   return (
@@ -165,7 +176,9 @@ function SetupFormField({ api, field, draft, problem, onConnect, onChange }: Fie
       <Field
         label={field.label}
         state={problem === undefined ? "default" : "error"}
-        {...(field.help === null ? {} : { help: field.help })}
+        {...(field.help === null && setBy === null
+          ? {}
+          : { help: [field.help, setBy].filter((line) => line !== null).join(" ") })}
         {...(problem === undefined ? {} : { error: problem })}
       >
         {(control) => {
@@ -282,7 +295,13 @@ const typeName = (key: string) => key.charAt(0).toUpperCase() + key.slice(1).rep
  * A field whose options are the paired Anytype's spaces, or one space's types. When the spaces
  * cannot be read, it says to connect Anytype and offers Setup's own Anytype step for it.
  */
-function AnytypeSelect({ api, field, draft, onConnect, onChange }: Omit<FieldProps, "problem">) {
+function AnytypeSelect({
+  api,
+  field,
+  draft,
+  onConnect,
+  onChange,
+}: Omit<FieldProps, "problem" | "setBy">) {
   const [options, setOptions] = useState<Answer<NodeOptions> | null>(null);
   const reload = field.reload;
   const spaceId =

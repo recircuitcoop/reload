@@ -107,3 +107,18 @@ export function isUnique(property: JsonSchema): boolean {
   const annotation = property[RELOAD_KEYWORD];
   return isRecord(annotation) && annotation["unique"] === true;
 }
+
+/** Who besides the person may set a property (`reload.writtenBy`, spec 4.6); null: only them. */
+export function writtenBy(property: JsonSchema): "plugin" | "both" | null {
+  const annotation = property[RELOAD_KEYWORD];
+  const writer = isRecord(annotation) ? annotation["writtenBy"] : undefined;
+  return writer === "plugin" || writer === "both" ? writer : null;
+}
+
+/**
+ * Whether the person may not type a property over: `readOnly` (JSON Schema), or one only its
+ * package sets (`reload.writtenBy: "plugin"`). A save keeps the value it had.
+ */
+export function isReadOnly(property: JsonSchema): boolean {
+  return property["readOnly"] === true || writtenBy(property) === "plugin";
+}

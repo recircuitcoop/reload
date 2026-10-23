@@ -8,7 +8,9 @@
 
 import RED from "node-red";
 import type { TabNode } from "../../domain/flows/tab";
+import { NO_RECORD, type WrittenRecord } from "../../domain/forms/written";
 import type { FlowEngine, FlowTab, FlowTabSummary, NewFlowTab } from "../../ports/flow-admin";
+import type { WrittenStore } from "../../ports/written-store";
 
 type Fields = Record<string, unknown>;
 
@@ -35,6 +37,22 @@ const labelOf = (label: unknown, id: string): string =>
   typeof label === "string" && label !== "" ? label : id;
 
 export class NodeRedFlows implements FlowEngine {
+  readonly #written: WrittenStore | undefined;
+
+  /** `written`: what nodes wrote of their own settings (spec 4.6), shown in Setup. */
+  constructor(written?: WrittenStore) {
+    this.#written = written;
+  }
+
+  written(nodeId: string): WrittenRecord {
+    try {
+      return this.#written?.read(nodeId) ?? NO_RECORD;
+    } catch {
+      // What cannot be read says nothing was written: Setup shows the node's own values.
+      return NO_RECORD;
+    }
+  }
+
   async tabs(): Promise<readonly FlowTabSummary[]> {
     const { flows } = await RED.runtime.flows.getFlows({});
     return nodesOf(flows)

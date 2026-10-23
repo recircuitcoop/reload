@@ -279,6 +279,67 @@ export function ready(): void {
   send({ t: "ready" });
 }
 
+// ── a node writes its own settings (spec 4.6, revision 2.2) ────────────────────────────────
+
+/** What the runtime made of a write: the properties recorded, and those refused, with why. */
+export interface WriteOutcome {
+  readonly recorded: readonly string[];
+  readonly refused: readonly { readonly path: string; readonly message: string }[];
+}
+
+const pendingWrites = new Map<string, (outcome: WriteOutcome) => void>();
+const written = new Map<string, string>();
+let writes = 0;
+
+/**
+ * Write values of this node's own settings: only properties its type lets the node set
+ * (`reload.writtenBy`). Resolves with what the runtime recorded and refused; a runtime older
+ * than revision 2.2 never answers, and then nothing was recorded. A secret recorded is kept
+ * for `credential()` at once, and protected like any credential. The frame is never redacted:
+ * a value is written as it is given.
+ */
+export function writeSettings(values: Readonly<Record<string, unknown>>): Promise<WriteOutcome> {
+  writes += 1;
+  const id = `w${String(writes)}`;
+  const answered = new Promise<WriteOutcome>((resolve) => {
+    pendingWrites.set(id, (outcome) => {
+      for (const key of outcome.recorded) {
+        const value = values[key];
+        if (typeof value === "string") {
+          written.set(key, value);
+          protect(value);
+        }
+      }
+      resolve(outcome);
+    });
+  });
+  process.stdout.write(JSON.stringify({ t: "settings", id, values }) + "\n");
+  return answered;
+}
+
+/** A credential: one this node wrote and the runtime recorded, else the start frame's own. */
+export function credential(name: string, info: StartInfo): string | undefined {
+  return written.get(name) ?? info.credentials[name];
+}
+
+function answerWrite(frame: Record<string, unknown>): void {
+  const id = frame["id"];
+  const settle = typeof id === "string" ? pendingWrites.get(id) : undefined;
+  if (settle === undefined || typeof id !== "string") {
+    return;
+  }
+  pendingWrites.delete(id);
+  const strings = (value: unknown): string[] =>
+    Array.isArray(value) ? value.filter((each): each is string => typeof each === "string") : [];
+  const refused = Array.isArray(frame["refused"])
+    ? frame["refused"].filter(isRecord).map((each) => ({
+        path: String(each["path"]),
+        message: String(each["message"]),
+      }))
+    : [];
+  settle({ recorded: strings(frame["recorded"]), refused });
+}
+
 export function emit(port: string, data: unknown, inputId?: string): void {
   if (declaredPorts !== null && !declaredPorts.has(port)) {
     const declared = [...declaredPorts].sort().join(", ") || "(none)";
@@ -580,6 +641,8 @@ export async function run(handlers: Handlers): Promise<void> {
         .catch((caught: unknown) => {
           log(caught instanceof Error ? caught.message : String(caught), "error");
         });
+    } else if (frame["t"] === "written") {
+      answerWrite(frame);
     } else if (frame["t"] === "ping" && typeof frame["id"] === "string") {
       // Answered apart from this loop (spec 2.4.2, 4.1): a slow health check never holds it.
       void pong(frame["id"], handlers);

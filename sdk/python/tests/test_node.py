@@ -15,7 +15,7 @@ import sys
 import threading
 import time
 import traceback
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from typing import cast
 
 import pytest
@@ -778,3 +778,50 @@ def test_run_ignores_malformed_json_lines(monkeypatch: pytest.MonkeyPatch) -> No
     node = Node()
     node.run()
     assert frames_of(out)[-1] == {"t": "closed"}
+
+
+# ── a node writes its own settings (spec 4.6, revision 2.2) ─────────────────────────────
+
+
+def test_a_node_writes_its_settings_and_keeps_a_recorded_secret_for_its_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    out, _ = patch_io(monkeypatch)
+    node = start_node(monkeypatch)
+    outcomes: list[dict[str, object]] = []
+
+    def written_lines() -> Iterator[str]:
+        yield json.dumps({"t": "input", "id": "i1", "event": {"type": "t.v1", "data": {}}}) + "\n"
+        # The answer comes once the handler's write is on the wire, as the runtime answers it.
+        wait_until(lambda: any(f.get("t") == "settings" for f in frames_of(out)))
+        yield json.dumps({"t": "written", "id": "w9", "recorded": [], "refused": []}) + "\n"
+        yield (
+            json.dumps(
+                {
+                    "t": "written",
+                    "id": "w1",
+                    "recorded": ["token"],
+                    "refused": [{"path": "/root", "message": "is left to the person"}],
+                }
+            )
+            + "\n"
+        )
+        wait_until(lambda: len(outcomes) == 1)
+        yield json.dumps({"t": "close"}) + "\n"
+
+    def on_input(input_id: str, event: dict[str, object]) -> None:
+        outcomes.append(node.write_settings({"token": "ya29-new", "root": "/x"}))
+        node.done(input_id)
+
+    monkeypatch.setattr("sys.stdin", written_lines())
+    node.run(on_input=on_input)
+    written = next(f for f in frames_of(out) if f.get("t") == "settings")
+    # Written as given, never redacted, under an id of the node's own.
+    assert written == {"t": "settings", "id": "w1", "values": {"token": "ya29-new", "root": "/x"}}
+    assert outcomes == [
+        {"recorded": ["token"], "refused": [{"path": "/root", "message": "is left to the person"}]}
+    ]
+    # Kept for its credentials at once, and protected like any credential.
+    assert node.credential("token") == "ya29-new"
+    assert node.credential("missing") is None
+    assert redact("the token is ya29-new") == f"the token is {REDACTED}"

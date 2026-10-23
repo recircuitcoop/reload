@@ -26,6 +26,8 @@ export interface NodeForm {
   readonly values: Readonly<Record<string, unknown>>;
   /** The secret fields that hold a value; their values never reach the page. */
   readonly secretsSet: readonly string[];
+  /** Who set each property last, and when (spec 4.6): its package, or "user" for the person. */
+  readonly written?: Readonly<Record<string, { readonly by: string; readonly at: string }>>;
 }
 
 /** One row of Configuration › Flows, as `flow.list` answers it. */

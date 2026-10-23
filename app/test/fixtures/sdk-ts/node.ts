@@ -13,6 +13,7 @@
 // - record (a snapshot view): snapshot, pass through, and answer a trigger (C11).
 
 import {
+  credential,
   declarePorts,
   done,
   emit,
@@ -24,6 +25,7 @@ import {
   snapshot,
   start,
   status,
+  writeSettings,
   type DoneNote,
   type DoneResult,
   type MediaItem,
@@ -116,6 +118,13 @@ async function runKitchen(): Promise<void> {
         const token = info.credentials["token"] ?? "";
         emit("out", token.length, id);
         log(`used a credential: ${token}`);
+        done(id);
+      } else if (action === "write") {
+        // Revision 2.2 (spec 4.6): writes its own settings, then says what was recorded and
+        // whether the secret it wrote is its credential now, never the secret itself (C28).
+        const outcome = await writeSettings({ token: "ya29-written", root: "/x" });
+        const same = credential("token", info) === "ya29-written";
+        emit("out", { recorded: outcome.recorded, credential: same }, id);
         done(id);
       } else if (action === "noise") {
         // console.log is redirected to stderr, redacted, once the SDK has started (C3): it

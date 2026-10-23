@@ -15,9 +15,11 @@ import {
   isAdvanced,
   isUnique,
   isMultiline,
+  isReadOnly,
   pathKind,
   reloadOptions,
   shownWhen,
+  writtenBy,
   type ReloadOptions,
   type ShownWhen,
 } from "./reload-keyword";
@@ -85,6 +87,8 @@ export interface Field {
   readonly reload?: ReloadOptions;
   /** `reload.advanced` (spec 2.4.1): drawn under Advanced, closed as the form opens. */
   readonly advanced?: true;
+  /** `reload.writtenBy` (spec 4.6): who besides the person sets it; "plugin" is read-only. */
+  readonly writtenBy?: "plugin" | "both";
   /** `reload.shown`: drawn only while a sibling holds a value; its own value is kept hidden. */
   readonly shown?: ShownWhen;
   /** A group's fields, or a table's columns. */
@@ -234,7 +238,7 @@ function fieldOf(key: string, property: JsonSchema, required: boolean, inRow = f
   if (control === "list") {
     field.element = fieldOf(key, itemsOf(property) as JsonSchema, false, inRow);
   }
-  if (property["readOnly"] === true) {
+  if (isReadOnly(property)) {
     field.readOnly = true;
   }
   if (control === "number" || control === "integer") {
@@ -256,6 +260,10 @@ function fieldOf(key: string, property: JsonSchema, required: boolean, inRow = f
   }
   if (isAdvanced(property)) {
     field.advanced = true;
+  }
+  const writer = writtenBy(property);
+  if (writer !== null) {
+    field.writtenBy = writer;
   }
   const shown = shownWhen(property);
   if (shown !== null) {

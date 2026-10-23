@@ -16,6 +16,7 @@ import * as path from "node:path";
 
 import { isSecret, propertiesOf, secretKeys } from "../../domain/forms/form-model";
 import { REFUSED_KEY } from "../../domain/forms/kept-on-save";
+import { WRITTEN_KEY } from "../../domain/forms/written";
 import {
   inputsOf,
   nodeTypeName,
@@ -89,6 +90,8 @@ function defaultsOf(type: DeclaredType): Record<string, { value: unknown }> {
   }
   // A refused save, kept until corrected (kept-on-save.ts): a node property like the others.
   defaults[REFUSED_KEY] = { value: null };
+  // When the person last changed each property (spec 4.6): a later write of its package wins.
+  defaults[WRITTEN_KEY] = { value: null };
   return defaults;
 }
 
@@ -102,7 +105,9 @@ export function editorHtml(declaration: Declaration, type: DeclaredType): string
   const name = nodeTypeName(declaration.package, type.id);
   const ports = portsOf(type);
   const defaults = defaultsOf(type);
-  const validated = Object.keys(defaults).filter((key) => key !== "name" && key !== REFUSED_KEY);
+  const validated = Object.keys(defaults).filter(
+    (key) => key !== "name" && key !== REFUSED_KEY && key !== WRITTEN_KEY,
+  );
   const required = new Set(
     Array.isArray(type.config["required"]) ? (type.config["required"] as unknown[]) : [],
   );

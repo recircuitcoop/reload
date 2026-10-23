@@ -497,6 +497,69 @@
         }
       }
     },
+    "settings": {
+      "type": "object",
+      "required": [
+        "t",
+        "id",
+        "values"
+      ],
+      "properties": {
+        "t": {
+          "const": "settings"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "values": {
+          "type": "object"
+        },
+        "by": {
+          "type": "string"
+        }
+      }
+    },
+    "written": {
+      "type": "object",
+      "required": [
+        "t",
+        "id",
+        "recorded",
+        "refused"
+      ],
+      "properties": {
+        "t": {
+          "const": "written"
+        },
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "recorded": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "refused": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "path",
+              "message"
+            ],
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
     "viewContent": {
       "type": "object",
       "properties": {

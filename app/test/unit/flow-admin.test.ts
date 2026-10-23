@@ -837,6 +837,7 @@ describe("flow.node.form and flow.node.configure", () => {
         schema: TYPES["reload-pkg-step"]?.config,
         values: { space: "sp1" },
         secretsSet: [],
+        written: {},
       },
     });
     const secretive = await h.call("flow.node.form", { flowId: "rec", nodeId: "t" });

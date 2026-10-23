@@ -184,7 +184,10 @@ export function setupFields(schema: Readonly<Record<string, unknown>>): SetupFie
         options: kind === "enum" ? (property["enum"] as unknown[]).map((each) => String(each)) : [],
         reload: reloadOf(property),
         advanced: isRecord(property["reload"]) && property["reload"]["advanced"] === true,
-        readOnly: property["readOnly"] === true,
+        // Shown, never typed over: `readOnly`, or one only its package sets (spec 4.6).
+        readOnly:
+          property["readOnly"] === true ||
+          (isRecord(property["reload"]) && property["reload"]["writtenBy"] === "plugin"),
         pathKind:
           kind === "path" && isRecord(property["reload"])
             ? (property["reload"]["path"] as "file" | "folder")

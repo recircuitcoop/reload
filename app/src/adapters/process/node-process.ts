@@ -34,6 +34,7 @@ import {
   type NodeFrame,
   type ReadLine,
   type RuntimeFrame,
+  writtenFrame,
 } from "./codec";
 import { inputJournalFor, type Admitted, type Input, type InputJournal } from "./input-journal";
 import { prepareInstance, type NodeProcessDeps } from "./node-process-settings";
@@ -450,6 +451,9 @@ class ChildNodeProcess implements NodeProcess {
       case "pong":
         this.#heartbeat?.pong(frame.id, frame.healthy, frame.progress);
         return;
+      case "settings": // revision 2.2 (spec 4.6): answered with its outcome
+        this.#write(writtenFrame(frame.id, this.#host.writeSettings(frame.values, frame.by)));
+        return;
     }
   }
 
@@ -551,8 +555,6 @@ class ChildNodeProcess implements NodeProcess {
     this.#finish(inputId, error);
   }
 
-  // ── writing ────────────────────────────────────────────────────────────────────────────
-
   #sendInput(id: string, input: Input): void {
     const line = inputLine(id, input.event);
     if (line instanceof Error) {
@@ -573,8 +575,6 @@ class ChildNodeProcess implements NodeProcess {
     this.#child.stdin.write(encodeFrame(frame));
     return true;
   }
-
-  // ── time and logging ───────────────────────────────────────────────────────────────────
 
   #after(ms: number, callback: () => void): void {
     this.#timers.push(this.#deps.clock.after(ms, callback));

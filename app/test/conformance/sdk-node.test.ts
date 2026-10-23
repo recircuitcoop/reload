@@ -355,6 +355,34 @@ describe.each(SDK_LANGUAGES)("conformance: the %s SDK's kitchen reference node",
     expect(node.rejected).toEqual([]);
   });
 
+  it("C28 settings (revision 2.2): a node's write goes out as one valid settings frame, and its answer is what the handler gets", async () => {
+    const node = session(language);
+    node.start();
+    node.send({ t: "input", id: "w", event: { type: "x.v1", data: { do: "write" }, run: "r" } });
+    await waitFor("the settings frame", () => node.frames.some((f) => f.t === "settings"));
+    const written = node.frames.find((f) => f.t === "settings");
+    expect(written).toEqual({
+      t: "settings",
+      id: expect.any(String) as string,
+      values: { token: "ya29-written", root: "/x" },
+    });
+    const id = written?.t === "settings" ? written.id : "";
+    node.send({
+      t: "written",
+      id,
+      recorded: ["token"],
+      refused: [{ path: "/root", message: "is left to the person: its package may not set it" }],
+    });
+    await waitFor("its done", () => node.frames.some((f) => f.t === "done"));
+    expect(node.frames.find((f) => f.t === "emit")).toEqual({
+      t: "emit",
+      port: "out",
+      data: { recorded: ["token"], credential: true },
+      in: "w",
+    });
+    expect(node.rejected).toEqual([]);
+  });
+
   it("C13 credentials: a credential value never appears on stdout or stderr, even where a handler logs it outright", async () => {
     const canary = "reload-canary-5f2c9a71e0d34b8c";
     const node = session(language);

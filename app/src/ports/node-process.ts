@@ -97,6 +97,8 @@ export interface InputDelivery {
 }
 
 /** View content (spec 4.5 `viewContent`). */
+import type { WriteOutcome } from "../domain/forms/written";
+
 export type ViewContent = Readonly<Record<string, unknown>>;
 
 /** What the instance's host is told that belongs to no one input. */
@@ -113,6 +115,8 @@ export interface NodeProcessHost {
   snapshot(content: ViewContent, state: unknown, inputId: string | null): void;
   /** An `error` frame with no `in`: `node.error()`, no Catch (spec 4.2). */
   nodeError(message: string): void;
+  /** Revision 2.2: the node writes its own settings; judged and recorded (spec 4.6). */
+  writeSettings(values: Readonly<Record<string, unknown>>, by: unknown): WriteOutcome;
 }
 
 /**

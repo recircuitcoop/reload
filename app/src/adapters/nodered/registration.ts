@@ -28,6 +28,8 @@ import { configOf, credentialsOf, emptyRequired, withCredentials } from "../../d
 import { secretKeys } from "../../domain/forms/form-model";
 import { hiddenPaths, unhidden } from "../../domain/forms/hidden";
 import { uniqueClashes } from "../../domain/forms/unique";
+import type { WrittenStore } from "../../ports/written-store";
+import { startingValues, writeSettings } from "./written-settings";
 import { unkeptSecretsOfNode } from "../../domain/forms/unkept";
 import { payloadRefusal, USER_EVENTS_PACKAGE } from "../../domain/events/event-types";
 import type { CloseReason } from "../../domain/journal/entry";
@@ -155,6 +157,8 @@ export interface RegistrationDeps {
   readonly reruns?: RerunTargets;
   /** The person's own resource limits (the settings file's `limits`); else the documented ones. */
   readonly personalLimits?: ResourceLimits;
+  /** Where what a node writes of its own settings is kept (spec 4.6); absent, none is kept. */
+  readonly written?: WrittenStore;
 }
 
 /** Node-RED's `wires` of an instance's config: for each output port, the nodes it feeds. */
@@ -213,8 +217,14 @@ export class TypeRegistration {
     const { validator, logger } = this.#deps;
     const who = `[${typeName} ${node.id}]`;
     const schema = loaded.type.config;
-    const config = configOf(schema, raw);
-    const credentials = credentialsOf(schema, node.credentials ?? {});
+    // What the node itself wrote, merged over what the person deployed (spec 4.6).
+    const written = { store: this.#deps.written, validator, logger, now: Date.now };
+    const { config, credentials } = startingValues(
+      written,
+      { id: node.id, who, node: raw },
+      configOf(schema, raw),
+      credentialsOf(schema, node.credentials ?? {}),
+    );
     // Validated with its credentials, so a required secret never set is refused too.
     const checked = validator.check(schema, withCredentials(config, credentials));
     // A required text left empty, or a required table with no rows (coerce.ts), and a row
@@ -274,6 +284,13 @@ export class TypeRegistration {
       nodeError: (message) => {
         node.error(message);
       },
+      writeSettings: (values, by) =>
+        writeSettings(
+          written,
+          { id: node.id, who, own: loaded.declaration.package, schema },
+          values,
+          by,
+        ),
     };
     const isView = loaded.type.kind === "view";
     const stability = stabilityOf(loaded.type);

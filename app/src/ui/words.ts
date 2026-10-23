@@ -372,6 +372,13 @@ export const wordChecked = (at: Date, now: Date) =>
     when: t("packages.checkedAt", { day: dayOf(at, now), time: clockTime(at) }),
   });
 
+/** "Set by monty, today 09:14": a step's setting its own package set last (spec 4.6). */
+export const wordSetBy = (by: string, at: Date, now: Date) =>
+  t("setup.form.setBy", {
+    package: by,
+    when: t("packages.checkedAt", { day: dayOf(at, now), time: clockTime(at) }),
+  });
+
 /** The captions under a row's name: where it came from, and whether anyone vouches for it. */
 export function wordCaptions(pkg: Package): string[] {
   const captions: string[] = [];
