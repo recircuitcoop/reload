@@ -78,8 +78,7 @@ class ChildNodeProcess implements NodeProcess {
   stopped: string | null = null;
   /** Stopped by a person from a terminal (`reload --stop`, `--kill`): no process until started. */
   paused = false;
-  /** Being restarted by a person: its exit spends no attempt, and a process follows at once. */
-  #restarting = false;
+  #restarting = false; // restarted by a person: its exit spends no attempt, a process follows
   #timers: Cancel[] = [];
 
   constructor(spec: NodeProcessSpec, host: NodeProcessHost, deps: NodeProcessDeps) {
@@ -101,7 +100,8 @@ class ChildNodeProcess implements NodeProcess {
     // Created again (a redeploy): nothing said about the old instance holds any more.
     clearNodeNotices(deps.notifier, this.#subject);
     this.#refused = new RefusedPorts(spec, deps.notifier, host, this.#log.bind(this));
-    this.#spawn();
+    this.paused = spec.paused === true; // a person stopped it before this redeploy: still stopped
+    if (!this.paused) this.#spawn();
   }
 
   get pid(): number | null {

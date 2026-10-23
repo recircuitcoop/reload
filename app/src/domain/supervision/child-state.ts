@@ -26,6 +26,7 @@ export type ChildState =
   | "recovering" // forking after a crash
   | "down" // crashed, waiting for the backoff
   | "down-for-good" // crashed too often: no more restarts until a person asks
+  | "killed" // killed by a person from a terminal: nothing restarts it until a person asks
   | "stopped"; // quit
 
 /** One child's state, as the app page sees it. */

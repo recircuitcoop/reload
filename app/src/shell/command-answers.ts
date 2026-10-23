@@ -237,7 +237,8 @@ async function replyTo(question: Question, deps: AnswerDeps): Promise<Reply> {
   }
 }
 
-const isChildName = (name: string): name is ChildName => name === "runtime" || name === "services";
+/** The shell's own child a person may kill: the services process (the old helper's MCP child). */
+const isChildName = (name: string): name is ChildName => name === "services";
 
 /**
  * `reload --kill services` (or `runtime`): the shell's own child, killed through the supervisor
@@ -259,7 +260,9 @@ function childReply(verb: NodeVerb, names: readonly ChildName[], running: Runnin
     }
     code = 1;
     const why =
-      did === undefined ? "only --kill and --start apply to it" : "it is not in that state";
+      did === undefined
+        ? "only --kill, --start and --release apply to it"
+        : "it is not in that state";
     return `  ${name}: not done (--${verb}): ${why}`;
   });
   return { code, text: lines.join("\n") + "\n" };

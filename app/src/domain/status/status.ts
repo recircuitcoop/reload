@@ -64,7 +64,7 @@ export function statusPill(inputs: StatusInputs): StatusPill {
     return "restarting";
   }
   const services = child(inputs, "services");
-  if (services !== null && services.state === "down-for-good") {
+  if (services !== null && (services.state === "down-for-good" || services.state === "killed")) {
     return "needsAttention";
   }
   if (inputs.anytype !== null && ANYTYPE_NEEDS_ATTENTION.has(inputs.anytype.state)) {

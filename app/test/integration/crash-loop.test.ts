@@ -241,7 +241,7 @@ describe("a person's kill of a child from a terminal", () => {
     clock.advance(60_000);
 
     expect(launcher.children).toHaveLength(1);
-    expect(supervisor.status()).toMatchObject({ state: "down-for-good", error: KILLED });
+    expect(supervisor.status()).toMatchObject({ state: "killed", error: KILLED });
     expect(notifier.notices).toEqual([]);
     expect(supervisor.kill()).toBe(false);
     // Its supervisor let go of it, so the start command can start it again.

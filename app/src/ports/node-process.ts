@@ -170,6 +170,8 @@ export interface NodeProcessSpec {
   readonly limits?: ResourceLimits;
   /** False when the type declares `reload.restartable: false` (spec 2.4.2): never respawned. */
   readonly restartable?: boolean;
+  /** A person stopped the instance before a redeploy (`reload --stop`): no process until started. */
+  readonly paused?: boolean;
   /** The type's `reload.heartbeat` (spec 2.4.2), in ms; absent for a type that promised none. */
   readonly stability?: StabilityProfile;
 }

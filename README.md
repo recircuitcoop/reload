@@ -31,13 +31,13 @@ opening a window:
 - `--log`: where the log is, and its last 50 lines. It works when Reload is not running too.
 - `--list`: each node that runs in your flows, by package, with its state and process.
 - `--stop <package>…`, `--start <package>…`: stops every node of the packages named, politely,
-  until you start them again. What arrives for them meanwhile waits.
+  until you start them again or Reload restarts; a redeploy keeps them stopped. What arrives for
+  them meanwhile waits.
 - `--kill <package>…`: kills their processes without asking, for a node that hangs; start them
   again with `--start`.
 - `--restart <package>…`: each node of the packages named onto a new process.
 - `--release <package>…`: starts again a node Reload stopped for good after repeated crashes.
-- `--kill services` (or `runtime`): kills that Reload process itself; nothing restarts it until
-  `--start services`.
+- `--kill services`: kills Reload's services process; nothing restarts it until `--start services`.
 
 A package name Reload has no running node of refuses the whole command, and anything not done
 ends the command with exit code 1.

@@ -190,10 +190,11 @@ export class Supervisor {
 
   /**
    * A person pressed Restart after the crash-loop limit (plan 0018 §7). Restarting resumes
-   * and the crashes counted so far are forgotten. False unless the state is down-for-good.
+   * and the crashes counted so far are forgotten; so does `reload --start` after a person's kill.
+   * False unless the state is down-for-good or killed.
    */
   recover(): boolean {
-    if (this.#state !== "down-for-good" || this.#quitting) {
+    if ((this.#state !== "down-for-good" && this.#state !== "killed") || this.#quitting) {
       return false;
     }
     this.#deps.logger.info(`the ${this.#deps.child} is started again by a person`);
@@ -433,7 +434,7 @@ export class Supervisor {
     if (killed) {
       this.#deps.logger.info(`the ${this.#deps.child} was killed from a terminal; not restarted`);
       this.#error = KILLED;
-      this.#setState("down-for-good");
+      this.#setState("killed");
       return;
     }
     this.#onCrash(code, forGood);

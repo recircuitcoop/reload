@@ -51,6 +51,7 @@ export function refusalFor(state: ChildState): ChannelErrorCode | null {
     case "recovering":
       return "restarting";
     case "down-for-good":
+    case "killed":
       return "down";
     case "stopped":
       return "stopped";

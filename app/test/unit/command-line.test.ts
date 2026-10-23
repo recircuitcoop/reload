@@ -1196,7 +1196,7 @@ describe("reload --kill and --start for the shell's own children", () => {
     });
     expect(await ask("stop", "d".repeat(32))).toEqual({
       code: 1,
-      text: "  services: not done (--stop): only --kill and --start apply to it\n",
+      text: "  services: not done (--stop): only --kill, --start and --release apply to it\n",
     });
     expect(calls).toEqual(["kill", "recover", "recover"]);
   });

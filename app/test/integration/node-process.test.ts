@@ -1134,6 +1134,15 @@ describe("a person's command for a node process", () => {
     await waitFor("ready again", () => node.node.ready === true);
   });
 
+  it("created again by a redeploy after a person stopped it, starts no process until start", async () => {
+    const node = raw({ paused: true });
+    expect(node.node.pid).toBeNull();
+    expect(node.node.paused).toBe(true);
+    expect(node.logger.has(/spawned pid/)).toBe(false);
+    expect(node.node.command?.("start")).toBeNull();
+    await ready(node);
+  });
+
   it("takes no command while it closes", async () => {
     const node = raw();
     await ready(node);

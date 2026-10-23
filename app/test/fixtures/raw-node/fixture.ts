@@ -245,6 +245,8 @@ export interface StartOptions {
   readonly limits?: ResourceLimits;
   /** False for a type that declares `reload.restartable: false` (spec 2.4.2). */
   readonly restartable?: boolean;
+  /** Stopped by a person before a redeploy created it again (`reload --stop`). */
+  readonly paused?: boolean;
   /** The type's declared heartbeat (spec 2.4.2), and the factory the runtime keeps it with. */
   readonly stability?: StabilityProfile;
   readonly heartbeat?: HeartbeatFactory;
@@ -262,6 +264,7 @@ export function startRaw(options: StartOptions = {}): RawNode {
     ...(options.ports === undefined ? {} : { ports: options.ports }),
     ...(options.limits === undefined ? {} : { limits: options.limits }),
     ...(options.restartable === undefined ? {} : { restartable: options.restartable }),
+    ...(options.paused === undefined ? {} : { paused: options.paused }),
     ...(options.stability === undefined ? {} : { stability: options.stability }),
   };
   const journal = options.journal ?? new MemoryJournal();

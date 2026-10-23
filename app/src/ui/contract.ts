@@ -22,6 +22,7 @@ export type ChildState =
   | "recovering"
   | "down"
   | "down-for-good"
+  | "killed"
   | "stopped";
 
 export interface ChildStatus {

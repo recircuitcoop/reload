@@ -161,6 +161,7 @@ describe("the typed errors", () => {
       recovering: "restarting",
       down: "restarting",
       "down-for-good": "down",
+      killed: "down",
       stopped: "stopped",
     };
     for (const [state, code] of Object.entries(expected)) {

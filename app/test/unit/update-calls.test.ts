@@ -176,6 +176,14 @@ describe("Reload's own update calls", () => {
     expect(h.notifier.cleared).toContain("core-crash-loop Reload");
   });
 
+  it("a person's kill is no crash loop: within ten minutes of an update it offers no Go back", async () => {
+    const h = afterUpdate();
+    h.clock.at = T0 + 3 * MINUTE;
+    h.runtimeIs("killed");
+    expect(h.notifier.notices).toEqual([]);
+    expect((await h.call("update.state")).value?.goBack?.because).not.toBe("crash-loop");
+  });
+
   it("a crash loop later than ten minutes, or with nothing to go back to, offers nothing", () => {
     const h = afterUpdate();
     h.clock.at = T0 + 11 * MINUTE;

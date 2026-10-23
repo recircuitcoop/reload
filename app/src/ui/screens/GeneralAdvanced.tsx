@@ -34,6 +34,7 @@ const CHILD_WORD: Readonly<Record<ChildState, readonly [StatusPillState, PlainKe
   recovering: ["waiting", "status.restarting"],
   down: ["waiting", "status.restarting"],
   "down-for-good": ["failed", "status.stopped"],
+  killed: ["failed", "status.stopped"],
   stopped: ["failed", "status.stopped"],
 };
 

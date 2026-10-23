@@ -57,9 +57,9 @@ interface Tracked {
 /** A node process that says when it has been closed; everything else is the process's own. */
 class Closing implements NodeProcess {
   readonly #process: NodeProcess;
-  readonly #closed: () => void;
+  readonly #closed: (reason: Parameters<NodeProcess["close"]>[0]) => void;
 
-  constructor(process: NodeProcess, closed: () => void) {
+  constructor(process: NodeProcess, closed: (reason: Parameters<NodeProcess["close"]>[0]) => void) {
     this.#process = process;
     this.#closed = closed;
   }
@@ -100,7 +100,7 @@ class Closing implements NodeProcess {
     try {
       await this.#process.close(reason);
     } finally {
-      this.#closed();
+      this.#closed(reason);
     }
   }
 
@@ -132,6 +132,8 @@ const PAUSED = "stopped from a terminal; `reload --start` starts it again";
 
 export class InstanceReadiness {
   readonly #running = new Map<string, Tracked>();
+  /** The instances a person stopped (`reload --stop`, `--kill`), kept across a redeploy. */
+  readonly #paused = new Set<string>();
 
   /** The launcher, with every process it starts tracked until it is closed. */
   wrap(launcher: NodeProcessLauncher): NodeProcessLauncher {
@@ -146,7 +148,8 @@ export class InstanceReadiness {
             host.status(status);
           },
         });
-        const process = launcher.start(spec, watched);
+        const paused = this.#paused.has(id) ? { paused: true } : {};
+        const process = launcher.start({ ...spec, ...paused }, watched);
         const { name, typeId } = spec.identity;
         const tracked: Tracked = {
           package: spec.identity.package,
@@ -156,10 +159,13 @@ export class InstanceReadiness {
         };
         statuses.tracked = tracked;
         this.#running.set(id, tracked);
-        return new Closing(process, () => {
+        return new Closing(process, (reason) => {
           if (this.#running.get(id) === tracked) {
             this.#running.delete(id);
           }
+          // Stopped by a person, it stays stopped when a redeploy creates it again; removed, not.
+          if (process.paused === true && reason !== "removed") this.#paused.add(id);
+          else this.#paused.delete(id);
         });
       },
     };

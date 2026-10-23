@@ -273,6 +273,14 @@ describe("the shell's telemetry", () => {
     expect(crashes.every((payload) => payload["kind"] === "error")).toBe(true);
   });
 
+  it("a person's kill of the services process is no crash: no crash report", () => {
+    const world = wired("on");
+    world.services.publish(status("services", "running"));
+    world.queue.purge();
+    world.services.publish(status("services", "killed"));
+    expect(world.queue.reports).toEqual([]);
+  });
+
   it("turning telemetry off in the window empties the queue", () => {
     const world = wired("on");
     world.runtime.publish(status("runtime", "down"));

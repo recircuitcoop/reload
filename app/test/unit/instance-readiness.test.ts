@@ -94,8 +94,10 @@ function spec(id: string, pkg: string): NodeProcessSpec {
 
 function launched() {
   const started: FakeProcess[] = [];
+  const specs: NodeProcessSpec[] = [];
   const inner: NodeProcessLauncher = {
-    start: () => {
+    start: (given) => {
+      specs.push(given);
       const process = new FakeProcess();
       started.push(process);
       return process;
@@ -107,6 +109,7 @@ function launched() {
   return {
     readiness,
     started,
+    specs,
     start: (id: string, pkg: string) => launcher.start(spec(id, pkg), host),
   };
 }
@@ -347,6 +350,24 @@ describe("a person's command for some packages' instances (nodes.command)", () =
       ok: true,
       value: [{ package: "alpha", state: "starting" }, row, row],
     });
+  });
+
+  it("keeps an instance a person stopped stopped when a redeploy creates it again, and not once removed", async () => {
+    const h = launched();
+    const first = h.start("n1", "beta");
+    h.readiness.call("nodes.command", { verb: "kill", names: ["beta"] });
+    const closing = first.close("redeploy");
+    (h.started[0] as FakeProcess).finishClose();
+    await closing;
+    const second = h.start("n1", "beta");
+    expect(h.specs[1]?.paused).toBe(true);
+    // Started paused, as the real process is: only its removal forgets it.
+    (h.started[1] as FakeProcess).paused = true;
+    const removing = second.close("removed");
+    (h.started[1] as FakeProcess).finishClose();
+    await removing;
+    h.start("n1", "beta");
+    expect(h.specs[2]?.paused).toBeUndefined();
   });
 
   it("says which instance the verb did not apply to, and why", () => {
