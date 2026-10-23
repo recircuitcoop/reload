@@ -54,11 +54,7 @@ export interface TelemetryWiring extends Pick<
    * The build's endpoints, as released (package.json's "reload"), and its own catalogue's
    * address: the one provider whose host is ever sent.
    */
-  readonly built: Endpoints & {
-    readonly catalogueUrl: string;
-    /** The build's catalogue key: the only signer whose packages telemetry names. */
-    readonly catalogueKey: string | null;
-  };
+  readonly built: Endpoints & { readonly catalogueUrl: string };
   /**
    * Where development and the e2e gate point the endpoints elsewhere; empty in an installed
    * build, which always sends where it was built to.
@@ -227,10 +223,6 @@ export function wireTelemetry(deps: TelemetryWiring): ShellTelemetry {
     record: (name, payload): unknown => pipeline.recordUsage(name, payload),
     versions,
     packages,
-    officialKey:
-      deps.built.catalogueKey === null
-        ? null
-        : createHash("sha256").update(deps.built.catalogueKey).digest("hex"),
     tools: new Set(Object.keys(deps.tools.tools).map((name) => name.toLowerCase())),
     vouched: {
       read: () => remembered.vouched ?? {},

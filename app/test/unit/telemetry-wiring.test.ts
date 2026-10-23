@@ -3,7 +3,6 @@
 // launch marker that tells an unclean stop, the first-run steps told once, the provider events,
 // the page's question and switch over IPC, and the children's facts reaching the shell over the
 // channel.
-import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import packageJson from "../../package.json";
 import { CrashReports } from "../../src/application/crash-reports";
@@ -72,9 +71,6 @@ class ListenedSupervisor {
   }
 }
 
-/** The build's catalogue key, as package.json's reload.catalogueKey would hold it. */
-const OFFICIAL_KEY = "RWfake-official-catalogue-key";
-
 /** One package_present for each listed package, at start. */
 const PRESENT = Array.from({ length: 5 }, () => "package_present");
 
@@ -87,8 +83,6 @@ const PACKAGES: ListedPackage[] = [
     signed: true,
     // What its verified files held at install: a source, and one only its source map names.
     held: { "src/probe.py": 40, "src/mapped.ts": 0 },
-    // Signed by the build's own catalogue key: the only installed package telemetry names.
-    signerKey: createHash("sha256").update(OFFICIAL_KEY).digest("hex"),
   },
   { name: "my-private-thing", document: { version: "0.0.1" }, installed: true, signed: false },
   // The package that answers the loopback MCP endpoint, shipped with the app.
@@ -139,13 +133,8 @@ function wired(
     hashIdentifier: () => "f".repeat(64),
     clock,
     logger: new RecordingLogger(),
-    // The build's own catalogue: the one provider whose host, and whose key's packages' names,
-    // are ever sent.
-    built: {
-      ...packageJson.reload,
-      catalogueUrl: "https://catalogue.recircu.it/v1/index.json",
-      catalogueKey: OFFICIAL_KEY,
-    },
+    // The build's own catalogue: the one provider whose host is ever sent.
+    built: { ...packageJson.reload, catalogueUrl: "https://catalogue.recircu.it/v1/index.json" },
     env,
     appVersion: "1.0.0",
     registry: { redact: (text) => text },
@@ -241,8 +230,7 @@ describe("the shell's telemetry", () => {
       expect.objectContaining({ package: "probekit", version: "0.3.0", signed: true }),
       expect.objectContaining({ package: "unsigned", version: null, signed: false }),
       expect.objectContaining({ package: "reload_anytype", version: "1.0.0" }),
-      // Signed, but by no key the build's catalogue holds: never named.
-      expect.objectContaining({ package: "custom", version: null, signed: true }),
+      expect.objectContaining({ package: "odd", version: "[withheld]" }),
     ]);
     expect(JSON.stringify(world.queue.reports)).not.toContain("my-private-thing");
   });
@@ -554,7 +542,6 @@ describe("the launch's own signals (plan 0029)", () => {
       contentHash: "c".repeat(64),
       environment: "uv-python" as const,
       signed: true,
-      signerKey: createHash("sha256").update(OFFICIAL_KEY).digest("hex"),
     };
     world.telemetry.signal(
       packageRemoved({
@@ -591,42 +578,53 @@ describe("the launch's own signals (plan 0029)", () => {
     });
   });
 
-  it("a package signed by another catalogue's key is never named, typed or filed", () => {
-    const other: ListedPackage = {
-      name: "acme_nodes",
-      document: { version: "1.0.0", types: [{ id: "acme-step" }] },
-      installed: true,
-      signed: true,
-      held: { "src/node.py": 10 },
-      signerKey: "d".repeat(64),
+  it("a signed package replaced by an unsigned one of its name is named by neither at send", async () => {
+    const marks = new MemoryMarks();
+    let store: readonly ListedPackage[] = PACKAGES;
+    const world = wired("on", TEST_ENV, marks, () => store);
+    world.up();
+    const failed = {
+      kind: "step" as const,
+      package: "probekit",
+      step: { nodeKind: "node" as const, nodeId: "probe", durationMs: 1, ok: false },
+      failure: { errorType: "Error", file: "src/probe.py", line: 7 },
     };
-    const world = wired("on", TEST_ENV, new MemoryMarks(), () => [...PACKAGES, other]);
-    world.runtime.tell({
-      kind: "step",
-      package: "acme_nodes",
-      step: { nodeKind: "node", nodeId: "acme-step", durationMs: 1, ok: false },
-      failure: { errorType: "Error", file: "src/node.py", line: 3 },
-    });
-    world.runtime.tell({
-      kind: "deployed",
-      nodesPerFlow: [1],
-      perPackage: [{ package: "acme_nodes", nodes: 1 }],
-      configNodes: 0,
-    });
-    expect(payloads(world, "package_error")).toEqual([
-      expect.objectContaining({
-        package: "custom",
-        version: null,
-        node_id: "custom",
-        file: "[withheld]",
-        line: "[withheld]",
-        signed: true,
-      }),
-    ]);
-    expect(payloads(world, "package_deployed")).toEqual([
-      expect.objectContaining({ package: "custom", nodes: 1 }),
-    ]);
-    expect(JSON.stringify(world.queue.reports)).not.toMatch(/acme/);
+    // Queued while the signed probekit is installed, so it is vouched for.
+    world.runtime.tell(failed);
+    expect(marks.memory?.vouched?.["probekit"]).toBeDefined();
+    // Removed, and an unsigned package of the same name installed before the report leaves.
+    store = [
+      ...PACKAGES.filter((listed) => listed.name !== "probekit"),
+      {
+        name: "probekit",
+        document: { version: "6.6.6", types: [{ id: "probe" }] },
+        installed: true,
+        signed: false,
+        origin: "file",
+      },
+    ];
+    world.runtime.publish(status("runtime", "starting"));
+    world.runtime.tell(failed);
+    world.clock.advance(60_000);
+    await settle();
+    const errors = world.poster.sent
+      .flatMap((request) =>
+        (
+          JSON.parse(request.body) as {
+            payload: { name: string; data: Record<string, unknown> };
+          }[]
+        ).map((event) => event.payload),
+      )
+      .filter((event) => event.name === "package_error")
+      .map((event) => event.data);
+    expect(errors).toHaveLength(2);
+    for (const data of errors) {
+      expect(data).toMatchObject({ package: "unsigned", version: null, node_id: null });
+      // Neither the file nor the line of a package nobody vouches for.
+      expect([null, "[withheld]"]).toContain(data["file"]);
+      expect([null, "[withheld]"]).toContain(data["line"]);
+    }
+    expect(marks.memory?.vouched?.["probekit"]).toBeUndefined();
   });
 
   it("a provider is remembered only once its event was queued, so a yes later still tells it", () => {

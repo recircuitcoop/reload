@@ -357,7 +357,7 @@ const COMMON_LINES = [
 ] as const satisfies readonly PlainKey[];
 /** Each line's fields, each with the words the line says it in: a field is listed with its words. */
 const STEP_WORDS = {
-  package: ["the package", "is never named", "only called unsigned", "only custom"],
+  package: ["the package", "only called unsigned"],
   version: ["its version", "with neither its version"],
   source: ["where it came from"],
   signed: ["whether it is signed"],
@@ -389,10 +389,9 @@ const NOTICE_FIELDS: Readonly<Record<string, Readonly<Record<string, readonly st
     package: [
       "each installed package on its own",
       "the package",
-      "one signed by any other catalogue only as custom",
       "an unsigned one only as unsigned",
     ],
-    version: ["its version if it ships with Reload or is signed by Reload's own catalogue"],
+    version: ["its version if it ships with Reload or is signed"],
     source: ["where it came from"],
     signed: ["whether it is signed"],
     environment: ["what it runs on"],
@@ -405,7 +404,7 @@ const NOTICE_FIELDS: Readonly<Record<string, Readonly<Record<string, readonly st
   "privacy.sent.errors": {
     ...Object.fromEntries(Object.keys(STEP_WORDS).map((field) => [field, ["the same"]])),
     error_type: ["the kind of error when it is a standard one", "any other is only other"],
-    file: ["the file", "only when the package is Reload's own, the file is one of its own"],
+    file: ["the file", "only when the file is one of the signed package's own"],
     line: ["and line", "the line is in it"],
   },
   "privacy.sent.aiApps": {
@@ -437,8 +436,8 @@ const NOTICE_FIELDS: Readonly<Record<string, Readonly<Record<string, readonly st
     packages_offered: ["how many packages it offers"],
   },
   "privacy.sent.installs": {
-    package: ["the package", "any other only as custom or unsigned"],
-    version: ["its versions if it is Reload's own"],
+    package: ["the package", "an unsigned one only as unsigned"],
+    version: ["its versions if it is signed"],
     from_version: ["its versions"],
     provider_host: ["Reload's own catalogue's server name", "another catalogue or a file"],
     source: ["it came from another catalogue or a file"],

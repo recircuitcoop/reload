@@ -237,8 +237,7 @@ export function memoryVouched(): {
   };
 }
 
-/** What UsageSignals needs of the build beside the store: no official key, the served tools. */
+/** What UsageSignals needs of the build beside the store: the served tools. */
 export const TEST_SIGNAL_DEPS = {
-  officialKey: "f".repeat(64),
   tools: new Set(["api-get-object", "api-list-spaces", "get_object"]),
 };

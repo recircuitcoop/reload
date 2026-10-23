@@ -32,8 +32,8 @@ import {
 /** What the app vouches for at send: the package store's and the build's own answers. */
 export interface Vouch {
   /**
-   * A package shipped with the app or signed by the build's own catalogue's key, as the store
-   * lists it now or listed it when a report about it was queued.
+   * A package shipped with the app or signed, as the store lists it now, or as it was listed when
+   * a report about it was queued and the store no longer lists it.
    */
   readonly package: (name: string) => boolean;
   /** A type id the signed package `pkg` declares. */
@@ -46,7 +46,7 @@ export interface Vouch {
   readonly tool: (name: string) => boolean;
 }
 
-/** What a package the build's catalogue vouched for keeps vouched until its reports are sent. */
+/** What a signed package keeps vouched for until its reports are sent. */
 export interface VouchedPackage {
   readonly nodeTypes: readonly string[];
   readonly held: Readonly<Record<string, number>>;
@@ -194,9 +194,8 @@ function crashCounts(value: Json | undefined): Json {
 
 /**
  * The vouched-for fields asked of the package store, the build's catalogue and the served tools:
- * what they do not vouch for falls back. A package the build's own catalogue did not sign keeps
- * no name, version, type or file: `custom` when another catalogue signed it, `unsigned` when
- * nobody did. Applied when a report is queued and again when it is sent.
+ * what they do not vouch for falls back. A package nobody vouches for is `unsigned`, with no
+ * version, type or file. Applied when a report is queued and again when it is sent.
  */
 export function vouchedFields<T extends Readonly<Record<string, unknown>>>(
   report: T,
@@ -205,9 +204,12 @@ export function vouchedFields<T extends Readonly<Record<string, unknown>>>(
   const checked: Record<string, unknown> = { ...report };
   const pkg = checked["package"];
   if (typeof pkg === "string" && !NAMED_NOWHERE.includes(pkg) && !vouch.package(pkg)) {
-    checked["package"] = checked["signed"] === true ? "custom" : "unsigned";
+    checked["package"] = "unsigned";
+  }
+  // A package that is not named has no version either, whatever the report says.
+  if (checked["package"] === "unsigned" || checked["package"] === "custom") {
     for (const field of ["version", "from_version"]) {
-      if (typeof checked[field] === "string") {
+      if (field in checked) {
         checked[field] = null;
       }
     }
@@ -217,7 +219,7 @@ export function vouchedFields<T extends Readonly<Record<string, unknown>>>(
   const id = checked["node_id"];
   if (typeof id === "string" && !NAMED_NOWHERE.includes(id)) {
     if (named === null) {
-      checked["node_id"] = owner === "custom" ? "custom" : null;
+      checked["node_id"] = null;
     } else if (!vouch.nodeType(named, id)) {
       checked["node_id"] = "unsigned";
     }

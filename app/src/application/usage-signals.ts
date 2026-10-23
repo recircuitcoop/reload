@@ -28,9 +28,6 @@ import {
   type Versions,
 } from "../domain/telemetry/reports";
 import type { Vouch, VouchedPackage } from "../domain/telemetry/send-check";
-
-/** What a package another catalogue signed is called in every event: never its own name. */
-const CUSTOM = "custom";
 import type { HeldSources } from "../domain/telemetry/sources";
 import { CORE_NODES } from "./flows";
 
@@ -49,8 +46,6 @@ export interface KnownPackage {
    * installed package, listed at build for a shipped one. Never read from its live folder.
    */
   readonly held?: HeldSources;
-  /** For an installed package: the sha256 of the key that verified it, when one did. */
-  readonly signerKey?: string;
 }
 
 export interface UsageSignalsDeps {
@@ -58,8 +53,6 @@ export interface UsageSignalsDeps {
   readonly record: (name: SignalName, payload: Readonly<Record<string, unknown>>) => unknown;
   readonly versions: Versions;
   readonly packages: () => readonly KnownPackage[];
-  /** The sha256 of the build's own catalogue key: the only signer whose packages are named. */
-  readonly officialKey: string | null;
   /** The served Anytype tools, lowercased: the only tool names an mcp_call may carry. */
   readonly tools: ReadonlySet<string>;
   /**
@@ -117,15 +110,6 @@ export class UsageSignals {
     this.#deps = deps;
   }
 
-  /** Shipped with the app, or signed by the build's own catalogue's key. */
-  #official(known: KnownPackage): boolean {
-    if (!known.installed) {
-      return true;
-    }
-    const { officialKey } = this.#deps;
-    return known.signed && officialKey !== null && known.signerKey === officialKey;
-  }
-
   #ledger(): Record<string, VouchedPackage> {
     this.#vouched ??= { ...this.#deps.vouched.read() };
     return this.#vouched;
@@ -140,35 +124,45 @@ export class UsageSignals {
     }
   }
 
+  /** Vouch no more for `name`: the package of that name now is not the one that was vouched for. */
+  #forget(name: string): void {
+    const ledger = this.#ledger();
+    if (Object.hasOwn(ledger, name)) {
+      Reflect.deleteProperty(ledger, name);
+      this.#deps.vouched.write(ledger);
+    }
+  }
+
   /**
-   * A package the installer verified (just installed, updated, or about to be removed): vouched
-   * for from its record when the build's catalogue key signed it, before its event is queued.
+   * A package the installer verified (just installed, updated, or about to be removed): kept
+   * vouched for from its record when it is signed, before its event is queued; forgotten when not.
    */
   vouchRecord(record: {
     readonly package: string;
     readonly signed: boolean;
-    readonly signerKey?: string;
     readonly sources?: HeldSources;
   }): void {
-    const known = { name: record.package, document: null, installed: true, ...record };
-    if (this.#official(known)) {
-      const kept = this.#ledger()[record.package];
-      this.#keep(record.package, {
-        nodeTypes: kept?.nodeTypes ?? [],
-        held: record.sources ?? kept?.held ?? {},
-      });
+    if (!record.signed) {
+      this.#forget(record.package);
+      return;
     }
+    const kept = this.#ledger()[record.package];
+    this.#keep(record.package, {
+      nodeTypes: kept?.nodeTypes ?? [],
+      held: record.sources ?? kept?.held ?? {},
+    });
   }
 
-  /** With no report waiting, only the packages the store vouches for now stay vouched for. */
+  /**
+   * With no report waiting, only what the store vouches for now stays: a package it no longer
+   * lists, or lists unsigned, is forgotten.
+   */
   prune(): void {
-    const ledger = this.#ledger();
-    for (const name of Object.keys(ledger)) {
-      if (this.facts(name) === null) {
-        Reflect.deleteProperty(ledger, name);
+    for (const name of Object.keys(this.#ledger())) {
+      if (this.facts(name)?.signed !== true) {
+        this.#forget(name);
       }
     }
-    this.#deps.vouched.write(ledger);
   }
 
   /**
@@ -193,8 +187,13 @@ export class UsageSignals {
    * it holds, and the build's own catalogue's host.
    */
   vouch(officialHost: string | null): Vouch {
+    // A package the store lists is vouched for only as it is listed now, signed or not; the
+    // ledger answers only for one it no longer lists (removed before its reports left).
     const entry = (name: string): VouchedPackage | undefined => {
-      this.facts(name);
+      const now = this.facts(name);
+      if (now !== null) {
+        return now.signed ? { nodeTypes: now.nodeTypes ?? [], held: now.held ?? {} } : undefined;
+      }
       return Object.hasOwn(this.#ledger(), name) ? this.#ledger()[name] : undefined;
     };
     return {
@@ -219,10 +218,14 @@ export class UsageSignals {
     if (this.#known === null) {
       const listed = this.#deps.packages();
       this.#known = new Map(listed.map((known) => [known.name, factsOf(known)]));
-      // Every package the build vouches for now stays vouched for until its reports are sent.
-      for (const known of listed.filter((each) => this.#official(each))) {
-        const facts = factsOf(known);
-        this.#keep(known.name, { nodeTypes: facts.nodeTypes ?? [], held: facts.held ?? {} });
+      // Every signed package listed now stays vouched for until its reports are sent; one listed
+      // unsigned is not the package an earlier entry of its name vouched for.
+      for (const facts of this.#known.values()) {
+        if (facts.signed) {
+          this.#keep(facts.package, { nodeTypes: facts.nodeTypes ?? [], held: facts.held ?? {} });
+        } else {
+          this.#forget(facts.package);
+        }
       }
     }
     return this.#known.get(name) ?? null;
@@ -257,20 +260,12 @@ export class UsageSignals {
     }
   }
 
-  /**
-   * A deploy's counts with every package the build's catalogue did not sign merged: under
-   * `custom` when another catalogue signed it, `unsigned` when nobody did or the store lists none.
-   */
+  /** A deploy's counts with every package nobody vouches for merged under `unsigned`. */
   #named(perPackage: readonly PackageCount[]): PackageCount[] {
     const counts = new Map<string, number>();
     const vouch = this.vouch(null);
     for (const { package: name, nodes } of perPackage) {
-      const shown =
-        name === CORE_NODES || vouch.package(name)
-          ? name
-          : this.facts(name)?.signed === true
-            ? CUSTOM
-            : UNSIGNED;
+      const shown = name === CORE_NODES || vouch.package(name) ? name : UNSIGNED;
       counts.set(shown, (counts.get(shown) ?? 0) + nodes);
     }
     return [...counts].map(([name, nodes]) => ({ package: name, nodes }));

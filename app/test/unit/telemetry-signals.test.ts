@@ -9,7 +9,8 @@ import { FsTelemetryMarks } from "../../src/adapters/telemetry/marks";
 import { CORE_NODES, deployCounts } from "../../src/application/flows";
 import { PackageCatalogues, type CatalogueReads } from "../../src/application/package-catalogues";
 import { TelemetryPipeline } from "../../src/application/telemetry";
-import { factsOf } from "../../src/application/usage-signals";
+import { factsOf, UsageSignals, type KnownPackage } from "../../src/application/usage-signals";
+import { vouchedFields } from "../../src/domain/telemetry/send-check";
 import { REDACTED } from "../../src/domain/redaction/registry";
 import { redactPayload } from "../../src/domain/telemetry/redact";
 import { WITHHELD } from "../../src/domain/telemetry/redact";
@@ -40,7 +41,13 @@ import {
 import { releaseOf } from "../../src/shell/telemetry";
 import { MAX_BATCH, outgoingFor } from "../../src/domain/telemetry/transports";
 import { RecordingLogger } from "../fakes/children";
-import { ENDPOINTS, settle, telemetryWorld } from "../fakes/telemetry";
+import {
+  ENDPOINTS,
+  memoryVouched,
+  settle,
+  TEST_SIGNAL_DEPS,
+  telemetryWorld,
+} from "../fakes/telemetry";
 
 describe("what a field may hold (plan 0029)", () => {
   it("a step's file is a plain source path inside its package, withheld otherwise", () => {
@@ -679,5 +686,72 @@ describe("the launch marker and the telemetry memory on disk", () => {
     fs.writeFileSync(blocked, "");
     new FsTelemetryMarks(path.join(blocked, "inside"), logger).writeRunning("1.0.0");
     expect(logger.lines.join("\n")).toContain("telemetry-running could not be written");
+  });
+});
+
+describe("what the vouched ledger answers for (plan 0029)", () => {
+  const signed: KnownPackage = {
+    name: "x",
+    installed: true,
+    signed: true,
+    document: { version: "1.0.0", types: [{ id: "t1" }] },
+    held: { "src/a.py": 10 },
+  };
+  const report = {
+    package: "x",
+    version: "6.6.6",
+    signed: true,
+    node_id: "t1",
+    file: "src/a.py",
+    line: 3,
+  };
+
+  function signals(listed: () => readonly KnownPackage[], vouched = memoryVouched()) {
+    const made = new UsageSignals({
+      ...TEST_SIGNAL_DEPS,
+      record: () => true,
+      versions: { appVersion: "1.0.0", os: "darwin", osVersion: "25.3.0", arch: "arm64" },
+      packages: listed,
+      vouched,
+    });
+    return { made, vouched };
+  }
+
+  it("a name the store lists now is vouched for only as it is listed now, never from the ledger", () => {
+    let listed: readonly KnownPackage[] = [signed];
+    const { vouched } = signals(() => listed);
+    signals(() => listed, vouched).made.facts("x");
+    expect(vouched.read()["x"]).toEqual({ nodeTypes: ["t1"], held: { "src/a.py": 10 } });
+    // Reinstalled from another catalogue: named, but its old file is no longer vouched for.
+    listed = [{ ...signed, document: { version: "6.6.6", types: [{ id: "t1" }] }, held: {} }];
+    const again = signals(() => listed, vouched).made;
+    again.prune();
+    expect(vouchedFields(report, again.vouch(null))).toMatchObject({
+      package: "x",
+      version: "6.6.6",
+      node_id: "t1",
+      file: WITHHELD,
+      line: WITHHELD,
+    });
+    // Reinstalled unsigned: not named, and forgotten.
+    listed = [{ ...signed, signed: false }];
+    const unsigned = signals(() => listed, vouched).made;
+    expect(vouchedFields(report, unsigned.vouch(null))).toMatchObject({
+      package: "unsigned",
+      version: null,
+      node_id: null,
+    });
+    expect(vouched.read()["x"]).toBeUndefined();
+  });
+
+  it("prune forgets what the store no longer lists, or lists unsigned", () => {
+    let listed: readonly KnownPackage[] = [signed, { ...signed, name: "y" }];
+    const { vouched } = signals(() => listed);
+    signals(() => listed, vouched).made.facts("x");
+    expect(Object.keys(vouched.read()).sort()).toEqual(["x", "y"]);
+    listed = [{ ...signed, signed: false }];
+    const later = signals(() => listed, vouched).made;
+    later.prune();
+    expect(vouched.read()).toEqual({});
   });
 });

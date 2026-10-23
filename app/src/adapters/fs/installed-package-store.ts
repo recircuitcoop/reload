@@ -33,8 +33,6 @@ export interface StoredPackage extends DeclaredDocument {
   readonly origin?: "catalogue" | "file";
   /** Its source files and line counts, as its record kept them at install (plan 0029). */
   readonly held?: HeldSources;
-  /** The sha256 of the key that verified it, as its record kept it at install (plan 0029). */
-  readonly signerKey?: string;
 }
 
 export class InstalledPackageStore implements PackageStore {
@@ -91,7 +89,6 @@ export class InstalledPackageStore implements PackageStore {
         signed: record.signed,
         ...(record.origin === undefined ? {} : { origin: record.origin.kind }),
         ...(record.sources === undefined ? {} : { held: heldFrom(record.sources) }),
-        ...(typeof record.signerKey === "string" ? { signerKey: record.signerKey } : {}),
         ...(record.python === undefined
           ? {}
           : { python: path.join(folder.root, ...record.python.split("/")) }),

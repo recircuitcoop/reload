@@ -117,7 +117,7 @@ describe("the check at send", () => {
     ).toBeNull();
   });
 
-  it("names no package the build does not vouch for: signed is custom, unsigned is unsigned", () => {
+  it("names no package the store does not vouch for, signed or not", () => {
     const error = {
       event: "package_error",
       version: "1.0.0",
@@ -125,20 +125,23 @@ describe("the check at send", () => {
       file: "src/probe.py",
       line: 7,
     };
-    expect(usage({ ...error, package: "acme_nodes", signed: true })).toMatchObject({
-      package: "custom",
-      version: null,
-      node_id: "custom",
-      file: WITHHELD,
-      line: WITHHELD,
-    });
-    expect(usage({ ...error, package: "acme_nodes", signed: false })).toMatchObject({
-      package: "unsigned",
-      version: null,
-      node_id: null,
-      file: WITHHELD,
-      line: WITHHELD,
-    });
+    for (const signed of [true, false]) {
+      expect(usage({ ...error, package: "acme_nodes", signed })).toMatchObject({
+        package: "unsigned",
+        version: null,
+        node_id: null,
+        file: WITHHELD,
+        line: WITHHELD,
+      });
+    }
+  });
+
+  it("sends no version for a package that is not named, whatever the report carries", () => {
+    for (const pkg of ["unsigned", "custom"]) {
+      expect(
+        usage({ event: "package_updated", package: pkg, version: "1.2.3", from_version: "1.0.0" }),
+      ).toMatchObject({ package: pkg, version: null, from_version: null });
+    }
   });
 
   it("asks the store and the build again for package, node_id, file, line and host", () => {

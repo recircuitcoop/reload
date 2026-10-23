@@ -19,11 +19,11 @@ export const PRIVACY_STRINGS = {
   "privacy.sent.stamp":
     "what kind of report it is and which of the things below happened, when it was made, a random number that tells it apart, and the version of the rules it was checked by", // plan 0029
   "privacy.sent.launches":
-    "when Reload starts and quits: how long it took to start, how many packages are installed and how many of them are unsigned, then each installed package on its own (the package and its version if it ships with Reload or is signed by Reload's own catalogue, one signed by any other catalogue only as custom, an unsigned one only as unsigned; where it came from, whether it is signed, what it runs on), how long Reload ran, why it quit, whether it is its first start, and the version that last ran when it ended without quitting", // plan 0029
+    "when Reload starts and quits: how long it took to start, how many packages are installed and how many of them are unsigned, then each installed package on its own (the package and its version if it ships with Reload or is signed, an unsigned one only as unsigned; where it came from, whether it is signed, what it runs on), how long Reload ran, why it quit, whether it is its first start, and the version that last ran when it ended without quitting", // plan 0029
   "privacy.sent.steps":
-    "every time a step of a package runs, or a package's source starts a run: the package, its version, where it came from, whether it is signed, what it runs on, the kind and type of the step but never its name, how long it took and whether it worked. A package that is not Reload's own is never named: one nobody signed is only called unsigned, one signed by any other catalogue only custom, with neither its version nor its type of step", // plan 0029
+    "every time a step of a package runs, or a package's source starts a run: the package, its version, where it came from, whether it is signed, what it runs on, the kind and type of the step but never its name, how long it took and whether it worked. A package nobody signed is only called unsigned, with neither its version nor its type of step", // plan 0029
   "privacy.sent.errors":
-    "every time such a step, or a package's source, fails: the same, the kind of error when it is a standard one (any other is only other), and the file and line in the package where it happened, only when the package is Reload's own, the file is one of its own and the line is in it. Never the error's message", // plan 0029
+    "every time such a step, or a package's source, fails: the same, the kind of error when it is a standard one (any other is only other), and the file and line in the package where it happened, only when the file is one of the signed package's own and the line is in it. Never the error's message", // plan 0029
   "privacy.sent.aiApps":
     "every time an AI app uses Reload's Anytype tools or reads a file through them: the Anytype package and its version, whether it called a tool or read a file, which of Reload's own Anytype tools, which known AI app it is (any other is only other), how long it took, whether it worked and the error's code, never what it asked, which file, or what it was answered", // plan 0029
   "privacy.sent.flows":
@@ -33,7 +33,7 @@ export const PRIVACY_STRINGS = {
   "privacy.sent.catalogues":
     "when a package catalogue is added or removed: its server's name only if it is Reload's own (a local one is only file, any other only custom), whether it is Reload's own, a short fingerprint of its signing key and how many packages it offers", // plan 0029
   "privacy.sent.installs":
-    "when a package is installed, updated, removed or refused: the package and its versions if it is Reload's own (any other only as custom or unsigned), Reload's own catalogue's server name, or only that it came from another catalogue or a file, whether it is signed, what it runs on, how many step types it brings, and the reason's code, never its words", // plan 0029
+    "when a package is installed, updated, removed or refused: the package and its versions if it is signed (an unsigned one only as unsigned), Reload's own catalogue's server name, or only that it came from another catalogue or a file, whether it is signed, what it runs on, how many step types it brings, and the reason's code, never its words", // plan 0029
   "privacy.sent.updates":
     "when a newer Reload is offered or installed: the versions and the update channel", // plan 0029
   "privacy.sent.address":
