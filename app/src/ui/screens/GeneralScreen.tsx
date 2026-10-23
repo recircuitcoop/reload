@@ -264,6 +264,8 @@ function AiAppsSection({
       },
       (error: unknown) => {
         say({ kind: "failed", text: moveRefusal(String(error), chosen) });
+        // A move with no answer may still have happened: the address drawn is read again.
+        api.mcpEndpoint().then(set, () => undefined);
       },
     );
   };

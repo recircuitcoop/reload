@@ -169,14 +169,16 @@ export function aiAppsLine(status: McpEndpointStatus): string {
  * (domain/endpoint/address.ts) before anything moves, and its refusal says "the MCP address must
  * be …": that is the host line. It refuses a port another program holds by naming the address it
  * could not bind (`127.0.0.1:<port>`): that is "Port … is used by another app". A services process
- * that is not running answers with the channel's own sentence: that is its own line. Anything
- * else (the setting could not be saved) is the generic line.
+ * that is not running, or did not answer, fails with the channel's own sentence: that is its own
+ * line. Anything else (the setting could not be saved) is the generic line.
  */
 export function moveRefusal(reason: string, port: number): string {
-  // The channel's own failure (domain/channel/errors.ts): the call was never sent, so nothing
-  // was half done and nothing was saved; said as that, not as a generic failure.
+  // The channel's own failure (domain/channel/errors.ts). Restarting or down: the call was never
+  // sent, so nothing changed. Otherwise (no answer in time, or it stopped before answering) it
+  // may have been sent and saved, so only that is said.
   if (reason.includes("the Reload services ")) {
-    return t("general.aiApps.servicesDown");
+    const unsent = reason.includes(" is restarting") || reason.includes(" is not restarted");
+    return t(unsent ? "general.aiApps.servicesDown" : "general.aiApps.servicesUnsure");
   }
   if (reason.includes("the MCP address must be")) {
     return t("general.aiApps.hostRefused");

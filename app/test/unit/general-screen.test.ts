@@ -260,12 +260,22 @@ describe("the AI apps section", () => {
   });
 
   it("names a services process that is not running, rather than the generic failure", () => {
-    // Every failure the channel answers with, unsent, when the services process is not running.
-    for (const code of ["restarting", "down", "timeout", "stopped"] as const) {
+    // Restarting or down: the channel never sent the call, so nothing changed. No answer in
+    // time, or a stop before one: the call may have been sent and saved, so that is not said.
+    const said = {
+      restarting: "servicesDown",
+      down: "servicesDown",
+      timeout: "servicesUnsure",
+      stopped: "servicesUnsure",
+    } as const;
+    for (const [code, line] of Object.entries(said) as [
+      keyof typeof said,
+      (typeof said)[keyof typeof said],
+    ][]) {
       const error = `Error: Error invoking remote method 'reload:mcp-endpoint-move': Error: ${
         channelError(code, "services").error
       }`;
-      expect(moveRefusal(error, 40001)).toBe(STRINGS["general.aiApps.servicesDown"]);
+      expect(moveRefusal(error, 40001)).toBe(STRINGS[`general.aiApps.${line}`]);
     }
     expect(channelError("down", "runtime").error).not.toContain("the Reload services ");
   });
