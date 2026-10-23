@@ -14,6 +14,7 @@ export default defineConfig({
   fullyParallel: true,
   // A ceiling, never a wait: tests side by side each take up to twice their time alone.
   timeout: 120_000,
+  expect: { timeout: 10_000 },
   forbidOnly: true,
   // The JSON report is what the parity stage checks ported ids against (plan 0018 §5.3).
   reporter: [["list"], ["json", { outputFile: "../.gate/playwright.json" }]],
