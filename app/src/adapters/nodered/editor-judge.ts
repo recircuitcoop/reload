@@ -14,6 +14,7 @@ import {
   missingSecrets,
 } from "../../domain/forms/coerce";
 import { describedProblems, type Field } from "../../domain/forms/form-model";
+import { hiddenPaths, unhidden } from "../../domain/forms/hidden";
 import { uniqueClashes } from "../../domain/forms/unique";
 import { unkeptSecretsOfNode } from "../../domain/forms/unkept";
 import type { JsonSchema } from "../../domain/packages/declaration";
@@ -93,7 +94,8 @@ export function nodeProblems(entry: Registered, node: Values): NodeProblem[] {
       found.push({ path: `/${name.replaceAll(".", "/")}`, message: "is required" });
     }
   }
-  return found;
+  // Nothing a condition hides is judged while it is hidden, nor said beside it (hidden.ts).
+  return unhidden(found, hiddenPaths(entry.full, values));
 }
 
 /**

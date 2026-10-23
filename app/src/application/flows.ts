@@ -15,8 +15,8 @@
 
 import type { CallOp, OpResult } from "../domain/channel/messages";
 import { remapIds, withoutCredentials, type TabNode } from "../domain/flows/tab";
-import { configOf, emptyRequired, missingSecrets } from "../domain/forms/coerce";
-import { uniqueClashes } from "../domain/forms/unique";
+import { configOf, missingSecrets } from "../domain/forms/coerce";
+import { hiddenPaths, unhidden } from "../domain/forms/hidden";
 import { REFUSED_KEY } from "../domain/forms/kept-on-save";
 import {
   describedProblems,
@@ -39,7 +39,7 @@ import type { RequestGuard } from "../ports/request-guard";
 import type { RunStore } from "../ports/run-store";
 import type { SchemaValidator } from "../ports/schema-validator";
 import { FLOWS_FILE_REFUSED } from "./deploy-guard";
-import { flowSummary, stepName, type FlowSummary } from "./flow-summary";
+import { flowSummary, stepName, valueProblems, type FlowSummary } from "./flow-summary";
 
 export { flowNodeTypeOf, type FlowSummary } from "./flow-summary";
 
@@ -563,22 +563,21 @@ export class FlowAdmin {
       }),
     );
     const known = new Set([...declared.map(([key]) => key), ...secrets]);
-    const checked = this.#deps.validator.check(plainSchema, configOf(type.config, plain));
-    const problems = [
+    const config = configOf(type.config, plain);
+    const found = [
       ...Object.keys(values)
         .filter((key) => !known.has(key))
         .map((key) => ({ path: `/${key}`, message: "is not a declared property" })),
-      ...checked,
-      ...emptyRequired(plainSchema, configOf(type.config, plain), "", checked),
-      ...uniqueClashes(plainSchema, configOf(type.config, plain)),
+      ...valueProblems(this.#deps.validator, plainSchema, config),
     ];
-    const config = configOf(type.config, plain);
     if (secrets.size > 0) {
       const set = new Set([...(await this.#deps.engine.secretsSet(node)), ...Object.keys(given)]);
       for (const name of missingSecrets(type.config, config, set)) {
-        problems.push({ path: `/${name.replaceAll(".", "/")}`, message: "is required" });
+        found.push({ path: `/${name.replaceAll(".", "/")}`, message: "is required" });
       }
     }
+    // Nothing a condition hides is judged while it is hidden (hidden.ts).
+    const problems = unhidden(found, hiddenPaths(type.config, config));
     if (problems.length > 0) {
       const params = { step: stepName(node, type), what: describedProblems(type.config, problems) };
       return refuse("invalid", `${params.step} isn't set up yet. ${params.what}`, {

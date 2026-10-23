@@ -192,7 +192,9 @@ Either may annotate an array's `items`, so a list of paths has Browse… on each
 Two more keys may stand alone (plan 0032). `shown` (`{"when": "<property>", "equals": v}`)
 draws the property only while the sibling property `when` (of the same object: the form's
 top, a group, or one table row) holds `v`, compared strictly, so the number 1 is not a switch
-that is on; a hidden property keeps its value. `when` naming the property itself or anything
+that is on; a hidden property keeps its value, and while hidden it is not judged at all,
+required or not: not by the runtime at start, by Setup, by whether the step is set up, nor by
+the canvas form, which draws no reason beside it. `when` naming the property itself or anything
 but a sibling, or a `v` the sibling cannot hold, refuses the declaration. `unique` (`true`)
 marks the one column of a table's row whose value no two rows may share: a text (not several
 lines), a number or a choice, never a secret, a list, a group or a table, and never outside a

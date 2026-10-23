@@ -31,7 +31,8 @@
 import { Ajv2020 } from "ajv/dist/2020.js";
 
 import { browseUrl } from "../../domain/forms/browse";
-import { emptyRequired } from "../../domain/forms/coerce";
+import { coerceObject, emptyRequired } from "../../domain/forms/coerce";
+import { hiddenPaths, unhidden } from "../../domain/forms/hidden";
 import {
   droppedSentence,
   keptOnSave,
@@ -425,7 +426,7 @@ function save(type: string, node: Values): boolean {
   // held, as the runtime refuses it (coerce.ts emptyRequired).
   const check = (value: Values) => {
     const found = entry.validate(value) ? [] : problems(entry.validate);
-    return [
+    const all = [
       ...found,
       ...emptyRequired(entry.schema, value, "", found).filter(({ path }) =>
         /\/\d+(\/|$)/.test(path),
@@ -433,6 +434,8 @@ function save(type: string, node: Values): boolean {
       // A row repeating another's unique value is refused, each naming the other (unique.ts).
       ...uniqueClashes(entry.schema, value),
     ];
+    // Nothing a condition hides is judged while it is hidden (hidden.ts).
+    return unhidden(all, hiddenPaths(entry.full, coerceObject(entry.schema, value)));
   };
   const origins = originsOf(entry.fields, submitted, originOf);
   const kept = keptOnSave(entry.schema, ownOf(entry, node), submitted, check, origins);

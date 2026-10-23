@@ -377,6 +377,21 @@ describe("a generated type's instance", () => {
     expect(started).toEqual(["one"]);
   });
 
+  it("starts with a required secret its condition hides left unset, and refuses it once shown", () => {
+    setUp(undefined, undefined, (config) => {
+      const token = config.properties["token"];
+      if (token !== undefined) {
+        token["reload"] = { shown: { when: "mode", equals: "fast" } };
+      }
+    });
+    const slow = create(PROBE, probeConfig("hidden", { mode: "slow" }));
+    expect(slow.errors).toEqual([]);
+    expect(started).toEqual(["hidden"]);
+    const fast = create(PROBE, probeConfig("shown", { mode: "fast" }));
+    expect(fast.errors[0]).toContain("token is required");
+    expect(started).toEqual(["hidden"]);
+  });
+
   it("starts nothing when its command cannot run here, and says why", () => {
     setUp(() => {
       throw new Error("the command declares nothing for this platform");

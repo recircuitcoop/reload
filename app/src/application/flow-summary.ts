@@ -7,9 +7,10 @@
 import { health, type FlowHealth } from "../domain/flows/health";
 import { wireOrder, type TabNode } from "../domain/flows/tab";
 import { configOf, emptyRequired, missingSecrets } from "../domain/forms/coerce";
+import { hiddenPaths, unhidden } from "../domain/forms/hidden";
 import { uniqueClashes } from "../domain/forms/unique";
 import { secretKeys, withoutSecrets } from "../domain/forms/form-model";
-import type { LoadedType } from "../domain/packages/declaration";
+import type { FieldProblem, JsonSchema, LoadedType } from "../domain/packages/declaration";
 import type { Run, RunState } from "../domain/runs/run";
 import type { FlowEngine, FlowMetaStore, FlowNodeType, FlowTab } from "../ports/flow-admin";
 import type { RunStore } from "../ports/run-store";
@@ -156,6 +157,23 @@ export function recentRuns(flowId: string, store: Pick<RunStore, "list">): Run[]
 }
 
 /**
+ * What is wrong with a step's plain values, as the runtime judges them (registration.ts): its
+ * schema's refusals, a required value left empty (said once), a row repeating a unique value.
+ */
+export function valueProblems(
+  validator: Pick<SummaryDeps["validator"], "check">,
+  plain: JsonSchema,
+  config: Readonly<Record<string, unknown>>,
+): FieldProblem[] {
+  const checked = validator.check(plain, config);
+  return [
+    ...checked,
+    ...emptyRequired(plain, config, "", checked),
+    ...uniqueClashes(plain, config),
+  ];
+}
+
+/**
  * Whether a step is set up: its config passes its schema, and every required secret is set.
  * The same rules its instance is constructed by (adapters/nodered/registration.ts).
  */
@@ -166,11 +184,9 @@ export async function isSetUp(
 ): Promise<boolean> {
   const config = configOf(type.config, node);
   const plain = withoutSecrets(type.config);
-  const judged = [
-    ...deps.validator.check(plain, config),
-    ...emptyRequired(plain, config),
-    ...uniqueClashes(plain, config),
-  ];
+  // Nothing a condition hides is judged while it is hidden (hidden.ts).
+  const hidden = hiddenPaths(type.config, config);
+  const judged = unhidden(valueProblems(deps.validator, plain, config), hidden);
   if (judged.length > 0) {
     return false;
   }
@@ -180,7 +196,10 @@ export async function isSetUp(
     return true;
   }
   const set = await deps.engine.secretsSet(node);
-  return missingSecrets(type.config, config, set).length === 0;
+  const missing = missingSecrets(type.config, config, set).map((name) => ({
+    path: `/${name.replaceAll(".", "/")}`,
+  }));
+  return unhidden(missing, hidden).length === 0;
 }
 
 /** A generated type, as flow administration reads it. */

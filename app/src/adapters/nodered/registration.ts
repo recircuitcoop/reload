@@ -26,6 +26,7 @@
 
 import { configOf, credentialsOf, emptyRequired, withCredentials } from "../../domain/forms/coerce";
 import { secretKeys } from "../../domain/forms/form-model";
+import { hiddenPaths, unhidden } from "../../domain/forms/hidden";
 import { uniqueClashes } from "../../domain/forms/unique";
 import { unkeptSecretsOfNode } from "../../domain/forms/unkept";
 import { payloadRefusal, USER_EVENTS_PACKAGE } from "../../domain/events/event-types";
@@ -216,13 +217,12 @@ export class TypeRegistration {
     const credentials = credentialsOf(schema, node.credentials ?? {});
     // Validated with its credentials, so a required secret never set is refused too.
     const checked = validator.check(schema, withCredentials(config, credentials));
-    const problems = [
-      ...checked,
-      // A required text left empty, or a required table with no rows (coerce.ts), and a row
-      // repeating another's unique value (unique.ts).
-      ...emptyRequired(schema, config, "", checked),
-      ...uniqueClashes(schema, config),
-    ];
+    // A required text left empty, or a required table with no rows (coerce.ts), and a row
+    // repeating another's unique value (unique.ts); nothing a condition hides (hidden.ts).
+    const problems = unhidden(
+      [...checked, ...emptyRequired(schema, config, "", checked), ...uniqueClashes(schema, config)],
+      hiddenPaths(schema, config),
+    );
     // A secret no credential can hold, found in the flow: never handed over (unkept.ts).
     const unkept = unkeptSecretsOfNode(schema, raw).map((path) => ({
       path: `/${path}`,
