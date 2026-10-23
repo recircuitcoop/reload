@@ -7,8 +7,9 @@
 // * The MCP child starts only after the health gate passes. Anytype not running is a state,
 //   not retried on a timer (helper/restart.py: a failed start changes nothing by waiting, and
 //   costs no attempt of the crash-loop budget). The person is told once, and Anytype is asked
-//   again when the person acts (Check again, coming back to the window) or Reload sees the
-//   Anytype desktop app start: `checkAgain`.
+//   again when the person acts (Check again, coming back to Reload) or once when the shell says
+//   what the launch did (a bounded wait only for an Anytype Reload has just started):
+//   `checkAgain`.
 // * The handshake runs and tools/list must match the committed surface exactly, or the state
 //   is `tool-surface-mismatch`, named, and the child is not restarted.
 // * A child that exits, or that the heartbeat judges stale, is restarted under the domain
@@ -223,14 +224,18 @@ export class AnytypeService {
     const child = this.#child;
     this.#child = null;
     this.#setState("stopped", null);
+    // A stopped Reload reaches nothing: `reload --status` must not keep saying it cannot.
+    this.#deps.notifier.clear("anytype-unreachable", ANYTYPE);
     await child?.stop();
   }
 
   /**
    * Ask an Anytype that did not answer again, once: the person acted (Check again, coming back
-   * to the window), or Reload saw the Anytype desktop app start. Any other state is left alone.
+   * to Reload), or the shell said what the launch did. Any other state is left alone.
    */
   checkAgain(waitMs = 0): void {
+    // Whatever comes of this ask, the start is over: from now on an unanswered Anytype is told.
+    this.#quiet = false;
     if ((this.#state !== "unreachable" && this.#state !== "starting") || this.#child !== null) {
       return;
     }
@@ -242,7 +247,6 @@ export class AnytypeService {
         ? `asking Anytype again, for up to ${String(waitMs / 1000)} s while it comes up`
         : "asking Anytype again",
     );
-    this.#quiet = false;
     // A plain ask (focus, Check again) never cuts short the wait for an Anytype just launched.
     this.#waitUntil = Math.max(this.#waitUntil, this.#now() + waitMs);
     this.#retry?.();
@@ -526,6 +530,10 @@ export class AnytypeService {
   }
 
   #setState(state: AnytypeState, detail: string | null): void {
+    // Paired at last: the quiet of the start was for a launch, not for a key that came later.
+    if (this.#state === "no-key" && state !== "no-key") {
+      this.#quiet = false;
+    }
     if (state !== this.#state || detail !== this.#detail) {
       this.#deps.logger.info(`anytype: ${state}${detail === null ? "" : ` (${detail})`}`);
     }

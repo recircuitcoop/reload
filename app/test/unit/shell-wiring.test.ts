@@ -229,10 +229,14 @@ describe("wireQuit, wireServiceCalls, wireDesktop and the e2e hooks", () => {
     tell();
     // Started by Reload: its API gets 60 s, asked once for this process.
     expect(asked).toEqual([["anytype.check", { waitMs: 60_000 }]]);
-    // A services process restarted after a crash starts quiet too: it is told again.
+    // A services process restarted after a crash starts quiet too: it is told again, with no
+    // wait, since the launch is long over.
     status = { state: "running", generation: 2 };
     tell();
-    expect(asked).toHaveLength(2);
+    expect(asked).toEqual([
+      ["anytype.check", { waitMs: 60_000 }],
+      ["anytype.check", { waitMs: 0 }],
+    ]);
     // Adopted, missing or failed: asked at once, with no wait, as the old launcher did.
     for (const state of ["adopted", "missing", "failed"] as const) {
       const once: unknown[] = [];

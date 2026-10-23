@@ -132,6 +132,9 @@ describe("bringing the MCP child up", () => {
     expect(ctx.api.probes).toHaveLength(2);
     expect(ctx.subject.status().state).toBe("unreachable");
     expect(ctx.launcher.children).toEqual([]);
+    // Quit: what was said about reaching Anytype is withdrawn with the service.
+    await ctx.subject.stop();
+    expect(ctx.notifier.cleared).toContain("anytype-unreachable Anytype");
   });
 
   it("an Anytype Reload has just launched is waited for, up to 60 s, while its API comes up", async () => {
@@ -186,6 +189,33 @@ describe("bringing the MCP child up", () => {
     await ctx.advance(10_000, ANYTYPE_WAIT_STEP_MS);
     expect(ctx.notifier.notices).toEqual([]);
     expect(ctx.subject.status().state).toBe("unreachable");
+  });
+
+  it("the quiet of the start ends when the shell's ask finds nothing to do: a later miss is told", async () => {
+    const ctx = await running();
+    expect(ctx.subject.status().state).toBe("ready");
+    // The shell's ask after the launch: the child is up, so it asks nothing.
+    ctx.subject.checkAgain(0);
+    await ctx.advance(0);
+    // Anytype goes away and the child exits: its restart finds Anytype silent, and says so.
+    ctx.api.up = false;
+    ctx.launcher.current.exit(1);
+    await ctx.advance(250, 250);
+    expect(ctx.subject.status().state).toBe("unreachable");
+    expect(ctx.notifier.notices.map((n) => n.kind)).toEqual(["anytype-unreachable"]);
+  });
+
+  it("the quiet of the start ends when a key arrives: a pairing whose Anytype then goes silent is told", async () => {
+    const ctx = await running({ key: null });
+    expect(ctx.subject.status().state).toBe("no-key");
+    await ctx.subject.startPairing();
+    await ctx.subject.completePairing("1234");
+    ctx.api.up = false;
+    await ctx.advance(0);
+    ctx.launcher.current.exit(1);
+    await ctx.advance(250, 250);
+    expect(ctx.subject.status().state).toBe("unreachable");
+    expect(ctx.notifier.notices.map((n) => n.kind)).toEqual(["anytype-unreachable"]);
   });
 
   it("tells the person once, logs once per state, and asks again only when asked to", async () => {

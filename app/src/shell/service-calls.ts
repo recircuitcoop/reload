@@ -30,7 +30,8 @@ export function wireServiceCalls(
   // is not reported unreachable on every launch); adopted, missing or failed, it is asked once,
   // as the old launcher did, with no wait.
   void anytypeApp.then((state) => {
-    const waitMs = state === "started" ? ANYTYPE_START_WAIT_MS : 0;
+    // The wait is for the launch: only the first ask after it, never a restarted process's.
+    let launched = state === "started";
     // Once for each generation of the services process: a restarted one starts quiet too.
     let asked = 0;
     const ask = (): void => {
@@ -39,7 +40,8 @@ export function wireServiceCalls(
         return;
       }
       asked = generation;
-      void services.call("anytype.check", { waitMs });
+      void services.call("anytype.check", { waitMs: launched ? ANYTYPE_START_WAIT_MS : 0 });
+      launched = false;
     };
     services.onStatus(ask);
     ask();
