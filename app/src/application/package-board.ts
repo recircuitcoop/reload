@@ -51,7 +51,9 @@ import {
   type PackageEnvironmentPorts,
 } from "./package-environment";
 import {
+  brokenRows,
   contentCheck,
+  installingRows,
   findingFacet,
   goBackOffer,
   latestAsked,
@@ -287,29 +289,7 @@ export class PackageBoard {
               : origin.source,
       });
     }
-    // A package being installed has its row from its first phase with a name.
-    for (const progress of this.#installing.values()) {
-      if (progress.name === null || rows.some((row) => row.package.name === progress.name)) {
-        continue;
-      }
-      rows.push({
-        package: {
-          name: progress.name,
-          version: "",
-          source: { kind: "catalogue" },
-          signed: false,
-          shipped: false,
-          registration: null,
-          installation: {
-            state: "installing",
-            progress: progress.percent,
-            verifiedAt: progress.verifiedAt,
-          },
-          update: null,
-        },
-        publisher: null,
-      });
-    }
+    rows.push(...installingRows(this.#installing.values(), rows), ...brokenRows(roots, now));
     const offers = [...state.catalogue, ...state.sources.flatMap((source) => source.offers)]
       .filter((offer) => offer.installable && offer.verified && !offer.installed)
       .filter((offer) => offer.shadowedBy === null)

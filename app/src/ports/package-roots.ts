@@ -67,6 +67,16 @@ export interface LivePackage {
   readonly folder: PackageFolder;
 }
 
+/**
+ * A live package folder whose record cannot be read, is no record of an installed package, or
+ * names another package (plan 0032, group 29): shown as broken, with why, and removable, never
+ * hidden nor standing in for the package it names.
+ */
+export interface BrokenPackage {
+  readonly name: string;
+  readonly reason: string;
+}
+
 /** One package's folder in one of the roots. */
 export interface PackageFolder {
   readonly root: string;
@@ -126,6 +136,8 @@ export interface PackageRoots {
   installed(name: string): InstalledRecord | undefined;
   /** Every live package with a record, by name (WI-0018-16). */
   list(): readonly LivePackage[];
+  /** The live folders whose record is broken, by name, each with why. */
+  broken(): readonly BrokenPackage[];
   /**
    * Take `name` away whole: its live folder (files, environment and record) and what the last
    * swap kept of it. Does nothing when it is not installed.

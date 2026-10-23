@@ -415,6 +415,53 @@ describe("FsPackageRoots: the live root is sealed (WI-0018-16, spec 11.4)", () =
     });
   });
 
+  it("lists a package whose record cannot be read, or is no record of one, as broken, saying why, and the others as usual", () => {
+    const records: [string, RegExp][] = [
+      ["{ not json", /^its record could not be read: /],
+      ['["/home/someone/git/monty"]', /^its record is not a record of an installed package$/],
+      ['{"package": "monty"}', /^its record is malformed: it names no package or no version$/],
+      ['{"package": "monty", "version": ""}', /^its record is malformed/],
+      ['{"package": 1, "version": "1.0"}', /^its record is malformed/],
+      ["null", /^its record is not a record of an installed package$/],
+    ];
+    stageComplete("1", "whodunnit");
+    roots.swapIn("whodunnit");
+    for (const [written, reason] of records) {
+      stageComplete("1");
+      roots.swapIn("monty");
+      unsealTree(roots.live);
+      fs.writeFileSync(path.join(roots.live, "monty", "installed.json"), written);
+      // One broken, not both.
+      expect(roots.list().map(({ record }) => record.package)).toEqual(["whodunnit"]);
+      expect(roots.broken()).toEqual([
+        { name: "monty", reason: expect.stringMatching(reason) as string },
+      ]);
+      roots.remove("monty");
+    }
+    expect(roots.broken()).toEqual([]);
+  });
+
+  it("lists a package whose record names another as broken, naming it, never under the other's name", () => {
+    stageComplete("1", "whodunnit");
+    roots.swapIn("whodunnit");
+    stageComplete("2");
+    roots.swapIn("monty");
+    unsealTree(roots.live);
+    fs.writeFileSync(
+      path.join(roots.live, "monty", "installed.json"),
+      JSON.stringify({ ...record("2"), package: "whodunnit" }),
+    );
+    expect(roots.list().map(({ record: listed }) => `${listed.package} ${listed.version}`)).toEqual(
+      ["whodunnit 1"],
+    );
+    expect(roots.broken()).toEqual([
+      { name: "monty", reason: "its record names another package, whodunnit" },
+    ]);
+    unsealTree(base);
+    fs.rmSync(roots.live, { recursive: true, force: true });
+    expect(roots.broken()).toEqual([]);
+  });
+
   it("removes a package whole, what the last swap kept of it too, and only it", () => {
     stageComplete("1", "other");
     roots.swapIn("other");

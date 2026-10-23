@@ -323,6 +323,28 @@ describe("from a folder (plan 0013)", () => {
   });
 });
 
+describe("a broken package (plan 0032, group 29)", () => {
+  it("is shown with why and a Remove, never hidden, and the others as usual", async () => {
+    const { board } = setUp();
+    await board.start();
+    await board.installFolder(writeFolder("monty", "0.1.0"));
+    await board.installFolder(writeFolder("whodunnit", "0.2.0"));
+    unsealTree(roots.live);
+    fs.writeFileSync(path.join(roots.live, "monty", "installed.json"), "{ not json");
+    const rows = (await board.board()).rows;
+    expect(rows.map((each) => each.package.name)).toEqual(["whodunnit", "monty"]);
+    const broken = row({ rows, offers: [] }, "monty");
+    expect(broken.installation).toMatchObject({
+      state: "failed-check",
+      broken: expect.stringMatching(/^its record could not be read: /) as string,
+    });
+    expect(broken.version).toBe("");
+    expect(rowActions(broken, new Date(now))).toEqual({ enabled: ["remove"], disabled: [] });
+    expect(await board.remove("monty", [])).toEqual({ ok: true });
+    expect((await board.board()).rows.map((each) => each.package.name)).toEqual(["whodunnit"]);
+  });
+});
+
 describe("shipped packages and install phases", () => {
   it("a shipped package is checked at start against this build's manifest, never against what this machine saw first", async () => {
     const shipped = shippedPackage("reload_anytype");

@@ -343,7 +343,7 @@ export function wordInstallation(installation: Installation): string {
     case "verifying":
       return t("packages.verifying");
     case "failed-check":
-      return t("packages.failedCheck");
+      return t(installation.broken === undefined ? "packages.failedCheck" : "packages.broken");
   }
 }
 

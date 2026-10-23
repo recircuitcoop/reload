@@ -315,7 +315,7 @@ describe("install from the catalogue", () => {
     expect(restarts).toHaveLength(1);
   });
 
-  it("refuses an install over a record that cannot be read, and removes nothing blind", async () => {
+  it("refuses an install over a record that cannot be read, shows it as broken, and removes it once asked", async () => {
     served.set(ARCHIVE_URL, signedArchive(packageFiles(), signer));
     const { installer, remover } = setUp();
     await installer.installFromCatalogue("pinger");
@@ -325,13 +325,18 @@ describe("install from the catalogue", () => {
     expect(!again.ok && again.error).toMatch(
       /^Not installed: pinger is installed, and its record cannot be read \(.*\); remove it first\.$/,
     );
-    const removal = await remover.remove("pinger");
-    expect(!removal.ok && removal.error).toMatch(
-      /^Not removed: its record cannot be read \(.*\), so nothing is removed\.$/,
-    );
-    expect(fs.existsSync(path.join(roots.live, "pinger", "package", "node.js"))).toBe(true);
-    // Unreadable, it is listed nowhere.
+    // Unreadable, it is no installed package, and it is listed as broken, saying why.
     expect(roots.list()).toEqual([]);
+    expect(roots.broken()).toEqual([
+      {
+        name: "pinger",
+        reason: expect.stringMatching(/^its record could not be read: /) as string,
+      },
+    ]);
+    // "Remove it first" can be done: removed by its folder's name, as no flow uses it.
+    expect(await remover.remove("pinger")).toEqual({ ok: true, message: "pinger is removed." });
+    expect(fs.existsSync(path.join(roots.live, "pinger"))).toBe(false);
+    expect(roots.broken()).toEqual([]);
   });
 
   it("refuses an entry it cannot install, an unverified catalogue, and a fetch that fails", async () => {

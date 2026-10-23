@@ -184,6 +184,17 @@ const NOT_A_LINE: ReadonlySet<string> = new Set([
   "Copy setup for Codex",
   "Go back to 0.2.1",
   "Go back to 0.3",
+  // A table's controls in the canvas form, drawn in Node-RED's page by
+  // adapters/nodered/editor-table.ts (TABLE_WORDS), which cannot read strings.ts.
+  "recorder 1 holds values. Remove it?",
+  "row",
+  "Add recorder",
+  "Remove it",
+  "Keep it",
+  "More (3)",
+  "Fewer",
+  "Collapse",
+  "Expand",
   // Names of states and words a person reads elsewhere under a key of their own.
   "Transcribing",
   "Summarising",

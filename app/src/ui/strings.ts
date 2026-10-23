@@ -424,6 +424,7 @@ export const STRINGS = {
   "packages.installing": "Installing · {percent}%",
   "packages.verifying": "Verifying…",
   "packages.failedCheck": "Failed its check",
+  "packages.broken": "Broken",
   "packages.install": "Install",
   "packages.installAgain": "Install again", // decided (WI-0022-19): a package that failed its check
   "packages.shippedFailed": "Reinstall Reload to restore it.", // decided (WI-0022-19)

@@ -46,8 +46,16 @@ export type Installation =
   /** `progress` is a whole percentage, 0 to 100, across fetching, verifying, building, swapping. */
   | (Verified & { readonly state: "installing"; readonly progress: number })
   | (Verified & { readonly state: "verifying" })
-  /** `reason` is the step of the install order that refused it (domain/packages/archive.ts). */
-  | (Verified & { readonly state: "failed-check"; readonly reason: RefusalReason });
+  /**
+   * `reason` is the step of the install order that refused it (domain/packages/archive.ts);
+   * `broken`, when its live record is broken (plan 0032, group 29), says why, and only Remove
+   * is offered: nothing else can be judged of a package nobody can read.
+   */
+  | (Verified & {
+      readonly state: "failed-check";
+      readonly reason: RefusalReason;
+      readonly broken?: string;
+    });
 
 export type PackageUpdate =
   | (Verified & { readonly state: "up-to-date" })
@@ -444,7 +452,9 @@ export function rowActions(pkg: Package, now: Date): RowActions {
     } else if (pkg.installation.state === "failed-check") {
       if (!pkg.shipped) {
         offer("remove", !busy);
-        offer("install", !busy);
+        if (pkg.installation.broken === undefined) {
+          offer("install", !busy);
+        }
       }
     } else {
       offer("install", !busy);

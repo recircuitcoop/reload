@@ -9,12 +9,13 @@ import {
   rollbackOffered,
   ROLLBACK_WINDOW_MS,
   type Installation,
+  type Package,
   type PackageUpdate,
   type Registration,
 } from "../domain/packages/states";
 import type { VersionFinding } from "../domain/packages/versions";
 import { UNREAD_BLOCKS } from "../ports/blocked-updates";
-import type { InstalledRecord } from "../ports/package-roots";
+import type { InstalledRecord, PackageRoots } from "../ports/package-roots";
 import type { ListedPackage } from "./install-package";
 import { inspectPackage, type PackageEnvironmentPorts } from "./package-environment";
 
@@ -185,4 +186,66 @@ export function latestAsked(
     };
   }
   return mine?.value ?? { update: null, unreadable: false };
+}
+
+/** A package being installed has its row from its first phase with a name, until it is listed. */
+export function installingRows(
+  installing: Iterable<{
+    readonly name: string | null;
+    readonly percent: number;
+    readonly verifiedAt: Date;
+  }>,
+  listed: readonly { readonly package: Package }[],
+): { package: Package; publisher: null }[] {
+  return [...installing].flatMap((progress) =>
+    progress.name === null || listed.some((row) => row.package.name === progress.name)
+      ? []
+      : [
+          {
+            package: {
+              name: progress.name,
+              version: "",
+              source: { kind: "catalogue" as const },
+              signed: false,
+              shipped: false,
+              registration: null,
+              installation: {
+                state: "installing" as const,
+                progress: progress.percent,
+                verifiedAt: progress.verifiedAt,
+              },
+              update: null,
+            },
+            publisher: null,
+          },
+        ],
+  );
+}
+
+/**
+ * A live package whose record is broken has a row of its own (plan 0032, group 29): a failed
+ * check saying why, with Remove only, so the package somebody most needs to reach is listed.
+ */
+export function brokenRows(
+  roots: Pick<PackageRoots, "broken">,
+  now: Date,
+): { package: Package; publisher: null }[] {
+  return roots.broken().map(({ name, reason }) => ({
+    package: {
+      name,
+      version: "",
+      source: { kind: "catalogue" },
+      signed: false,
+      shipped: false,
+      registration: null,
+      installation: {
+        state: "failed-check",
+        reason: "unreadable",
+        broken: reason,
+        verifiedAt: now,
+      },
+      update: null,
+    },
+    publisher: null,
+  }));
 }

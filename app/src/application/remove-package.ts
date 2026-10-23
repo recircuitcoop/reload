@@ -62,18 +62,22 @@ export class PackageRemover {
       if (this.#ports.shipped().includes(name)) {
         return this.#refused(name, `${name} is shipped with Reload and cannot be removed`);
       }
+      // A package whose record is broken is listed as broken with a Remove (plan 0032, group
+      // 29): it is removed by its folder's name, still only once no flow uses its types.
+      const broken = roots.broken().find((each) => each.name === name);
       let record: InstalledRecord | undefined;
-      try {
-        record = roots.installed(name);
-      } catch (error) {
-        // Nothing is removed blind: a record that cannot be read says nothing about the rest.
-        return this.#refused(
-          name,
-          `its record cannot be read (${(error as Error).message}), so nothing is removed`,
-        );
-      }
-      if (record === undefined) {
-        return this.#refused(name, `${name} is not installed`);
+      if (broken === undefined) {
+        try {
+          record = roots.installed(name);
+        } catch (error) {
+          return this.#refused(
+            name,
+            `its record cannot be read (${(error as Error).message}), so nothing is removed`,
+          );
+        }
+        if (record === undefined) {
+          return this.#refused(name, `${name} is not installed`);
+        }
       }
       let usage: TypesInUse;
       try {
@@ -100,17 +104,27 @@ export class PackageRemover {
       }
 
       roots.remove(name);
-      this.#ports.signal?.(packageRemoved(recordFacts(record)), record);
+      if (record !== undefined) {
+        this.#ports.signal?.(packageRemoved(recordFacts(record)), record);
+      }
       this.#ports.forgetGenerated(name);
       const took = await this.#ports.restartRuntime(`${name} was removed`);
+      const what =
+        record === undefined
+          ? `${name} (broken: ${broken?.reason ?? ""})`
+          : `${name} ${record.version}`;
       logger.info(
-        `remove: ${name} ${record.version} is gone, with its environment, record and generated ` +
+        `remove: ${what} is gone, with its environment, record and generated ` +
           "modules; " +
           (took === null
             ? "the runtime was not running"
             : `only the runtime restarted, in ${String(took)} ms`),
       );
-      return { ok: true, message: `${name} ${record.version} is removed.` };
+      return {
+        ok: true,
+        message:
+          record === undefined ? `${name} is removed.` : `${name} ${record.version} is removed.`,
+      };
     });
   }
 

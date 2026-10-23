@@ -18,6 +18,7 @@ import * as path from "node:path";
 
 import type { Logger } from "../../ports/logger";
 import type {
+  BrokenPackage,
   InstalledRecord,
   LivePackage,
   PackageFolder,
@@ -356,19 +357,57 @@ export class FsPackageRoots implements PackageRoots {
     }
     const found: LivePackage[] = [];
     for (const name of names.sort()) {
-      let record: InstalledRecord | undefined;
-      try {
-        record = this.installed(name);
-      } catch {
-        // A record that cannot be read lists nothing; the installer still refuses the name.
-        continue;
-      }
-      // A folder with no record is not an installed package, whatever else it holds.
-      if (record !== undefined) {
-        found.push({ record, folder: folderIn(path.join(this.live, name)) });
+      // A broken record lists nothing here, and is shown by `broken()`; the installer still
+      // refuses the name. A folder with no record is not an installed package at all.
+      const read = this.#judged(name);
+      if (read !== undefined && "record" in read) {
+        found.push({ record: read.record, folder: folderIn(path.join(this.live, name)) });
       }
     }
     return found;
+  }
+
+  broken(): readonly BrokenPackage[] {
+    let names: string[];
+    try {
+      names = fs.readdirSync(this.live).filter((name) => PACKAGE_NAME.test(name));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return [];
+      }
+      throw error;
+    }
+    return names.sort().flatMap((name) => {
+      const read = this.#judged(name);
+      return read !== undefined && "reason" in read ? [{ name, reason: read.reason }] : [];
+    });
+  }
+
+  /**
+   * A live folder's record judged: the record, or why the package is broken (one that cannot be
+   * read, is no record of an installed package, or names another one); undefined with none.
+   */
+  #judged(name: string): { record: InstalledRecord } | { reason: string } | undefined {
+    let record: unknown;
+    try {
+      record = this.installed(name);
+    } catch (error) {
+      return { reason: `its record could not be read: ${(error as Error).message}` };
+    }
+    if (record === undefined) {
+      return undefined;
+    }
+    if (typeof record !== "object" || record === null || Array.isArray(record)) {
+      return { reason: "its record is not a record of an installed package" };
+    }
+    const { package: named, version } = record as Record<string, unknown>;
+    if (typeof named !== "string" || typeof version !== "string" || version === "") {
+      return { reason: "its record is malformed: it names no package or no version" };
+    }
+    if (named !== name) {
+      return { reason: `its record names another package, ${named}` };
+    }
+    return { record: record as InstalledRecord };
   }
 
   remove(name: string): void {

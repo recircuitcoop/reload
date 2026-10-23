@@ -115,10 +115,15 @@ function facetsOf(pkg: Pkg, now: Date): PackageFacet[] {
     });
   }
   if (pkg.installation !== null) {
+    const broken = pkg.installation.state === "failed-check" ? pkg.installation.broken : undefined;
     facets.push({
       state: INSTALLATION_PILL[pkg.installation.state],
       label: wordInstallation(pkg.installation),
       checked: wordChecked(pkg.installation.verifiedAt, now),
+      // A broken package is shown with why, never hidden (plan 0032, group 29).
+      ...(broken === undefined
+        ? {}
+        : { reason: { text: broken, testid: `packages-row-${pkg.name}-broken` } }),
     });
   }
   if (pkg.update !== null) {

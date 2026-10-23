@@ -776,3 +776,33 @@ test("no state without checked-when", async () => {
     });
   }
 });
+
+test("a package whose record is broken is shown with why, and removed", async () => {
+  test.setTimeout(3 * 60_000);
+  const { scratch, userData, env } = scratchDirectories();
+  const apps: ElectronApplication[] = [];
+  try {
+    // A live folder whose record cannot be read, as a cut-short write or a hand edit leaves it.
+    const live = path.join(userData, "node-packages", "packages", "brokenkit");
+    fs.mkdirSync(path.join(live, "package"), { recursive: true });
+    fs.writeFileSync(path.join(live, "installed.json"), "{ not json");
+    const { app, window } = await launchApp(env);
+    apps.push(app);
+    await waitForRunning(window, "runtime");
+    const general = await openGeneral(window);
+    const row = packageRow(general, "brokenkit");
+    await expect(row).toContainText(STRINGS["packages.broken"], { timeout: 30_000 });
+    await expect(row.getByTestId("packages-row-brokenkit-broken")).toContainText(
+      "its record could not be read",
+    );
+    await expect(row.getByTestId("package-remove")).toBeEnabled();
+    await row.getByTestId("package-remove").click();
+    await expect(row).toHaveCount(0, { timeout: 30_000 });
+    expect(fs.existsSync(live)).toBe(false);
+    await quit(app);
+  } finally {
+    await cleanUp(apps, scratch, () => {
+      unsealTree(scratch);
+    });
+  }
+});
