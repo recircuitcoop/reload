@@ -189,9 +189,12 @@ export class TelemetryPipeline {
   answer(on: boolean): void {
     this.#deps.setting.writeTelemetry(on);
     this.#deps.logger.info(`telemetry is turned ${on ? "on" : "off"}`);
-    // An answer is a change: an off after it empties the queue again, and owes a purge.
+    // An answer is a change: an off after it empties the queue again, and owes a purge (read from
+    // its marker). A yes keeps a purge this launch still owes, stored or not.
     this.#purgedFor = null;
-    this.#owedNow = null;
+    if (!on) {
+      this.#owedNow = null;
+    }
     if (on) {
       this.#wake();
     } else {

@@ -325,6 +325,24 @@ describe("while a purge is owed, nothing leaves (an off, an unset, or a purge th
     expect(await pipeline.flush()).toEqual({ sent: 1, retryInMs: null });
   });
 
+  it("a purge that failed is still owed after a yes on this launch when its marker could not be stored", async () => {
+    const world = telemetryWorld("on");
+    const pipeline = new TelemetryPipeline(world.deps);
+    pipeline.recordUsage("setup_step", { step: "launched" });
+    world.setting.answer = "unset";
+    world.setting.owedUnwritable = true;
+    vi.spyOn(world.queue, "purge").mockImplementationOnce(() => {
+      throw new Error("EPERM: rename telemetry-queue");
+    });
+    pipeline.state();
+    expect(world.setting.owed).toBe(false);
+    world.setting.owedUnwritable = false;
+    pipeline.answer(true);
+    expect(await pipeline.flush()).toEqual({ sent: 0, retryInMs: null });
+    expect(world.poster.sent).toEqual([]);
+    expect(world.queue.reports).toEqual([]);
+  });
+
   it("a purge marker that cannot be read purges before anything is sent", async () => {
     const world = telemetryWorld("on");
     const pipeline = new TelemetryPipeline(world.deps);

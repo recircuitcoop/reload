@@ -58,6 +58,7 @@ export class MemorySetting implements TelemetrySetting {
   /** A purge owed (shell-settings.json's telemetryPurgeOwed); `owedUnreadable` makes it throw. */
   owed = false;
   owedUnreadable = false;
+  owedUnwritable = false;
 
   purgeOwed(): boolean {
     if (this.owedUnreadable) {
@@ -67,6 +68,9 @@ export class MemorySetting implements TelemetrySetting {
   }
 
   writePurgeOwed(owed: boolean): void {
+    if (this.owedUnwritable) {
+      throw new Error("could not write shell-settings.json: EACCES");
+    }
     this.owed = owed;
   }
 }
