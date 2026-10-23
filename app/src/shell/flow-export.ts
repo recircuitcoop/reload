@@ -26,6 +26,21 @@ export function exportFileName(name: string): string {
 }
 
 /**
+ * `text` at `file`, whole or not at all: written beside it, then renamed over it, so nothing ever
+ * reads half an export, and a write that fails leaves a file already there as it was.
+ */
+export async function writeWhole(file: string, text: string): Promise<void> {
+  const scratch = `${file}.part`;
+  try {
+    await fs.writeFile(scratch, text, "utf8");
+    await fs.rename(scratch, file);
+  } catch (error) {
+    await fs.rm(scratch, { force: true });
+    throw error;
+  }
+}
+
+/**
  * The flow's export, saved where the person chooses: `{saved: path}`, or `{saved: null}` when
  * they cancelled. A refusal or a failed call from the runtime is answered as it came.
  */
@@ -47,7 +62,7 @@ export async function exportFlow(deps: FlowExportDeps, args: unknown): Promise<C
   if (chosen.canceled || chosen.filePath === "") {
     return { ok: true, value: { saved: null } };
   }
-  await fs.writeFile(chosen.filePath, `${JSON.stringify(value.nodes, null, 2)}\n`, "utf8");
+  await writeWhole(chosen.filePath, `${JSON.stringify(value.nodes, null, 2)}\n`);
   deps.logger.info(`a flow was exported (${String(value.nodes.length)} nodes)`);
   return { ok: true, value: { saved: chosen.filePath } };
 }

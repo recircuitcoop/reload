@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Supervisor } from "../../src/application/supervisor";
 import { wireFlowCalls } from "../../src/shell/flow-calls";
-import { exportFileName } from "../../src/shell/flow-export";
+import { exportFileName, writeWhole } from "../../src/shell/flow-export";
 import { IPC } from "../../src/shell/ipc";
 import { obedient } from "../fakes/children";
 import { supervised } from "../fakes/supervised";
@@ -264,6 +264,25 @@ describe("the shell's flow relay", () => {
       refused: { reason: "failed", sentence: "refused.failed" },
     });
     expect([...refused.dialogs, ...failed.dialogs]).toEqual([]);
+  });
+
+  it("writes an export whole or not at all: a failed write leaves the file there as it was", async () => {
+    const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-export-"));
+    try {
+      const file = path.join(scratch, "out.json");
+      await writeWhole(file, "[1]\n");
+      expect(fs.readFileSync(file, "utf8")).toBe("[1]\n");
+      await writeWhole(file, "[2]\n");
+      expect(fs.readFileSync(file, "utf8")).toBe("[2]\n");
+      // The rename cannot replace a directory: the write fails, and what was there stays.
+      const blocked = path.join(scratch, "dir.json");
+      fs.mkdirSync(path.join(blocked, "inside"), { recursive: true });
+      await expect(writeWhole(blocked, "[3]\n")).rejects.toThrow();
+      expect(fs.readdirSync(blocked)).toEqual(["inside"]);
+      expect(fs.readdirSync(scratch).sort()).toEqual(["dir.json", "out.json"]);
+    } finally {
+      fs.rmSync(scratch, { recursive: true, force: true });
+    }
   });
 
   it("names an export's file after its flow, safely", () => {
