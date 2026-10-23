@@ -9,7 +9,7 @@
 // Pure: no I/O, no library.
 
 import type { JsonSchema } from "../packages/declaration";
-import { isSecret, propertiesOf, secretsOf, withoutSecrets } from "./form-model";
+import { isSecret, propertiesOf, rowSchemaOf, secretsOf, withoutSecrets } from "./form-model";
 
 const INTEGER = /^[+-]?\d+$/;
 const NUMBER = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;
@@ -142,6 +142,39 @@ export function declaredOnly(schema: JsonSchema, value: unknown): unknown {
 }
 
 /**
+ * Where `value` holds a key its schema forbids (`additionalProperties: false`), at every depth:
+ * the object holding it is its own problem, a row and not one of its cells, since no cell is
+ * drawn for that key (the old form's "a row carrying a key the declaration does not name").
+ * `declaredOnly` leaves such a key out; this says where it was.
+ */
+export function forbiddenKeys(
+  schema: JsonSchema,
+  value: unknown,
+  path = "",
+): { path: string; message: string }[] {
+  if (Array.isArray(value)) {
+    const items = schema["items"];
+    return isSchema(items)
+      ? value.flatMap((item: unknown, index) =>
+          forbiddenKeys(items, item, `${path}/${String(index)}`),
+        )
+      : [];
+  }
+  if (!isRecord(value) || schema["type"] !== "object") {
+    return [];
+  }
+  const declared = new Map(propertiesOf(schema));
+  const open = schema["additionalProperties"] !== false || "patternProperties" in schema;
+  return Object.entries(value).flatMap(([key, inner]) => {
+    const property = declared.get(key);
+    if (property !== undefined) {
+      return forbiddenKeys(property, inner, `${path}/${key}`);
+    }
+    return open ? [] : [{ path, message: `holds ${JSON.stringify(key)}, which it does not take` }];
+  });
+}
+
+/**
  * An instance's `credentials` (spec 2.5.2, 4.1): the declared secrets Node-RED holds for it,
  * each a non-empty string, by its credential's name ("token", or "account.token" for one in a
  * nested object). A secret never set is absent.
@@ -203,6 +236,43 @@ export function missingSecrets(
     const present = isRecord(group) || [...set].some((each) => each.startsWith(`${name}.`));
     return property["type"] === "object" && present
       ? missingSecrets(property, isRecord(group) ? group : {}, set, name)
+      : [];
+  });
+}
+
+/**
+ * The required values left empty, at every depth (the top, a group, each row of a table): a
+ * text that is "" and a list or table with no element. JSON Schema's `required` asks only for
+ * the key, so the form kept them; the old settings refused them on their field, and a required
+ * table with no rows held its plugin ("is required and holds no recorder"). The runtime starts
+ * nothing for them, and the editor and Setup say so beside the field (plan 0032, group 27).
+ */
+export function emptyRequired(
+  schema: JsonSchema,
+  value: Fields,
+  path = "",
+): { path: string; message: string }[] {
+  const required = new Set(Array.isArray(schema["required"]) ? schema["required"] : []);
+  return propertiesOf(schema).flatMap(([key, property]) => {
+    const at = `${path}/${key}`;
+    const given = value[key];
+    if (required.has(key) && given === "") {
+      return [{ path: at, message: "is required" }];
+    }
+    const row = rowSchemaOf(property);
+    if (Array.isArray(given)) {
+      if (required.has(key) && given.length === 0) {
+        const noun = typeof row?.["title"] === "string" ? row["title"] : "value";
+        return [{ path: at, message: `is required and holds no ${noun}` }];
+      }
+      return row === null
+        ? []
+        : given.flatMap((each: unknown, index) =>
+            isRecord(each) ? emptyRequired(row, each, `${at}/${String(index)}`) : [],
+          );
+    }
+    return property["type"] === "object" && isRecord(given)
+      ? emptyRequired(property, given, at)
       : [];
   });
 }

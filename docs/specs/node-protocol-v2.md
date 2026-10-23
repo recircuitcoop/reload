@@ -284,6 +284,13 @@ A type MAY set its own limits in `reload.limits`:
    deploy, at the top; by Setup's Continue, which keeps the groups, tables and lists it does not
    draw) except where the schema forbids them, where a save leaves them out and says so; such a
    value never reaches the node. An empty text nobody filled is unset, unless it is required.
+   A required text left empty, and a required array with no element, are missing (plan 0032):
+   the runtime starts nothing for them, Setup refuses them, and the step is not set up; a save
+   refuses a table's row whose required cell is empty or whose required nested table holds no
+   row, while a required field at the top left empty is saved and its node held. As the editor
+   form opens, what is wrong with the node now is said beside what it is about: a field's
+   reason after its control, a cell's beside that cell, a row's own (a key its row does not
+   take, `additionalProperties: false`) on the row, and a table's own once above its rows.
 
    A `config` the form cannot draw is refused when its package is read (at install, at load and
    by `reload-pack`), naming the field by its path (plan 0032): a schema the JSON Schema 2020-12

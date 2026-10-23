@@ -15,7 +15,7 @@
 
 import type { CallOp, OpResult } from "../domain/channel/messages";
 import { remapIds, withoutCredentials, type TabNode } from "../domain/flows/tab";
-import { configOf, missingSecrets } from "../domain/forms/coerce";
+import { configOf, emptyRequired, missingSecrets } from "../domain/forms/coerce";
 import { REFUSED_KEY } from "../domain/forms/kept-on-save";
 import {
   describedProblems,
@@ -567,6 +567,7 @@ export class FlowAdmin {
         .filter((key) => !known.has(key))
         .map((key) => ({ path: `/${key}`, message: "is not a declared property" })),
       ...this.#deps.validator.check(plainSchema, configOf(type.config, plain)),
+      ...emptyRequired(plainSchema, configOf(type.config, plain)),
     ];
     const config = configOf(type.config, plain);
     if (secrets.size > 0) {

@@ -979,6 +979,26 @@ describe("flow.node.form and flow.node.configure", () => {
     expect(h.engine.calls).toEqual([]);
   });
 
+  it("refuses a required text left empty, and counts the step as not set up, as the runtime refuses it", async () => {
+    const h = harness();
+    const answer = await h.write("flow.node.configure", {
+      flowId: "rec",
+      nodeId: "f",
+      values: { space: "" },
+    });
+    expect(answer).toMatchObject({
+      ok: true,
+      value: {
+        refused: { reason: "invalid", problems: [{ path: "/space", message: "is required" }] },
+      },
+    });
+    expect(h.engine.calls).toEqual([]);
+    const tab = structuredClone(RECORDINGS);
+    const nodes = tab.nodes.map((node) => (node.id === "f" ? { ...node, space: "" } : node));
+    const [flow] = await list(harness({ tabs: [{ ...tab, nodes }] }));
+    expect(flow?.steps.find((step) => step.id === "f")?.setUp).toBe(false);
+  });
+
   it("sets a secret given, keeps one left empty, and refuses a required one never set", async () => {
     const h = harness();
     await h.write("flow.node.configure", {

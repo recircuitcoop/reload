@@ -24,7 +24,7 @@
 // The spike did this in `runtime/runtime.js` with its own journal and its own listener per
 // instance; here the process, the journal and the replay are the runtime's own, handed in.
 
-import { configOf, credentialsOf, withCredentials } from "../../domain/forms/coerce";
+import { configOf, credentialsOf, emptyRequired, withCredentials } from "../../domain/forms/coerce";
 import { secretKeys } from "../../domain/forms/form-model";
 import { unkeptSecretsOfNode } from "../../domain/forms/unkept";
 import { payloadRefusal, USER_EVENTS_PACKAGE } from "../../domain/events/event-types";
@@ -214,7 +214,11 @@ export class TypeRegistration {
     const config = configOf(schema, raw);
     const credentials = credentialsOf(schema, node.credentials ?? {});
     // Validated with its credentials, so a required secret never set is refused too.
-    const problems = validator.check(schema, withCredentials(config, credentials));
+    const problems = [
+      ...validator.check(schema, withCredentials(config, credentials)),
+      // A required text left empty, or a required table with no rows (coerce.ts).
+      ...emptyRequired(schema, config),
+    ];
     // A secret no credential can hold, found in the flow: never handed over (unkept.ts).
     const unkept = unkeptSecretsOfNode(schema, raw).map((path) => ({
       path: `/${path}`,

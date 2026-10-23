@@ -6,7 +6,7 @@
 
 import { health, type FlowHealth } from "../domain/flows/health";
 import { wireOrder, type TabNode } from "../domain/flows/tab";
-import { configOf, missingSecrets } from "../domain/forms/coerce";
+import { configOf, emptyRequired, missingSecrets } from "../domain/forms/coerce";
 import { secretKeys, withoutSecrets } from "../domain/forms/form-model";
 import type { LoadedType } from "../domain/packages/declaration";
 import type { Run, RunState } from "../domain/runs/run";
@@ -164,7 +164,8 @@ export async function isSetUp(
   deps: Pick<SummaryDeps, "engine" | "validator">,
 ): Promise<boolean> {
   const config = configOf(type.config, node);
-  if (deps.validator.check(withoutSecrets(type.config), config).length > 0) {
+  const plain = withoutSecrets(type.config);
+  if (deps.validator.check(plain, config).length + emptyRequired(plain, config).length > 0) {
     return false;
   }
   // `config` never holds a secret: Node-RED keeps them apart, as credentials. A required one is

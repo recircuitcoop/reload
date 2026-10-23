@@ -54,14 +54,27 @@ let red: FakeRed;
 let live: FakeNode[];
 
 /** `probeReload`: the probe type's `reload` object (spec 2.4.2), added to the fixture's own. */
-function setUp(commandFor?: () => never, probeReload?: object): TypeRegistration {
+function setUp(
+  commandFor?: () => never,
+  probeReload?: object,
+  probeConfig?: (config: { properties: Record<string, Record<string, unknown>> }) => void,
+): TypeRegistration {
   const validator = new AjvSchemaValidator();
   const document = JSON.parse(
     fs.readFileSync(path.join(FIXTURE, "reload-package.json"), "utf8"),
-  ) as { types: { id: string; reload?: object }[] };
+  ) as {
+    types: {
+      id: string;
+      reload?: object;
+      config: { properties: Record<string, Record<string, unknown>> };
+    }[];
+  };
   const probe = document.types.find((type) => type.id === "probe");
   if (probe !== undefined && probeReload !== undefined) {
     probe.reload = probeReload;
+  }
+  if (probe !== undefined && probeConfig !== undefined) {
+    probeConfig(probe.config);
   }
   const loaded = loadNodeTypes(
     [{ name: "everycontrol", folder: FIXTURE, document }],
@@ -344,6 +357,24 @@ describe("a generated type's instance", () => {
     await node.close(false);
     await new Promise((resolve) => setTimeout(resolve, 200));
     expect(fs.existsSync(path.join(scratch, "instances", "bad", "start.json"))).toBe(false);
+  });
+
+  it("starts nothing for a required text left empty, or a required table with no rows, naming each", () => {
+    // Without minLength or minItems, JSON Schema's required asks only for the key.
+    setUp(undefined, undefined, (config) => {
+      delete config.properties["label"]?.["minLength"];
+      delete config.properties["volumes"]?.["minItems"];
+    });
+    const node = create(PROBE, probeConfig("empty", { label: "", volumes: [] }), { token: "t" });
+    expect(started).toEqual([]);
+    const [said] = node.errors;
+    expect(said).toContain("not started: its configuration is refused:");
+    expect(said).toContain("label is required");
+    expect(said).toContain("volumes is required and holds no Volume");
+    // One row, and it starts.
+    const ready = create(PROBE, probeConfig("one", { label: "L" }), { token: "t" });
+    expect(ready.errors).toEqual([]);
+    expect(started).toEqual(["one"]);
   });
 
   it("starts nothing when its command cannot run here, and says why", () => {

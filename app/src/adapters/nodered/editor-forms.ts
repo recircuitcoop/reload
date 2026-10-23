@@ -28,10 +28,10 @@
 // from coverage like the preload bridge, and the e2e drives it in the real editor. So does the
 // form's every rule: what is kept on a save is domain/forms/kept-on-save.ts, unit-tested.
 
-import { Ajv2020, type ValidateFunction } from "ajv/dist/2020.js";
+import { Ajv2020 } from "ajv/dist/2020.js";
 
 import { browseUrl } from "../../domain/forms/browse";
-import { coerceObject, declaredOnly, missingSecrets } from "../../domain/forms/coerce";
+import { emptyRequired } from "../../domain/forms/coerce";
 import {
   droppedSentence,
   keptOnSave,
@@ -42,12 +42,10 @@ import {
   type Problem,
 } from "../../domain/forms/kept-on-save";
 import { originsOf, seedOrigins, seedRecorded } from "../../domain/forms/row-origins";
-import { unkeptSecretsOfNode } from "../../domain/forms/unkept";
 import { RELOAD_ANNOTATION } from "../../domain/forms/reload-keyword";
 import {
   ADVANCED_LABEL,
   addRow,
-  describedProblems,
   dynamicSelect,
   formModel,
   moveRow,
@@ -56,6 +54,7 @@ import {
   type Field,
 } from "../../domain/forms/form-model";
 import type { JsonSchema } from "../../domain/packages/declaration";
+import { judge, nodeProblems, ownOf, problems, UNKEPT, type Registered } from "./editor-judge";
 import { element, LOADING, showSelect, wireOptions } from "./editor-options";
 import {
   isRecord,
@@ -69,15 +68,6 @@ import {
 } from "./editor-read";
 
 type Values = Record<string, unknown>;
-
-interface Registered {
-  /** The config schema without its secrets: what the node's own properties must satisfy. */
-  readonly schema: JsonSchema;
-  /** The whole config schema, secrets included. */
-  readonly full: JsonSchema;
-  readonly fields: readonly Field[];
-  readonly validate: ValidateFunction;
-}
 
 // `reload` (spec 2.4.1) is a known annotation: it never changes what validates.
 const ajv = new Ajv2020({ allErrors: true, strict: false }).addKeyword(RELOAD_ANNOTATION);
@@ -99,67 +89,9 @@ function define(type: string, schema: JsonSchema): void {
   types.set(type, { schema: plain, full: schema, fields, validate: ajv.compile(plain) });
 }
 
-/** The node's own values for its declared, non-secret properties, as Node-RED keeps them. */
-function ownOf(entry: Registered, node: Values): Values {
-  const plain = entry.fields.filter(
-    (field) => field.control !== "password" && field.control !== "unkept",
-  );
-  return Object.fromEntries(plain.map((field) => [field.key, node[field.key]]));
-}
-
-/** The node's values for its declared properties, coerced as the runtime will coerce them. */
-function valuesOf(entry: Registered, node: Values): Values {
-  // As the runtime judges it: nothing the schema does not declare (coerce.ts configOf).
-  return declaredOnly(entry.schema, coerceObject(entry.schema, ownOf(entry, node))) as Values;
-}
-
-/** Each ajv error as the field it is about and what is wrong with it. */
-function problems(validate: ValidateFunction): { path: string; message: string }[] {
-  return (validate.errors ?? []).map((error) => {
-    const params = error.params as Record<string, unknown>;
-    const missing = params["missingProperty"];
-    return error.keyword === "required" && typeof missing === "string"
-      ? { path: `${error.instancePath}/${missing}`, message: "is required" }
-      : { path: error.instancePath, message: error.message ?? error.keyword };
-  });
-}
-
-/**
- * Node-RED's validator for one property: true, or the reason it is refused. Every property
- * is judged against the whole schema, and answers for the errors under its own name.
- */
+/** Node-RED's validator for one property: true, or the reason it is refused (editor-judge.ts). */
 function validate(type: string, node: Values, key: string): true | string {
-  const entry = registered(type);
-  const values = valuesOf(entry, node);
-  // A refusal of the whole node (a dependentRequired, anyOf, not…) is said at its first field.
-  const first = Object.keys(ownOf(entry, {}))[0] === key;
-  const mine = entry.validate(values)
-    ? []
-    : problems(entry.validate).filter(
-        ({ path }) => path === `/${key}` || path.startsWith(`/${key}/`) || (path === "" && first),
-      );
-  for (const path of unkeptSecretsOfNode(entry.full, node)) {
-    if (path === key || path.startsWith(`${key}.`)) {
-      mine.push({ path: `/${path.replaceAll(".", "/")}`, message: UNKEPT });
-    }
-  }
-  // A required secret in this group, unset, as the runtime refuses it; only once Node-RED has
-  // said which of the node's secrets are set.
-  const held = node["credentials"];
-  if (isRecord(held)) {
-    const set = new Set(
-      Object.keys(held)
-        .filter((name) => name.startsWith("has_") && held[name] === true)
-        .map((name) => name.slice("has_".length)),
-    );
-    for (const name of missingSecrets(entry.full, values, set)) {
-      if (name.startsWith(`${key}.`)) {
-        mine.push({ path: `/${name.replaceAll(".", "/")}`, message: "is required" });
-      }
-    }
-  }
-  // In the person's words, by the property's title: never its key.
-  return mine.length === 0 ? true : describedProblems(entry.full, mine);
+  return judge(registered(type), node, key);
 }
 
 // ── drawing ──────────────────────────────────────────────────────────────────────────────
@@ -328,6 +260,13 @@ function secret(path: string): HTMLInputElement {
   return input;
 }
 
+/** The reason kept for `path`, drawn to stand beside it; null when it has none. */
+function reasonBeside(path: string): HTMLElement | null {
+  const reason = reasons.get(path);
+  const attributes = { class: "form-tips reload-error", "data-testid": `reload-error-${path}` };
+  return reason === undefined ? null : element("div", attributes, reason);
+}
+
 /** The controls of `fields`, holding `values`, under `container`; the advanced ones folded. */
 function draw(container: HTMLElement, fields: readonly Field[], values: Values, prefix: string) {
   const advanced = element("details", {
@@ -360,10 +299,15 @@ function draw(container: HTMLElement, fields: readonly Field[], values: Values, 
         input.setAttribute("disabled", "");
       }
     }
-    const reason = reasons.get(path);
-    if (reason !== undefined) {
-      const said = { class: "form-tips reload-error", "data-testid": `reload-error-${path}` };
-      row.append(element("div", said, reason));
+    const reason = reasonBeside(path);
+    if (reason !== null) {
+      // A table's own reason stands above its rows, once; any other field's after its control.
+      const table = field.control === "table" ? row.querySelector(".reload-table") : null;
+      if (table === null) {
+        row.append(reason);
+      } else {
+        table.before(reason);
+      }
     }
     if (field.reload !== undefined) {
       row.append(
@@ -384,9 +328,6 @@ function draw(container: HTMLElement, fields: readonly Field[], values: Values, 
   }
   wireOptions(container, fields);
 }
-
-/** Why a value typed into a secret no credential can hold is not kept (unkept.ts). */
-const UNKEPT = "is a secret no credential can hold, so it is not kept";
 
 /** The button beside a path field. */
 const BROWSE_LABEL = "Browse…";
@@ -413,6 +354,11 @@ function table(field: Field, path: string, rows: readonly Values[]): HTMLElement
         line.setAttribute("data-reload-origin", String(origin));
       }
       draw(line, columns, row, rowPath);
+      // A row's own reason (a key its row does not take): on the row, never on a cell.
+      const reason = reasonBeside(rowPath);
+      if (reason !== null) {
+        line.append(reason);
+      }
       const button = (action: string, text: string, change: () => Values[]): void => {
         const pressed = element(
           "button",
@@ -489,6 +435,13 @@ function prepare(type: string, node: Values): void {
   const { fields, full } = registered(type);
   const refused = readRefusal(node[REFUSED_KEY]);
   if (refused === null) {
+    // What is wrong with the node now (a value its type no longer takes, a required one left
+    // empty), each reason beside its field, its row or its table (editor-judge.ts).
+    for (const problem of nodeProblems(registered(type), node)) {
+      const path = problem.path.slice(1).replaceAll("/", ".");
+      const reason = reasonOf(full, problem);
+      reasons.set(path, [reasons.get(path), reason].filter(Boolean).join(" "));
+    }
     seedOrigins(fields, node, originOf);
     draw(container, fields, node, "");
     return;
@@ -514,7 +467,13 @@ function save(type: string, node: Values): boolean {
   const entry = registered(type);
   const container = containerOf(type);
   const submitted = read(container, entry.fields);
-  const check = (value: Values) => (entry.validate(value) ? [] : problems(entry.validate));
+  // A row whose required cell is empty, or whose required nested table holds no row, is
+  // refused like any other bad row; an empty required field at the top is saved and the node
+  // held, as the runtime refuses it (coerce.ts emptyRequired).
+  const check = (value: Values) => [
+    ...(entry.validate(value) ? [] : problems(entry.validate)),
+    ...emptyRequired(entry.schema, value).filter(({ path }) => /\/\d+(\/|$)/.test(path)),
+  ];
   const origins = originsOf(entry.fields, submitted, originOf);
   const kept = keptOnSave(entry.schema, ownOf(entry, node), submitted, check, origins);
   const unkept = typedUnkept(container).map((path) => ({

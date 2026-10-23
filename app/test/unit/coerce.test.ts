@@ -4,7 +4,14 @@
 
 import { describe, expect, it } from "vitest";
 
-import { coerceObject, coerceValue, configOf, credentialsOf } from "../../src/domain/forms/coerce";
+import {
+  coerceObject,
+  coerceValue,
+  configOf,
+  credentialsOf,
+  emptyRequired,
+  forbiddenKeys,
+} from "../../src/domain/forms/coerce";
 
 // ── a seeded generator ───────────────────────────────────────────────────────────────────
 
@@ -298,5 +305,86 @@ describe("configOf and credentialsOf", () => {
       token: "s3cret",
     });
     expect(credentialsOf(schema, { key: 5 })).toEqual({});
+  });
+});
+
+describe("a required value left empty (plan 0032, group 27)", () => {
+  const RECORDERS = {
+    type: "object",
+    required: ["root", "volumes"],
+    properties: {
+      root: { type: "string" },
+      interval: { type: "integer", default: 15 },
+      account: { type: "object", required: ["user"], properties: { user: { type: "string" } } },
+      volumes: {
+        type: "array",
+        items: {
+          type: "object",
+          title: "recorder",
+          required: ["label", "takes"],
+          properties: {
+            label: { type: "string" },
+            takes: { type: "array", items: { type: "object", title: "take", properties: {} } },
+          },
+        },
+      },
+      tags: { type: "array", items: { type: "string" } },
+    },
+  };
+
+  it("yields no value for a required field with no default, and the default for another", () => {
+    expect(configOf(RECORDERS, {})).toEqual({ interval: 15 });
+  });
+
+  it("finds a required text left empty and a required table with no rows, at every depth", () => {
+    const config = {
+      root: "",
+      account: { user: "" },
+      volumes: [{ label: "Zoom H6", takes: [] }, { label: "", takes: [{}] }, "not a row"],
+    };
+    expect(emptyRequired(RECORDERS, config)).toEqual([
+      { path: "/root", message: "is required" },
+      { path: "/account/user", message: "is required" },
+      { path: "/volumes/0/takes", message: "is required and holds no take" },
+      { path: "/volumes/1/label", message: "is required" },
+    ]);
+    expect(emptyRequired(RECORDERS, { root: "/x", volumes: [] })).toEqual([
+      { path: "/volumes", message: "is required and holds no recorder" },
+    ]);
+    // Filled, or optional and empty, nothing is missing; a list with no row noun says value.
+    expect(
+      emptyRequired(RECORDERS, { root: "/x", volumes: [{ label: "a", takes: [{}] }], tags: [] }),
+    ).toEqual([]);
+    const tagged = { ...RECORDERS, required: ["tags"] };
+    expect(emptyRequired(tagged, { tags: [] })).toEqual([
+      { path: "/tags", message: "is required and holds no value" },
+    ]);
+  });
+
+  it("says where a row holds a key its schema forbids, on the row itself", () => {
+    const closed = {
+      type: "object",
+      properties: {
+        volumes: {
+          type: "array",
+          items: {
+            type: "object",
+            additionalProperties: false,
+            properties: { label: { type: "string" } },
+          },
+        },
+        open: { type: "object", properties: {} },
+        plain: { type: "array" },
+      },
+    };
+    const value = {
+      volumes: [{ label: "one" }, { label: "two", colour: "red" }],
+      open: { other: 1 },
+      plain: [{ any: 1 }],
+    };
+    expect(forbiddenKeys(closed, value)).toEqual([
+      { path: "/volumes/1", message: 'holds "colour", which it does not take' },
+    ]);
+    expect(forbiddenKeys(closed, "x")).toEqual([]);
   });
 });
