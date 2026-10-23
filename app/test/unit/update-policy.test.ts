@@ -20,13 +20,14 @@ describe("parseUpdatePolicy", () => {
     });
   });
 
-  it("reads the spread of each check, 0 to a day, an hour when absent", () => {
+  it("reads the spread of each check, any seconds from 0 up as the old helper did, an hour when absent", () => {
     expect(parseUpdatePolicy({ check_jitter: 0 }).checkJitterSeconds).toBe(0);
-    expect(parseUpdatePolicy({ check_jitter: 86_400 }).checkJitterSeconds).toBe(86_400);
+    expect(parseUpdatePolicy({ check_jitter: 100_000 }).checkJitterSeconds).toBe(100_000);
+    expect(parseUpdatePolicy({ check_jitter: 1e9 }).checkJitterSeconds).toBe(1e9);
     expect(parseUpdatePolicy({}).checkJitterSeconds).toBe(3600);
-    for (const bad of [-1, 86_401, "1h", Number.NaN, Number.POSITIVE_INFINITY]) {
+    for (const bad of [-1, "1h", Number.NaN, Number.POSITIVE_INFINITY]) {
       expect(() => parseUpdatePolicy({ check_jitter: bad })).toThrow(
-        "update.check_jitter must be a number of seconds from 0 to 86400",
+        "update.check_jitter must be a number of seconds, 0 or more",
       );
     }
   });

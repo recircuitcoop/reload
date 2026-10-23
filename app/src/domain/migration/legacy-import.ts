@@ -213,7 +213,22 @@ export function buildLegacyImportPlan(document: TomlTable): LegacyImportPlan {
   let updateSetting: Readonly<Record<string, unknown>> | null = null;
   const rawChannel = updateSection["channel"];
   const channel: string | undefined = typeof rawChannel === "string" ? rawChannel : undefined;
-  const jitter = updateSection["check_jitter"];
+  // The spread is judged on its own: a bad one is left out, never the switch or the channel.
+  let jitter: unknown = updateSection["check_jitter"];
+  if (jitter !== undefined) {
+    try {
+      parseUpdatePolicy({ check_jitter: jitter });
+    } catch (error) {
+      if (!(error instanceof UpdateSettingsError)) {
+        throw error;
+      }
+      ignored.push({
+        key: "update.check_jitter",
+        reason: `could not be imported: ${reasonOf(error)}`,
+      });
+      jitter = undefined;
+    }
+  }
   if (
     typeof document["auto_check_versions"] === "boolean" ||
     channel !== undefined ||
@@ -241,10 +256,7 @@ export function buildLegacyImportPlan(document: TomlTable): LegacyImportPlan {
     } catch (error) {
       if (error instanceof UpdateSettingsError) {
         ignored.push({
-          key:
-            jitter !== undefined && channel === undefined
-              ? "update.check_jitter"
-              : "update.channel",
+          key: "update.channel",
           reason: `could not be imported: ${reasonOf(error)}`,
         });
       } else {

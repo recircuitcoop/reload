@@ -4,6 +4,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   CHECK_INTERVAL_MS,
+  LONGEST_WAIT_MS,
   UpdateCheck,
   type UpdateCheckPorts,
 } from "../../src/application/update-check";
@@ -147,6 +148,16 @@ describe("UpdateCheck.schedule", () => {
     // An unreadable setting spreads by the default hour; the draw here is 0.
     h.setting = { auto_check: true, check_jitter: 0 };
     await advance(h.clock, CHECK_INTERVAL_MS);
+    expect(h.requests()).toBe(1);
+    h.check.stop();
+  });
+
+  it("a spread longer than a timer can wait is held to the timer's limit, never fired at once", async () => {
+    const h = harness({ auto_check: true, check_jitter: 1e9 }, [0.999]);
+    h.check.schedule();
+    await advance(h.clock, 1_000);
+    expect(h.requests()).toBe(0);
+    await advance(h.clock, LONGEST_WAIT_MS - 1_000);
     expect(h.requests()).toBe(1);
     h.check.stop();
   });

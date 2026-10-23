@@ -56,6 +56,12 @@ export const MAX_SIGNATURE_BYTES = 4096;
 /** electron-builder's mac zip and Linux AppImage artifacts: generous, still bounded. */
 export const MAX_ARTIFACT_BYTES = 500 * 1024 * 1024;
 
+/**
+ * The longest a check waits: a timer's own limit (about 24.8 days). check_jitter has no upper
+ * bound (the old helper took any value), and a longer delay would make a timer fire at once.
+ */
+export const LONGEST_WAIT_MS = 2_147_483_647;
+
 /** How often the scheduled check runs, before its spread (helper/config.py:350). */
 export const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
@@ -399,10 +405,13 @@ export class UpdateCheck {
           },
         )
         .then(() => {
-          this.#cancelSchedule = clock.after(CHECK_INTERVAL_MS + this.#spread(), tick);
+          this.#cancelSchedule = clock.after(
+            Math.min(CHECK_INTERVAL_MS + this.#spread(), LONGEST_WAIT_MS),
+            tick,
+          );
         });
     };
-    this.#cancelSchedule = clock.after(this.#spread(), tick);
+    this.#cancelSchedule = clock.after(Math.min(this.#spread(), LONGEST_WAIT_MS), tick);
   }
 
   /** Anywhere inside the setting's spread (helper/supervision.py:177 `_spread`); 0 at once. */

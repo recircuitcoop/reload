@@ -61,17 +61,32 @@ describe("buildLegacyImportPlan", () => {
     expect(plan.updateSetting).toEqual({ channel: "beta" });
   });
 
-  it("imports update.check_jitter as the spread of each check, and refuses one out of range", () => {
-    const plan = buildLegacyImportPlan({ update: { check_jitter: 60 } });
-    expect(plan.updateSetting).toEqual({ check_jitter: 60 });
-    expect(plan.imported).toContain("update.check_jitter: 60s");
-    const refused = buildLegacyImportPlan({ update: { check_jitter: -5 } });
-    expect(refused.updateSetting).toBeNull();
-    expect(refused.ignored).toContainEqual({
-      key: "update.check_jitter",
-      reason:
-        "could not be imported: update.check_jitter must be a number of seconds from 0 to 86400",
+  it("imports update.check_jitter as the spread of each check, a large one too, beside the switch and channel", () => {
+    const plan = buildLegacyImportPlan({
+      auto_check_versions: true,
+      update: { channel: "beta", check_jitter: 100_000 },
     });
+    expect(plan.updateSetting).toEqual({
+      auto_check: true,
+      channel: "beta",
+      check_jitter: 100_000,
+    });
+    expect(plan.imported).toContain("update.check_jitter: 100000s");
+    expect(plan.ignored.map((entry) => entry.key)).not.toContain("update.check_jitter");
+  });
+
+  it("a check_jitter it cannot take is left out under its own name; the switch and channel still come", () => {
+    const plan = buildLegacyImportPlan({
+      auto_check_versions: true,
+      update: { channel: "beta", check_jitter: -5 },
+    });
+    expect(plan.updateSetting).toEqual({ auto_check: true, channel: "beta" });
+    expect(plan.ignored).toEqual([
+      {
+        key: "update.check_jitter",
+        reason: "could not be imported: update.check_jitter must be a number of seconds, 0 or more",
+      },
+    ]);
   });
 
   it("imports registered sources, judged by the same source validator", () => {
