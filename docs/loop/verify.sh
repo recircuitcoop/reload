@@ -161,23 +161,60 @@ fi
 echo "== name census (tools/name-census.mjs, plan 0028) =="
 node tools/name-census.mjs
 
-echo "== uv sync --frozen =="
-$UV sync --frozen
+# == python == The old Python app's stages and the Python SDK's need nothing the app stages
+# make, and the app stages nothing of theirs, so they run alongside them: same checks, one
+# after another inside the group, with the group's output printed whole once it ends. The
+# group runs in a process group of its own (set -m), so a red app stage stops it too.
+mkdir -p .gate
+PY_LOG=.gate/python-stages.log
+set -m
+(
+  echo "== uv sync --frozen =="
+  $UV sync --frozen
 
-echo "== ruff =="
-$UV run --no-sync ruff check src tests
+  echo "== ruff =="
+  $UV run --no-sync ruff check src tests
 
-echo "== ruff format --check =="
-$UV run --no-sync ruff format --check src tests
+  echo "== ruff format --check =="
+  $UV run --no-sync ruff format --check src tests
 
-echo "== mypy =="
-$UV run --no-sync mypy
+  echo "== mypy =="
+  $UV run --no-sync mypy
 
-echo "== pytest =="
-$UV run --no-sync pytest
+  echo "== pytest =="
+  $UV run --no-sync pytest
 
-# == app == The new application (plan 0018 §6), after the Python stages and in the
-# plan's order. Same rule as above: `npm ci` installs exactly the committed
+  # == sdk/python == The Python node SDK (reload-node, WI-0018-26): its own project, its own
+  # committed uv.lock, checked the same hermetic way as the root project above. A subshell (not
+  # --project, which points uv at another project's pyproject.toml without changing the actual
+  # working directory) so `ruff`/`mypy`'s relative paths, and sdk/python's own pyproject.toml
+  # config, resolve the way they do when run from sdk/python directly -- and the repo root's cwd
+  # is untouched once the subshell exits. The JUnit report is what lets the parity ledger below
+  # name a pytest-sdk: id (tools/parity/check.ts's own convention for it).
+  (
+    cd sdk/python
+    echo "== sdk/python: uv sync --frozen =="
+    $UV sync --frozen
+
+    echo "== sdk/python: ruff =="
+    $UV run --no-sync ruff check src tests
+
+    echo "== sdk/python: ruff format --check =="
+    $UV run --no-sync ruff format --check src tests
+
+    echo "== sdk/python: mypy --strict =="
+    $UV run --no-sync mypy
+
+    echo "== sdk/python: pytest --cov --cov-fail-under=80 =="
+    $UV run --no-sync pytest --cov --cov-fail-under=80 --junitxml=../../.gate/pytest-sdk.xml
+  )
+) > "$PY_LOG" 2>&1 &
+PY_PID=$!
+set +m
+trap 'kill -- -"$PY_PID" 2>/dev/null || true' EXIT
+
+# == app == The new application (plan 0018 §6), in the plan's order, while the Python
+# stages run. Same rule as above: `npm ci` installs exactly the committed
 # package-lock.json and fails if it and the manifests disagree, and nothing after it
 # installs anything. Each stage is an `npm run gate:*` script in the root package.json.
 
@@ -205,30 +242,15 @@ $NPM run --silent gate:conformance
 echo "== app: e2e (playwright _electron, dev build) =="
 $NPM run --silent gate:e2e
 
-# == sdk/python == The Python node SDK (reload-node, WI-0018-26): its own project, its own
-# committed uv.lock, checked the same hermetic way as the root project above. A subshell (not
-# --project, which points uv at another project's pyproject.toml without changing the actual
-# working directory) so `ruff`/`mypy`'s relative paths, and sdk/python's own pyproject.toml
-# config, resolve the way they do when run from sdk/python directly -- and the repo root's cwd
-# is untouched once the subshell exits. The JUnit report is what lets the parity ledger below
-# name a pytest-sdk: id (tools/parity/check.ts's own convention for it).
-(
-  cd sdk/python
-  echo "== sdk/python: uv sync --frozen =="
-  $UV sync --frozen
-
-  echo "== sdk/python: ruff =="
-  $UV run --no-sync ruff check src tests
-
-  echo "== sdk/python: ruff format --check =="
-  $UV run --no-sync ruff format --check src tests
-
-  echo "== sdk/python: mypy --strict =="
-  $UV run --no-sync mypy
-
-  echo "== sdk/python: pytest --cov --cov-fail-under=80 =="
-  $UV run --no-sync pytest --cov --cov-fail-under=80 --junitxml=../../.gate/pytest-sdk.xml
-)
+# The Python stages' verdict, before parity reads their JUnit report.
+PY_STATUS=0
+wait "$PY_PID" || PY_STATUS=$?
+trap - EXIT
+cat "$PY_LOG"
+if [ "$PY_STATUS" -ne 0 ]; then
+  echo "python stages failed (exit $PY_STATUS)"
+  exit "$PY_STATUS"
+fi
 
 # == parity == (plan 0018 §5). Until the cutover the old suite must be exactly the one
 # docs/parity/old-tests.txt lists, so an old test added, renamed or removed stops here until
