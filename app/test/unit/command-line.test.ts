@@ -24,12 +24,14 @@ import {
   commandOf,
   LOG_TAIL_LINES,
   logText,
+  namesOf,
   PICKUP_MS,
   questionFile,
   replyFile,
   stdoutWriter,
   STALE_REPLY_MS,
   WAIT_MS,
+  isQuestion,
   type Asked,
   type Question,
   type Reply,
@@ -1013,5 +1015,110 @@ describe("the shell", () => {
     put("status", other);
     await new Promise((resolve) => setTimeout(resolve, 600));
     expect(fs.existsSync(questionFile(userData, other))).toBe(true);
+  });
+});
+
+// The old helper's per-plugin commands (test_helper_restart.py, test_control_channel.py,
+// test_helper_breaker.py): `reload --list`, and `--start`, `--stop`, `--kill`, `--restart` and
+// `--release` for the packages named, each answered by the runtime, which holds the node
+// processes.
+describe("reload --list and the package verbs", () => {
+  /** A runtime that records each call and answers it as `answer` says. */
+  const runtime = (answer: (op: string, args: unknown) => unknown) => {
+    const calls: [string, unknown][] = [];
+    const supervisor = {
+      ...child("runtime", 4242),
+      call: (op: string, args: unknown) => {
+        calls.push([op, args]);
+        return Promise.resolve(answer(op, args) as never);
+      },
+    };
+    return { calls, supervisor };
+  };
+  const ROW = { name: "ping", package: "monty", pid: 77, state: "running", why: null };
+  const askWith = (command: string, names?: string[]) => {
+    const question = { command, id: ID, ...ASKER, ...(names === undefined ? {} : { names }) };
+    writePrivateFile(questionFile(userData, ID), JSON.stringify(question));
+  };
+
+  it("reads the package names after the flag, up to the next flag", () => {
+    expect(namesOf(["Reload", "--stop", "monty", "beta", "--force"])).toEqual(["monty", "beta"]);
+    expect(namesOf(["Reload", "--stop"])).toEqual([]);
+    expect(commandOf(["Reload", "--release", "monty"])).toBe("release");
+  });
+
+  it("is no question when a verb names no package, or names one that is not a name", () => {
+    const base = { id: ID, ...ASKER };
+    expect(isQuestion({ ...base, command: "stop", names: ["monty"] })).toBe(true);
+    expect(isQuestion({ ...base, command: "stop" })).toBe(false);
+    expect(isQuestion({ ...base, command: "stop", names: [] })).toBe(false);
+    expect(isQuestion({ ...base, command: "start", names: [7] })).toBe(false);
+    expect(isQuestion({ ...base, command: "list" })).toBe(true);
+    expect(isQuestion({ ...base, command: "status", names: ["monty"] })).toBe(false);
+    expect(isQuestion({ ...base, command: "levitate" })).toBe(false);
+  });
+
+  it.each(["start", "stop", "restart", "kill", "release"])(
+    "--%s reaches the runtime for the packages named, and its answer is reported back",
+    async (verb) => {
+      const { calls, supervisor } = runtime(() => ({
+        ok: true,
+        value: { rows: [ROW], refused: [] },
+      }));
+      const { answer } = deps({
+        running: running({ supervisors: new Map([["runtime", supervisor]]) }),
+      });
+      askWith(verb, ["monty"]);
+      takeQuestions(userData, answer, Date.now());
+      expect(await replyFor()).toEqual({
+        code: 0,
+        text: "  monty › ping: running (process 77)\n",
+      });
+      expect(calls).toEqual([["nodes.command", { verb, names: ["monty"] }]]);
+    },
+  );
+
+  it("--list answers with every node process the runtime runs, by package", async () => {
+    const stopped = { ...ROW, package: "beta", pid: null, state: "stopped", why: "it was killed" };
+    const { calls, supervisor } = runtime(() => ({ ok: true, value: [ROW, stopped] }));
+    const { answer } = deps({
+      running: running({ supervisors: new Map([["runtime", supervisor]]) }),
+    });
+    askWith("list");
+    takeQuestions(userData, answer, Date.now());
+    expect(await replyFor()).toEqual({
+      code: 0,
+      text: "  beta › ping: stopped — it was killed\n  monty › ping: running (process 77)\n",
+    });
+    expect(calls).toEqual([["nodes.list", null]]);
+  });
+
+  it("exits 1 naming what it refused: an instance the verb did not apply to, or a package it does not have", async () => {
+    const refusing = runtime((_op, args) =>
+      (args as { names: string[] }).names.includes("whodunnit")
+        ? { ok: false, error: "no node of whodunnit runs in Reload" }
+        : { ok: true, value: { rows: [ROW], refused: [{ ...ROW, why: "it is already running" }] } },
+    );
+    const { answer } = deps({
+      running: running({ supervisors: new Map([["runtime", refusing.supervisor]]) }),
+    });
+    askWith("start", ["monty"]);
+    takeQuestions(userData, answer, Date.now());
+    expect(await replyFor()).toEqual({
+      code: 1,
+      text:
+        "  monty › ping: running (process 77)\n" +
+        "  monty › ping: not done (--start): it is already running\n",
+    });
+    const other = "f".repeat(32);
+    writePrivateFile(
+      questionFile(userData, other),
+      JSON.stringify({ command: "restart", id: other, ...ASKER, names: ["whodunnit"] }),
+    );
+    takeQuestions(userData, answer, Date.now());
+    expect(await replyFor(other)).toEqual({
+      code: 1,
+      text: "Reload could not do it: no node of whodunnit runs in Reload\n",
+    });
   });
 });

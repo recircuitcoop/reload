@@ -31,7 +31,9 @@ describe("a node instance's notices", () => {
       how: "signal SIGKILL",
       stuck: true,
     });
-    raiseStopped(notifier, notice, "tab1");
+    raiseStopped(notifier, notice, "tab1", (error) => {
+      throw error;
+    });
     expect(notifier.cleared).toEqual(["node-stuck raw", "node-unhealthy raw"]);
     // A click on it opens Live on the node's own flow (plan 0032, group 38).
     expect(notifier.notices).toEqual([

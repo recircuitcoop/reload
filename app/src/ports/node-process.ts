@@ -174,6 +174,13 @@ export interface NodeProcessSpec {
   readonly stability?: StabilityProfile;
 }
 
+/**
+ * A person's command for an instance from a terminal (`reload --start` …, shell/command-line.ts;
+ * the old helper's commands): start one they stopped, stop it politely, kill it unasked,
+ * restart it onto a new process, or release one stopped for good.
+ */
+export type NodeVerb = "start" | "stop" | "kill" | "restart" | "release";
+
 /** One instance's process, respawned after an unexpected exit until the breaker trips. */
 export interface NodeProcess {
   /** The current process's pid; null while none is running. */
@@ -185,6 +192,10 @@ export interface NodeProcess {
   readonly ready?: boolean;
   /** Why it gets no more processes (the crash-loop limit, a type never restarted); else null. */
   readonly stopped?: string | null;
+  /** Stopped by a person (`reload --stop`, `--kill`): no process until `reload --start`. */
+  readonly paused?: boolean;
+  /** A person's command (NodeVerb); why it does not apply now, else null. */
+  command?(verb: NodeVerb): string | null;
   /**
    * A message arrived at the instance (Node-RED's `input`). It is journaled, then its `input`
    * frame is written (spec 7.1), unless the queue is at its bound (spec 7.6). A message this

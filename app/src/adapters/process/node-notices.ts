@@ -23,13 +23,23 @@ export function clearNodeNotices(notifier: Notifier, subject: string): void {
 
 /**
  * An instance gets no more processes: one condition, one notice. What was said about how it
- * ran (stuck, unhealthy) is withdrawn, and the stop is said, on the node's flow (`flowId`).
+ * ran (stuck, unhealthy) is withdrawn, and the stop is said, on the node's flow (`flowId`);
+ * a notifier that fails is `failed`'s to tell.
  */
-export function raiseStopped(notifier: Notifier, notice: Notice, flowId: string): void {
-  notifier.clear("node-stuck", notice.subject);
-  notifier.clear("node-unhealthy", notice.subject);
-  // A click on it opens Live on the node's own flow (plan 0032, group 38).
-  notifier.raise({ ...notice, flowId });
+export function raiseStopped(
+  notifier: Notifier,
+  notice: Notice,
+  flowId: string,
+  failed: (error: unknown) => void,
+): void {
+  try {
+    notifier.clear("node-stuck", notice.subject);
+    notifier.clear("node-unhealthy", notice.subject);
+    // A click on it opens Live on the node's own flow (plan 0032, group 38).
+    notifier.raise({ ...notice, flowId });
+  } catch (error) {
+    failed(error);
+  }
 }
 
 /**

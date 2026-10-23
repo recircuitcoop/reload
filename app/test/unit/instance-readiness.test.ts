@@ -15,7 +15,19 @@ class FakeProcess implements NodeProcess {
   pid: number | null = 7;
   ready = false;
   stopped: string | null = null;
+  paused = false;
+  /** The commands a person gave it, and what it answers each with. */
+  readonly commands: string[] = [];
+  refuse: string | null = null;
   #closing: (() => void) | null = null;
+  command(verb: string): string | null {
+    this.commands.push(verb);
+    if (this.refuse === null && verb === "kill") {
+      this.pid = null;
+      this.paused = true;
+    }
+    return this.refuse;
+  }
   input(): string | null {
     this.calls.push("input");
     return "in-1";
@@ -308,5 +320,66 @@ describe("the window's list of node processes (nodes.list)", () => {
       ok: true,
       value: { running: true },
     });
+  });
+});
+
+// A person's commands from a terminal (`reload --kill <package>` …): the old helper's commands,
+// each for every instance of the packages it names (test_host_children.py,
+// test_control_channel.py).
+describe("a person's command for some packages' instances (nodes.command)", () => {
+  it("gives the verb to every instance of the named packages, and answers with them afterwards", () => {
+    const h = launched();
+    h.start("n1", "alpha");
+    h.start("n2", "beta");
+    h.start("n3", "beta");
+    const [alpha, beta1, beta2] = h.started as [FakeProcess, FakeProcess, FakeProcess];
+
+    const killed = h.readiness.call("nodes.command", { verb: "kill", names: ["beta"] });
+
+    expect(alpha.commands).toEqual([]);
+    expect(beta1.commands).toEqual(["kill"]);
+    expect(beta2.commands).toEqual(["kill"]);
+    const why = "stopped from a terminal; `reload --start` starts it again";
+    const row = { name: "ping", package: "beta", pid: null, state: "stopped", why };
+    expect(killed).toEqual({ ok: true, value: { rows: [row, row], refused: [] } });
+    // The list says so too: one killed is not running, and not restarting either.
+    expect(h.readiness.call("nodes.list", null)).toMatchObject({
+      ok: true,
+      value: [{ package: "alpha", state: "starting" }, row, row],
+    });
+  });
+
+  it("says which instance the verb did not apply to, and why", () => {
+    const h = launched();
+    h.start("n1", "alpha");
+    const [alpha] = h.started as [FakeProcess];
+    alpha.refuse = "it is already running";
+    expect(h.readiness.call("nodes.command", { verb: "start", names: ["alpha"] })).toMatchObject({
+      ok: true,
+      value: { refused: [{ name: "ping", package: "alpha", why: "it is already running" }] },
+    });
+  });
+
+  it("refuses a command naming a package with no instance, by name, and touches none of the others", () => {
+    const h = launched();
+    h.start("n1", "alpha");
+    const [alpha] = h.started as [FakeProcess];
+    expect(
+      h.readiness.call("nodes.command", { verb: "restart", names: ["alpha", "whodunnit"] }),
+    ).toEqual({ ok: false, error: "no node of whodunnit runs in Reload" });
+    expect(alpha.commands).toEqual([]);
+  });
+
+  it.each([
+    [{ verb: "levitate", names: ["alpha"] }, '"levitate" is not a command for a node'],
+    [{ verb: "start", names: [7] }, "nodes.command takes {verb, names: [package names]}"],
+    [{ verb: "stop", names: [] }, "nodes.command takes {verb, names: [package names]}"],
+    [{ verb: "stop" }, "nodes.command takes {verb, names: [package names]}"],
+    [null, "undefined is not a command for a node"],
+  ])("refuses a command it cannot read rather than guessing at it: %j", (args, error) => {
+    const h = launched();
+    h.start("n1", "alpha");
+    expect(h.readiness.call("nodes.command", args)).toEqual({ ok: false, error });
+    expect((h.started[0] as FakeProcess).commands).toEqual([]);
   });
 });

@@ -533,8 +533,8 @@ serveShell({
     if (op === "node.options") {
       return nodeOptions.call(args);
     }
-    // One instance's last status, and every one's state, from the processes of this generation.
-    if (op === "node.status" || op === "nodes.list") {
+    // One instance's last status, every one's state, and a person's command for some of them.
+    if (op === "node.status" || op === "nodes.list" || op === "nodes.command") {
       return Promise.resolve(readiness.call(op, args));
     }
     if (

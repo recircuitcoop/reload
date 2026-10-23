@@ -1038,3 +1038,107 @@ describe("no orphan: a node's grandchildren end with it", () => {
     expect(signals).toEqual([]);
   });
 });
+
+// A person's commands from a terminal (`reload --kill <package>` …; the old helper's kill,
+// stop, start, restart and release, test_host_children.py, test_control_channel.py).
+describe("a person's command for a node process", () => {
+  const spawns = (node: RawNode): number =>
+    node.logger.lines.filter((line) => line.text.includes("spawned pid")).length;
+  const exited = (node: RawNode): boolean => node.logger.has(/on a person's command$/);
+
+  it("kill: the process is killed rather than asked, and nothing starts it again until start", async () => {
+    const clock = new FakeClock();
+    const node = raw({ clock });
+    await ready(node);
+    const first = node.node.pid as number;
+
+    expect(node.node.command?.("kill")).toBeNull();
+    await waitFor("the kill", () => exited(node));
+
+    // Killed, never sent close: no close was acknowledged, and it died of the signal.
+    expect(node.logger.has(/process exited \(signal SIGKILL\) on a person's command$/)).toBe(true);
+    expect(node.logger.has(/close acknowledged/)).toBe(false);
+    expect(alive(first)).toBe(false);
+    clock.advance(60_000);
+    expect(node.node.pid).toBeNull();
+    expect(node.node.paused).toBe(true);
+    // No crash: it spent no restart attempt and raised nothing.
+    expect(node.crashes).toEqual([]);
+    expect(node.notifier.notices).toEqual([]);
+
+    // Its owner let go of it, so start can start it again.
+    expect(node.node.command?.("start")).toBeNull();
+    expect(node.node.pid).not.toBeNull();
+    expect(node.node.pid).not.toBe(first);
+    expect(spawns(node)).toBe(2);
+    await waitFor("ready again", () => node.node.ready === true);
+  });
+
+  it("stop asks it to close, keeps what arrives meanwhile, and start hands it to the next process", async () => {
+    const node = raw();
+    await ready(node);
+
+    expect(node.node.command?.("stop")).toBeNull();
+    await waitFor("the stop", () => exited(node));
+    expect(node.logger.has(/close acknowledged/)).toBe(true);
+    expect(node.host.statuses.at(-1)).toEqual({
+      fill: "grey",
+      shape: "ring",
+      text: "stopped by you",
+    });
+    expect(node.node.command?.("stop")).toBe("it is stopped");
+
+    const [, delivery] = send(node.node, { do: "echo", value: 3 });
+    expect(delivery.finished).toBe(false);
+    expect(node.node.command?.("start")).toBeNull();
+    await waitFor("done", () => delivery.finished);
+    expect(delivery.outputs[0]?.message.payload).toBe(3);
+  });
+
+  it("restart spawns the process exactly once more, onto a new pid, and counts no crash", async () => {
+    const clock = new FakeClock();
+    const node = raw({ clock });
+    await ready(node);
+    const first = node.node.pid;
+
+    expect(node.node.command?.("restart")).toBeNull();
+    await waitFor("the restart", () => exited(node));
+
+    expect(spawns(node)).toBe(2);
+    expect(node.node.pid).not.toBeNull();
+    expect(node.node.pid).not.toBe(first);
+    expect(node.node.paused).toBe(false);
+    expect(node.crashes).toEqual([]);
+    await waitFor("ready again", () => node.node.ready === true);
+    clock.advance(60_000);
+    expect(spawns(node)).toBe(2);
+  });
+
+  it("release starts one stopped for good again and withdraws its notice, and is refused for one running", async () => {
+    const clock = new FakeClock();
+    const node = raw({ clock, restartable: false });
+    await ready(node);
+    expect(node.node.command?.("release")).toBe("it is not stopped for good");
+    expect(node.node.command?.("start")).toBe("it is already running");
+    process.kill(node.node.pid as number, "SIGKILL");
+    await waitFor("the stop", () => node.notifier.notices.length === 1);
+    expect(node.node.command?.("start")).toBe(
+      "it is stopped for good; `reload --release` starts it again",
+    );
+
+    expect(node.node.command?.("release")).toBeNull();
+
+    expect(node.node.stopped).toBeNull();
+    expect(node.node.pid).not.toBeNull();
+    expect(node.notifier.cleared).toContain("node-not-restarted raw");
+    await waitFor("ready again", () => node.node.ready === true);
+  });
+
+  it("takes no command while it closes", async () => {
+    const node = raw();
+    await ready(node);
+    const closing = node.node.close("redeploy");
+    expect(node.node.command?.("restart")).toBe("it is closing");
+    await closing;
+  });
+});

@@ -13,21 +13,20 @@ import type { NodeLineLevel } from "../../ports/logger";
 import type {
   InputDelivery,
   InputMessage,
-  NodeOutput,
   NodeProcess,
   NodeProcessHost,
   NodeProcessLauncher,
   NodeProcessSpec,
+  NodeVerb,
   StepOutcome,
   ViewContent,
 } from "../../ports/node-process";
 import {
-  decodeFrame,
   encodeFrame,
-  envelopeOf,
   failureOf,
-  FrameTooLargeError,
+  inputLine,
   outcomeOf,
+  outputOf,
   sourceError,
   statusOf,
   stepSignal,
@@ -38,6 +37,8 @@ import {
 } from "./codec";
 import { inputJournalFor, type Admitted, type Input, type InputJournal } from "./input-journal";
 import { prepareInstance, type NodeProcessDeps } from "./node-process-settings";
+import { routeLines } from "./frame-lines";
+import { verbRefusal } from "./person-commands";
 import { killLive, livePid, readPipes, watchExit } from "./exit-watch";
 import { nodeHeartbeat, type NodeHeartbeat } from "./node-heartbeat";
 import { clearNodeNotices, raiseStopped, stoppedFor } from "./node-notices";
@@ -75,6 +76,10 @@ class ChildNodeProcess implements NodeProcess {
   #closedAck = false;
   /** Why no process starts again (an input's refusal), or null while one may. */
   stopped: string | null = null;
+  /** Stopped by a person from a terminal (`reload --stop`, `--kill`): no process until started. */
+  paused = false;
+  /** Being restarted by a person: its exit spends no attempt, and a process follows at once. */
+  #restarting = false;
   #timers: Cancel[] = [];
 
   constructor(spec: NodeProcessSpec, host: NodeProcessHost, deps: NodeProcessDeps) {
@@ -84,13 +89,9 @@ class ChildNodeProcess implements NodeProcess {
     this.#breaker = new CrashLoopBreaker(deps.settings.crashLoop, () => deps.clock.now());
     this.#who = `[${spec.identity.type} ${spec.identity.id}]`;
     this.#subject = spec.identity.name || spec.identity.typeId;
-    this.#journal = inputJournalFor(spec.identity, deps, (level, message) => {
-      this.#log(level, message);
-    });
+    this.#journal = inputJournalFor(spec.identity, deps, this.#log.bind(this));
     this.#guard = new NodeResourceGuard(spec, deps);
-    this.#deadlines = new ViewDeadlines(deps.clock, (inputId) => {
-      this.#timedOut(inputId);
-    });
+    this.#deadlines = new ViewDeadlines(deps.clock, this.#timedOut.bind(this));
     prepareInstance(spec, deps, this.#who);
     this.#heartbeat = nodeHeartbeat(spec, deps, {
       who: this.#who,
@@ -99,14 +100,41 @@ class ChildNodeProcess implements NodeProcess {
     });
     // Created again (a redeploy): nothing said about the old instance holds any more.
     clearNodeNotices(deps.notifier, this.#subject);
-    this.#refused = new RefusedPorts(spec, deps.notifier, host, (level, message) => {
-      this.#log(level, message);
-    });
+    this.#refused = new RefusedPorts(spec, deps.notifier, host, this.#log.bind(this));
     this.#spawn();
   }
 
   get pid(): number | null {
     return this.#child === null ? null : livePid(this.#child);
+  }
+
+  /** A person's command from a terminal (`reload --stop` …); why it does not apply, else null. */
+  command(verb: NodeVerb): string | null {
+    const child = this.#child;
+    const why = verbRefusal(verb, {
+      closing: this.#closing !== null,
+      stopped: this.stopped !== null,
+      paused: this.paused,
+      restarting: this.#restarting,
+      process: child !== null,
+    });
+    if (why !== null) return why;
+    this.#log("info", `${verb}: a person's command from a terminal`);
+    if (child === null) {
+      // Started, or released: its crashes so far are forgotten, and what was said of its stop.
+      this.paused = false;
+      this.stopped = null;
+      this.#breaker.reset();
+      clearNodeNotices(this.#deps.notifier, this.#subject);
+      this.#spawn();
+      return null;
+    }
+    this.paused = verb !== "restart";
+    this.#restarting = verb === "restart";
+    if (verb === "kill")
+      killLive(this.#deps.tree, child); // killed, never asked
+    else this.#askToClose(child);
+    return null;
   }
 
   // ── from the runtime ───────────────────────────────────────────────────────────────────
@@ -197,9 +225,7 @@ class ChildNodeProcess implements NodeProcess {
       return gone;
     }
     this.#closing = reason;
-    if (reason === "removed") {
-      clearNodeNotices(this.#deps.notifier, this.#subject);
-    }
+    if (reason === "removed") clearNodeNotices(this.#deps.notifier, this.#subject);
     this.#cancelTimers();
     this.#deadlines.disarmAll();
     // The inputs still open belong to the journal now: it re-sends them to the next instance (spec 7.2), marked by why this one closed. They are neither done nor failed here.
@@ -210,6 +236,12 @@ class ChildNodeProcess implements NodeProcess {
       this.#finishClose();
       return gone;
     }
+    this.#askToClose(child);
+    return gone;
+  }
+
+  /** `close`, and SIGKILL to its process group at the deadline (spec 6.2, 6.3). */
+  #askToClose(child: ChildProcess): void {
     this.#write({ t: "close" });
     this.#after(this.#deps.settings.closeDeadlineMs, () => {
       if (child === this.#child && livePid(child) !== null) {
@@ -221,7 +253,6 @@ class ChildNodeProcess implements NodeProcess {
         killLive(this.#deps.tree, child);
       }
     });
-    return gone;
   }
 
   // ── the process ────────────────────────────────────────────────────────────────────────
@@ -288,8 +319,11 @@ class ChildNodeProcess implements NodeProcess {
       this.#finishClose();
       return;
     }
-    this.#log("error", `process exited unexpectedly (${how})`);
-    this.#host.status({ fill: "red", shape: "dot", text: `process exited (${how})` });
+    const person = this.paused || this.#restarting;
+    if (!person) {
+      this.#log("error", `process exited unexpectedly (${how})`);
+      this.#host.status({ fill: "red", shape: "dot", text: `process exited (${how})` });
+    }
     for (const [id, input] of this.#inputs) {
       if (input.state === "sent") {
         this.#fail(
@@ -297,6 +331,14 @@ class ChildNodeProcess implements NodeProcess {
           new Error(`${this.#subject}: node process exited (${how}) while handling this event`),
         );
       }
+    }
+    // A person's stop or restart is no crash: it spends no attempt, and nothing else restarts it.
+    if (person) {
+      this.#log("info", `process exited (${how}) on a person's command`);
+      if (this.paused) this.#host.status({ fill: "grey", shape: "ring", text: "stopped by you" });
+      else this.#spawn();
+      this.#restarting = false;
+      return;
     }
     // A failed start spends no attempt and is not retried (helper/restart.py); a type that must never run twice (spec 2.4.2) stops at its first exit; a stuck one comes back at once.
     const restartable = this.#spec.restartable !== false;
@@ -330,11 +372,9 @@ class ChildNodeProcess implements NodeProcess {
       }
     }
     this.#journal.failHeld(new Error(`the node process ${text}`));
-    try {
-      raiseStopped(this.#deps.notifier, notice, this.#spec.identity.flowId);
-    } catch (error) {
+    raiseStopped(this.#deps.notifier, notice, this.#spec.identity.flowId, (error) => {
       this.#log("error", `the crash-loop notice could not be raised: ${String(error)}`);
-    }
+    });
   }
 
   #finishClose(): void {
@@ -346,41 +386,14 @@ class ChildNodeProcess implements NodeProcess {
   // ── frames from the process ────────────────────────────────────────────────────────────
 
   #onStdout(child: ChildProcess, lines: ReadLine[]): void {
-    for (const line of lines) {
+    routeLines(lines, {
       // After `closed` the runtime ignores the process (spec 4.3.4); a stale process is ignored always.
-      if (child !== this.#child || this.#closedAck) {
-        continue;
-      }
-      if (line.kind === "dropped") {
-        this.#oversize(line.bytes, null);
-        continue;
-      }
-      this.#onLine(line.bytes);
-    }
-  }
-
-  #onLine(bytes: Buffer): void {
-    const decoded = decodeFrame(bytes);
-    switch (decoded.kind) {
-      case "oversize":
-        this.#oversize(decoded.bytes, decoded.inputId);
-        return;
-      case "violation":
-        this.#line("stdout", `protocol violation (${decoded.reason}): ${decoded.text}`);
-        return;
-      case "unknown":
-        this.#log("warn", `ignored a frame of unknown type ${JSON.stringify(decoded.t)}`);
-        return;
-      case "invalid":
-        this.#log("error", `refused an invalid ${decoded.t} frame: ${decoded.problems}`);
-        return;
-      case "frame":
-        if (decoded.dropped !== undefined) {
-          this.#log("warn", `${decoded.frame.t}: ${decoded.dropped.join("; ")}`);
-        }
-        this.#onFrame(decoded.frame);
-        return;
-    }
+      heard: () => child === this.#child && !this.#closedAck,
+      oversize: this.#oversize.bind(this),
+      stray: this.#line.bind(this, "stdout"),
+      log: this.#log.bind(this),
+      frame: this.#onFrame.bind(this),
+    });
   }
 
   #oversize(bytes: number, inputId: string | null): void {
@@ -451,22 +464,14 @@ class ChildNodeProcess implements NodeProcess {
       this.#log("error", `refused an emit for unknown input ${JSON.stringify(inputId)}`);
       return;
     }
-    const event = envelopeOf(this.#spec.identity, this.#deps, declared.event);
+    const at = { index, port, event: declared.event };
     if (inputId === undefined || input === undefined) {
-      // A new run: its id is this event's id (spec 5.4.2, 5.5).
-      const message = { payload: data, topic: declared.event, reload: { event, run: event.id } };
-      this.#host.send({ index, port, message });
+      this.#host.send(outputOf(this.#spec.identity, this.#deps, at, data));
       this.#deps.steps?.(stepSignal(this.#spec.identity, 0, true, undefined)); // a run is a use
       return;
     }
-    // Caused by an input: it keeps the input's run and names the input (spec 5.4.1).
-    const run = input.event.run ?? event.id;
-    const output: NodeOutput = {
-      index,
-      port,
-      message: { payload: data, topic: declared.event, reload: { event, run, cause: inputId } },
-    };
-    input.delivery.send(output);
+    const caused = { run: input.event.run, cause: inputId };
+    input.delivery.send(outputOf(this.#spec.identity, this.#deps, at, data, caused));
   }
 
   #onPresent(inputId: string, content: ViewContent): void {
@@ -549,14 +554,9 @@ class ChildNodeProcess implements NodeProcess {
   // ── writing ────────────────────────────────────────────────────────────────────────────
 
   #sendInput(id: string, input: Input): void {
-    let line: string;
-    try {
-      line = encodeFrame({ t: "input", id, event: input.event });
-    } catch (error) {
-      this.#fail(
-        id,
-        error instanceof FrameTooLargeError ? new Error("frame too large") : (error as Error),
-      );
+    const line = inputLine(id, input.event);
+    if (line instanceof Error) {
+      this.#fail(id, line);
       return;
     }
     this.#child?.stdin.write(line);

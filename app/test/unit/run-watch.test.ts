@@ -325,7 +325,9 @@ describe("the run notices, worded", () => {
         stuck: false,
       },
     );
-    raiseStopped(notifier, notice, "rec");
+    raiseStopped(notifier, notice, "rec", (error) => {
+      throw error;
+    });
     const [raised] = notifier.notices;
     if (raised === undefined) throw new Error("no notice");
     handlers.onClick(compose(raised));

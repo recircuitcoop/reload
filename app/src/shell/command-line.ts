@@ -1,6 +1,7 @@
 // Reload from a terminal (plan 0031 group E; the old app's `helper status`, `quit` and
 // `logs`, cli.py:692, 1254, 1540): `reload --status` and `reload --quit` ask the instance already
-// running, print its answer, and exit. `reload --log` asks nobody: it names the log the way the
+// running, print its answer, and exit; so do `--list` and the package verbs (`--stop <package>…`,
+// the old `helper list`, `stop`, `kill` …), which the runtime answers. `reload --log` asks nobody: it names the log the way the
 // running app finds it, and shows its end. `reload --quit --force` asks nobody either
 // (shell/run-state.ts).
 //
@@ -26,6 +27,7 @@ import fs from "node:fs";
 import * as path from "node:path";
 import type { App } from "electron";
 import { compose, isNotice, type Notice } from "../domain/notices/notices";
+import type { NodeVerb } from "../ports/node-process";
 import {
   confirmQuit,
   forceQuit,
@@ -40,7 +42,7 @@ import {
   type RunRecord,
 } from "./run-state";
 
-export type Command = "status" | "quit" | "log";
+export type Command = "status" | "quit" | "log" | "list" | NodeVerb;
 
 /** The commands put to the running instance; `--log` is answered by the asking process. */
 export type Asked = Exclude<Command, "log">;
@@ -49,7 +51,31 @@ const FLAGS: Readonly<Record<string, Command>> = {
   "--status": "status",
   "--quit": "quit",
   "--log": "log",
+  "--list": "list",
+  "--start": "start",
+  "--stop": "stop",
+  "--kill": "kill",
+  "--restart": "restart",
+  "--release": "release",
 };
+
+/**
+ * The commands that name packages, `reload --stop <package>…` (the old `helper stop`, `kill` …):
+ * each acts on every node instance of the packages named, in the runtime.
+ */
+const VERBS: readonly string[] = ["start", "stop", "kill", "restart", "release"];
+
+export const isVerb = (command: unknown): command is NodeVerb =>
+  typeof command === "string" && VERBS.includes(command);
+
+const ASKED: readonly unknown[] = ["status", "quit", "list", ...VERBS];
+
+/** The package names after the command's flag, up to the next flag. */
+export function namesOf(argv: readonly string[]): string[] {
+  const rest = argv.slice(argv.findIndex((arg) => FLAGS[arg] !== undefined) + 1);
+  const end = rest.findIndex((arg) => arg.startsWith("-"));
+  return end === -1 ? rest : rest.slice(0, end);
+}
 
 /** How long a running instance has to take a question; one that does not is not answering. */
 export const PICKUP_MS = 5_000;
@@ -62,6 +88,12 @@ export const QUESTION_POLL_MS = 200;
 export const WAIT_MS: Readonly<Record<Asked, number>> = {
   status: 10_000,
   quit: 120_000,
+  list: 10_000,
+  start: 10_000,
+  stop: 10_000,
+  kill: 10_000,
+  restart: 10_000,
+  release: 10_000,
 };
 
 /** How many of the log's last lines `--log` shows. */
@@ -88,6 +120,8 @@ export interface Question {
   /** The asking process, and its identity (shell/run-state.ts identityOf) when it asked. */
   readonly pid: number;
   readonly identity: string;
+  /** The packages a verb names; absent for every other command. */
+  readonly names?: readonly string[];
 }
 
 const REPLY_ID = /^[0-9a-f]{32}$/;
@@ -96,9 +130,16 @@ export function isQuestion(value: unknown): value is Question {
   if (typeof value !== "object" || value === null) {
     return false;
   }
-  const { command, id, pid, identity } = value as Record<string, unknown>;
+  const { command, id, pid, identity, names } = value as Record<string, unknown>;
+  const named = isVerb(command)
+    ? Array.isArray(names) &&
+      names.length > 0 &&
+      names.length <= 64 &&
+      names.every((name) => typeof name === "string" && name !== "" && name.length <= 214)
+    : names === undefined;
   return (
-    (command === "status" || command === "quit") &&
+    ASKED.includes(command) &&
+    named &&
     typeof id === "string" &&
     REPLY_ID.test(id) &&
     isPid(pid) &&
@@ -143,6 +184,8 @@ export interface AskDeps {
   /** This process, which the question names, and the executable Reload runs as. */
   readonly pid: number;
   readonly executable: string;
+  /** The packages a verb names. */
+  readonly names?: readonly string[];
 }
 
 /** Asks the running instance and prints its answer; the exit code. */
@@ -273,7 +316,8 @@ function askInstance(
     try {
       const identity = deps.identity(deps.pid);
       if (identity === null) throw new Error("this process is not in the process table");
-      const asked: Question = { command, id: deps.id, pid: deps.pid, identity };
+      const names = isVerb(command) ? { names: deps.names ?? [] } : {};
+      const asked: Question = { command, id: deps.id, pid: deps.pid, identity, ...names };
       writePrivateFile(question, JSON.stringify(asked));
     } catch (error) {
       return { reply: null, unanswered: `Reload could not be asked: ${String(error)}\n` };
@@ -444,6 +488,13 @@ export function runCommandLine(
       }),
     );
   }
+  const names = namesOf(argv);
+  if (isVerb(command) && names.length === 0) {
+    print(
+      `\`reload --${command}\` names the packages it acts on: reload --${command} <package>…\n`,
+    );
+    process.exit(1);
+  }
   const code = ask(command, {
     app,
     print,
@@ -454,6 +505,7 @@ export function runCommandLine(
     notices: files.notices,
     pid: process.pid,
     executable: process.execPath,
+    names,
   });
   process.exit(code);
 }

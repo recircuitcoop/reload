@@ -5,6 +5,7 @@
 // `--quit --force` ask nobody.
 import { spawn } from "node:child_process";
 import fs from "node:fs";
+import * as http from "node:http";
 import * as path from "node:path";
 import { expect, test, type ElectronApplication } from "@playwright/test";
 import {
@@ -260,3 +261,93 @@ test("reload --quit --force stops every recorded process of a stopped Reload its
     await cleanUp(apps, scratch);
   }
 });
+
+// The old helper's per-plugin commands against the assembled app (test_control_channel.py
+// "every command reaches the assembled host"): a deployed fixture node, listed, stopped,
+// started, restarted onto a new process and killed from a second process.
+test("reload --list and the package verbs reach the node processes of the running Reload", async () => {
+  const { scratch, env } = scratchDirectories();
+  const apps: ElectronApplication[] = [];
+  try {
+    const { app, window } = await launchApp(env);
+    apps.push(app);
+    const port = Number((await waitForRunning(window, "runtime")).port);
+    const flows = [
+      { id: "tab1", type: "tab", label: "Flow 1" },
+      {
+        id: "tk",
+        type: "reload-everycontrol-ticker",
+        z: "tab1",
+        greeting: "hi",
+        delay_ms: "2000",
+        wires: [[]],
+      },
+    ];
+    await expect.poll(() => deploy(port, flows), { timeout: 20_000 }).toBe(204);
+    const row = /^ {2}everycontrol › ticker: (\w+)(?: \(process (\d+)\))?/m;
+    const listed = async () => {
+      const list = await reload("--list", env);
+      const [, state, pid] = row.exec(list.stdout) ?? [];
+      return { code: list.code, state, pid };
+    };
+    await expect.poll(listed, { timeout: 15_000 }).toMatchObject({ code: 0, state: "running" });
+    const first = (await listed()).pid;
+
+    expect((await reload(["--stop", "everycontrol"], env)).code).toBe(0);
+    await expect.poll(listed).toMatchObject({ state: "stopped", pid: undefined });
+    expect((await reload(["--start", "everycontrol"], env)).code).toBe(0);
+    await expect.poll(listed).toMatchObject({ state: "running" });
+    const started = (await listed()).pid;
+    expect(started).not.toBe(first);
+    expect((await reload(["--restart", "everycontrol"], env)).code).toBe(0);
+    await expect.poll(async () => (await listed()).pid).not.toBe(started);
+    await expect.poll(listed).toMatchObject({ state: "running" });
+
+    const killed = Number((await listed()).pid);
+    expect((await reload(["--kill", "everycontrol"], env)).code).toBe(0);
+    await expect.poll(() => isAlive(killed)).toBe(false);
+    await expect.poll(listed).toMatchObject({ state: "stopped" });
+    // Refusals tell the truth in the exit code, by name.
+    const release = await reload(["--release", "everycontrol"], env);
+    expect(release.code).toBe(1);
+    expect(release.stdout).toContain("not done (--release): it is not stopped for good");
+    const unknown = await reload(["--stop", "whodunnit"], env);
+    expect(unknown).toEqual({
+      code: 1,
+      stdout: "Reload could not do it: no node of whodunnit runs in Reload\n",
+    });
+    expect(await reload("--stop", env)).toEqual({
+      code: 1,
+      stdout: "`reload --stop` names the packages it acts on: reload --stop <package>…\n",
+    });
+  } finally {
+    await cleanUp(apps, scratch);
+  }
+});
+
+/** Deploys `flows` through the runtime's own admin API; its status. */
+function deploy(port: number, flows: readonly object[]): Promise<number> {
+  return new Promise((resolve) => {
+    const body = JSON.stringify(flows);
+    const sent = http.request(
+      {
+        host: "127.0.0.1",
+        port,
+        method: "POST",
+        path: "/red/flows",
+        headers: {
+          "content-type": "application/json",
+          "content-length": String(Buffer.byteLength(body)),
+        },
+      },
+      (response) => {
+        response.resume();
+        resolve(response.statusCode ?? 0);
+      },
+    );
+    sent.on("error", () => {
+      resolve(0);
+    });
+    sent.end(body);
+  });
+}

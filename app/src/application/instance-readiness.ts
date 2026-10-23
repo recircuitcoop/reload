@@ -17,6 +17,7 @@ import type {
   NodeProcessHost,
   NodeProcessLauncher,
   NodeStatus,
+  NodeVerb,
 } from "../ports/node-process";
 
 /**
@@ -121,6 +122,14 @@ export interface NodeRow {
   readonly why: string | null;
 }
 
+const VERBS: readonly string[] = ["start", "stop", "kill", "restart", "release"];
+const isVerb = (verb: unknown): verb is NodeVerb =>
+  typeof verb === "string" && VERBS.includes(verb);
+const isName = (name: unknown): name is string => typeof name === "string" && name !== "";
+
+/** Why an instance a person stopped is stopped, as the list says it. */
+const PAUSED = "stopped from a terminal; `reload --start` starts it again";
+
 export class InstanceReadiness {
   readonly #running = new Map<string, Tracked>();
 
@@ -182,9 +191,48 @@ export class InstanceReadiness {
     return { ok: true, value: { deployed: ids, ready } };
   }
 
-  /** `node.status` (one instance's last status) and `nodes.list` (every process, with its state). */
-  call(op: "node.status" | "nodes.list", args: unknown): OpResult {
+  /**
+   * `node.status` (one instance's last status), `nodes.list` (every process, with its state) and
+   * `nodes.command` (a person's command from a terminal, shell/command-answers.ts).
+   */
+  call(op: "node.status" | "nodes.list" | "nodes.command", args: unknown): OpResult {
+    if (op === "nodes.command") {
+      return this.command(args);
+    }
     return op === "nodes.list" ? { ok: true, value: this.list() } : this.status(args);
+  }
+
+  /**
+   * `{verb, names}` in: the verb given to every instance of the named packages (`reload --stop
+   * <package>…`). A name with no instance refuses the whole command, by name, before any is
+   * touched: half a group restarted is worse than none of it (the old helper's restart-group).
+   * Out: each named package's instances afterwards, and each instance the verb did not apply to,
+   * with why.
+   */
+  command(args: unknown): OpResult {
+    const { verb, names } = (typeof args === "object" && args !== null ? args : {}) as Record<
+      string,
+      unknown
+    >;
+    if (!isVerb(verb)) {
+      return { ok: false, error: `${JSON.stringify(verb)} is not a command for a node` };
+    }
+    if (!Array.isArray(names) || names.length === 0 || !names.every(isName)) {
+      return { ok: false, error: "nodes.command takes {verb, names: [package names]}" };
+    }
+    const named = new Set<string>(names);
+    const tracked = [...this.#running.values()].filter((each) => named.has(each.package));
+    const unknown = names.filter((name) => !tracked.some((each) => each.package === name));
+    if (unknown.length > 0) {
+      return { ok: false, error: `no node of ${unknown.join(", ")} runs in Reload` };
+    }
+    const refused = tracked.flatMap(({ name, package: pkg, process }) => {
+      const why =
+        process.command === undefined ? "this node cannot take a command" : process.command(verb);
+      return why === null ? [] : [{ name, package: pkg, why }];
+    });
+    const rows = this.list().filter((row) => named.has(row.package));
+    return { ok: true, value: { rows, refused } };
   }
 
   /**
@@ -193,7 +241,7 @@ export class InstanceReadiness {
    */
   list(): NodeRow[] {
     return [...this.#running.values()].map(({ name, process, ...rest }) => {
-      const stopped = process.stopped ?? null;
+      const stopped = process.paused === true ? PAUSED : (process.stopped ?? null);
       const state: NodeRow["state"] =
         stopped !== null
           ? "stopped"

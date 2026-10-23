@@ -1,6 +1,7 @@
 // What the running Reload answers a terminal with (plan 0031 group E; shell/command-line.ts is
 // the asking side): it takes each question file from the user-data folder, removes it, and
-// writes the answer as a file of this user's own, named by the question's id.
+// writes the answer as a file of this user's own, named by the question's id. `--list` and the
+// package verbs (`--stop <package>…`) are the runtime's to answer: it holds the node processes.
 import fs from "node:fs";
 import * as path from "node:path";
 import type { App } from "electron";
@@ -8,6 +9,7 @@ import type { AnytypeApp, AnytypeAppState } from "../application/anytype-app";
 import type { QuitOutcome } from "../application/quit";
 import type { Supervisor } from "../application/supervisor";
 import type { ChildName, ChildStatus } from "../domain/supervision/child-state";
+import type { NodeRow } from "../application/instance-readiness";
 import type { Logger } from "../ports/logger";
 import type { Notice } from "../domain/notices/notices";
 import type { Notifier } from "../ports/notifier";
@@ -26,7 +28,11 @@ import { writePrivateFile } from "./run-state";
 
 /** What the running instance answers from. */
 export interface Running {
-  readonly supervisors: ReadonlyMap<ChildName, Pick<Supervisor, "status" | "onStatus">>;
+  /** The runtime's `call` asks it for its node processes (`reload --list`, `--stop` …). */
+  readonly supervisors: ReadonlyMap<
+    ChildName,
+    Pick<Supervisor, "status" | "onStatus"> & Partial<Pick<Supervisor, "call">>
+  >;
   readonly anytype: Pick<AnytypeApp, "state" | "startedPid" | "onStarted">;
   readonly notices: CommandFiles["notices"];
 }
@@ -223,7 +229,47 @@ async function replyTo(question: Question, deps: AnswerDeps): Promise<Reply> {
       // What stopped is the asking process's to say: it watches each process go (confirmQuit).
       return { code: 0, text: outcome === "busy" ? "Reload is already quitting.\n" : "" };
     }
+    default:
+      return nodesReply(question, deps.running);
   }
+}
+
+/**
+ * `reload --list`, and a verb for the named packages' instances (the old helper's list, start,
+ * stop, kill, restart and release), answered by the runtime. Exit code 0 only when the verb
+ * applied to every instance it names.
+ */
+async function nodesReply(question: Question, running: Running): Promise<Reply> {
+  const runtime = running.supervisors.get("runtime");
+  const verb = question.command === "list" ? null : question.command;
+  const result =
+    runtime?.call === undefined
+      ? { ok: false as const, error: "the Reload runtime cannot be asked" }
+      : verb === null
+        ? await runtime.call("nodes.list", null)
+        : await runtime.call("nodes.command", { verb, names: question.names });
+  if (!result.ok) {
+    return { code: 1, text: `Reload could not do it: ${result.error}\n` };
+  }
+  const { rows, refused } = (
+    verb === null ? { rows: result.value, refused: [] } : result.value
+  ) as {
+    rows: readonly NodeRow[];
+    refused: readonly (Pick<NodeRow, "name" | "package"> & { why: string })[];
+  };
+  const lines = [...rows]
+    .sort((a, b) => a.package.localeCompare(b.package) || a.name.localeCompare(b.name))
+    .map((row) => {
+      const where = row.pid === null ? "" : ` (process ${String(row.pid)})`;
+      return `  ${row.package} › ${row.name}: ${row.state}${where}${row.why === null ? "" : ` — ${row.why}`}`;
+    });
+  if (lines.length === 0) {
+    lines.push("No node runs in Reload.");
+  }
+  for (const each of refused) {
+    lines.push(`  ${each.package} › ${each.name}: not done (--${verb ?? ""}): ${each.why}`);
+  }
+  return { code: refused.length === 0 ? 0 : 1, text: lines.join("\n") + "\n" };
 }
 
 /** Written whole or not at all, readable by this user alone (shell/run-state.ts). */

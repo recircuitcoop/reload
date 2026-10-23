@@ -13,6 +13,7 @@ import type {
   EventEnvelope,
   InputEvent,
   NodeIdentity,
+  NodeOutput,
   NodeStatus,
   StepOutcome,
   StepStatus,
@@ -224,6 +225,24 @@ export function envelopeOf(
   };
 }
 
+/**
+ * An emit on a declared port, as it goes on the wire (spec 5.4): caused by an input, it keeps
+ * the input's run and names the input (5.4.1); else it is a new run, whose id is this event's id
+ * (5.4.2, 5.5).
+ */
+export function outputOf(
+  identity: NodeIdentity,
+  stamp: Parameters<typeof envelopeOf>[1],
+  at: { readonly index: number; readonly port: string; readonly event: string },
+  payload: unknown,
+  caused?: { readonly run: string | undefined; readonly cause: string },
+): NodeOutput {
+  const event = envelopeOf(identity, stamp, at.event);
+  const run = caused?.run ?? event.id;
+  const reload = caused === undefined ? { event, run } : { event, run, cause: caused.cause };
+  return { index: at.index, port: at.port, message: { payload, topic: at.event, reload } };
+}
+
 /** A `status` as the node's badge (spec 4.2). */
 export function statusOf(frame: Extract<NodeFrame, { t: "status" }>): NodeStatus {
   return { text: frame.text, fill: frame.fill ?? "blue", shape: frame.shape ?? "dot" };
@@ -295,6 +314,15 @@ export function sourceError(
 /** A frame the runtime was about to send is over 1 MiB (spec 3.5). */
 export class FrameTooLargeError extends Error {
   override name = "FrameTooLargeError";
+}
+
+/** An input's frame line (spec 4.1 `input`), or why it cannot be sent. */
+export function inputLine(id: string, event: InputEvent): string | Error {
+  try {
+    return encodeFrame({ t: "input", id, event });
+  } catch (error) {
+    return error instanceof FrameTooLargeError ? new Error("frame too large") : (error as Error);
+  }
 }
 
 /** One line to write to a node's stdin: validated, sized, newline-terminated. */
