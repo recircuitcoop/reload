@@ -16,12 +16,14 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
+import type { Logger } from "../../ports/logger";
 import type {
   InstalledRecord,
   LivePackage,
   PackageFolder,
   PackageRoots,
   RecordAmendment,
+  Recovered,
   Swapped,
 } from "../../ports/package-roots";
 
@@ -88,6 +90,18 @@ export function unsealTree(root: string): void {
   chmodTree(root, false);
 }
 
+/** A folder's entries, or none when it does not exist. */
+function entries(folder: string): string[] {
+  try {
+    return fs.readdirSync(folder).sort();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return [];
+    }
+    throw error;
+  }
+}
+
 /** Delete a tree that may be sealed. */
 function removeTree(root: string): void {
   unsealTree(root);
@@ -98,11 +112,14 @@ export class FsPackageRoots implements PackageRoots {
   readonly live: string;
   readonly staging: string;
   readonly previous: string;
+  /** Where a failure after the change is said: the change happened, so it is not thrown. */
+  readonly #logger: Pick<Logger, "warn"> | undefined;
 
-  constructor(base: string) {
+  constructor(base: string, logger?: Pick<Logger, "warn">) {
     this.live = path.join(base, LIVE_DIRNAME);
     this.staging = path.join(base, STAGING_DIRNAME);
     this.previous = path.join(base, PREVIOUS_DIRNAME);
+    this.#logger = logger;
   }
 
   stage(name: string): PackageFolder {
@@ -145,10 +162,11 @@ export class FsPackageRoots implements PackageRoots {
     }
     fs.mkdirSync(this.previous, { recursive: true });
     return this.#unsealedLive(name, () => {
-      // The previous one from an earlier swap is spent: one is kept, the one this swap replaces.
-      removeTree(kept);
       const replaced = fs.existsSync(live);
       if (replaced) {
+        // The previous one from an earlier swap is spent: one is kept, the one this swap
+        // replaces. With nothing live, what is kept is the only whole version, and stays.
+        removeTree(kept);
         this.#rename(live, kept, name);
       }
       try {
@@ -160,7 +178,7 @@ export class FsPackageRoots implements PackageRoots {
         }
         throw error;
       }
-      return { live, previous: replaced ? kept : null };
+      return { live, previous: fs.existsSync(kept) ? kept : null };
     });
   }
 
@@ -186,7 +204,7 @@ export class FsPackageRoots implements PackageRoots {
         }
         throw error;
       }
-      removeTree(discarded);
+      this.#discard(discarded, name);
       return live;
     });
   }
@@ -216,9 +234,39 @@ export class FsPackageRoots implements PackageRoots {
         }
         throw error;
       }
-      removeTree(discarded);
+      this.#discard(discarded, name);
       return live;
     });
+  }
+
+  recover(): readonly Recovered[] {
+    const recovered: Recovered[] = [];
+    // A swap or a rollback cut between its two renames leaves the version it moved aside in
+    // previous/; a repair, beside staging. Each is whole (it was live), so it goes back.
+    const candidates = [
+      ...entries(this.previous).map((name) => ({ name, from: this.#in(this.previous, name) })),
+      ...entries(this.staging)
+        .filter((entry) => entry.endsWith(".replaced"))
+        .map((entry) => ({
+          name: entry.slice(0, -".replaced".length),
+          from: path.join(this.staging, entry),
+        })),
+    ];
+    for (const { name, from } of candidates) {
+      if (!PACKAGE_NAME.test(name) || fs.existsSync(this.#in(this.live, name))) {
+        continue;
+      }
+      const record = this.#recordIn(from);
+      if (record === undefined) {
+        continue;
+      }
+      this.#unsealedLive(name, () => {
+        chmodOne(from, false);
+        this.#rename(from, this.#in(this.live, name), name);
+      });
+      recovered.push({ name, version: record.version });
+    }
+    return recovered;
   }
 
   installed(name: string): InstalledRecord | undefined {
@@ -316,11 +364,36 @@ export class FsPackageRoots implements PackageRoots {
     fs.mkdirSync(this.live, { recursive: true });
     chmodOne(this.live, false);
     chmodOne(live, false);
+    let result: T;
     try {
-      return change();
-    } finally {
+      result = change();
+    } catch (error) {
+      this.#seal(live, name);
+      throw error;
+    }
+    this.#seal(live, name);
+    return result;
+  }
+
+  /**
+   * Seal the live root and `name` again. A failure is said, never thrown: what changed has
+   * changed, and the next change seals it again.
+   */
+  #seal(live: string, name: string): void {
+    try {
       chmodTree(live, true);
       chmodOne(this.live, true);
+    } catch (error) {
+      this.#logger?.warn(`packages: ${name} could not be sealed again: ${String(error)}`);
+    }
+  }
+
+  /** Delete what a swap set aside once the swap is done; scrap left is removed by the next. */
+  #discard(discarded: string, name: string): void {
+    try {
+      removeTree(discarded);
+    } catch (error) {
+      this.#logger?.warn(`packages: ${name}: ${discarded} could not be removed: ${String(error)}`);
     }
   }
 

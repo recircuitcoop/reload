@@ -391,7 +391,7 @@ async function start(): Promise<DesktopWired["notices"] | null> {
   const viewSession = session.fromPartition(VIEW_PARTITION);
   // ── packages (WI-0018-16): verified installs, and only the runtime restarted ──────────
   const packageBase = path.join(userDir, "node-packages");
-  const packageRoots = new FsPackageRoots(packageBase);
+  const packageRoots = new FsPackageRoots(packageBase, logger);
   const shippedStore = new DeclaredPackageStore(PACKAGE_ROOTS, logger);
   const packageStore = new InstalledPackageStore(shippedStore, packageRoots, logger);
   const testCa = process.env["RELOAD_TEST_CATALOGUE_CA"];

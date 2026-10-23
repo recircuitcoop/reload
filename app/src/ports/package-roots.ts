@@ -77,6 +77,12 @@ export interface Swapped {
   readonly previous: string | null;
 }
 
+/** A package a cut-short swap left with no live version, put back to a whole one. */
+export interface Recovered {
+  readonly name: string;
+  readonly version: string;
+}
+
 export interface PackageRoots {
   /**
    * A fresh staging folder for `name`, empty but for `package/` and `environment/`. A staged
@@ -100,6 +106,11 @@ export interface PackageRoots {
   replaceLive(name: string): string;
   /** Put back what the last swap replaced. Refuses when nothing is kept. */
   rollBack(name: string): string;
+  /**
+   * At the start, before anything reads the live root: every package a crash between a swap's
+   * two renames left with no live version gets back the whole version it had. Says which.
+   */
+  recover(): readonly Recovered[];
   /** The record of what the last swap of `name` replaced and kept; undefined when none is. */
   kept(name: string): InstalledRecord | undefined;
   /** Add `fields` to `name`'s live record, every other field kept. */

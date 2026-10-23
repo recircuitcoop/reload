@@ -194,6 +194,11 @@ export function wirePackages(given: ShellPackagesOptions): PackageBoard {
   };
   const options = { ...given, environment };
   const { logger, userDir } = options;
+  // Before the runtime first reads the live root: a swap a crash cut short is put back whole.
+  for (const { name, version } of environment.roots.recover()) {
+    logger.warn(`packages: ${name} had no live version after a cut-short swap; ${version} is back`);
+    options.notifier.raise({ kind: "package-recovered", subject: name, version });
+  }
   const restartRuntime = runtimeRestarter(options.runtime, options.clock, logger);
   const one = new OneAtATime();
   const shipped = () =>

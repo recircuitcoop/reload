@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { FsContentHashes } from "../../src/adapters/fs/content-hashes";
 import { FsPackageRoots, unsealTree, SwapError } from "../../src/adapters/fs/package-roots";
 import type { InstalledRecord } from "../../src/ports/package-roots";
+import { RecordingLogger } from "../fakes/children";
 
 let base: string;
 let roots: FsPackageRoots;
@@ -195,6 +196,95 @@ function writeFromAnotherProcess(target: string): string {
   }).trim();
 }
 
+describe("FsPackageRoots: a change that happened is reported as done", () => {
+  it("a swap whose sealing fails after both renames is done, and says why", () => {
+    const logger = new RecordingLogger();
+    const told = new FsPackageRoots(base, logger);
+    stageComplete("1");
+    told.swapIn("monty");
+    stageComplete("2");
+    failSealing(null, () => {
+      expect(told.swapIn("monty")).toEqual({
+        live: path.join(base, "packages", "monty"),
+        previous: path.join(base, "previous", "monty"),
+      });
+    });
+    expect(liveVersion()).toBe("2");
+    expect(told.kept("monty")?.version).toBe("1");
+    expect(logger.lines.join("\n")).toContain("monty could not be sealed again");
+  });
+
+  it("a rollback whose clean-up and sealing fail after the old version is live is done", () => {
+    const logger = new RecordingLogger();
+    const told = new FsPackageRoots(base, logger);
+    stageComplete("1");
+    told.swapIn("monty");
+    stageComplete("2");
+    told.swapIn("monty");
+    failSealing(".rolled-back", () => {
+      expect(told.rollBack("monty")).toBe(path.join(base, "packages", "monty"));
+    });
+    expect(liveVersion()).toBe("1");
+    const said = logger.lines.join("\n");
+    expect(said).toContain("could not be removed");
+    expect(said).toContain("monty could not be sealed again");
+  });
+
+  it("never deletes the only whole version a cut-short swap left in previous", () => {
+    stageComplete("1");
+    roots.swapIn("monty");
+    stageComplete("2");
+    // The second rename fails, and so does putting the old one back: nothing is live.
+    failRenames([2, 3], () => {
+      expect(() => roots.swapIn("monty")).toThrow(/could not be moved/);
+    });
+    expect(roots.installed("monty")).toBeUndefined();
+    expect(roots.kept("monty")?.version).toBe("1");
+    stageComplete("3");
+    roots.swapIn("monty");
+    expect(liveVersion()).toBe("3");
+    expect(roots.kept("monty")?.version).toBe("1");
+  });
+});
+
+describe("FsPackageRoots: recovery at the start (a crash between two renames)", () => {
+  it("puts back the version a swap moved aside, and says which", () => {
+    stageComplete("1");
+    roots.swapIn("monty");
+    stageComplete("2");
+    failRenames([2, 3], () => {
+      expect(() => roots.swapIn("monty")).toThrow();
+    });
+    expect(roots.installed("monty")).toBeUndefined();
+    expect(roots.recover()).toEqual([{ name: "monty", version: "1" }]);
+    expect(liveVersion()).toBe("1");
+    // Once whole, there is nothing more to put back.
+    expect(roots.recover()).toEqual([]);
+  });
+
+  it("puts back the version a repair moved aside, and leaves whole packages alone", () => {
+    stageComplete("1");
+    roots.swapIn("monty");
+    stageComplete("1", "other");
+    roots.swapIn("other");
+    stageComplete("1");
+    failRenames([2, 3], () => {
+      expect(() => roots.replaceLive("monty")).toThrow();
+    });
+    expect(roots.installed("monty")).toBeUndefined();
+    expect(roots.recover()).toEqual([{ name: "monty", version: "1" }]);
+    expect(liveVersion()).toBe("1");
+    expect(liveVersion("other")).toBe("1");
+  });
+
+  it("puts nothing back when nothing was cut short, or what is left is half-built", () => {
+    expect(roots.recover()).toEqual([]);
+    fs.mkdirSync(path.join(base, "previous", "monty"), { recursive: true });
+    expect(roots.recover()).toEqual([]);
+    expect(roots.installed("monty")).toBeUndefined();
+  });
+});
+
 describe("FsPackageRoots: the live root is sealed (WI-0018-16, spec 11.4)", () => {
   it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
     "no other process can write into the live root, a package's folder, or its files",
@@ -287,13 +377,44 @@ describe("FsPackageRoots: the live root is sealed (WI-0018-16, spec 11.4)", () =
   });
 });
 
-/** Make the `nth` rename (and only it) fail, as a cross-filesystem rename would. */
-function failRenames(nth: number, run: () => void): void {
+/**
+ * Make every sealing chmod fail (a folder made 0555), and every removal of `scrap` but the
+ * first (the clean-up before a change, which may fail as a refusal).
+ */
+function failSealing(scrap: string | null, run: () => void): void {
+  const chmod = fs.chmodSync;
+  const rm = fs.rmSync;
+  fs.chmodSync = (target: fs.PathLike, mode: fs.Mode): void => {
+    if (mode === 0o555) {
+      throw Object.assign(new Error("EPERM: operation not permitted"), { code: "EPERM" });
+    }
+    chmod(target, mode);
+  };
+  let removals = 0;
+  fs.rmSync = (target: fs.PathLike, options?: fs.RmOptions): void => {
+    if (scrap !== null && String(target).endsWith(scrap) && ++removals > 1) {
+      throw Object.assign(new Error("EBUSY: resource busy"), { code: "EBUSY" });
+    }
+    rm(target, options);
+  };
+  syncBuiltinESMExports();
+  try {
+    run();
+  } finally {
+    fs.chmodSync = chmod;
+    fs.rmSync = rm;
+    syncBuiltinESMExports();
+  }
+}
+
+/** Make the `nth` renames (and only those) fail, as a cross-filesystem rename would. */
+function failRenames(nth: number | readonly number[], run: () => void): void {
   const original = fs.renameSync;
+  const failing = typeof nth === "number" ? [nth] : nth;
   let count = 0;
   fs.renameSync = (from: fs.PathLike, to: fs.PathLike): void => {
     count += 1;
-    if (count === nth) {
+    if (failing.includes(count)) {
       throw Object.assign(new Error("EXDEV: cross-device link not permitted"), { code: "EXDEV" });
     }
     original(from, to);

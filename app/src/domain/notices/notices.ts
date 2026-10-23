@@ -40,6 +40,8 @@ export type NoticeKind =
   | "package-update-available"
   /** A package update is refused, and what is installed stays (WI-0018-17). */
   | "package-update-refused"
+  /** A swap cut short left a package with no live version; its last whole one was put back. */
+  | "package-recovered"
   /** A newer version of Reload itself is verified and queued to install at quit (WI-0018-24). */
   | "core-update-available"
   /** The core update check found a tampered feed or artifact; nothing is installed (WI-0018-24). */
@@ -83,6 +85,7 @@ export const NOTICE_KINDS: readonly NoticeKind[] = [
   "view-waiting",
   "package-update-available",
   "package-update-refused",
+  "package-recovered",
   "core-update-available",
   "core-update-refused",
   "core-crash-loop",
@@ -237,6 +240,14 @@ function composeWords(notice: Notice): Message {
       return {
         title: `${subject} ${version} is available`,
         body: sentences(detail, "Update it in Configuration › General."),
+      };
+    case "package-recovered":
+      return {
+        title: `${subject} ${version} was put back`,
+        body: sentences(
+          detail,
+          "An update or a Go back was cut short, so Reload put back the version it had.",
+        ),
       };
     case "package-update-refused":
       return {

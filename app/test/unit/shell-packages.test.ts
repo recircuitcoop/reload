@@ -7,7 +7,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { FsPackageRoots } from "../../src/adapters/fs/package-roots";
+import { FsPackageRoots, unsealTree } from "../../src/adapters/fs/package-roots";
 import {
   catalogueSource,
   deployedTypes,
@@ -139,8 +139,10 @@ describe("General's Packages board, wired", () => {
     const { clock, supervisor } = supervised(obedient);
     const logger = new RecordingLogger();
     const settings = new MemoryPackageSettings();
+    const notifier = new RecordingNotifier();
     const board = wirePackages({
       ...UPDATES_UNUSED(),
+      notifier,
       settings,
       runtime: supervisor,
       editor: { nodes: () => Promise.resolve(null) },
@@ -159,8 +161,33 @@ describe("General's Packages board, wired", () => {
         roots: new FsPackageRoots(path.join(scratch, "node-packages")),
       } as never,
     });
-    return { board, logger, settings, clock };
+    return { board, logger, settings, clock, notifier };
   }
+
+  it("puts back, before the runtime reads the packages, a version a crash left aside, and says so", () => {
+    // A swap cut between its two renames: nothing live, the old version in previous/.
+    const kept = path.join(scratch, "node-packages", "previous", "monty");
+    fs.mkdirSync(path.join(kept, "package"), { recursive: true });
+    fs.writeFileSync(
+      path.join(kept, "installed.json"),
+      JSON.stringify({
+        package: "monty",
+        version: "0.1.0",
+        contentHash: "a",
+        environment: "node",
+        signed: true,
+      }),
+    );
+    const { notifier, logger } = wired([]);
+    expect(notifier.notices).toEqual([
+      { kind: "package-recovered", subject: "monty", version: "0.1.0" },
+    ]);
+    expect(
+      fs.existsSync(path.join(scratch, "node-packages", "packages", "monty", "installed.json")),
+    ).toBe(true);
+    expect(logger.lines.join("\n")).toContain("monty had no live version after a cut-short swap");
+    unsealTree(path.join(scratch, "node-packages"));
+  });
 
   it("lists the shipped packages, and a build with no catalogue offers none to install", async () => {
     const { board } = wired([
