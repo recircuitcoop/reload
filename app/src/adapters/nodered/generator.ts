@@ -13,6 +13,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { isSecret, propertiesOf, secretKeys } from "../../domain/forms/form-model";
+import { REFUSED_KEY } from "../../domain/forms/kept-on-save";
 import {
   inputsOf,
   nodeTypeName,
@@ -84,6 +85,8 @@ function defaultsOf(type: DeclaredType): Record<string, { value: unknown }> {
     const empty = property["type"] === "array" ? [] : property["type"] === "object" ? {} : "";
     defaults[key] = { value: "default" in property ? property["default"] : empty };
   }
+  // A refused save, kept until corrected (kept-on-save.ts): a node property like the others.
+  defaults[REFUSED_KEY] = { value: null };
   return defaults;
 }
 
@@ -97,7 +100,7 @@ export function editorHtml(declaration: Declaration, type: DeclaredType): string
   const name = nodeTypeName(declaration.package, type.id);
   const ports = portsOf(type);
   const defaults = defaultsOf(type);
-  const validated = Object.keys(defaults).filter((key) => key !== "name");
+  const validated = Object.keys(defaults).filter((key) => key !== "name" && key !== REFUSED_KEY);
   const required = new Set(
     Array.isArray(type.config["required"]) ? (type.config["required"] as unknown[]) : [],
   );
@@ -115,7 +118,8 @@ export function editorHtml(declaration: Declaration, type: DeclaredType): string
     paletteLabel: ${scriptJson(type.label)},
     label: function () { return this.name || ${scriptJson(type.label)}; },
     oneditprepare: function () { window.ReloadForms.prepare(TYPE, this); },
-    oneditsave: function () { return window.ReloadForms.save(TYPE, this); }
+    oneditsave: function () { return window.ReloadForms.save(TYPE, this); },
+    oneditcancel: function () { window.ReloadForms.close(); }
   }`;
   // A top-level secret is Node-RED's own credential input; one in a group the form draws there.
   const topSecrets = propertiesOf(type.config).filter(([, property]) => isSecret(property));

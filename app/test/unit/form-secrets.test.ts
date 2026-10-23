@@ -18,6 +18,7 @@ import {
   withCredentials,
 } from "../../src/domain/forms/coerce";
 import { formModel, secretKeys, withoutSecrets } from "../../src/domain/forms/form-model";
+import { unkeptSecretsOfNode } from "../../src/domain/forms/unkept";
 import {
   parseDeclaration,
   type Declaration,
@@ -172,21 +173,54 @@ describe("a secret's default", () => {
 });
 
 describe("a secret that cannot be a credential", () => {
-  it("a table with a secret column is refused at the declaration, naming the column", () => {
-    const config = {
+  it("a table with a secret column is accepted, and a value for it is refused rather than kept", () => {
+    const config: JsonSchema = {
+      type: "object",
       properties: { volumes: RECORDER_ROW({ token: { type: "string", writeOnly: true } }) },
     };
-    expect(problemsOf(config)).toEqual([
-      'types/0/config: "volumes.token" is a secret inside a table\'s rows or a list, which ' +
-        "cannot be stored; declare it as a property of its own",
-    ]);
+    expect(problemsOf(config)).toEqual([]);
+    const [volumes] = formModel(config).fields;
+    expect(volumes?.fields?.map((column) => column.control)).toEqual(["text", "unkept"]);
+    // Never in the plain schema, nor in what the node is handed, nor a credential.
+    const node = { volumes: [{ label: "Zoom H6", token: "hunter2" }] };
+    expect(configOf(config, node)).toEqual({ volumes: [{ label: "Zoom H6" }] });
+    expect(secretKeys(config)).toEqual([]);
+    // A flow holding one is refused by its path, as the old store refused the write.
+    expect(unkeptSecretsOfNode(config, { id: "n1", ...node })).toEqual(["volumes.0.token"]);
+    expect(unkeptSecretsOfNode(config, { volumes: [{ label: "x" }] })).toEqual([]);
   });
 
   it("a secret column in a nested row is named by its path through the declaration", () => {
     const takes = RECORDER_ROW({ token: { type: "string", "x-secret": true } });
-    const config = { properties: { volumes: RECORDER_ROW({ takes }) } };
-    expect(problemsOf(config)).toHaveLength(1);
-    expect(problemsOf(config)[0]).toContain('"volumes.takes.token"');
+    const config: JsonSchema = { type: "object", properties: { volumes: RECORDER_ROW({ takes }) } };
+    expect(problemsOf(config)).toEqual([]);
+    const node = { volumes: [{ label: "Zoom H6", takes: [{ token: "hunter2" }] }] };
+    expect(unkeptSecretsOfNode(config, node)).toEqual(["volumes.0.takes.0.token"]);
+  });
+
+  it("a secret under a row's additionalProperties or only in an anyOf branch is never kept", () => {
+    const config: JsonSchema = {
+      type: "object",
+      properties: {
+        rows: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: { label: { type: "string" } },
+            additionalProperties: { type: "string", writeOnly: true },
+          },
+        },
+        either: {
+          type: "object",
+          anyOf: [{ properties: { token: { type: "string", "x-secret": true } } }],
+        },
+      },
+    };
+    const node = {
+      rows: [{ label: "a", extra: "hunter2", empty: "" }],
+      either: { token: "hunter2", other: "plain" },
+    };
+    expect(unkeptSecretsOfNode(config, node)).toEqual(["rows.0.extra", "either.token"]);
   });
 
   it("a property name holding a dot is refused, at any depth, as it would share a credential", () => {
@@ -207,14 +241,46 @@ describe("a secret that cannot be a credential", () => {
     expect(problems[2]).toContain('"rows.c.d"');
   });
 
-  it("a list of secrets is refused, as it would be kept in the plain flows", () => {
-    const config = {
-      properties: { keys: { type: "array", items: { type: "string", writeOnly: true } } },
+  it("a list of secrets parses and installs, and a value for it is refused, never kept", () => {
+    const config: JsonSchema = {
+      type: "object",
+      properties: {
+        keys: { type: "array", title: "API tokens", items: { type: "string", writeOnly: true } },
+      },
     };
-    expect(problemsOf(config)[0]).toContain('"keys"');
+    expect(problemsOf(config)).toEqual([]);
+    expect(formModel(config).fields[0]).toMatchObject({ key: "keys", control: "unkept" });
+    expect(withoutSecrets(config)["properties"]).toEqual({});
+    expect(configOf(config, { keys: ["a", "b"] })).toEqual({});
+    expect(unkeptSecretsOfNode(config, { keys: ["a"] })).toEqual(["keys"]);
+    expect(unkeptSecretsOfNode(config, { keys: [] })).toEqual([]);
     // A secret in a group, at any depth, is a credential and accepted.
     const nested = { properties: { a: { type: "object", properties: CONFIG["properties"] } } };
     expect(problemsOf(nested)).toEqual([]);
     expect(secretKeys(nested)).toEqual(["a.token", "a.account.password"]);
+  });
+
+  it("a default that holds a secret's value is refused, as it would be written into the flows", () => {
+    const config = {
+      properties: {
+        account: {
+          type: "object",
+          default: { user: "me", password: "hunter2" },
+          properties: { user: { type: "string" }, password: { type: "string", writeOnly: true } },
+        },
+        volumes: {
+          ...RECORDER_ROW({ token: { type: "string", writeOnly: true } }),
+          default: [{ label: "a", token: "hunter2" }],
+        },
+        fine: { type: "object", default: { user: "me" }, properties: CONFIG["properties"] },
+      },
+    };
+    const problems = problemsOf(config);
+    expect(problems).toHaveLength(2);
+    expect(problems[0]).toBe(
+      'types/0/config: the default of "account" holds a secret\'s value, which would be ' +
+        "written into the plain flows; leave the secret out of the default",
+    );
+    expect(problems[1]).toContain('"volumes"');
   });
 });

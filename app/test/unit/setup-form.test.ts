@@ -140,6 +140,10 @@ describe("a step's form", () => {
       ["odd", "text", null],
       ["space", "text", null],
     ]);
+    // A read-only value is shown and never sent back.
+    const shown = setupFields({ properties: { recorded: { type: "string", readOnly: true } } });
+    expect(shown[0]?.readOnly).toBe(true);
+    expect(valuesOf(shown, { recorded: "typed" })).toEqual({});
     // A multiline value is sent as typed, its newlines and all.
     expect(valuesOf(fields, { body: "one\ntwo\n" })).toEqual({ body: "one\ntwo\n" });
   });

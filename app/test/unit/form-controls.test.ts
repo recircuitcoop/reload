@@ -72,27 +72,46 @@ describe("the controls of the old settings window", () => {
       [{ type: "number", minimum: 1 }, "number"],
       [{ type: "boolean" }, "checkbox"],
       [{ enum: ["one", "two"] }, "select"],
-      [{ type: "array", items: { enum: ["one", "two"] } }, "multiselect"],
+      [{ type: "array", items: { enum: ["one", "two"] }, uniqueItems: true }, "multiselect"],
       [{ type: "string", reload: { path: "file" } }, "path"],
     ];
     for (const [items, control] of elements) {
       const [many] = formModel({ properties: { many: { type: "array", items } } }).fields;
-      // A list of options is ticked, not listed: the option is the element.
-      const expected = control === "select" ? "multiselect" : "list";
-      expect(many?.control).toBe(expected);
-      if (expected === "list") {
-        expect(many?.element?.control).toBe(control);
-      }
+      expect(many?.control).toBe("list");
+      expect(many?.element?.control).toBe(control);
     }
   });
 
   it("a multiselect's default is kept as the list it declares", () => {
     const [formats] = formModel({
       properties: {
-        formats: { type: "array", items: { enum: ["wav", "mp3"] }, default: ["mp3"] },
+        formats: {
+          type: "array",
+          items: { enum: ["wav", "mp3"] },
+          uniqueItems: true,
+          default: ["mp3"],
+        },
       },
     }).fields;
     expect(formats).toMatchObject({ control: "multiselect", default: ["mp3"] });
+  });
+
+  it("a list of choice keeps its order and its repeats; distinct options are ticked", () => {
+    const { fields } = formModel({
+      properties: {
+        order: { type: "array", items: { enum: ["low", "high"] } },
+        formats: { type: "array", items: { enum: ["wav", "mp3"] }, uniqueItems: true },
+      },
+    });
+    expect(fields.map((field) => [field.control, field.element?.control])).toEqual([
+      ["list", "select"],
+      ["multiselect", undefined],
+    ]);
+    // A list holds what it was given, repeats and order and all.
+    const order = { properties: { order: { type: "array", items: { enum: ["low", "high"] } } } };
+    expect(coerceObject(order, { order: ["high", "low", "high"] })).toEqual({
+      order: ["high", "low", "high"],
+    });
   });
 
   it("a table's path column gets the path control a top-level path gets, kind and all", () => {

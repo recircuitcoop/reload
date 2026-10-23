@@ -61,7 +61,7 @@ every ledger row against its old test, the other checks behaviour under failure.
    required values caught), 29 (a broken package shown, not hidden), 2, 1 (the controls), 4, 37
    (saving one setting restarts every node), 38.
 3. **Wave 3, supervision and process control:** groups 9, 10, 11, 12, 13, 14, 15, 23, 24.
-   With them, **WI-0032-41, a plugin writes its own settings** (group 3's write-back half, 14
+   With them, **WI-0032-41, a plugin writes its own settings** (group 3's write-back half, 13
    rows): a `reload.writtenBy` key (`plugin` or `both`; spec 2.4.1 and the declaration schema);
    a node→runtime message that writes declared values, in both SDKs and the conformance suite,
    refused for a property the author left to the person or in another package's name; a store per
@@ -80,15 +80,20 @@ settings.
 
 - **Group 1** (branch `port/0032-forms-data`): a list of values, ticked options, several lines
   of text and a path with Browse… are controls of their own in the canvas form, in a table's rows
-  as at the top; a number carries its bounds and step; a list is saved as a list. 22 rows
-  ported; the 23rd, a list of secrets, is group 3's.
-- **Group 3, its data-loss half** (same branch): a secret inside a group is a Node-RED credential
-  named by its path, drawn in its group; a secret in a table's rows, or a list of secrets, is
-  refused at the declaration naming its path; a secret's default is kept. 5 rows ported, and
-  group 1's list of secrets `replaced` by that refusal, as it cannot be a credential. The 14
-  rows of a plugin writing its own settings moved to WI-0032-41 (wave 3).
+  as at the top; a number carries its bounds and step; a list is saved as a list, and a list of
+  choice keeps its order and its repeats. A list of secrets parses and installs, and a value for
+  it is refused where it would be kept, as the old secret store refused it. 23 rows ported.
+- **Group 3** (same branch): a secret inside a group is a Node-RED credential named by its path,
+  drawn in its group; a secret in a table's rows, or under a row's `additionalProperties` or an
+  `anyOf` branch, parses and installs, and a value for it is refused by its path, by the form's
+  save and by the runtime, as the old store refused it; a default holding a secret's value is
+  refused at read; a `readOnly` value is shown and never typed over. 7 rows ported. The 13 rows
+  of a plugin writing its own settings and saying who set a value moved to WI-0032-41 (wave 3).
 - **Group 28** (same branch): a save keeps what passes and nothing that fails, field by field and
-  row by row at every depth, says what was not kept, and shows it again beside why. 14 rows.
+  row by row at every depth, each row matched to the row it was drawn from; a refusal of the whole
+  form keeps it whole. What was refused is kept on the node with all that was typed, each reason
+  beside its field, across reopens and editor reloads, until a save corrects it (with group 27's
+  two rows of a refusal drawn beside its field). 14 rows.
 - **Group 31** (same branch): a value for a property the type no longer declares is kept by every
   deploy and comes back when declared again. 1 row.
 

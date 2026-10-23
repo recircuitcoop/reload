@@ -84,8 +84,12 @@ export function coerceObject(schema: JsonSchema, value: Fields): Record<string, 
   const result: Record<string, unknown> = Object.fromEntries(
     Object.entries(value).filter(([key]) => !declared.has(key)),
   );
+  const required = new Set(Array.isArray(schema["required"]) ? schema["required"] : []);
   for (const [key, property] of declared) {
-    const coerced = coerceValue(property, value[key]);
+    // An empty text Node-RED keeps for a field nobody filled is unset, unless the field must be
+    // filled: then it is judged as typed ("must not be empty").
+    const given = value[key] === "" && !required.has(key) ? undefined : value[key];
+    const coerced = coerceValue(property, given);
     if (coerced !== undefined) {
       result[key] = coerced;
     } else if ("default" in property) {
@@ -107,19 +111,34 @@ export function configOf(schema: JsonSchema, node: Fields): Record<string, unkno
       .filter(([key]) => key in node)
       .map(([key]) => [key, node[key]]),
   );
-  const config = coerceObject(plain, declared);
-  // A secret in a group never rides along in the plain config, whatever the node holds there.
-  for (const [name] of secretsOf(schema)) {
-    const path = name.split(".");
-    let at: unknown = config;
-    for (const segment of path.slice(0, -1)) {
-      at = isRecord(at) ? at[segment] : undefined;
-    }
-    if (isRecord(at)) {
-      Reflect.deleteProperty(at, path.at(-1) as string);
-    }
+  // A value nobody declares never reaches the node, at any depth (kept-undeclared.ts).
+  return declaredOnly(plain, coerceObject(plain, declared)) as Record<string, unknown>;
+}
+
+/**
+ * `value` with only what `schema` declares, at every depth: an object's undeclared keys are
+ * left out, unless the schema takes other keys too (`additionalProperties` or
+ * `patternProperties` other than false); an array's elements are judged by its items.
+ */
+export function declaredOnly(schema: JsonSchema, value: unknown): unknown {
+  if (Array.isArray(value)) {
+    const items = schema["items"];
+    return isSchema(items) ? value.map((item: unknown) => declaredOnly(items, item)) : value;
   }
-  return config;
+  if (!isRecord(value) || schema["type"] !== "object") {
+    return value;
+  }
+  const declared = new Map(propertiesOf(schema));
+  const open = (schema["additionalProperties"] ?? false) !== false || "patternProperties" in schema;
+  return Object.fromEntries(
+    Object.entries(value).flatMap(([key, inner]): [string, unknown][] => {
+      const property = declared.get(key);
+      if (property !== undefined) {
+        return [[key, declaredOnly(property, inner)]];
+      }
+      return open ? [[key, inner]] : [];
+    }),
+  );
 }
 
 /**

@@ -96,6 +96,8 @@ export interface SetupField {
     { readonly source: "spaces" } | { readonly source: "types"; readonly of: string } | null;
   /** `reload.advanced` (spec 2.4.1): never drawn in Setup, but its value is sent back as it is. */
   readonly advanced: boolean;
+  /** `readOnly` (JSON Schema): shown, never typed over, and never sent back. */
+  readonly readOnly: boolean;
   /** What a path's Browse… chooses; null for any other kind. */
   readonly pathKind: "file" | "folder" | null;
   readonly default: unknown;
@@ -180,6 +182,7 @@ export function setupFields(schema: Readonly<Record<string, unknown>>): SetupFie
         options: kind === "enum" ? (property["enum"] as unknown[]).map((each) => String(each)) : [],
         reload: reloadOf(property),
         advanced: isRecord(property["reload"]) && property["reload"]["advanced"] === true,
+        readOnly: property["readOnly"] === true,
         pathKind:
           kind === "path" && isRecord(property["reload"])
             ? (property["reload"]["path"] as "file" | "folder")
@@ -220,6 +223,9 @@ export function valuesOf(fields: readonly SetupField[], draft: Draft): Record<st
   return Object.fromEntries(
     fields.flatMap((field): [string, unknown][] => {
       const value = draft[field.key];
+      if (field.readOnly) {
+        return [];
+      }
       if (typeof value === "boolean") {
         return [[field.key, value]];
       }

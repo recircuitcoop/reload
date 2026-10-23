@@ -271,21 +271,29 @@ A type MAY set its own limits in `reload.limits`:
    | `array` of objects | a table: one row of its properties per element |
    | a secret | password input |
 
-   `title` gives the label, `description` a tip, and `default` the default value. A save keeps
-   what passes and nothing that fails: a property the schema refuses keeps its value from before,
-   and a table's refused row the row it was drawn from (wherever it now stands), or none for a
-   row added in that save, at every depth; a value for a property nobody declares is refused.
-   The editor says what was not kept, with what was typed. Values the schema does not declare are
-   kept at every depth: by a save, in a group and in a row; by a deploy, at the top, coming back
-   when the property is declared again; and by Setup's Continue, which keeps the groups, tables
-   and lists it does not draw. Such a value never reaches the node.
+   `title` gives the label, `description` a tip, and `default` the default value. A `readOnly`
+   property is shown and never typed over. An array of `enum` items is a list of selects, in its
+   own order with repeats; with `uniqueItems` it is one checkbox per option. A save keeps what
+   passes and nothing that fails: a property the schema refuses keeps its value from before, and a
+   table's refused row the row it was drawn from (wherever it now stands), or none for a row added
+   in that save, at every depth; a refusal of the whole object (`dependentRequired`, `anyOf`,
+   `not`, `minProperties` at the top) keeps everything as it was; a value for a property nobody
+   declares is refused. What was refused is kept on the node, as `reload.refused`, with all that
+   was typed, and shown again with each reason beside its field until a save corrects it. Values
+   the schema does not declare are kept at every depth (by a save, in a group and in a row; by a
+   deploy, at the top; by Setup's Continue, which keeps the groups, tables and lists it does not
+   draw) except where the schema forbids them, where a save leaves them out and says so; such a
+   value never reaches the node. An empty text nobody filled is unset, unless it is required.
 2. Secret properties MUST become Node-RED credentials, stored encrypted in `flows_cred.json` with
    the runtime's credential secret. They MUST NOT appear in `flows.json`. A secret inside a nested
    object is a credential named by its path (`"account.token"`), drawn in its group and delivered
    under that name in `start.credentials`; a required one unset makes the step not set up, on
-   the canvas, in Setup and at start. A secret inside an array's items, or a list of secrets,
-   cannot be a credential and is refused at the declaration, naming its path, and so is a
-   property name holding a dot, which would share a credential's name.
+   the canvas, in Setup and at start. A secret no credential can hold (in a table's rows, a list of
+   secrets, under `additionalProperties`, or only in an `anyOf`, `oneOf` or `allOf` branch) is
+   accepted in the declaration and drawn, but a value for it is refused by the form's save and,
+   found in a flow, by the runtime, which starts nothing. A property name holding a dot is
+   refused at the declaration, as it would share a credential's name, and so is a default that
+   holds a secret's value.
 3. Before the start frame, the runtime MUST coerce the form values to the schema types (Node-RED
    returns strings; proven).
    **[UNPROVEN]** Full validation with a real JSON Schema 2020-12 validator (for example ajv); the

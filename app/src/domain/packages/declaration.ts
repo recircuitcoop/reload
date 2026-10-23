@@ -149,13 +149,30 @@ function deepFreeze<T>(value: T): T {
 const isSecretProperty = (property: Readonly<Record<string, unknown>>): boolean =>
   property["writeOnly"] === true || property["x-secret"] === true;
 
+/** Whether `value`, by `schema`, holds a value for a secret at any depth. */
+function holdsSecret(schema: Readonly<Record<string, unknown>>, value: unknown): boolean {
+  if (isSecretProperty(schema)) {
+    return value !== undefined && value !== "";
+  }
+  const items = schema["items"];
+  if (Array.isArray(value)) {
+    return isRecord(items) && value.some((each: unknown) => holdsSecret(items, each));
+  }
+  const properties = schema["properties"];
+  if (!isRecord(value) || !isRecord(properties)) {
+    return false;
+  }
+  return Object.entries(properties).some(
+    ([key, property]) => key in value && isRecord(property) && holdsSecret(property, value[key]),
+  );
+}
+
 /**
- * The secrets a config declares inside an array's items, by their path through the schema
- * ("volumes.token", "volumes.takes.token"), and every list of secrets ("keys"): Node-RED keeps
- * a node's secrets by name, never per row or per element, so such a value could be neither
- * stored nor shown, and would land in the plain flows (the old store refused it too).
+ * The config's defaults that hold a value for a secret, by the path of the property whose
+ * default it is ("account"): a default is written into the plain flows, so a package author's
+ * secret would land there (a secret's own default is never written: it is a credential).
  */
-function rowSecrets(schema: Readonly<Record<string, unknown>>, path = "", inRow = false): string[] {
+function secretDefaults(schema: Readonly<Record<string, unknown>>, path = ""): string[] {
   const properties = schema["properties"];
   const own = isRecord(properties) ? Object.entries(properties) : [];
   return own.flatMap(([key, property]) => {
@@ -163,16 +180,17 @@ function rowSecrets(schema: Readonly<Record<string, unknown>>, path = "", inRow 
       return [];
     }
     const name = path === "" ? key : `${path}.${key}`;
-    if (isSecretProperty(property)) {
-      return inRow ? [name] : [];
-    }
+    const here =
+      !isSecretProperty(property) &&
+      "default" in property &&
+      holdsSecret(property, property["default"])
+        ? [name]
+        : [];
     const items = property["items"];
-    if (isRecord(items) && isSecretProperty(items)) {
-      return [name]; // a list of secrets
-    }
     return [
-      ...rowSecrets(property, name, inRow),
-      ...(isRecord(items) ? rowSecrets(items, name, true) : []),
+      ...here,
+      ...secretDefaults(property, name),
+      ...(isRecord(items) ? secretDefaults(items, name) : []),
     ];
   });
 }
@@ -212,10 +230,10 @@ function beyondTheSchema(declaration: Declaration): string[] {
           "a secret is named by its path through the groups",
       );
     }
-    for (const secret of rowSecrets(type.config)) {
+    for (const secret of secretDefaults(type.config)) {
       problems.push(
-        `${at}/config: ${JSON.stringify(secret)} is a secret inside a table's rows or a list, ` +
-          "which cannot be stored; declare it as a property of its own",
+        `${at}/config: the default of ${JSON.stringify(secret)} holds a secret's value, which ` +
+          "would be written into the plain flows; leave the secret out of the default",
       );
     }
     if (typeIds.has(type.id)) {

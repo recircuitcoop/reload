@@ -299,6 +299,23 @@ describe("a generated type's instance", () => {
     expect(JSON.stringify(frame["config"])).not.toContain("pw");
   });
 
+  it("starts nothing for a flow holding a secret no credential can hold, naming it", () => {
+    setUp();
+    const node = create(
+      PROBE,
+      probeConfig("rowkey", {
+        volumes: [{ name: "media", path: "/Volumes/media", key: "hunter2" }],
+        keys: ["also hunter2"],
+      }),
+      { token: "t" },
+    );
+    expect(started).toEqual([]);
+    expect(node.errors[0]).toContain(
+      "volumes.0.key is a secret no credential can hold, so it is not kept",
+    );
+    expect(node.errors[0]).toContain("keys is a secret no credential can hold");
+  });
+
   it("starts with a value its type no longer declares, never handing it to the process", async () => {
     setUp();
     create(PROBE, probeConfig("old", { quality: "low" }), { token: "t" });

@@ -28,6 +28,7 @@ const PROBE = "reload-everycontrol-probe";
 const TICKER = "reload-everycontrol-ticker";
 const SECRET = "s3cret-e2e-9f2c";
 const GROUP_SECRET = "gr0up-s3cret-e2e-41d7";
+const UNKEPT_SECRET = "unk3pt-s3cret-e2e-77b1";
 
 function request(
   port: number,
@@ -255,6 +256,8 @@ test("a fixture package with every control deploys, its start frame carries the 
 });
 
 test("the form in the real editor: every control, required marked, rows added, removed and reordered, lists kept, a bad entry kept out, validated before deploy", async () => {
+  // It saves, refuses, deploys, reloads the editor and saves again: more than one test's time.
+  test.setTimeout(150_000);
   const { scratch, userData, env } = scratchDirectories();
   const launched: ElectronApplication[] = [];
   try {
@@ -280,6 +283,7 @@ test("the form in the real editor: every control, required marked, rows added, r
             { name: "b", path: "/b" },
           ],
           sizes: ["2"],
+          recorded: "by the plugin",
         },
         // A group holding a required secret Node-RED says is not set: flagged on the canvas.
         {
@@ -292,22 +296,37 @@ test("the form in the real editor: every control, required marked, rows added, r
           account: { user: "me" },
           credentials: { has_token: true },
         },
+        // A host without the port it asks for: the whole form is refused, on the canvas too.
+        {
+          id: "f3",
+          type,
+          x: 200,
+          y: 300,
+          label: "L",
+          volumes: [{ name: "a", path: "/a" }],
+          host: "a.example",
+        },
       ]);
       const node = RED.nodes.node("f1");
       RED.editor.validateNode(node);
       const grouped = RED.nodes.node("f2");
       RED.editor.validateNode(grouped);
+      const hosted = RED.nodes.node("f3");
+      RED.editor.validateNode(hosted);
       // Off the canvas again, so the deploy below carries only the node under test.
       RED.nodes.remove("f2");
+      RED.nodes.remove("f3");
       return {
         valid: node.valid,
         errors: node.validationErrors,
         grouped: grouped.validationErrors,
+        hosted: [hosted.valid, hosted.validationErrors],
       };
     }, PROBE);
     expect(judged.valid).toBe(false);
     expect(judged.errors).toEqual(["Label: must not be empty."]);
     expect(judged.grouped).toEqual(["Password: fill this in."]);
+    expect(judged.hosted).toEqual([false, ["Port: fill this in, as Host is set."]]);
 
     await editor.evaluate(() => {
       const RED = (window as unknown as { RED: EditorRed }).RED;
@@ -323,6 +342,12 @@ test("the form in the real editor: every control, required marked, rows added, r
     await expect(field("retry.attempts")).toHaveCount(1);
     await expect(field("volumes.1.name")).toHaveValue("b");
     await expect(field("notes")).toHaveJSProperty("tagName", "TEXTAREA");
+    // A read-only value is shown, never typed over.
+    await expect(field("recorded")).toHaveValue("by the plugin");
+    await expect(field("recorded")).toBeDisabled();
+    // A secret no credential can hold is drawn, to be typed and refused, never kept.
+    await expect(field("keys")).toHaveAttribute("type", "password");
+    await expect(field("volumes.0.key")).toHaveAttribute("type", "password");
     await expect(form.getByTestId("reload-browse-root")).toHaveCount(1);
     await expect(form.getByTestId("reload-option-formats-1")).toHaveCount(1);
     await expect(form.getByTestId("reload-list-sizes")).toHaveCount(1);
@@ -374,7 +399,7 @@ test("the form in the real editor: every control, required marked, rows added, r
     await form.getByTestId("reload-browse-root").dispatchEvent("click");
     await expect(field("root")).toHaveValue("/Volumes/chosen");
     await field("notes").fill("one\ntwo");
-    await form.getByTestId("reload-option-formats-0").check();
+    await form.getByTestId("reload-option-formats-0").dispatchEvent("click");
     await form.getByTestId("reload-item-add-sizes").dispatchEvent("click");
     await field("sizes.1").fill("4.5");
     await field("label").fill("Filled");
@@ -424,35 +449,62 @@ test("the form in the real editor: every control, required marked, rows added, r
     };
     expect(await read()).toEqual(saved);
 
-    // One bad entry keeps out only itself: the count before stays, the row being added is
-    // left out, the good change is kept, and the editor says what was not kept.
+    // One bad entry keeps out only itself: the count before stays, the refused row keeps the
+    // row it was drawn from, the good change is kept, a secret no credential can hold is
+    // refused, and the editor says what was not kept, with what was typed.
     await expect(form).toHaveCount(0);
-    await editor.evaluate(() => {
-      const RED = (window as unknown as { RED: EditorRed }).RED;
-      RED.editor.edit(RED.nodes.node("f1"));
-    });
+    const edit = () =>
+      editor.evaluate(() => {
+        const RED = (window as unknown as { RED: EditorRed }).RED;
+        RED.editor.edit(RED.nodes.node("f1"));
+      });
+    await edit();
     await expect(field("count")).toHaveValue("5");
     await field("count").fill("0");
     await field("label").fill("Kept");
-    await table.getByTestId("reload-action-add").dispatchEvent("click");
+    await field("volumes.0.name").fill("two-edited");
+    await field("volumes.0.path").fill("");
+    await field("volumes.0.key").fill(UNKEPT_SECRET);
     await frame.locator("#node-dialog-ok").dispatchEvent("click");
-    await expect(frame.locator(".red-ui-notification").last()).toContainText(
-      'Not saved: Count: must be 1 or more, not "0". Volumes, row 3, Name: must not be empty.',
+    const notice = frame.locator(".red-ui-notification").last();
+    await expect(notice).toContainText(
+      'Not saved: Count: must be 1 or more, not "0". Volumes, row 1, Path: must not be empty.',
+    );
+    await expect(notice).toContainText(
+      "Volumes, row 1, Key: is a secret no credential can hold, so it is not kept.",
     );
     expect(await read()).toEqual({ ...saved, label: "Kept" });
-    // Opened again, once the tray has closed, the form says what was typed and why it was not
-    // kept, above the values the node holds.
+    // Opened again, once the tray has closed: everything typed, each reason beside its field.
+    const refusedShown = async () => {
+      await expect(form.getByTestId("reload-refused")).toContainText(
+        'Count: must be 1 or more, not "0".',
+      );
+      await expect(field("count")).toHaveValue("0");
+      await expect(field("volumes.0.name")).toHaveValue("two-edited");
+      await expect(form.getByTestId("reload-error-count")).toContainText("must be 1 or more");
+      await expect(form.getByTestId("reload-error-volumes.0.path")).toContainText(
+        "must not be empty",
+      );
+    };
     await expect(form).toHaveCount(0);
-    await editor.evaluate(() => {
-      const RED = (window as unknown as { RED: EditorRed }).RED;
-      RED.editor.edit(RED.nodes.node("f1"));
-    });
-    await expect(form.getByTestId("reload-refused")).toContainText(
-      'Count: must be 1 or more, not "0".',
-    );
-    await expect(field("count")).toHaveValue("5");
+    await edit();
+    await refusedShown();
     await frame.locator("#node-dialog-cancel").dispatchEvent("click");
     expect(await read()).toEqual({ ...saved, label: "Kept" });
+    // Closed, the form takes no late Browse… answer, even into a form of the same fields.
+    const late = await editor.evaluate(() => {
+      const stray = document.createElement("div");
+      stray.className = "reload-form";
+      stray.innerHTML = '<input data-reload-field="root" value="unchanged">';
+      document.body.append(stray);
+      const forms = (window as unknown as { ReloadForms: { browsed(...a: string[]): void } })
+        .ReloadForms;
+      forms.browsed("f1", "root", "/late");
+      const value = stray.querySelector("input")?.value;
+      stray.remove();
+      return value;
+    });
+    expect(late).toBe("unchanged");
 
     // Deployed from the editor: the start frame holds what the form held, coerced.
     await frame.locator("#red-ui-header-button-deploy").click();
@@ -473,10 +525,51 @@ test("the form in the real editor: every control, required marked, rows added, r
       account: { user: "me" },
     });
     expect(started?.["credentials"]).toEqual({ token: SECRET, "account.password": GROUP_SECRET });
-    // Both secrets are credentials, never in the plain flows.
-    const flowsJson = fs.readFileSync(path.join(userData, "node-red", "flows.json"), "utf8");
+    // Both secrets are credentials, never in the plain flows; the one no credential can hold
+    // is nowhere at all.
+    const nodeRed = path.join(userData, "node-red");
+    const flowsJson = fs.readFileSync(path.join(nodeRed, "flows.json"), "utf8");
     expect(flowsJson).not.toContain(GROUP_SECRET);
     expect(flowsJson).not.toContain(SECRET);
+    expect(flowsJson).not.toContain(UNKEPT_SECRET);
+    expect(fs.readFileSync(path.join(nodeRed, "flows_cred.json"), "utf8")).not.toContain(
+      UNKEPT_SECRET,
+    );
+
+    // The refused save is kept on the node: after a reload of the editor it is shown again,
+    // and a save that corrects it keeps what was typed and clears it.
+    await editor.evaluate(() => {
+      globalThis.location.reload();
+    });
+    await expect(frame.locator(`.red-ui-palette-node[data-palette-type="${PROBE}"]`)).toHaveCount(
+      1,
+      { timeout: 20_000 },
+    );
+    await edit();
+    await refusedShown();
+    await field("count").fill("6");
+    await field("volumes.0.path").fill("/b2");
+    await frame.locator("#node-dialog-ok").dispatchEvent("click");
+    const corrected = await editor.evaluate(() => {
+      const RED = (window as unknown as { RED: EditorRed }).RED;
+      const node = RED.nodes.node("f1") as unknown as Record<string, unknown>;
+      return { count: node["count"], volumes: node["volumes"], refused: node["reload.refused"] };
+    });
+    expect(corrected.count).toBe("6");
+    expect((corrected.volumes as Record<string, unknown>[])[0]).toMatchObject({
+      name: "two-edited",
+      path: "/b2",
+    });
+    expect(corrected.refused).toBeNull();
+    // Deployed, so the quit below asks nobody about undeployed edits.
+    await frame.locator("#red-ui-header-button-deploy").click();
+    await expect
+      .poll(() =>
+        editor.evaluate(() =>
+          (window as unknown as { RED: { nodes: { dirty(): boolean } } }).RED.nodes.dirty(),
+        ),
+      )
+      .toBe(false);
 
     await quit(app);
     await expect.poll(() => processesNaming(userData), { timeout: 10_000 }).toEqual([]);

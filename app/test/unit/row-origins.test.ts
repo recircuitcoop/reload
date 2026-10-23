@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 
 import { formModel } from "../../src/domain/forms/form-model";
-import { originsOf, seedOrigins } from "../../src/domain/forms/row-origins";
+import { originsOf, seedOrigins, seedRecorded } from "../../src/domain/forms/row-origins";
 
 const { fields } = formModel({
   type: "object",
@@ -65,5 +65,28 @@ describe("row origins", () => {
     // A table, or a group, holding no rows has nothing to match.
     seedOrigins(fields, { volumes: "not rows", group: "not a group" }, origins);
     expect(originsOf(fields, { volumes: "not rows" }, origins)).toEqual(new Map());
+  });
+});
+
+describe("row origins of a refused save shown again", () => {
+  it("are where its rows now stand, as recorded, a row recorded nowhere being new", () => {
+    const typed = {
+      group: { rows: [{ a: "x" }] },
+      volumes: [{ label: "added", takes: [{ file: "f" }] }, { label: "two" }, "not a row"],
+    };
+    const origins = new WeakMap<object, number>();
+    const recorded = new Map([
+      ["/volumes", [null, 0]],
+      ["/volumes/0/takes", [3]],
+      ["/group/rows", [1]],
+    ]);
+    seedRecorded(fields, typed, recorded, origins);
+    expect(originsOf(fields, typed, origins)).toEqual(
+      new Map<string, (number | null)[]>([
+        ["/group/rows", [1]],
+        ["/volumes", [null, 0, null]],
+        ["/volumes/0/takes", [3]],
+      ]),
+    );
   });
 });

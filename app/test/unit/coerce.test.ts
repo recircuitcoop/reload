@@ -227,11 +227,17 @@ describe("coerceObject", () => {
   it("drops an unset property that has no default, and keeps undeclared ones", () => {
     expect(coerceObject(schema, { name: "", extra: "kept" })).toEqual({
       count: 3,
-      name: "",
       list: [{ a: 1 }],
       extra: "kept",
     });
     expect(coerceObject(schema, { name: null })).not.toHaveProperty("name");
+  });
+
+  it("reads an empty text nobody filled as unset, and an empty required one as typed", () => {
+    // So a field nobody filled never asks for another (dependentRequired), nor fails minLength.
+    const asks = { ...schema, required: ["name"] };
+    expect(coerceObject(asks, { name: "" })).toMatchObject({ name: "" });
+    expect(coerceObject(schema, { name: "" })).not.toHaveProperty("name");
   });
 });
 
@@ -257,6 +263,34 @@ describe("configOf and credentialsOf", () => {
       token: "leaked into the node?",
     };
     expect(configOf(schema, node)).toEqual({ count: 7 });
+  });
+
+  it("hands the node nothing its schema does not declare, at any depth", () => {
+    const nested = {
+      type: "object",
+      properties: {
+        retry: { type: "object", properties: { attempts: { type: "integer" } } },
+        rows: {
+          type: "array",
+          items: { type: "object", properties: { name: { type: "string" } } },
+        },
+        open: {
+          type: "object",
+          properties: { known: { type: "string" } },
+          additionalProperties: { type: "string" },
+        },
+      },
+    };
+    const node = {
+      retry: { attempts: "2", jitter: 0.5 },
+      rows: [{ name: "a", old_cell: "x" }],
+      open: { known: "k", other: "taken as the schema allows" },
+    };
+    expect(configOf(nested, node)).toEqual({
+      retry: { attempts: 2 },
+      rows: [{ name: "a" }],
+      open: { known: "k", other: "taken as the schema allows" },
+    });
   });
 
   it("takes the declared secrets Node-RED holds, and only those set", () => {

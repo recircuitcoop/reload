@@ -74,3 +74,34 @@ export function originsOf(
   }
   return found;
 }
+
+/**
+ * Each row of `values` (a refused save shown again) as drawn from where `recorded` says it now
+ * stands in the node's tables; a row recorded as standing nowhere is new.
+ */
+export function seedRecorded(
+  fields: readonly Field[],
+  values: Values,
+  recorded: RowOrigins,
+  origins: Origins,
+  at = "",
+): void {
+  for (const field of fields) {
+    const value = values[field.key];
+    const path = `${at}/${field.key}`;
+    if (field.control === "group" && isRecord(value)) {
+      seedRecorded(columnsOf(field), value, recorded, origins, path);
+    }
+    if (field.control === "table" && Array.isArray(value)) {
+      value.forEach((row: unknown, index) => {
+        const stands = recorded.get(path)?.[index];
+        if (isRecord(row)) {
+          if (typeof stands === "number") {
+            origins.set(row, stands);
+          }
+          seedRecorded(columnsOf(field), row, recorded, origins, `${path}/${String(index)}`);
+        }
+      });
+    }
+  }
+}

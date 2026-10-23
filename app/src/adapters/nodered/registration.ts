@@ -26,6 +26,7 @@
 
 import { configOf, credentialsOf, withCredentials } from "../../domain/forms/coerce";
 import { secretKeys } from "../../domain/forms/form-model";
+import { unkeptSecretsOfNode } from "../../domain/forms/unkept";
 import { payloadRefusal, USER_EVENTS_PACKAGE } from "../../domain/events/event-types";
 import type { CloseReason } from "../../domain/journal/entry";
 import { portsOf, stabilityOf, type LoadedType } from "../../domain/packages/declaration";
@@ -214,10 +215,15 @@ export class TypeRegistration {
     const credentials = credentialsOf(schema, node.credentials ?? {});
     // Validated with its credentials, so a required secret never set is refused too.
     const problems = validator.check(schema, withCredentials(config, credentials));
+    // A secret no credential can hold, found in the flow: never handed over (unkept.ts).
+    const unkept = unkeptSecretsOfNode(schema, raw).map((path) => ({
+      path: `/${path}`,
+      message: "is a secret no credential can hold, so it is not kept",
+    }));
     let refusal: string | null =
-      problems.length === 0
+      problems.length + unkept.length === 0
         ? null
-        : `its configuration is refused: ${problems
+        : `its configuration is refused: ${[...unkept, ...problems]
             .map((p) => `${p.path === "" ? "config" : p.path.slice(1)} ${p.message}`)
             .join("; ")}`;
     let command: ProcessCommand | null = null;

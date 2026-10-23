@@ -32,11 +32,16 @@ export type Control =
   | "checkbox"
   | "select"
   | "password"
+  /**
+   * A secret no credential can hold: a column of a table's rows, or a list of secrets. Drawn
+   * so it can be typed, never kept: a value typed is refused, as the old secret store refused it.
+   */
+  | "unkept"
   /** A text of several lines (`reload.multiline`). */
   | "textarea"
   /** A file or folder's path, typed or chosen with Browse… (`reload.path`). */
   | "path"
-  /** An array whose items are an `enum`: each option ticked or not. */
+  /** An array of distinct options (`items.enum`, `uniqueItems`): each option ticked or not. */
   | "multiselect"
   /** An array of single values: one control per element, added and removed. */
   | "list"
@@ -67,6 +72,8 @@ export interface Field {
   readonly pathKind?: "file" | "folder";
   /** A list's element: the control each of its values is drawn with. */
   readonly element?: Field;
+  /** `readOnly` (JSON Schema): shown, never typed over; a save keeps the value it had. */
+  readonly readOnly?: true;
   /**
    * Where a text field's options come from, when its property declares them through `reload`
    * (spec 2.4.1); resolving them is the options route's job. The value stays a plain string.
@@ -131,9 +138,13 @@ function itemsOf(property: JsonSchema): JsonSchema | null {
   return isRecord(items) ? items : null;
 }
 
-function controlOf(property: JsonSchema): Control {
+function controlOf(property: JsonSchema, inRow: boolean): Control {
   if (isSecret(property)) {
-    return "password";
+    return inRow ? "unkept" : "password";
+  }
+  const items = itemsOf(property);
+  if (typeOf(property) === "array" && items !== null && isSecret(items)) {
+    return "unkept";
   }
   if (Array.isArray(property["enum"])) {
     return "select";
@@ -173,7 +184,9 @@ function arrayControlOf(property: JsonSchema): Control {
   if (items === null || rowSchemaOf(items) !== null) {
     return "text";
   }
-  return Array.isArray(items["enum"]) ? "multiselect" : "list";
+  // A list of options with repeats and an order of its own is a list of selects (the old
+  // "list of choice"); distinct options are ticked (the old "multiple-choice").
+  return Array.isArray(items["enum"]) && property["uniqueItems"] === true ? "multiselect" : "list";
 }
 
 const numberAt = (property: JsonSchema, key: string): number | undefined => {
@@ -181,8 +194,8 @@ const numberAt = (property: JsonSchema, key: string): number | undefined => {
   return typeof value === "number" ? value : undefined;
 };
 
-function fieldOf(key: string, property: JsonSchema, required: boolean): Field {
-  const control = controlOf(property);
+function fieldOf(key: string, property: JsonSchema, required: boolean, inRow = false): Field {
+  const control = controlOf(property, inRow);
   const title = property["title"];
   const description = property["description"];
   const field: {
@@ -204,7 +217,10 @@ function fieldOf(key: string, property: JsonSchema, required: boolean): Field {
     field.options = (itemsOf(property) as JsonSchema)["enum"] as readonly unknown[];
   }
   if (control === "list") {
-    field.element = fieldOf(key, itemsOf(property) as JsonSchema, false);
+    field.element = fieldOf(key, itemsOf(property) as JsonSchema, false, inRow);
+  }
+  if (property["readOnly"] === true) {
+    field.readOnly = true;
   }
   if (control === "number" || control === "integer") {
     const bounds = { min: "minimum", max: "maximum", step: "multipleOf" } as const;
@@ -227,180 +243,52 @@ function fieldOf(key: string, property: JsonSchema, required: boolean): Field {
     field.advanced = true;
   }
   if (control === "group") {
-    field.fields = formModel(property).fields;
+    field.fields = formModel(property, inRow).fields;
   }
   if (control === "table") {
-    field.fields = formModel(rowSchemaOf(property) as JsonSchema).fields;
+    field.fields = formModel(rowSchemaOf(property) as JsonSchema, true).fields;
   }
   return field;
 }
 
-/** The form for an object schema: one field per property, required ones marked. */
-export function formModel(schema: JsonSchema): FormModel {
+/**
+ * The form for an object schema: one field per property, required ones marked. `inRow`: the
+ * object is (inside) a table's row, where a secret can be no credential.
+ */
+export function formModel(schema: JsonSchema, inRow = false): FormModel {
   const required = requiredOf(schema);
   return {
     fields: propertiesOf(schema).map(([key, property]) =>
-      fieldOf(key, property, required.has(key)),
+      fieldOf(key, property, required.has(key), inRow),
     ),
   };
 }
 
-// ── a refusal in the person's words ──────────────────────────────────────────────────────
-
-/** The property schema at a JSON Pointer of property names ("/retry/attempts"); null past it. */
-function propertyAt(schema: JsonSchema, path: string): JsonSchema | null {
-  let at: JsonSchema | null = schema;
-  for (const segment of path.split("/").slice(1)) {
-    const properties: unknown = at?.["properties"];
-    const next: unknown = isRecord(properties) ? properties[segment] : undefined;
-    at = isRecord(next) ? next : null;
-  }
-  return at;
-}
-
-/** A property's name as the person reads it: its title exactly as written, else its key spaced. */
-function nameAt(schema: JsonSchema, path: string): string {
-  const title = propertyAt(schema, path)?.["title"];
-  if (typeof title === "string" && title !== "") {
-    return title;
-  }
-  return (path.split("/").at(-1) ?? "").replaceAll("_", " ");
-}
-
-/** A value's JSON Schema type in plain words. */
-const TYPE_WORDS: Readonly<Record<string, string>> = {
-  integer: "a whole number",
-  number: "a number",
-  string: "text",
-  boolean: "on or off",
-  object: "a group of values",
-  array: "a list",
-  null: "empty",
-};
-
-/** A string `format` (ajv-formats' names) in plain words. */
-const FORMAT_WORDS: Readonly<Record<string, string>> = {
-  uri: "a web address",
-  "uri-reference": "a web address",
-  iri: "a web address",
-  "iri-reference": "a web address",
-  "uri-template": "a web address",
-  url: "a web address",
-  email: "an email address",
-  "idn-email": "an email address",
-  hostname: "a computer's name",
-  "idn-hostname": "a computer's name",
-  ipv4: "an IP address",
-  ipv6: "an IP address",
-  date: "a date",
-  time: "a time of day",
-  "date-time": "a date and time",
-  "iso-time": "a time of day",
-  "iso-date-time": "a date and time",
-  duration: "a length of time",
-  uuid: "an ID",
-  regex: "a search pattern",
-  "json-pointer": "a path",
-  "relative-json-pointer": "a path",
-  byte: "encoded data",
-  int32: "a whole number",
-  int64: "a whole number",
-  float: "a number",
-  double: "a number",
-  password: "text",
-  binary: "data",
-};
+// The refusal in the person's words lives in problems.ts; it is part of reading a form.
+export { describedProblems } from "./problems";
 
 /**
- * What ajv says is wrong (minimum, maximum, exclusive bounds, minLength, maxLength, pattern,
- * format, type, enum, const), plainly; anything else as ajv words it.
- */
-function plainMessage(message: string): string {
-  const words: [RegExp, (found: string) => string][] = [
-    [/^must be <= (.+)$/, (n) => `must be ${n} or less`],
-    [/^must be >= (.+)$/, (n) => `must be ${n} or more`],
-    [/^must be < (.+)$/, (n) => `must be less than ${n}`],
-    [/^must be > (.+)$/, (n) => `must be more than ${n}`],
-    [
-      /^must NOT have fewer than (\d+) characters?$/,
-      (n) => (n === "1" ? "must not be empty" : `must be at least ${n} characters long`),
-    ],
-    [/^must NOT have more than (\d+) characters?$/, (n) => `must be at most ${n} characters long`],
-    [/^must match pattern .*$/, () => "is not in the form it must have"],
-    [
-      /^must match format "(.+)"$/,
-      (format) => {
-        const kind = FORMAT_WORDS[format];
-        return kind === undefined ? "is not in the form it must have" : `must be ${kind}`;
-      },
-    ],
-    [/^must be equal to one of the allowed values$/, () => "must be one of its choices"],
-    [/^must be equal to constant$/, () => "must be the one value it allows"],
-    [/^must be (\w+)$/, (type) => `must be ${TYPE_WORDS[type] ?? type}`],
-  ];
-  for (const [pattern, said] of words) {
-    const found = pattern.exec(message);
-    if (found !== null) {
-      return said(found[1] ?? "");
-    }
-  }
-  return message;
-}
-
-/**
- * One problem as "<Title>: <what to do>.", against `schema`, the object its path starts in. The
- * title stands as a label, exactly as written, never inside a sentence; a table's row is
- * "<table title>, row N, <column title>: …".
- */
-function describedProblem(schema: JsonSchema, path: string, message: string): string {
-  if (path === "") {
-    return `The form: ${plainMessage(message)}.`;
-  }
-  const segments = path.split("/").slice(1);
-  const row = segments.findIndex((segment) => /^\d+$/.test(segment));
-  if (row > 0) {
-    const table = `/${segments.slice(0, row).join("/")}`;
-    const rest = segments.slice(row + 1);
-    const where = `${nameAt(schema, table)}, row ${String(Number(segments[row]) + 1)}`;
-    if (rest.length === 0) {
-      return `${where}: ${plainMessage(message)}.`;
-    }
-    const rows = rowSchemaOf(propertyAt(schema, table) ?? {}) ?? {};
-    return `${where}, ${describedProblem(rows, `/${rest.join("/")}`, message)}`;
-  }
-  const name = nameAt(schema, path);
-  if (message !== "is required") {
-    return `${name}: ${plainMessage(message)}.`;
-  }
-  const property = propertyAt(schema, path) ?? {};
-  const chosen = reloadOptions(property) !== null || Array.isArray(property["enum"]);
-  return `${name}: ${chosen ? "choose one" : "fill this in"}.`;
-}
-
-/**
- * What a step lacks, in the person's words, for "*Step* isn't set up yet. …": each field by its
- * label and what to do ("Space: choose one.", "Name from: fill this in.", "At most: must be 100
- * or less.", "Properties, row 2, Value from: fill this in."). Never a schema key (ux-writing,
- * Voice).
- */
-export function describedProblems(
-  schema: JsonSchema,
-  problems: readonly { readonly path: string; readonly message: string }[],
-): string {
-  return problems.map(({ path, message }) => describedProblem(schema, path, message)).join(" ");
-}
-
-/**
- * The same schema without its secret properties, at the top and inside nested objects: what
- * `config` holds (spec 2.5.2). A secret is never a table's column: the declaration refuses it.
+ * The same schema without its secret properties, at every depth: in nested objects, in a table's
+ * rows, and a list of secrets: what `config` holds (spec 2.5.2). None of them reaches the plain
+ * flows or the node's config.
  */
 export function withoutSecrets(schema: JsonSchema): JsonSchema {
   const kept = propertiesOf(schema)
     .filter(([, property]) => !isSecret(property))
-    .map(([key, property]): [string, JsonSchema] => [
-      key,
-      typeOf(property) === "object" ? withoutSecrets(property) : property,
-    ]);
+    .flatMap(([key, property]): [string, JsonSchema][] => {
+      const items = itemsOf(property);
+      if (typeOf(property) === "object") {
+        return [[key, withoutSecrets(property)]];
+      }
+      if (typeOf(property) === "array" && items !== null) {
+        if (isSecret(items)) {
+          return [];
+        }
+        const rows = typeOf(items) === "object" ? withoutSecrets(items) : items;
+        return [[key, { ...property, items: rows }]];
+      }
+      return [[key, property]];
+    });
   const keys = new Set(kept.map(([key]) => key));
   const result: Record<string, unknown> = { ...schema, properties: Object.fromEntries(kept) };
   if (Array.isArray(schema["required"])) {

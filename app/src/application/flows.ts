@@ -544,8 +544,12 @@ export class FlowAdmin {
       property["type"] === "object" || property["type"] === "array";
     const plain = Object.fromEntries(
       declared.flatMap(([key, property]): [string, unknown][] => {
-        if (key in values) {
+        // A read-only value is shown, never typed over: Continue keeps the node's own.
+        if (key in values && property["readOnly"] !== true) {
           return [[key, values[key]]];
+        }
+        if (property["readOnly"] === true) {
+          return key in node ? [[key, node[key]]] : [];
         }
         return undrawn(property) && key in node ? [[key, node[key]]] : [];
       }),

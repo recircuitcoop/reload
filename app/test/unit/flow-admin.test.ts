@@ -85,6 +85,7 @@ const TYPES: Record<string, FlowNodeType> = {
       type: "object",
       properties: {
         label: { type: "string" },
+        recorded: { type: "string", readOnly: true },
         account: {
           type: "object",
           required: ["password"],
@@ -896,6 +897,7 @@ describe("flow.node.form and flow.node.configure", () => {
       type: "reload-pkg-grouped",
       z: "rec",
       label: "before",
+      recorded: "by the plugin",
       ...(account === undefined ? {} : { account }),
       volumes: [{ name: "media", old_cell: "kept" }],
       tags: ["a", "b"],
@@ -909,12 +911,14 @@ describe("flow.node.form and flow.node.configure", () => {
     const answer = await h.write("flow.node.configure", {
       flowId: "rec",
       nodeId: "g",
-      values: { label: "after" },
+      values: { label: "after", recorded: "typed over" },
     });
     expect(answer).toEqual({ ok: true, value: { flowId: "rec", nodeId: "g" } });
     const node = h.engine.tabsById.get("rec")?.nodes.find((each) => each.id === "g");
     expect(node).toMatchObject({
       label: "after",
+      // Read-only: shown, never typed over.
+      recorded: "by the plugin",
       volumes: [{ name: "media", old_cell: "kept" }],
       tags: ["a", "b"],
     });

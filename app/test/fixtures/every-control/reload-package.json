@@ -30,6 +30,7 @@
       "config": {
         "type": "object",
         "required": ["label", "count", "volumes", "token"],
+        "dependentRequired": { "host": ["port"] },
         "properties": {
           "label": { "type": "string", "title": "Label", "minLength": 1 },
           "ratio": {
@@ -55,6 +56,14 @@
             "title": "Sizes",
             "items": { "type": "number", "minimum": 1, "maximum": 100, "multipleOf": 0.5 }
           },
+          "keys": {
+            "type": "array",
+            "title": "Keys",
+            "items": { "type": "string", "writeOnly": true }
+          },
+          "recorded": { "type": "string", "title": "Recorded", "readOnly": true },
+          "host": { "type": "string", "title": "Host" },
+          "port": { "type": "integer", "title": "Port" },
           "account": {
             "type": "object",
             "title": "Account",
@@ -91,6 +100,7 @@
                   "reload": { "path": "folder" }
                 },
                 "note": { "type": "string", "title": "Note", "reload": { "advanced": true } },
+                "key": { "type": "string", "title": "Key", "writeOnly": true },
                 "globs": {
                   "type": "array",
                   "title": "Globs",

@@ -9,7 +9,14 @@ import { describe, expect, it } from "vitest";
 import { AjvSchemaValidator } from "../../src/adapters/schema/ajv-validator";
 import { coerceObject } from "../../src/domain/forms/coerce";
 import { describedProblems } from "../../src/domain/forms/form-model";
-import { keptOnSave, notKeptSentence, type RowOrigins } from "../../src/domain/forms/kept-on-save";
+import {
+  droppedSentence,
+  keptOnSave,
+  notKeptSentence,
+  readRefusal,
+  storedRefusal,
+  type RowOrigins,
+} from "../../src/domain/forms/kept-on-save";
 import type { JsonSchema } from "../../src/domain/packages/declaration";
 
 const validator = new AjvSchemaValidator();
@@ -73,6 +80,11 @@ function inPlace(schema: JsonSchema, previous: unknown, submitted: unknown, at =
     const given = record(submitted)[key];
     const before = record(previous)[key];
     const items = record(record(property)["items"]);
+    if (record(property)["type"] === "object") {
+      for (const [path, rows] of inPlace(record(property), before, given, `${at}/${key}`)) {
+        origins.set(path, rows);
+      }
+    }
     if (Array.isArray(given) && items["type"] === "object") {
       const stored = Array.isArray(before) ? before : [];
       origins.set(
@@ -435,5 +447,152 @@ describe("a save of a nested table", () => {
     const kept = save(schema, before, { volumes: [{ label: "", takes: [{ file: 5 }] }] });
     expect(kept.values).toEqual(before);
     expect(kept.refused).toHaveLength(2);
+  });
+});
+
+describe("a save the whole form refuses", () => {
+  const schema: JsonSchema = {
+    type: "object",
+    properties: {
+      host: { type: "string", title: "Host" },
+      port: { type: "integer", title: "Port" },
+      label: { type: "string", title: "Label" },
+    },
+    dependentRequired: { host: ["port"] },
+  };
+
+  it("keeps every good stored value, and says which field to fill in", () => {
+    const before = { host: "a.example", port: 80, label: "old" };
+    const kept = save(schema, before, { host: "b.example", label: "new" });
+    expect(kept.values).toEqual(before);
+    expect(notKeptSentence(schema, kept.refused)).toBe(
+      "Not saved: Port: fill this in, as Host is set. The value each had before is kept.",
+    );
+    // Any other refusal of the whole object is said of the form.
+    const strict: JsonSchema = { ...schema, dependentRequired: undefined, minProperties: 3 };
+    const few = save(strict, before, { label: "new" });
+    expect(few.values).toEqual(before);
+    expect(describedProblems(strict, few.refused)).toBe(
+      "The form: must NOT have fewer than 3 properties.",
+    );
+  });
+});
+
+describe("what a save never takes, and what it leaves out", () => {
+  it("a read-only value is shown, never typed over", () => {
+    const schema: JsonSchema = {
+      type: "object",
+      properties: { recorded: { type: "string", readOnly: true }, label: { type: "string" } },
+    };
+    const kept = save(schema, { recorded: "by the plugin" }, { recorded: "typed", label: "x" });
+    expect(kept.values).toEqual({ recorded: "by the plugin", label: "x" });
+  });
+
+  it("a value the schema now forbids where it was is left out, and said, so the node is repairable", () => {
+    const schema: JsonSchema = {
+      type: "object",
+      properties: {
+        retry: {
+          type: "object",
+          additionalProperties: false,
+          properties: { attempts: INTERVAL },
+        },
+      },
+    };
+    const before = { retry: { attempts: 2, jitter: 0.5 } };
+    const kept = save(schema, before, { retry: { attempts: "3" } });
+    expect(kept.values).toEqual({ retry: { attempts: "3" } });
+    expect(kept.dropped).toEqual(["/retry/jitter"]);
+    expect(droppedSentence(kept.dropped)).toBe("Left out, as the step no longer takes it: jitter.");
+    expect(droppedSentence(["/a", "/b_c"])).toBe(
+      "Left out, as the step no longer takes them: a, b c.",
+    );
+  });
+});
+
+describe("a bad cell in a table inside a group inside a row", () => {
+  it("refuses only that nested row; the parent row's other edits survive", () => {
+    const schema = volumes({
+      settings: {
+        type: "object",
+        title: "Settings",
+        properties: { takes: TAKES },
+      },
+    });
+    const before = { volumes: [{ label: "one", settings: { takes: [{ file: "/a.wav" }] } }] };
+    const kept = save(schema, before, {
+      volumes: [{ label: "ONE", settings: { takes: [{ file: "/A.wav" }, { file: 5 }] } }],
+    });
+    expect(kept.values).toEqual({
+      volumes: [{ label: "ONE", settings: { takes: [{ file: "/A.wav" }] } }],
+    });
+    expect(kept.refused.map((problem) => problem.path)).toEqual([
+      "/volumes/0/settings/takes/1/file",
+    ]);
+  });
+});
+
+describe("a refused save kept until it is corrected", () => {
+  const gain = { type: "integer", title: "Gain", minimum: 1 };
+  const schema = volumes({ gain });
+  const before = {
+    volumes: [
+      { label: "one", gain: 1 },
+      { label: "two", gain: 2 },
+    ],
+  };
+  const submitted = {
+    volumes: [
+      { label: "new", gain: "0" },
+      { label: "two-edited", gain: "0" },
+      { label: "one", gain: "1" },
+    ],
+  };
+
+  it("keeps all that was typed, why, and where each typed row now stands", () => {
+    const kept = save(schema, before, submitted, new Map([["/volumes", [null, 1, 0]]]));
+    // Stored: "two" kept at its own place, "one" saved; the added row left out.
+    expect(rows(kept.values["volumes"]).map((row) => row["label"])).toEqual(["two", "one"]);
+    const stored = storedRefusal(submitted, kept);
+    expect(stored?.values).toEqual(submitted);
+    // Every cell typed is kept, the good with the bad: "two-edited" with its refused gain.
+    expect(rows(stored?.values["volumes"])[1]).toEqual({ label: "two-edited", gain: "0" });
+    expect(stored?.origins).toEqual([["/volumes", [null, 0, 1]]]);
+    expect(readRefusal(JSON.parse(JSON.stringify(stored)))).toEqual(stored);
+  });
+
+  it("is matched against the stored rows on the next save, so nothing is lost", () => {
+    const first = save(schema, before, submitted, new Map([["/volumes", [null, 1, 0]]]));
+    const stored = storedRefusal(submitted, first);
+    if (stored === null) throw new Error("nothing was refused");
+    // Corrected: the typed rows matched where their stored rows now stand.
+    const corrected = {
+      volumes: [
+        { label: "new", gain: "3" },
+        { label: "two-edited", gain: "2" },
+        { label: "one", gain: "1" },
+      ],
+    };
+    const second = save(schema, first.values, corrected, new Map(stored.origins));
+    expect(rows(second.values["volumes"]).map((row) => row["label"])).toEqual([
+      "new",
+      "two-edited",
+      "one",
+    ]);
+    expect(storedRefusal(corrected, second)).toBeNull();
+  });
+
+  it("reads back nothing that is not of its shape", () => {
+    for (const raw of [
+      null,
+      "x",
+      { values: 1 },
+      { values: {}, problems: "x", origins: [] },
+      { values: {}, problems: [{ path: 1 }], origins: [] },
+      { values: {}, problems: [], origins: "x" },
+      { values: {}, problems: [], origins: [["/v", ["a"]]] },
+    ]) {
+      expect(readRefusal(raw)).toBeNull();
+    }
   });
 });

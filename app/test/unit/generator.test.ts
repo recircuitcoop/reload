@@ -218,7 +218,16 @@ describe("a generated editor definition", () => {
       key: { type: "password" },
     });
     const defaults = definition["defaults"] as Record<string, { value: unknown }>;
-    expect(Object.keys(defaults)).toEqual(["name", "title", "limit", "rows", "nested"]);
+    // The last is a refused save kept until corrected (kept-on-save.ts), never validated.
+    expect(Object.keys(defaults)).toEqual([
+      "name",
+      "title",
+      "limit",
+      "rows",
+      "nested",
+      "reload.refused",
+    ]);
+    expect(defaults["reload.refused"]?.value).toBeNull();
     expect(defaults["limit"]?.value).toBe(10);
     expect(defaults["rows"]?.value).toEqual([]);
     expect(defaults["nested"]?.value).toEqual({});

@@ -166,6 +166,17 @@ function SetupFormField({ api, field, draft, problem, onConnect, onChange }: Fie
         {...(problem === undefined ? {} : { error: problem })}
       >
         {(control) => {
+          if (field.readOnly) {
+            // Shown, never typed over (JSON Schema readOnly).
+            return (
+              <TextField
+                id={control.id}
+                testId={`setup-field-${field.key}-text`}
+                state="disabled"
+                value={typeof value === "boolean" ? String(value) : text}
+              />
+            );
+          }
           if (field.kind === "boolean") {
             return (
               <Switch

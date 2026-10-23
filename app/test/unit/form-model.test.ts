@@ -279,3 +279,33 @@ describe("a refusal in the person's words", () => {
     ).toBe("Space: choose one. At most: must be 100 or less.");
   });
 });
+
+describe("a refusal in the person's words, at its edges", () => {
+  const schema = {
+    type: "object",
+    properties: {
+      level: { type: "number", title: "Level" },
+      host: { type: "string", title: "Host" },
+      port_number: { type: "integer" },
+    },
+  };
+
+  it("says exclusive bounds, the whole form, and a value one field asks of another", () => {
+    expect(
+      describedProblems(schema, [
+        { path: "/level", message: "must be < 5" },
+        { path: "/level", message: "must be > 0" },
+        { path: "", message: "must NOT have fewer than 2 properties" },
+        { path: "", message: "must have property port_number when property host is present" },
+        { path: "/level", message: "must be thing" },
+        { path: "/level", message: "must be equal to constant" },
+        { path: "/nothing/0/x", message: "is required" },
+      ]),
+    ).toBe(
+      "Level: must be less than 5. Level: must be more than 0. " +
+        "The form: must NOT have fewer than 2 properties. " +
+        "port number: fill this in, as Host is set. Level: must be thing. " +
+        "Level: must be the one value it allows. nothing, row 1, x: fill this in.",
+    );
+  });
+});

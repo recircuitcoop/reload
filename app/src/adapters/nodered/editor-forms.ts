@@ -31,9 +31,18 @@
 import { Ajv2020, type ValidateFunction } from "ajv/dist/2020.js";
 
 import { browseUrl } from "../../domain/forms/browse";
-import { coerceObject, missingSecrets } from "../../domain/forms/coerce";
-import { keptOnSave, notKeptSentence } from "../../domain/forms/kept-on-save";
-import { originsOf, seedOrigins } from "../../domain/forms/row-origins";
+import { coerceObject, declaredOnly, missingSecrets } from "../../domain/forms/coerce";
+import {
+  droppedSentence,
+  keptOnSave,
+  notKeptSentence,
+  readRefusal,
+  REFUSED_KEY,
+  storedRefusal,
+  type Problem,
+} from "../../domain/forms/kept-on-save";
+import { originsOf, seedOrigins, seedRecorded } from "../../domain/forms/row-origins";
+import { unkeptSecretsOfNode } from "../../domain/forms/unkept";
 import { RELOAD_ANNOTATION } from "../../domain/forms/reload-keyword";
 import {
   ADVANCED_LABEL,
@@ -47,7 +56,17 @@ import {
   type Field,
 } from "../../domain/forms/form-model";
 import type { JsonSchema } from "../../domain/packages/declaration";
-import { element, LOADING, rowOf, showSelect, wireOptions } from "./editor-options";
+import { element, LOADING, showSelect, wireOptions } from "./editor-options";
+import {
+  isRecord,
+  originOf,
+  read,
+  readList,
+  readRows,
+  saveSecrets,
+  SET,
+  typedUnkept,
+} from "./editor-read";
 
 type Values = Record<string, unknown>;
 
@@ -82,13 +101,16 @@ function define(type: string, schema: JsonSchema): void {
 
 /** The node's own values for its declared, non-secret properties, as Node-RED keeps them. */
 function ownOf(entry: Registered, node: Values): Values {
-  const plain = entry.fields.filter((field) => field.control !== "password");
+  const plain = entry.fields.filter(
+    (field) => field.control !== "password" && field.control !== "unkept",
+  );
   return Object.fromEntries(plain.map((field) => [field.key, node[field.key]]));
 }
 
 /** The node's values for its declared properties, coerced as the runtime will coerce them. */
 function valuesOf(entry: Registered, node: Values): Values {
-  return coerceObject(entry.schema, ownOf(entry, node));
+  // As the runtime judges it: nothing the schema does not declare (coerce.ts configOf).
+  return declaredOnly(entry.schema, coerceObject(entry.schema, ownOf(entry, node))) as Values;
 }
 
 /** Each ajv error as the field it is about and what is wrong with it. */
@@ -109,11 +131,18 @@ function problems(validate: ValidateFunction): { path: string; message: string }
 function validate(type: string, node: Values, key: string): true | string {
   const entry = registered(type);
   const values = valuesOf(entry, node);
+  // A refusal of the whole node (a dependentRequired, anyOf, not…) is said at its first field.
+  const first = Object.keys(ownOf(entry, {}))[0] === key;
   const mine = entry.validate(values)
     ? []
     : problems(entry.validate).filter(
-        ({ path }) => path === `/${key}` || path.startsWith(`/${key}/`),
+        ({ path }) => path === `/${key}` || path.startsWith(`/${key}/`) || (path === "" && first),
       );
+  for (const path of unkeptSecretsOfNode(entry.full, node)) {
+    if (path === key || path.startsWith(`${key}.`)) {
+      mine.push({ path: `/${path.replaceAll(".", "/")}`, message: UNKEPT });
+    }
+  }
   // A required secret in this group, unset, as the runtime refuses it; only once Node-RED has
   // said which of the node's secrets are set.
   const held = node["credentials"];
@@ -238,6 +267,11 @@ function control(field: Field, path: string, value: unknown): HTMLElement {
       input.value = textOf(value);
       return input;
     }
+    case "unkept": {
+      // Typed, never kept: a save refuses what is typed here (unkept.ts), and it is never read.
+      const attributes = { ...common, type: "password", "data-reload-unkept": path };
+      return element("input", { ...attributes, style: "width:70%" });
+    }
     case "group":
     case "table":
     case "password":
@@ -263,6 +297,7 @@ function list(field: Field, path: string, values: readonly unknown[]): HTMLEleme
       const remove = element("button", { type: "button", "data-testid": "reload-item-remove" });
       remove.textContent = "Remove";
       remove.addEventListener("click", () => {
+        reasons.clear();
         redraw(readList(holder, element_).filter((_, at) => at !== index));
       });
       item.append(remove);
@@ -271,6 +306,7 @@ function list(field: Field, path: string, values: readonly unknown[]): HTMLEleme
     const add = element("button", { type: "button", "data-testid": `reload-item-add-${path}` });
     add.textContent = "Add";
     add.addEventListener("click", () => {
+      reasons.clear();
       redraw([...readList(holder, element_), element_.default ?? ""]);
     });
     holder.append(add);
@@ -318,6 +354,17 @@ function draw(container: HTMLElement, fields: readonly Field[], values: Values, 
     } else {
       row.append(control(field, path, value));
     }
+    if (field.readOnly === true) {
+      // Shown, never typed over: a save keeps the value it had (kept-on-save.ts).
+      for (const input of row.querySelectorAll("input, select, textarea, button")) {
+        input.setAttribute("disabled", "");
+      }
+    }
+    const reason = reasons.get(path);
+    if (reason !== undefined) {
+      const said = { class: "form-tips reload-error", "data-testid": `reload-error-${path}` };
+      row.append(element("div", said, reason));
+    }
     if (field.reload !== undefined) {
       row.append(
         element("div", {
@@ -338,8 +385,8 @@ function draw(container: HTMLElement, fields: readonly Field[], values: Values, 
   wireOptions(container, fields);
 }
 
-/** What a set secret's input holds: Node-RED's own placeholder, never the value. */
-const SET = "__PWRD__";
+/** Why a value typed into a secret no credential can hold is not kept (unkept.ts). */
+const UNKEPT = "is a secret no credential can hold, so it is not kept";
 
 /** The button beside a path field. */
 const BROWSE_LABEL = "Browse…";
@@ -377,6 +424,7 @@ function table(field: Field, path: string, rows: readonly Values[]): HTMLElement
           text,
         );
         pressed.addEventListener("click", () => {
+          reasons.clear();
           redraw(change());
         });
         line.append(pressed);
@@ -392,86 +440,13 @@ function table(field: Field, path: string, rows: readonly Values[]): HTMLElement
       "Add row",
     );
     add.addEventListener("click", () => {
+      reasons.clear();
       redraw(addRow(readRows(holder, columns), columns));
     });
     holder.append(add);
   };
   redraw(rows);
   return holder;
-}
-
-// ── reading back ─────────────────────────────────────────────────────────────────────────
-
-const isRecord = (value: unknown): value is Values =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-/** The value of `field` as drawn by `drawn`: text as text, as Node-RED keeps it. */
-function valueOf(field: Field, drawn: Element): unknown {
-  switch (field.control) {
-    case "group":
-      return read(drawn, field.fields ?? []);
-    case "table":
-      return readRows(drawn, field.fields ?? []);
-    case "list":
-      return readList(drawn, field.element ?? { ...field, control: "text" });
-    case "multiselect":
-      return (field.options ?? []).filter(
-        (_, index) =>
-          drawn.querySelector<HTMLInputElement>(`[data-reload-option="${String(index)}"]`)
-            ?.checked === true,
-      );
-    case "path":
-      return drawn.querySelector("input")?.value ?? "";
-    default:
-      if (drawn instanceof HTMLInputElement && drawn.type === "checkbox") {
-        return drawn.checked;
-      }
-      return drawn instanceof HTMLInputElement ||
-        drawn instanceof HTMLSelectElement ||
-        drawn instanceof HTMLTextAreaElement
-        ? drawn.value
-        : undefined;
-  }
-}
-
-/** The values of `fields` as drawn under `container`; a secret is never among them. */
-function read(container: Element, fields: readonly Field[]): Values {
-  const values: Values = {};
-  for (const field of fields) {
-    const drawn = rowOf(container, field.key)?.children[1];
-    const value =
-      drawn === undefined || field.control === "password" ? undefined : valueOf(field, drawn);
-    if (value !== undefined) {
-      values[field.key] = value;
-    }
-  }
-  return values;
-}
-
-/** The rows drawn under `holder`, each remembering the row it was drawn from, if any. */
-function readRows(holder: Element, columns: readonly Field[]): Values[] {
-  return [...holder.children]
-    .filter((child) => child.hasAttribute("data-reload-row"))
-    .map((line) => {
-      const row = read(line, columns);
-      const origin = line.getAttribute("data-reload-origin");
-      if (origin !== null) {
-        originOf.set(row, Number(origin));
-      }
-      return row;
-    });
-}
-
-/**
- * Which stored row each drawn row was drawn from (kept-on-save.ts matches rows by it, never by
- * their place): set for the node's own rows as its form opens, carried by every move.
- */
-const originOf = new WeakMap<object, number>();
-
-function readList(holder: Element, item: Field): unknown[] {
-  return [...holder.children]
-    .filter((child) => child.hasAttribute("data-reload-item"))
-    .map((line) => (line.children[0] === undefined ? "" : valueOf(item, line.children[0])));
 }
 
 /** The form container of the open edit dialog for `type`. */
@@ -492,66 +467,79 @@ function editingId(): string {
   return typeof id === "string" ? id : "";
 }
 
-/** What a save did not keep, by node id: said again as that node's form next opens. */
-const refusedOf = new Map<string, string>();
+/** Why each typed value was not kept, by its path in the form open now ("volumes.1.gain"). */
+const reasons = new Map<string, string>();
 
-/** oneditprepare: draw the form with the node's values, and what its last save refused. */
+/** The one sentence of a field's refusal ("Gain: must be 1 or more, not "0"."). */
+const reasonOf = (schema: JsonSchema, problem: Problem): string =>
+  notKeptSentence(schema, [problem])
+    .replace(/^Not saved: /, "")
+    .replace(/ The value each had before is kept\.$/, "");
+
+/**
+ * oneditprepare: draw the form with the node's values; or, while a save of it stands refused
+ * (kept on the node, so a reload of the editor keeps it too), with what was typed, each reason
+ * beside its field, and every row matched to where its stored row now stands.
+ */
 function prepare(type: string, node: Values): void {
   const container = containerOf(type);
   container.replaceChildren();
   editing = node;
-  const refused = refusedOf.get(String(node["id"]));
-  refusedOf.delete(String(node["id"]));
-  // What was not kept, with what was typed and why, above the values the node holds.
-  if (refused !== undefined) {
-    const said = { class: "form-tips reload-refused", "data-testid": "reload-refused" };
-    container.append(element("div", said, refused));
+  reasons.clear();
+  const { fields, full } = registered(type);
+  const refused = readRefusal(node[REFUSED_KEY]);
+  if (refused === null) {
+    seedOrigins(fields, node, originOf);
+    draw(container, fields, node, "");
+    return;
   }
-  const { fields } = registered(type);
-  seedOrigins(fields, node, originOf);
-  draw(container, fields, node, "");
+  const said = { class: "form-tips reload-refused", "data-testid": "reload-refused" };
+  container.append(element("div", said, notKeptSentence(full, refused.problems)));
+  for (const problem of refused.problems) {
+    reasons.set(problem.path.slice(1).replaceAll("/", "."), reasonOf(full, problem));
+  }
+  seedRecorded(fields, refused.values, new Map(refused.origins), originOf);
+  draw(container, fields, { ...node, ...refused.values }, "");
 }
 
 /**
- * oneditsave: what passes back onto the node, what fails left as it was (kept-on-save.ts), and
- * each secret drawn in a group to its credential. True when a secret changed, which Node-RED
- * cannot see itself.
+ * oneditsave: what passes back onto the node, what fails left as it was (kept-on-save.ts) and
+ * kept on the node with what was typed until a save corrects it, a secret typed where no
+ * credential can hold it refused, and each secret drawn in a group to its credential. True when
+ * a secret changed, which Node-RED cannot see itself.
  */
 function save(type: string, node: Values): boolean {
   const entry = registered(type);
   const container = containerOf(type);
   const submitted = read(container, entry.fields);
-  const previous = ownOf(entry, node);
   const check = (value: Values) => (entry.validate(value) ? [] : problems(entry.validate));
   const origins = originsOf(entry.fields, submitted, originOf);
-  const kept = keptOnSave(entry.schema, previous, submitted, check, origins);
+  const kept = keptOnSave(entry.schema, ownOf(entry, node), submitted, check, origins);
+  const unkept = typedUnkept(container).map((path) => ({
+    path: `/${path.replaceAll(".", "/")}`,
+    message: UNKEPT,
+  }));
   for (const [key, value] of Object.entries(kept.values)) {
     node[key] = value;
   }
-  if (kept.refused.length > 0) {
-    const sentence = notKeptSentence(entry.schema, kept.refused);
-    refusedOf.set(String(node["id"]), sentence);
-    window.RED?.notify(sentence, "warning");
+  const all = { ...kept, refused: [...kept.refused, ...unkept] };
+  node[REFUSED_KEY] = storedRefusal(submitted, all);
+  const said = [
+    ...(all.refused.length === 0 ? [] : [notKeptSentence(entry.full, all.refused)]),
+    ...(kept.dropped.length === 0 ? [] : [droppedSentence(kept.dropped)]),
+  ];
+  if (said.length > 0) {
+    window.RED?.notify(said.join(" "), "warning");
   }
-  return saveSecrets(container, node);
+  const changed = saveSecrets(container, node);
+  editing = null;
+  return changed;
 }
 
-/** Each secret drawn in a group to its credential, as Node-RED saves its own inputs. */
-function saveSecrets(container: Element, node: Values): boolean {
-  const held: Values = isRecord(node["credentials"]) ? node["credentials"] : {};
-  node["credentials"] = held;
-  let changed = false;
-  for (const input of container.querySelectorAll<HTMLInputElement>("[data-reload-secret]")) {
-    const name = input.getAttribute("data-reload-secret") ?? "";
-    const set = held[`has_${name}`] === true;
-    if (input.value === SET || (input.value === "" && !set)) {
-      continue;
-    }
-    held[name] = input.value;
-    held[`has_${name}`] = input.value !== "";
-    changed = true;
-  }
-  return changed;
+/** oneditcancel: the form is closed, and a late Browse… answer has nowhere to go. */
+function close(): void {
+  editing = null;
+  reasons.clear();
 }
 
 /**
@@ -574,6 +562,7 @@ declare global {
       validate: typeof validate;
       prepare: typeof prepare;
       save: typeof save;
+      close: typeof close;
       browsed: typeof browsed;
     };
     /** The editor's own RED, as far as the form uses it. */
@@ -583,7 +572,7 @@ declare global {
   }
 }
 
-window.ReloadForms = { define, validate, prepare, save, browsed };
+window.ReloadForms = { define, validate, prepare, save, close, browsed };
 for (const [type, schema] of window.ReloadFormsPending ?? []) {
   define(type, schema);
 }
