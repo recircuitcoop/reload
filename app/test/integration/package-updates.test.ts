@@ -1087,6 +1087,27 @@ describe("a path install (plan 0013)", () => {
     return where;
   }
 
+  it("a linked folder is never checked nor updated, whatever its folder now declares", async () => {
+    const where = folder("0.1.0", "// the first build\n");
+    const { installer, updates } = setUp();
+    expect(await installer.installFromFile(where, true, { linked: true })).toMatchObject({
+      ok: true,
+    });
+    writePackages({ update_mode: "auto" });
+    folder("0.2.0", "// a newer build\n");
+    restarts = [];
+    await drive(updates.check());
+    expect(restarts).toEqual([]);
+    expect(roots.installed("monty")?.version).toBe("0.1.0");
+    expect((await line(installer, updates, "monty"))?.update).toEqual({
+      kind: "unchecked",
+      version: null,
+      detail: `it is linked to ${where}: its files are read as they are, never checked`,
+      apply: false,
+    });
+    expect(told).toEqual([]);
+  });
+
   it("refuses and reports content that changed under the same version, then updates to a new version", async () => {
     const where = folder("0.1.0", "// the first build\n");
     const { installer, updates } = setUp();

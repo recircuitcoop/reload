@@ -378,6 +378,9 @@ export function wordCaptions(pkg: Package): string[] {
   if (pkg.source.kind === "folder") {
     captions.push(t("packages.fromFolder.caption", { path: pkg.source.path }));
   }
+  if (pkg.source.kind === "folder" && pkg.source.linked === true) {
+    captions.push(t("packages.linked"));
+  }
   if (pkg.source.kind === "folder" && pkg.source.unreadable === true) {
     captions.push(t("packages.folderUnreadable"));
   }

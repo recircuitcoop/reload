@@ -113,7 +113,13 @@ export const PACKAGE_UPDATE_STATES: readonly PackageUpdateState[] = [
  */
 export type PackageSource =
   | { readonly kind: "catalogue" }
-  | { readonly kind: "folder"; readonly path: string; readonly unreadable?: true };
+  | {
+      readonly kind: "folder";
+      readonly path: string;
+      readonly unreadable?: true;
+      /** A development install: read where it is, never pinned, checked or updated. */
+      readonly linked?: true;
+    };
 
 /** One package as its row knows it. A facet is null until Reload has verified it. */
 export interface Package {

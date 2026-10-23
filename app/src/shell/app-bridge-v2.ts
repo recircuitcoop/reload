@@ -83,7 +83,12 @@ export function appApiV2Over(ipc: RendererIpc): AppApiV2 {
     },
     listPackages: () => pkg("package.list"),
     installCatalogueEntry: (source, id) => pkg("package.install", { source, id }),
-    installFolder: (folder) => pkg("package.installFolder", { folder }),
+    installFolder: (folder, how) =>
+      pkg("package.installFolder", {
+        folder,
+        ...(how?.linked === true ? { linked: true } : {}),
+        ...(how?.replace === true ? { replace: true } : {}),
+      }),
     uninstallPackage: (name) => pkg("package.remove", { name }),
     updatePackage: (name) => pkg("package.update", { name }),
     reinstallPackage: (name) => pkg("package.reinstall", { name }),

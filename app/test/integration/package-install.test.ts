@@ -750,3 +750,108 @@ describe("the installed-package store", () => {
     );
   });
 });
+
+describe("the package author's workflow (plan 0032 group 7): a linked folder, the same checkout again, Replace", () => {
+  const edit = (folder: string, version: string, label = "Ping") => {
+    const document = JSON.parse(declaration("pinger", version)) as {
+      types: { label: string }[];
+    };
+    (document.types[0] as { label: string }).label = label;
+    fs.writeFileSync(path.join(folder, "reload-package.json"), JSON.stringify(document));
+  };
+
+  it("a linked folder is read where it is: the runtime's store points at the checkout, and an edit is live", async () => {
+    const { installer } = setUp();
+    const checkout = folderOf(packageFiles());
+    expect(await installer.installFromFile(checkout, true, { linked: true })).toMatchObject({
+      ok: true,
+    });
+    const store = () => new InstalledPackageStore(shipped(), roots, logger);
+    const stored = () =>
+      store()
+        .documents()
+        .find((entry) => entry.name === "pinger");
+    expect(stored()?.folder).toBe(checkout);
+    // Edited in the checkout, read as it is: no install in between.
+    edit(checkout, "0.1.0", "Ping, edited");
+    expect(JSON.stringify(stored()?.document)).toContain("Ping, edited");
+  });
+
+  it("its own code is never pinned: no content hash is kept, and the same version changed is re-recorded", async () => {
+    const { installer } = setUp();
+    const checkout = folderOf(packageFiles());
+    await installer.installFromFile(checkout, true, { linked: true });
+    const first = roots.installed("pinger")?.contentHash;
+    const hashes = path.join(base, "content-hashes.json");
+    const kept = fs.existsSync(hashes) ? fs.readFileSync(hashes, "utf8") : "";
+    expect(kept).not.toContain("pinger");
+    fs.writeFileSync(path.join(checkout, "node.js"), "process.stdout.write('a new kind')\n");
+    expect(await installer.installFromFile(checkout, true, { linked: true })).toMatchObject({
+      ok: true,
+    });
+    expect(roots.installed("pinger")?.contentHash).not.toBe(first);
+    // The same change under the same version, copied rather than linked, is refused (plan 0013).
+    const copied = folderOf(packageFiles("pinger", "0.3.0"));
+    await setUp().installer.installFromFile(copied, true, { replace: true });
+    fs.writeFileSync(path.join(copied, "node.js"), "process.stdout.write('moved')\n");
+    const moved = await setUp().installer.installFromFile(copied, true);
+    expect(moved).toMatchObject({ ok: false });
+  });
+
+  it("the record says it is linked, and where from, read back whole", async () => {
+    const checkout = folderOf(packageFiles());
+    await setUp().installer.installFromFile(checkout, true, { linked: true });
+    expect(roots.installed("pinger")?.origin).toEqual({
+      kind: "file",
+      path: checkout,
+      linked: true,
+    });
+    expect(roots.list().find((live) => live.record.package === "pinger")?.record.signed).toBe(
+      false,
+    );
+  });
+
+  it("installing the same checkout again needs no Replace, at a new version too", async () => {
+    const { installer } = setUp();
+    const checkout = folderOf(packageFiles());
+    await installer.installFromFile(checkout, true);
+    edit(checkout, "0.2.0");
+    expect(await installer.installFromFile(checkout, true)).toMatchObject({ ok: true });
+    expect(roots.installed("pinger")?.version).toBe("0.2.0");
+  });
+
+  it("Replace takes the place of an installation from anywhere else; without it the install is refused", async () => {
+    const { installer } = setUp();
+    await installer.installFromFile(folderOf(packageFiles()), true);
+    const other = folderOf(packageFiles("pinger", "0.5.0"));
+    expect(await installer.installFromFile(other, true)).toEqual({
+      ok: false,
+      error: "Not installed: pinger 0.1.0 is already installed; remove it first",
+    });
+    expect(roots.installed("pinger")?.version).toBe("0.1.0");
+    expect(await installer.installFromFile(other, true, { replace: true })).toMatchObject({
+      ok: true,
+    });
+    expect(roots.installed("pinger")).toMatchObject({
+      version: "0.5.0",
+      origin: { kind: "file", path: other },
+    });
+    // A shipped name is never replaced.
+    expect(
+      await installer.installFromFile(folderOf(packageFiles("anytype")), true, { replace: true }),
+    ).toMatchObject({ ok: false });
+  });
+
+  it("Replace takes the place of a catalogue install too, the one the refusal protected", async () => {
+    served.set(ARCHIVE_URL, signedArchive(packageFiles(), signer));
+    entries = [entry("pinger", ARCHIVE_URL)];
+    const { installer } = setUp();
+    expect(await installer.installFromCatalogue("pinger")).toMatchObject({ ok: true });
+    const folder = folderOf(packageFiles("pinger", "0.2.0"));
+    expect(await installer.installFromFile(folder, true)).toMatchObject({ ok: false });
+    expect(await installer.installFromFile(folder, true, { replace: true })).toMatchObject({
+      ok: true,
+    });
+    expect(roots.installed("pinger")?.origin).toEqual({ kind: "file", path: folder });
+  });
+});

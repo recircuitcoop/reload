@@ -47,6 +47,7 @@ import {
   restartAround,
   type ListedPackage,
   type OneAtATime,
+  type FileInstall,
   type PackageInstaller,
   type PackageOutcome,
   type RestartRuntime,
@@ -245,9 +246,12 @@ export class PackageBoard {
           version: record.version,
           source:
             origin?.kind === "file"
-              ? latest.unreadable
-                ? { kind: "folder", path: origin.path, unreadable: true }
-                : { kind: "folder", path: origin.path }
+              ? {
+                  kind: "folder",
+                  path: origin.path,
+                  ...(latest.unreadable ? { unreadable: true as const } : {}),
+                  ...(origin.linked === true ? { linked: true as const } : {}),
+                }
               : { kind: "catalogue" },
           signed: record.signed,
           shipped: false,
@@ -321,8 +325,9 @@ export class PackageBoard {
   }
 
   /** Install a folder (or `.tgz`) the person chose and confirmed unsigned; then ask it, once. */
-  installFolder(folder: string): Promise<BoardOutcome> {
-    return this.#installThen(() => this.#ports.installer.installFromFile(folder, true));
+  /** A folder or `.tgz`: copied, or linked for development; `replace` takes the name's place. */
+  installFolder(folder: string, how: FileInstall = {}): Promise<BoardOutcome> {
+    return this.#installThen(() => this.#ports.installer.installFromFile(folder, true, how));
   }
 
   async #installThen(work: () => Promise<PackageOutcome>): Promise<BoardOutcome> {

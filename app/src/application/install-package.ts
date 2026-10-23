@@ -140,6 +140,14 @@ export async function restartAround(
   return { took, refused: made.refused };
 }
 
+/** How a folder or `.tgz` is installed (plan 0032 group 7, the old editable install and --force). */
+export interface FileInstall {
+  /** A development install: its files read where they are, never pinned, checked or updated. */
+  readonly linked?: boolean;
+  /** Replace an installation of the same name from anywhere else. */
+  readonly replace?: boolean;
+}
+
 export interface PackageInstallerPorts extends CatalogueReads {
   readonly environment: PackageEnvironmentPorts;
   /** Where the install events go (plan 0029): the usage signals, behind consent. */
@@ -285,7 +293,7 @@ export class PackageInstaller {
         url: this.#catalogues.urlOf(source),
         official: source === OFFICIAL_SOURCE_NAME,
       };
-      const early = this.#refusedName(name);
+      const early = this.#refusedName(name, { kind: "catalogue", source, id }, false);
       if (early !== null) {
         return this.#refused(id, early, where, nameRefusal(early));
       }
@@ -357,7 +365,11 @@ export class PackageInstaller {
    * Install a package folder or `.tgz` a developer chose. It is unsigned, so it is refused
    * unless `unsignedConfirmed`: the person was told nobody vouches for it, and went ahead.
    */
-  installFromFile(file: string, unsignedConfirmed: boolean): Promise<PackageOutcome> {
+  installFromFile(
+    file: string,
+    unsignedConfirmed: boolean,
+    how: FileInstall = {},
+  ): Promise<PackageOutcome> {
     if (!unsignedConfirmed) {
       return Promise.resolve({
         ok: false,
@@ -371,7 +383,12 @@ export class PackageInstaller {
       this.#ports.logger.warn(`an unsigned package is installed from ${file}, as confirmed`);
       // Reading the folder or file is this install's fetching; its name is read with it.
       this.#ports.environment.phase?.("fetching", null);
-      return this.#install(fileOrigin(file), null, { kind: "file", path: file }, { kind: "file" });
+      const from: InstalledOrigin = {
+        kind: "file",
+        path: file,
+        ...(how.linked ? { linked: true } : {}),
+      };
+      return this.#install(fileOrigin(file), null, from, { kind: "file" }, how.replace === true);
     });
   }
 
@@ -447,8 +464,12 @@ export class PackageInstaller {
     });
   }
 
-  /** Why `name` cannot be installed now, or null. */
-  #refusedName(name: string): string | null {
+  /**
+   * Why `name` cannot be installed now, or null. An installation is replaced only when asked
+   * (`replace`, the old `--force`), or by the very folder it was installed from: an author
+   * installing their checkout again, at any version (plan 0032 group 7).
+   */
+  #refusedName(name: string, from: InstalledOrigin, replace: boolean): string | null {
     if (this.#ports.shipped().some((shipped) => shipped.name === name)) {
       return `${name} is the name of a package shipped with Reload`;
     }
@@ -459,7 +480,11 @@ export class PackageInstaller {
       // A record nobody can read is still an installation: refusing is what protects it.
       return `${name} is installed, and its record cannot be read (${(error as Error).message}); remove it first`;
     }
-    if (installed !== undefined) {
+    const same =
+      installed?.origin?.kind === "file" &&
+      from.kind === "file" &&
+      installed.origin.path === from.path;
+    if (installed !== undefined && !replace && !same) {
       return `${name} ${installed.version} is already installed; remove it first`;
     }
     return null;
@@ -470,6 +495,7 @@ export class PackageInstaller {
     expected: string | null,
     from: InstalledOrigin,
     where: InstallOrigin,
+    replace = false,
   ): Promise<PackageOutcome> {
     let nodeTypes = 0;
     // Judged on the verified declaration, before anything is written.
@@ -481,7 +507,7 @@ export class PackageInstaller {
           `the catalogue offers ${expected}, and the archive declares ${declaration.package}`,
         );
       }
-      const refused = this.#refusedName(declaration.package);
+      const refused = this.#refusedName(declaration.package, from, replace);
       if (refused !== null) {
         throw new PackageRefusal(nameRefusal(refused) as "installed" | "reserved", refused);
       }

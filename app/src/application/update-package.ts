@@ -42,7 +42,7 @@ import {
   type RestartRuntime,
 } from "./install-package";
 import { PackageCatalogues, type CatalogueReads, type UpdateArchives } from "./package-catalogues";
-import { movedDetail, readyWithin, updateLine, type Found } from "./update-lines";
+import { movedDetail, notChecked, readyWithin, updateLine, type Found } from "./update-lines";
 import { packageUpdated, type Signal } from "../domain/telemetry/reports";
 import {
   inspectPackage,
@@ -204,8 +204,9 @@ export class PackageUpdates {
    * whose updates are off is not asked about at all: no catalogue and no folder is read for it.
    */
   async checkOne(record: InstalledRecord): Promise<VersionFinding> {
-    const finding = this.#isOff(record)
-      ? { kind: "unchecked" as const, reason: `its updates are off, so it is not checked` }
+    const held = notChecked(record, () => this.#modeOf(record, this.#ports.policy()));
+    const finding = held
+      ? { kind: "unchecked" as const, reason: held }
       : await this.#judge(record).catch((error: unknown): VersionFinding => ({
           kind: "unchecked",
           reason: reasonOf(error),
@@ -564,15 +565,6 @@ export class PackageUpdates {
     }
     const source = record.origin?.kind === "catalogue" ? record.origin.source : null;
     return modeFor(policy, sources, record.package, source).mode;
-  }
-
-  /** Whether `record`'s updates are off; a setting that cannot be read is judged by check. */
-  #isOff(record: InstalledRecord): boolean {
-    try {
-      return this.#modeOf(record, this.#ports.policy()) === "off";
-    } catch {
-      return false;
-    }
   }
 
   #actionOf(record: InstalledRecord, policy: PackagePolicy): ReturnType<typeof actionFor> {

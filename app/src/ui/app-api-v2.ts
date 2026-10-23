@@ -151,8 +151,15 @@ export interface AppApiV2 {
   listPackages(): Promise<Answer<PackagesView>>;
   /** "Add a package… › From the catalogue": install an entry from its signed archive. */
   installCatalogueEntry(source: string, id: string): Promise<Answer<null>>;
-  /** "Add a package… › From a folder": install the chosen folder, confirmed unsigned. */
-  installFolder(folder: string): Promise<Answer<null>>;
+  /**
+   * "Add a package… › From a folder": install the chosen folder, confirmed unsigned. `linked`: a
+   * development install, read where it is; `replace`: take the place of the installed package of
+   * that name, wherever it came from (plan 0032 group 7).
+   */
+  installFolder(
+    folder: string,
+    how?: { readonly linked?: boolean; readonly replace?: boolean },
+  ): Promise<Answer<null>>;
   /** Remove a package's files and environment; refused while used, naming EVERY use (D6). */
   uninstallPackage(name: string): Promise<Answer<null>>;
   /** "Install again": a package whose copy failed its check, from where it came from. */

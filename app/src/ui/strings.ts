@@ -418,6 +418,9 @@ export const STRINGS = {
   "packages.add": "Add a package…",
   "packages.fromCatalogue": "From the catalogue",
   "packages.fromFolderMenu": "From a folder on this Mac…",
+  "packages.linkedFolderMenu": "Link a folder, for development…", // decided (plan 0032 group 7)
+  "packages.replaceFolderMenu": "Replace with a folder…", // decided (plan 0032 group 7)
+  "packages.linked": "Linked: its files are read as they are, never checked or updated.", // decided
   "packages.by": "by *{publisher}*",
   "packages.registered": "Registered",
   "packages.notRegistered": "Not registered",

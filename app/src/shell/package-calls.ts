@@ -179,7 +179,12 @@ export function wirePackageCalls(deps: PackageCallsDeps): void {
         case "package.install":
           return changing(text("id"), () => board.install(text("source"), text("id")));
         case "package.installFolder":
-          return changing("", () => board.installFolder(text("folder")));
+          return changing("", () =>
+            board.installFolder(text("folder"), {
+              linked: args["linked"] === true,
+              replace: args["replace"] === true,
+            }),
+          );
         case "package.remove":
           return withUses(name, op, (used) => board.remove(name, used));
         case "package.update":

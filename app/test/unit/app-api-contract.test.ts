@@ -202,10 +202,13 @@ const CALLS: Record<string, { call: (api: AppApi) => Promise<unknown>; sent: unk
     ],
   },
   installFolder: {
-    call: (api) => api.installFolder("/Users/me/reload_summarize"),
+    call: (api) => api.installFolder("/Users/me/reload_summarize", { linked: true, replace: true }),
     sent: [
       IPC.packageCall,
-      { op: "package.installFolder", args: { folder: "/Users/me/reload_summarize" } },
+      {
+        op: "package.installFolder",
+        args: { folder: "/Users/me/reload_summarize", linked: true, replace: true },
+      },
     ],
   },
   uninstallPackage: {

@@ -55,11 +55,13 @@ export type RecordAmendment = Pick<InstalledRecord, "installedAt" | "left" | "up
 
 /**
  * A catalogue entry (`source` is `official` or a registered source's name, whose auto-update
- * switch is then this package's too), or a folder or `.tgz` a person chose.
+ * switch is then this package's too), or a folder or `.tgz` a person chose. A `linked` folder
+ * is a development install (plan 0032 group 7, the old editable install): its files are read
+ * where they are, as they are, never hash-pinned, checked or updated.
  */
 export type InstalledOrigin =
   | { readonly kind: "catalogue"; readonly source: string; readonly id: string }
-  | { readonly kind: "file"; readonly path: string };
+  | { readonly kind: "file"; readonly path: string; readonly linked?: true };
 
 /** A live package: its record, and its folders. */
 export interface LivePackage {

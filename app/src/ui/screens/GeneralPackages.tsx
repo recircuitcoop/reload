@@ -167,7 +167,9 @@ export function PackagesSection({ api }: { readonly api: AppApi }) {
   const packages = usePackages();
   const [said, say] = useState<Said>(null);
   /** The folder chosen, waiting for the unsigned dialog's answer. */
+  /** The folder chosen, and how it is to be installed (plan 0032 group 7). */
   const [unsigned, setUnsigned] = useState<string | null>(null);
+  const [how, setHow] = useState<{ linked?: boolean; replace?: boolean }>({});
   const [goingBack, setGoingBack] = useState<Pkg | null>(null);
   const [catalogue, setCatalogue] = useState(false);
   const act = (call: () => Promise<Answer<unknown>>) => {
@@ -176,10 +178,13 @@ export function PackagesSection({ api }: { readonly api: AppApi }) {
       if (!answer.ok) say({ kind: "failed", text: wordRefusal(answer.refused) });
     });
   };
-  const chooseFolder = () => {
+  const chooseFolder = (chosenHow: { linked?: boolean; replace?: boolean } = {}) => {
     act(async () => {
       const chosen = await api.chooseInstallFolder();
-      if (chosen.ok && chosen.value.folder !== null) setUnsigned(chosen.value.folder);
+      if (chosen.ok && chosen.value.folder !== null) {
+        setHow(chosenHow);
+        setUnsigned(chosen.value.folder);
+      }
       return chosen;
     });
   };
@@ -231,7 +236,25 @@ export function PackagesSection({ api }: { readonly api: AppApi }) {
             value="folder"
             testId="menu-packages-from-folder"
             label={t("packages.fromFolderMenu")}
-            onSelect={chooseFolder}
+            onSelect={() => {
+              chooseFolder();
+            }}
+          />
+          <MenuItem
+            value="linked"
+            testId="menu-packages-linked-folder"
+            label={t("packages.linkedFolderMenu")}
+            onSelect={() => {
+              chooseFolder({ linked: true });
+            }}
+          />
+          <MenuItem
+            value="replace"
+            testId="menu-packages-replace-folder"
+            label={t("packages.replaceFolderMenu")}
+            onSelect={() => {
+              chooseFolder({ replace: true });
+            }}
           />
         </Menu>
         <Button
@@ -306,7 +329,7 @@ export function PackagesSection({ api }: { readonly api: AppApi }) {
             onPrimary={() => {
               const folder = unsigned;
               setUnsigned(null);
-              if (folder !== null) act(() => api.installFolder(folder));
+              if (folder !== null) act(() => api.installFolder(folder, how));
             }}
             onCancel={() => {
               setUnsigned(null);

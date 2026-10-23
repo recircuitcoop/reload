@@ -69,11 +69,15 @@ export class InstalledPackageStore implements PackageStore {
         );
         continue;
       }
+      // A linked folder is read where it is, as it is (plan 0032 group 7): its edits are live.
+      const origin = record.origin;
+      const packageDir =
+        origin?.kind === "file" && origin.linked === true ? origin.path : folder.packageDir;
       let document: unknown;
       try {
-        document = JSON.parse(fs.readFileSync(path.join(folder.packageDir, DECLARATION), "utf8"));
+        document = JSON.parse(fs.readFileSync(path.join(packageDir, DECLARATION), "utf8"));
       } catch (error) {
-        const old = fs.existsSync(path.join(folder.packageDir, OLD_DECLARATION_FILE));
+        const old = fs.existsSync(path.join(packageDir, OLD_DECLARATION_FILE));
         this.#warnOnce(
           old
             ? `installed package ${record.package} is refused: ${oldDeclarationProblem(DECLARATION)}`
@@ -83,7 +87,7 @@ export class InstalledPackageStore implements PackageStore {
       }
       found.set(record.package, {
         name: record.package,
-        folder: folder.packageDir,
+        folder: packageDir,
         document,
         installed: true,
         signed: record.signed,

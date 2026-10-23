@@ -109,7 +109,7 @@ class FakeBoard {
   }
   board = () => Promise.resolve({ rows: this.rows, offers: [] });
   install = (source: string, id: string) => this.#did("install", source, id);
-  installFolder = (folder: string) => this.#did("installFolder", folder);
+  installFolder = (folder: string, how?: unknown) => this.#did("installFolder", folder, how);
   update = (name: string) => this.#did("update", name);
   register = (name: string) => this.#did("register", name);
   checkFolder = (name: string) => this.#did("checkFolder", name);
@@ -763,6 +763,11 @@ describe("AppApi v2 calls, through the shell to its processes", () => {
     expect(await h.api.registerPackage("monty")).toEqual({ ok: true, value: null });
     expect(await h.api.checkFolder("monty")).toEqual({ ok: true, value: null });
     expect(await h.api.installFolder("/Users/me/monty")).toEqual({ ok: true, value: null });
+    expect(h.board.calls.at(-1)).toEqual([
+      "installFolder",
+      "/Users/me/monty",
+      { linked: false, replace: false },
+    ]);
     expect(await h.api.installCatalogueEntry("official", "monty")).toEqual({
       ok: true,
       value: null,

@@ -227,12 +227,16 @@ async function judgeAndBuild(
   if (repairing !== undefined) {
     judgeRepair(repairing, declaration, hash);
   }
-  judgeContent(
-    declaration.package,
-    declaration.version,
-    hash,
-    ports.contentHashes.recorded(declaration.package, declaration.version),
-  );
+  // A linked folder is edited between its installs: its content is never pinned to its version.
+  const linked = from?.kind === "file" && from.linked === true;
+  if (!linked) {
+    judgeContent(
+      declaration.package,
+      declaration.version,
+      hash,
+      ports.contentHashes.recorded(declaration.package, declaration.version),
+    );
+  }
   const plan = planEnvironment(declaration, files, ports.target, ports.sha256);
 
   // Step 6. Only the package's own files go into the environment's package folder, never the
@@ -277,7 +281,9 @@ async function judgeAndBuild(
     }
     // Recorded before the swap, the last step that can fail: a hash that cannot be written then
     // leaves the old version live, as "Not updated" says. The swap itself puts it back.
-    ports.contentHashes.record(declaration.package, declaration.version, hash);
+    if (!linked) {
+      ports.contentHashes.record(declaration.package, declaration.version, hash);
+    }
     const swapped = ports.roots.swapIn(declaration.package);
     ports.logger.info(
       `package ${record.package} ${record.version} is installed in its own ` +

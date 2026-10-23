@@ -59,6 +59,22 @@ export function updateLine(
   }
 }
 
+/**
+ * Why `record` is not checked at all: a linked folder (plan 0032 group 7), or a package whose
+ * updates are off. `mode` throws when the settings cannot be read: the check then judges it.
+ */
+export function notChecked(record: InstalledRecord, mode: () => UpdateMode): string | null {
+  const { origin } = record;
+  if (origin?.kind === "file" && origin.linked === true) {
+    return `it is linked to ${origin.path}: its files are read as they are, never checked`;
+  }
+  try {
+    return mode() === "off" ? "its updates are off, so it is not checked" : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Why content that changed under the same version is not applied (plan 0013). */
 export function movedDetail(record: InstalledRecord): string {
   const where = record.origin?.kind === "file" ? record.origin.path : "its source";
