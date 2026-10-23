@@ -46,3 +46,19 @@ export function flowRow(flow: FlowSummary, now: Date): FlowsListRow {
 
 /** The template Blank canvas makes; it is not offered again as a card under From a template. */
 export const BLANK_TEMPLATE = "blank";
+
+/**
+ * The flows as the switches must show them: a switch pressed is drawn in the state asked for
+ * until the list read after its answer comes back. The switch compares a press with the state
+ * it is drawn in, so one drawn from a list read before an earlier press was answered would take
+ * the next press for no change at all, and send nothing.
+ */
+export function withSwitching(
+  flows: readonly FlowSummary[],
+  switching: ReadonlyMap<string, boolean>,
+): FlowSummary[] {
+  return flows.map((flow) => {
+    const on = switching.get(flow.id);
+    return on === undefined || on === flow.on ? flow : { ...flow, on };
+  });
+}

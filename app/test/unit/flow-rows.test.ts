@@ -6,7 +6,12 @@ import { describe, expect, it } from "vitest";
 import type { ChildStatus } from "../../src/ui/contract";
 import { editorUrl, flowEditorUrl } from "../../src/ui/editor-url";
 import type { FlowSummary } from "../../src/ui/flow-contract";
-import { BLANK_TEMPLATE, flowRow, HEALTH_LOOK } from "../../src/ui/screens/flow-rows";
+import {
+  BLANK_TEMPLATE,
+  flowRow,
+  HEALTH_LOOK,
+  withSwitching,
+} from "../../src/ui/screens/flow-rows";
 import { STRINGS } from "../../src/ui/strings";
 import { wordDeleteFlow } from "../../src/ui/words";
 
@@ -90,6 +95,21 @@ describe("a flow's row", () => {
       ["failing-since", "no-source", "ready", "steps-not-set-up"].sort(),
     );
     expect(BLANK_TEMPLATE).toBe("blank");
+  });
+});
+
+describe("a flow's switch while its press is under way", () => {
+  it("is drawn as asked, not as a list read before the press says, and as the list says once read", () => {
+    const flows = [summary({ id: "a", on: true }), summary({ id: "b", on: true })];
+    // Off pressed on a: drawn off at once, though the list still says on; b as the list says.
+    const drawn = withSwitching(flows, new Map([["a", false]]));
+    expect(drawn.map((flow) => [flow.id, flow.on])).toEqual([
+      ["a", false],
+      ["b", true],
+    ]);
+    // Nothing pressed, or a press the list already shows: the list's own objects.
+    expect(withSwitching(flows, new Map())).toEqual(flows);
+    expect(withSwitching(flows, new Map([["b", true]]))[1]).toBe(flows[1]);
   });
 });
 

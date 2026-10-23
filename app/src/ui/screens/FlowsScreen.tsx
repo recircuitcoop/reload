@@ -15,10 +15,10 @@ import { FlowsList, type FlowAction, type FlowsListWords } from "../components/o
 import type { AppApi } from "../contract";
 import type { FlowSummary, FlowTemplateEntry } from "../flow-contract";
 import type { Route } from "../routes";
-import { useFlows } from "../store";
+import { useFlows, useStores } from "../store";
 import { t } from "../strings";
 import { wordDeleteFlow, wordRefusal } from "../words";
-import { BLANK_TEMPLATE, flowRow } from "./flow-rows";
+import { BLANK_TEMPLATE, flowRow, withSwitching } from "./flow-rows";
 
 const WORDS: FlowsListWords = {
   title: t("nav.flows"),
@@ -48,6 +48,9 @@ export interface FlowsScreenProps {
 
 export function FlowsScreen({ api, navigate }: FlowsScreenProps) {
   const flows = useFlows();
+  const stores = useStores();
+  // Each flow's switch while its press is under way: the state asked for (withSwitching).
+  const [switching, setSwitching] = useState<ReadonlyMap<string, boolean>>(new Map());
   // The line a refused call left: shown above the list until the next call answers.
   const [problem, setProblem] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<FlowSummary | null>(null);
@@ -92,9 +95,21 @@ export function FlowsScreen({ api, navigate }: FlowsScreenProps) {
         navigate({ screen: "history", flowId: flow.id });
         return;
       case "on":
-      case "off":
-        answered(await api.setFlowOn(flow.id, action === "on"));
+      case "off": {
+        const on = action === "on";
+        setSwitching((now) => new Map(now).set(flow.id, on));
+        answered(await api.setFlowOn(flow.id, on));
+        // Drawn as asked until the list read after the answer is in, refused or not.
+        await stores.flows.refresh();
+        setSwitching((now) => {
+          const next = new Map(now);
+          if (next.get(flow.id) === on) {
+            next.delete(flow.id);
+          }
+          return next;
+        });
         return;
+      }
       case "rename":
         setRenaming({ flow, name: flow.name });
         return;
@@ -123,7 +138,7 @@ export function FlowsScreen({ api, navigate }: FlowsScreenProps) {
     <div data-testid="flows-screen" className="flex flex-col gap-5">
       {problem === null ? null : <InlineMessage kind="failed">{problem}</InlineMessage>}
       <FlowsList
-        flows={flows.value.map((flow) => flowRow(flow, now))}
+        flows={withSwitching(flows.value, switching).map((flow) => flowRow(flow, now))}
         words={WORDS}
         onAction={(flowId, action) => {
           const flow = byId.get(flowId);
