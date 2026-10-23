@@ -29,15 +29,12 @@
 
 import { compareVersions } from "../domain/packages/versions";
 import { updateSignal, type Signal } from "../domain/telemetry/reports";
-import { MinisignError } from "../domain/signature/minisign";
 import {
   DEFAULT_CHECK_JITTER_SECONDS,
   parseUpdatePolicy,
   type UpdatePolicy,
 } from "../domain/update/policy";
 import {
-  metadataFileName,
-  parseReleaseMetadata,
   pickReleaseFile,
   ReleaseMetadataError,
   type ReleaseFile,
@@ -47,7 +44,7 @@ import {
 } from "../domain/update/release-metadata";
 import { PROTOCOL } from "../domain/packages/declaration";
 import { sidecarFileName } from "../domain/update/release-sidecar";
-import { readSidecar, stoppedBy } from "./release-terms";
+import { readSidecar, readSignedFeed, stoppedBy } from "./release-terms";
 import type { CheckFailure, UpdateEvent } from "../domain/updates/machine";
 import type { Clock } from "../ports/clock";
 import type { HttpClient } from "../ports/http-client";
@@ -159,6 +156,7 @@ export class UpdateCheck {
   #staged: Staged | null = null;
   /** Quit and update (or Go back) was pressed: a release that waits is installed. */
   #requested = false;
+  #queue: Promise<void> = Promise.resolve();
   #cancelSchedule: (() => void) | null = null;
 
   constructor(ports: UpdateCheckPorts) {
@@ -171,10 +169,19 @@ export class UpdateCheck {
    * network problem is logged and answered, never a notice (a server hiccup is not tampering).
    * A tampered feed or artifact IS a notice, once (application/notices.ts's NoticeBoard).
    */
-  async check(options: { readonly manual?: boolean } = {}): Promise<UpdateOutcome> {
+  check(options: { readonly manual?: boolean } = {}): Promise<UpdateOutcome> {
+    return this.#serial(() => this.#check(options));
+  }
+
+  async #check(options: { readonly manual?: boolean }): Promise<UpdateOutcome> {
     const { notifier, logger } = this.#ports.report;
+    // A Go back the person pressed is theirs: no check replaces what it staged before the quit.
+    if (this.#staged?.downgrade === true) {
+      logger.info(`update check: going back to ${this.#staged.version} at quit; nothing asked`);
+      return { ok: true, message: `Not checked: going back to ${this.#staged.version} at quit.` };
+    }
+    const before = this.#staged?.version ?? null;
     this.#staged = null;
-    this.#requested = false;
     const policy = this.#policy();
     if (!policy.ok) {
       return this.#failed(policy.why);
@@ -230,6 +237,10 @@ export class UpdateCheck {
     if (!staged.ok) {
       return staged.outcome;
     }
+    // Quit and update applies to the release the person was shown, never to another one.
+    if (staged.value.version !== before) {
+      this.#requested = false;
+    }
     notifier.clear("core-update-refused", NOTICE_SUBJECT);
     this.#ports.signal?.(
       updateSignal("update_offered", this.#ports.session.currentVersion(), parsed.version, channel),
@@ -264,12 +275,16 @@ export class UpdateCheck {
    * Go back (plan 0022 §G, D4; plan 0003 D10: going back is as verified as going forward). The
    * older release's own `latest-*.yml` and `.minisig` are fetched from its tag, verified with the
    * key this build embeds, and must name exactly the version asked for; its artifact's bytes are
-   * checked against the signed sha512. Only then is the platform updater pinned to that release
-   * with downgrades allowed, and it downloads only what it finds there when that is the verified
-   * release; it installs at quit. Anything refused is a safety-check failure: an older release
-   * that does not verify is never installed, whoever serves it.
+   * checked against the signed sha512. Only then is it kept in Reload's own folder, and handed to
+   * the platform updater at the quit, hashed again, with the downgrade allowed for that handoff
+   * alone. Anything refused is a safety-check failure: an older release that does not verify is
+   * never installed, whoever serves it.
    */
-  async goBack(to: { readonly version: string; readonly tag: string }): Promise<UpdateOutcome> {
+  goBack(to: { readonly version: string; readonly tag: string }): Promise<UpdateOutcome> {
+    return this.#serial(() => this.#goBack(to));
+  }
+
+  async #goBack(to: { readonly version: string; readonly tag: string }): Promise<UpdateOutcome> {
     const { logger } = this.#ports.report;
     this.#staged = null;
     const policy = this.#policy();
@@ -302,9 +317,11 @@ export class UpdateCheck {
       return fetched.outcome;
     }
     logger.info(`update: going back to ${to.version}: ${metadataUrl} and its artifact verified`);
-    // The person's own press: installed at the quit it asks for, older than this one.
+    // The person's own press: installed at the quit it asks for, older than this one, and held
+    // like any release while an installed package declares another protocol than it implements.
+    const sidecar = await readSidecar(this.#ports, base, policy.value.channel, to.version);
     const staged = this.#stage(signed, file, fetched.bytes, policy.value.channel, {
-      protocol: null,
+      protocol: typeof sidecar === "string" ? null : sidecar.protocol,
       waitsFor: null,
       downgrade: true,
     });
@@ -376,60 +393,15 @@ export class UpdateCheck {
       }
     | { readonly ok: false; readonly outcome: UpdateOutcome }
   > {
-    const { platform, publicKey } = this.#ports;
-    const { http, verifier } = this.#ports.transport;
-    const metadataUrl = joinUrl(base, metadataFileName(channel, platform));
-    const signatureUrl = `${metadataUrl}${METADATA_SIGNATURE_SUFFIX}`;
-    const failed = (outcome: UpdateOutcome) => ({ ok: false as const, outcome });
-
-    const metadata = await http.get(metadataUrl, { maxBytes: MAX_METADATA_BYTES });
-    if (!metadata.ok) {
-      return failed(
-        this.#failed(`${metadataUrl} could not be read: ${metadata.detail}`, "no-connection"),
-      );
+    const read = await readSignedFeed(this.#ports, base, channel);
+    if (read.ok) {
+      return read;
     }
-    const signature = await http.get(signatureUrl, { maxBytes: MAX_SIGNATURE_BYTES });
-    if (!signature.ok) {
-      return failed(
-        this.#failed(`${signatureUrl} could not be read: ${signature.detail}`, "no-connection"),
-      );
-    }
-    if (publicKey === null) {
-      // The alternative to refusing is installing whatever a server sends, unverified.
-      return failed(
-        this.#refused("this build ships no public key to verify an update with", refusal),
-      );
-    }
-
-    let signatureText: string;
-    try {
-      signatureText = new TextDecoder("utf-8", { fatal: true }).decode(signature.body);
-    } catch {
-      return failed(this.#refused(`${signatureUrl} is not UTF-8 text`, refusal));
-    }
-    try {
-      verifier.verify(metadata.body, signatureText, publicKey);
-    } catch (error) {
-      if (error instanceof MinisignError) {
-        return failed(this.#refused(`${metadataUrl} did not verify: ${error.message}`, refusal));
-      }
-      throw error;
-    }
-    try {
-      const text = new TextDecoder("utf-8", { fatal: true }).decode(metadata.body);
-      return { ok: true, parsed: parseReleaseMetadata(text), body: metadata.body, metadataUrl };
-    } catch (error) {
-      if (error instanceof ReleaseMetadataError) {
-        // Signed, but not understood: refused all the same, never read in part.
-        return failed(
-          this.#refused(
-            `${metadataUrl} is signed but could not be read: ${error.message}`,
-            refusal,
-          ),
-        );
-      }
-      throw error;
-    }
+    const outcome =
+      read.failure === "unreachable"
+        ? this.#failed(read.why, "no-connection")
+        : this.#refused(read.why, refusal);
+    return { ok: false, outcome };
   }
 
   /** The artifact the signed metadata names, fetched and checked against its sha512. */
@@ -467,7 +439,18 @@ export class UpdateCheck {
    * installed package; hash it again first, and hand over only what still verifies. Never
    * throws; whatever is not installed leaves the running installation as it is, and says why.
    */
-  async installAtQuit(): Promise<void> {
+  installAtQuit(): Promise<void> {
+    // After any check or Go back under way, and never throwing: the quit goes on whatever.
+    return this.#serial(async () => {
+      try {
+        await this.#installAtQuit();
+      } catch (error) {
+        this.#ports.report.logger.warn(`update: nothing was installed at quit: ${reasonOf(error)}`);
+      }
+    });
+  }
+
+  async #installAtQuit(): Promise<void> {
     const staged = this.#staged;
     if (staged === null) return;
     const { notifier, logger } = this.#ports.report;
@@ -518,12 +501,23 @@ export class UpdateCheck {
       });
     } catch (error) {
       // Refused (another release was found) or not taken: either way, what runs stays.
+      this.#staged = null;
       const why = `Reload ${staged.version} could not be installed (${reasonOf(error)}); ${from} keeps running`;
       this.#refused(why, error instanceof ReleaseMismatchError ? "safety-check" : "unreadable");
       return;
     }
     this.#ports.signal?.(updateSignal("update_applied", from, staged.version, staged.channel));
     this.#ports.selfUpdater.quitAndInstall();
+  }
+
+  /** One check, Go back or install at a time, in the order asked: they share what is staged. */
+  #serial<T>(task: () => Promise<T>): Promise<T> {
+    const run = this.#queue.then(task, task);
+    this.#queue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
   }
 
   /** Whether a verified release waits to be installed at quit. */

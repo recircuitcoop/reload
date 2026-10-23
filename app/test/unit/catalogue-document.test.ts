@@ -377,5 +377,14 @@ describe("an entry's releases, on channels (plan 0032 group 6)", () => {
     expect(refused([{ version: "1.1.0", archive: "http://cat.test/m.tgz" }])).toContain(
       "never fetched in the clear",
     );
+    // One version once, whichever channel: the entry is refused, naming it.
+    expect(refused([{ version: "1.0.0", archive: "other.tgz", channel: "beta" }])).toContain(
+      "`releases` lists 1.0.0 more than once",
+    );
+    expect(
+      refused(
+        Array.from({ length: 21 }, (_, n) => ({ version: `1.1.${String(n)}`, archive: "m.tgz" })),
+      ),
+    ).toContain("`releases` lists 21, and an entry lists at most 20");
   });
 });

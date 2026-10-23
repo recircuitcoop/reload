@@ -301,6 +301,12 @@ export function wirePackages(given: ShellPackagesOptions): PackageBoard {
       policy,
       restartRuntime,
       readiness,
+      editorUses: async (name) => {
+        const nodes = await options.editor.nodes();
+        return nodes === null
+          ? null
+          : nodes.some((node) => node.type.startsWith(`reload-${name}-`));
+      },
       // A package no deployed flow uses is updated with nothing restarted (plan 0032 group 21).
       reloadTypes: async (name) => {
         const result = await options.runtime.call("package.reload", { name });

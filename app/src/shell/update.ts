@@ -84,8 +84,11 @@ export function installThenQuit(
   app: { quit(): void },
 ): () => Promise<void> {
   return async () => {
-    await updates()?.installAtQuit();
-    app.quit();
+    try {
+      await updates()?.installAtQuit();
+    } finally {
+      app.quit();
+    }
   };
 }
 

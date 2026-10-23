@@ -15,6 +15,7 @@ import { MinisignVerifier } from "../../src/adapters/signature/minisign";
 import { HttpsClient } from "../../src/adapters/net/https-client";
 import { JsonSettingsStore } from "../../src/adapters/fs/settings-store";
 import { UpdateCheck } from "../../src/application/update-check";
+import { installThenQuit } from "../../src/shell/update";
 import { FsReleaseStaging } from "../../src/adapters/fs/catalogue-cache";
 import type { SelfUpdater, StagedHandoff } from "../../src/ports/self-updater";
 import { RecordingLogger, RecordingNotifier } from "../fakes/children";
@@ -497,6 +498,9 @@ describe("Go back over real HTTPS: as verified as an update (plan 0022 §G, D4)"
       `/download/${TAG}/latest-mac.yml`,
       `/download/${TAG}/latest-mac.yml.minisig`,
       `/download/${TAG}/${fileName}`,
+      // Its protocol, for the packages it would stop: none published, so none are judged.
+      `/download/${TAG}/latest-release.json`,
+      `/download/${TAG}/latest-release.json.minisig`,
     ]);
     // Kept in Reload's folder, and handed over only at the quit, older and so with the downgrade.
     expect(selfUpdater.handed).toEqual([]);
@@ -738,5 +742,110 @@ describe("what a staged release may do at quit (plan 0032: the old D13, the stag
     check.requestInstall();
     await check.installAtQuit();
     expect(selfUpdater.installed).toBe(1);
+  });
+});
+
+describe("checks, Go back and the quit, one at a time (verifier SHOULDs 1, 2 and 5)", () => {
+  const OLD = "0.9.0";
+  const TAG = `v${OLD}`;
+
+  /** A release under `dir` ("" for the feed, or a tag's folder), signed, with its sidecar. */
+  function release(signer: Signer, dir: string, version: string, protocol: number | null) {
+    const fileName = `Reload-${version}-mac.zip`;
+    const artifact = encode(`Reload ${version}`);
+    const yaml = metadataYaml(version, fileName, artifact);
+    published.set(`${dir}/latest-mac.yml`, encode(yaml));
+    published.set(`${dir}/latest-mac.yml.minisig`, encode(signer.sign(encode(yaml))));
+    published.set(`${dir}/${fileName}`, artifact);
+    if (protocol !== null) {
+      publishSidecar(signer, version, protocol, dir);
+    }
+  }
+
+  it("a check, at the same time as a Go back or after it, never replaces what Go back staged", async () => {
+    const signer = new Signer();
+    release(signer, "", "1.2.3", 2);
+    release(signer, `/download/${TAG}`, OLD, 2);
+    const { check, selfUpdater } = checker({ publicKey: signer.publicKeyText });
+    const [back, checked] = await Promise.all([
+      check.goBack({ version: OLD, tag: TAG }),
+      check.check(),
+    ]);
+    expect(back).toMatchObject({ ok: true });
+    expect(checked).toMatchObject({
+      ok: true,
+      message: `Not checked: going back to ${OLD} at quit.`,
+    });
+    expect(await check.check()).toMatchObject({
+      message: expect.stringContaining("going back") as unknown,
+    });
+    await check.installAtQuit();
+    expect(selfUpdater.handed.map((one) => [one.verified.version, one.downgrade])).toEqual([
+      [OLD, true],
+    ]);
+  });
+
+  it("Quit and update installs the release the person was shown, never another a later check staged", async () => {
+    const signer = new Signer();
+    release(signer, "", "1.2.3", 3);
+    const { check, selfUpdater } = checker({ publicKey: signer.publicKeyText, installed: [] });
+    await check.check();
+    check.requestInstall();
+    // A scheduled check, just before the quit, finds another release that waits too.
+    published.clear();
+    release(signer, "", "1.2.4", 3);
+    await check.check();
+    await check.installAtQuit();
+    expect(selfUpdater.handed).toEqual([]);
+    // The same release checked again keeps the person's request.
+    check.requestInstall();
+    await check.check();
+    await check.installAtQuit();
+    expect(selfUpdater.handed.map((one) => one.verified.version)).toEqual(["1.2.4"]);
+  });
+
+  it("the quit's install never throws, a notice that cannot be raised included, and the app quits", async () => {
+    const signer = new Signer();
+    release(signer, "", "1.2.3", 3);
+    const notifier = new RecordingNotifier();
+    const { check, logger } = checker({
+      publicKey: signer.publicKeyText,
+      notifier,
+      installed: [{ name: "monty", protocol: 2 }],
+    });
+    await check.check();
+    check.requestInstall();
+    notifier.raise = () => {
+      throw new Error("the notice board is full");
+    };
+    await expect(check.installAtQuit()).resolves.toBeUndefined();
+    expect(logger.lines.join("\n")).toContain(
+      "nothing was installed at quit: the notice board is full",
+    );
+    const quits: string[] = [];
+    await installThenQuit(() => check, { quit: () => quits.push("quit") })();
+    const failing = { installAtQuit: () => Promise.reject(new Error("broken")) };
+    await expect(
+      installThenQuit(() => failing, { quit: () => quits.push("quit") })(),
+    ).rejects.toThrow("broken");
+    expect(quits).toEqual(["quit", "quit"]);
+  });
+
+  it("Go back is held, naming each package, while one declares another protocol than it implements", async () => {
+    const signer = new Signer();
+    release(signer, `/download/${TAG}`, OLD, 1);
+    const { check, notifier, selfUpdater } = checker({
+      publicKey: signer.publicKeyText,
+      installed: [{ name: "monty", protocol: 2 }],
+    });
+    expect(await check.goBack({ version: OLD, tag: TAG })).toMatchObject({ ok: true });
+    await check.installAtQuit();
+    expect(selfUpdater.handed).toEqual([]);
+    expect(notifier.notices.at(-1)).toEqual({
+      kind: "core-update-waiting",
+      subject: "Reload",
+      version: OLD,
+      detail: "monty declares another plugin protocol than 1, so it would stop",
+    });
   });
 });

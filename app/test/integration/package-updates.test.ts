@@ -659,6 +659,19 @@ describe("several releases in one entry, on channels (plan 0032 group 6)", () =>
     expect(await drive(updates.apply("pinger", "person"))).toMatchObject({ ok: true });
     expect(roots.installed("pinger")?.version).toBe("2.0.0");
   });
+
+  it("a release refused once is not downloaded again at the next checks, until its entry changes", async () => {
+    const { installer, updates } = await installed("pinger", "0.1.0");
+    releases("pinger", "0.1.0", [{ version: "3.0.0", protocol: 3 }, { version: "2.0.0" }]);
+    fetched = [];
+    await updates.check();
+    await updates.check();
+    await updates.check();
+    expect(fetched.filter((url) => url === archiveUrl("pinger", "3.0.0"))).toHaveLength(1);
+    expect((await line(installer, updates, "pinger"))?.update?.detail).toContain(
+      "3.0.0 is offered too, and its archive did not verify",
+    );
+  });
 });
 
 describe("applying an update", () => {
@@ -863,6 +876,7 @@ describe("applying an update", () => {
     publish("pinger", "0.1.0");
     const reloaded: [string, string | undefined][] = [];
     const { installer, updates } = setUp({
+      editorUses: () => Promise.resolve(false),
       reloadTypes: (name) => {
         // Loaded again once the new version is the live one.
         reloaded.push([name, roots.installed(name)?.version]);
@@ -881,11 +895,39 @@ describe("applying an update", () => {
     expect(logger.lines.join("\n")).toContain("pinger 0.1.0 → 0.2.0 is live; nothing restarted");
   });
 
+  it("an undeployed node in the editor, or an editor that cannot say, keeps the restart", async () => {
+    publish("pinger", "0.1.0");
+    let editing: boolean | null = true;
+    const reloaded: string[] = [];
+    const { installer, updates } = setUp({
+      editorUses: (name) => Promise.resolve(name === "pinger" ? editing : false),
+      reloadTypes: (name) => {
+        reloaded.push(name);
+        return Promise.resolve();
+      },
+    });
+    expect(await installer.installFromCatalogue("pinger")).toMatchObject({ ok: true });
+    readiness = () => Promise.resolve({ deployed: [], ready: [] });
+    for (const [version, open] of [
+      ["0.2.0", true],
+      ["0.3.0", null],
+    ] as const) {
+      editing = open;
+      publish("pinger", version);
+      await updates.check();
+      restarts = [];
+      expect(await drive(updates.apply("pinger", "person"))).toMatchObject({ ok: true });
+      expect(restarts).toEqual([`pinger was updated to ${version}`]);
+    }
+    expect(reloaded).toEqual([]);
+  });
+
   it("a package a flow uses, or a runtime that cannot say, restarts as before; types that do not load again restart after", async () => {
     publish("pinger", "0.1.0");
     let refuse = false;
     const reloaded: string[] = [];
     const { installer, updates } = setUp({
+      editorUses: () => Promise.resolve(false),
       reloadTypes: (name) => {
         reloaded.push(name);
         return refuse

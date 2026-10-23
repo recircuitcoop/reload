@@ -327,7 +327,14 @@ test("go back verifies the old release", async () => {
     await exited;
 
     // The older release's own signed yml, its signature and its artifact, from its tag only.
-    expect(host.asked).toEqual([`${OLD_DIR}/${YML}`, `${OLD_DIR}/${YML}.minisig`, artifact]);
+    // Then its signed sidecar: the protocol it implements, for the packages it would stop.
+    expect(host.asked).toEqual([
+      `${OLD_DIR}/${YML}`,
+      `${OLD_DIR}/${YML}.minisig`,
+      artifact,
+      `${OLD_DIR}/latest-release.json`,
+      `${OLD_DIR}/latest-release.json.minisig`,
+    ]);
     const log = output.join("");
     expect(log).toContain(`update: going back to ${OLD}: ${host.base}${OLD_DIR}/${YML}`);
     // Only then, at the quit, is it handed to electron-updater from Reload's own folder, with the

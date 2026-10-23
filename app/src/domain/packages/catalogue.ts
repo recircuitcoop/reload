@@ -156,6 +156,9 @@ export interface CatalogueRelease {
   readonly channel: string;
 }
 
+/** The most releases one entry lists: each newer one may be downloaded once to be judged. */
+export const MAX_RELEASES = 20;
+
 /** The channel a release is on unless it names one, and a package follows unless set. */
 export const STABLE_CHANNEL = "stable";
 
@@ -308,6 +311,14 @@ function parseEntry(
   const listed =
     "releases" in published ? releasesOf(published["releases"], where, catalogueUrl) : [];
   const releases = [...own, ...listed];
+  const versions = releases.map((release) => release.version);
+  const twice = versions.filter((version, index) => versions.indexOf(version) !== index);
+  if (twice.length > 0) {
+    throw invalid(
+      `${where}: \`releases\` lists ${[...new Set(twice)].join(", ")} more than once; one ` +
+        "version is one release, on one channel",
+    );
+  }
   return {
     packageId,
     summary,
@@ -327,6 +338,12 @@ function releasesOf(
 ): CatalogueRelease[] {
   if (!Array.isArray(value)) {
     throw invalid(`${where}: \`releases\` must be a list of releases`);
+  }
+  if (value.length > MAX_RELEASES) {
+    throw invalid(
+      `${where}: \`releases\` lists ${String(value.length)}, and an entry lists at most ` +
+        `${String(MAX_RELEASES)}: the check verifies each newer one it would offer`,
+    );
   }
   const releases = value.map((release: unknown, index): CatalogueRelease => {
     const at = `${where}, release ${String(index)}`;

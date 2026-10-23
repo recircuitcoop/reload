@@ -375,10 +375,22 @@ export class PackageCatalogues {
       // Settings that cannot be read follow the stable releases; the check itself says why.
     }
     let refused: { readonly version: string; readonly reason: string } | null = null;
+    const { cache } = checks;
     for (const release of newerReleases(entry, channel, record.version)) {
+      // A release refused before is not downloaded again, until its entry changes.
+      const once = `${record.package}@${release.version}`;
+      const before = cache.verdict(from.source, once);
+      if (before?.ok === false && before.archive === release.archive) {
+        refused ??= { version: release.version, reason: before.reason };
+        continue;
+      }
       const archive = { name: record.package, source: from.source, version: release.version };
       const offered = { ...entry, version: release.version, archive: release.archive };
       const verdict = await this.verifiedArchive(archive, offered, key, checks, false);
+      const judged = cache.verdict(from.source, record.package);
+      if (!verdict.ok && judged?.version === release.version && !judged.ok) {
+        cache.keep(from.source, once, judged);
+      }
       if (verdict.ok) {
         return {
           kind: "newer",

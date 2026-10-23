@@ -4,11 +4,21 @@
 
 import { MinisignError } from "../domain/signature/minisign";
 import {
+  metadataFileName,
+  parseReleaseMetadata,
+  ReleaseMetadataError,
+  type ReleaseMetadata,
+} from "../domain/update/release-metadata";
+import {
   parseReleaseSidecar,
   ReleaseSidecarError,
   sidecarFileName,
 } from "../domain/update/release-sidecar";
-import type { UpdateCheckPorts } from "./update-check";
+import {
+  MAX_METADATA_BYTES,
+  MAX_SIGNATURE_BYTES as FEED_SIGNATURE_BYTES,
+  type UpdateCheckPorts,
+} from "./update-check";
 
 /** minisign's own suffix, as the feed's signature has it. */
 const SIGNATURE_SUFFIX = ".minisig";
@@ -77,4 +87,66 @@ export function stoppedBy(
     `${stopping.join(", ")} ${one ? "declares" : "declare"} another plugin protocol than ` +
     `${String(protocol)}, so ${one ? "it" : "they"} would stop`
   );
+}
+
+/**
+ * A release's `latest-*.yml` under `base`, read only once its minisign signature verified
+ * against the embedded key (plan 0003 D10); or why not: `unreachable` (a failure, never a
+ * refusal: nothing was tampered with), or `refused`.
+ */
+export async function readSignedFeed(
+  ports: Pick<UpdateCheckPorts, "transport" | "publicKey" | "platform">,
+  base: string,
+  channel: string,
+): Promise<
+  | {
+      readonly ok: true;
+      readonly parsed: ReleaseMetadata;
+      readonly body: Uint8Array;
+      readonly metadataUrl: string;
+    }
+  | { readonly ok: false; readonly failure: "unreachable" | "refused"; readonly why: string }
+> {
+  const { http, verifier } = ports.transport;
+  const metadataUrl = `${base.replace(/\/+$/, "")}/${metadataFileName(channel, ports.platform)}`;
+  const signatureUrl = `${metadataUrl}${SIGNATURE_SUFFIX}`;
+  const refused = (why: string) => ({ ok: false as const, failure: "refused" as const, why });
+  const metadata = await http.get(metadataUrl, { maxBytes: MAX_METADATA_BYTES });
+  if (!metadata.ok) {
+    const why = `${metadataUrl} could not be read: ${metadata.detail}`;
+    return { ok: false, failure: "unreachable", why };
+  }
+  const signature = await http.get(signatureUrl, { maxBytes: FEED_SIGNATURE_BYTES });
+  if (!signature.ok) {
+    const why = `${signatureUrl} could not be read: ${signature.detail}`;
+    return { ok: false, failure: "unreachable", why };
+  }
+  if (ports.publicKey === null) {
+    // The alternative to refusing is installing whatever a server sends, unverified.
+    return refused("this build ships no public key to verify an update with");
+  }
+  let signatureText: string;
+  try {
+    signatureText = new TextDecoder("utf-8", { fatal: true }).decode(signature.body);
+  } catch {
+    return refused(`${signatureUrl} is not UTF-8 text`);
+  }
+  try {
+    verifier.verify(metadata.body, signatureText, ports.publicKey);
+  } catch (error) {
+    if (error instanceof MinisignError) {
+      return refused(`${metadataUrl} did not verify: ${error.message}`);
+    }
+    throw error;
+  }
+  try {
+    const text = new TextDecoder("utf-8", { fatal: true }).decode(metadata.body);
+    return { ok: true, parsed: parseReleaseMetadata(text), body: metadata.body, metadataUrl };
+  } catch (error) {
+    if (error instanceof ReleaseMetadataError) {
+      // Signed, but not understood: refused all the same, never read in part.
+      return refused(`${metadataUrl} is signed but could not be read: ${error.message}`);
+    }
+    throw error;
+  }
 }

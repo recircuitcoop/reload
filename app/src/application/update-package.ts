@@ -7,7 +7,8 @@
 // - The check asks where each package came from: its catalogue's entry for a newer version, or its folder (a path install) for a newer version AND for content that changed under the same version (domain/packages/versions.ts). What it finds is in General › Packages, and each newer version is told in one notice, once (the NoticeBoard's rule, application/notices.ts).
 // - The mode decides what happens next: `auto` applies, `manual` waits for Apply, `pinned` holds even against a press. A version that failed here is held until a newer one appears.
 // - Apply builds the new version in staging and swaps it in (application/package-environment.ts,
-//   which keeps the old one), then restarts ONLY the runtime. If every deployed instance of the
+//   which keeps the old one), then restarts ONLY the runtime (and nothing at all for a package no
+//   flow and no open editor uses: its types are loaded again in place, plan 0032 group 21). If every deployed instance of the
 //   package's types does not send `ready` within 30 s, the old version is swapped back, the
 //   runtime restarted again, the version blocked, and a notice names the package and the reason.
 //
@@ -73,6 +74,8 @@ export interface PackageUpdatesPorts extends CatalogueReads {
   readonly restartRuntime: RestartRuntime;
   /** Load package `name`'s types again in the running runtime; rejects when it cannot. */
   readonly reloadTypes?: (name: string) => Promise<void>;
+  /** Whether the editor holds an undeployed node of `name`'s types; null: it cannot say. */
+  readonly editorUses?: (name: string) => Promise<boolean | null>;
   readonly readiness: (packages: readonly string[]) => Promise<Readiness>;
   readonly blocked: BlockedUpdates;
   readonly notifier: Notifier;
@@ -439,7 +442,14 @@ export class PackageUpdates {
       (answer) => answer.deployed,
       () => null,
     );
-    if (reloadTypes === undefined || deployed === null || deployed.length > 0) {
+    // An undeployed node in the editor is a use too: its form would lose its type under it.
+    const editing = (await this.#ports.editorUses?.(name).catch(() => null)) ?? null;
+    if (
+      reloadTypes === undefined ||
+      deployed === null ||
+      deployed.length > 0 ||
+      editing !== false
+    ) {
       return null;
     }
     try {
