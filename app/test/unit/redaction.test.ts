@@ -88,6 +88,54 @@ describe("redactStrings: a whole message bound for another process", () => {
     expect((out as { at: unknown }).at).toBeInstanceOf(Date);
   });
 
+  it("tells real dates and bytes by their slots, not a faked prototype, and redacts secret bytes", () => {
+    const fakeDate = Object.create(Date.prototype) as Record<string, unknown>;
+    fakeDate["token"] = "s3cret";
+    const fakeBytes = Object.create(Uint8Array.prototype) as Record<string, unknown>;
+    fakeBytes["token"] = "s3cret";
+    const fakeBuffer = Object.create(ArrayBuffer.prototype) as Record<string, unknown>;
+    fakeBuffer["token"] = "s3cret";
+    const out = redactStrings(
+      {
+        fakeDate,
+        fakeBytes,
+        fakeBuffer,
+        buffer: Buffer.from("the s3cret"),
+        raw: new TextEncoder().encode("the s3cret").buffer,
+        clean: new Uint8Array([0, 255, 7]),
+      },
+      redact,
+    ) as Record<string, unknown>;
+    expect(out["fakeDate"]).toEqual({ token: REDACTED });
+    expect(out["fakeBytes"]).toEqual({ token: REDACTED });
+    expect(out["fakeBuffer"]).toEqual({ token: REDACTED });
+    expect(new TextDecoder().decode(out["buffer"] as Uint8Array)).toBe(`the ${REDACTED}`);
+    expect(new TextDecoder().decode(out["raw"] as Uint8Array)).toBe(`the ${REDACTED}`);
+    expect(out["clean"]).toEqual(new Uint8Array([0, 255, 7]));
+  });
+
+  it("never throws: a cycle is cut, a throwing getter is dropped, a faked Map is walked", () => {
+    const cyclic: Record<string, unknown> = { name: "s3cret" };
+    cyclic["self"] = cyclic;
+    const hostile = {
+      ok: "s3cret",
+      get boom(): string {
+        throw new Error("no");
+      },
+    };
+    const fakeMap = Object.create(Map.prototype) as Record<string, unknown>;
+    fakeMap["token"] = "s3cret";
+    // One object met twice side by side is not a cycle: posted both times.
+    const shared = { at: "here" };
+    const out = redactStrings({ cyclic, hostile, fakeMap, twice: [shared, shared] }, redact);
+    expect(out).toEqual({
+      cyclic: { name: REDACTED, self: REDACTED },
+      hostile: { ok: REDACTED },
+      fakeMap: { token: REDACTED },
+      twice: [{ at: "here" }, { at: "here" }],
+    });
+  });
+
   it("redacts an Error's message, name and stack, and leaves the original as it was", () => {
     const original = new Error("the key s3cret was refused");
     original.name = "s3cretError";

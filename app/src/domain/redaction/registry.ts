@@ -60,12 +60,22 @@ export class SecretRegistry {
 
 /**
  * `value` with every string in it, keys included, passed through `redact`: a message bound for
- * another process, redacted whole. Fail closed: strings, numbers, booleans, null, undefined and
- * bytes pass; an Error is posted as a new one with its message, name and stack redacted; a Map
- * or a Set as an array of its (redacted) entries; any other object as a plain object of its
- * own enumerable properties, each redacted, whatever its prototype. Nothing is passed on unread.
+ * another process, redacted whole. Fail closed, and never throw:
+ * - strings are redacted; numbers, booleans, null and undefined pass;
+ * - a real Date passes (it carries no text); bytes pass unless they hold a secret as text, when
+ *   they are posted redacted;
+ * - an Error is posted as a new one with its message, name and stack redacted;
+ * - a Map or a Set as an array of its redacted entries;
+ * - any other object as a plain object of its own enumerable properties, each redacted, whatever
+ *   its prototype; a property whose getter throws is dropped, and an object met again on the way
+ *   down (a cycle) is posted as REDACTED.
+ * "Real" is told by the value's own internal slots, never by a prototype that can be faked.
  */
 export function redactStrings(value: unknown, redact: (text: string) => string): unknown {
+  return walk(value, redact, new WeakSet());
+}
+
+function walk(value: unknown, redact: (text: string) => string, seen: WeakSet<object>): unknown {
   if (typeof value === "string") {
     return redact(value);
   }
@@ -73,27 +83,117 @@ export function redactStrings(value: unknown, redact: (text: string) => string):
     // A bigint, symbol or function cannot cross the channel; numbers and the rest carry no text.
     return value;
   }
-  if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer || value instanceof Date) {
-    // Bytes and a moment carry no text a secret could be in, and must arrive as they are.
+  if (isRealDate(value)) {
     return value;
   }
+  const bytes = bytesOf(value);
+  if (bytes !== null) {
+    const text = new TextDecoder().decode(bytes);
+    const redacted = redact(text);
+    return redacted === text ? value : new TextEncoder().encode(redacted);
+  }
+  // Only an ancestor is a cycle: an object met twice side by side is posted twice.
+  if (seen.has(value)) {
+    return REDACTED;
+  }
+  seen.add(value);
+  try {
+    return walkObject(value, redact, seen);
+  } finally {
+    seen.delete(value);
+  }
+}
+
+function walkObject(
+  value: object,
+  redact: (text: string) => string,
+  seen: WeakSet<object>,
+): unknown {
   if (value instanceof Error) {
-    const copy = new Error(redact(value.message));
-    copy.name = redact(value.name);
-    if (value.stack === undefined) {
-      delete copy.stack;
+    const message = read(value, "message");
+    const name = read(value, "name");
+    const copy = new Error(typeof message === "string" ? redact(message) : "");
+    copy.name = typeof name === "string" ? redact(name) : "Error";
+    const stack = read(value, "stack");
+    if (typeof stack === "string") {
+      copy.stack = redact(stack);
     } else {
-      copy.stack = redact(value.stack);
+      delete copy.stack;
     }
     return copy;
   }
   if (Array.isArray(value)) {
-    return value.map((item: unknown) => redactStrings(item, redact));
+    return value.map((item: unknown) => walk(item, redact, seen));
   }
-  if (value instanceof Map || value instanceof Set) {
-    return [...value].map((item: unknown) => redactStrings(item, redact));
+  const entries = collectionEntries(value);
+  if (entries !== null) {
+    return entries.map((item) => walk(item, redact, seen));
   }
-  return Object.fromEntries(
-    Object.entries(value).map(([key, item]) => [redact(key), redactStrings(item, redact)]),
-  );
+  let keys: string[];
+  try {
+    keys = Object.keys(value);
+  } catch {
+    return REDACTED;
+  }
+  const out: Record<string, unknown> = {};
+  for (const key of keys) {
+    const item = read(value, key);
+    if (item !== THREW) {
+      out[redact(key)] = walk(item, redact, seen);
+    }
+  }
+  return out;
+}
+
+const THREW = Symbol("threw");
+
+/** One property, or THREW when its getter threw. */
+function read(value: object, key: string): unknown {
+  try {
+    return (value as Record<string, unknown>)[key];
+  } catch {
+    return THREW;
+  }
+}
+
+function isRealDate(value: object): boolean {
+  try {
+    Date.prototype.getTime.call(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The byteLength getter, which only a real ArrayBuffer answers (its own internal slot). */
+const byteLengthOf = Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, "byteLength");
+
+/** The bytes of a real typed array, DataView or ArrayBuffer; null for anything else. */
+function bytesOf(value: object): Uint8Array | null {
+  if (ArrayBuffer.isView(value)) {
+    return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+  }
+  try {
+    byteLengthOf?.get?.call(value);
+    return new Uint8Array(value as ArrayBuffer);
+  } catch {
+    return null;
+  }
+}
+
+/** The entries of a real Map or Set (a faked one fails to iterate, and is walked as an object). */
+function collectionEntries(value: object): unknown[] | null {
+  try {
+    Map.prototype.has.call(value, undefined);
+    return [...Map.prototype.entries.call(value as Map<unknown, unknown>)];
+  } catch {
+    // Not a Map.
+  }
+  try {
+    Set.prototype.has.call(value, undefined);
+    const values: unknown[] = [...Set.prototype.values.call(value as Set<unknown>)];
+    return values;
+  } catch {
+    return null;
+  }
 }
