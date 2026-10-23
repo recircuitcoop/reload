@@ -21,6 +21,7 @@ import {
   packagesLine,
   PRIVACY_NOTICE,
   PRIVACY_NOTICE_OPENING,
+  readEndpoint,
   readSpaces,
   reportsLine,
   RETENTION_OPTIONS,
@@ -179,6 +180,41 @@ describe("Anytype's spaces, read once Anytype is ready", () => {
     await vi.advanceTimersByTimeAsync(20_000);
     expect(read.asks()).toBe(1);
     expect(read.shown).toHaveLength(1);
+  });
+});
+
+describe("the MCP endpoint, read while General is open", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("is read again every 2 s while nothing is served or the read is refused, then not again", async () => {
+    vi.useFakeTimers();
+    const answers: (McpEndpointStatus | Error)[] = [
+      new Error("the Reload services process is restarting; try again in a moment"),
+      endpoint(null),
+      endpoint("http://127.0.0.1:31010/mcp"),
+    ];
+    let asks = 0;
+    const shown: McpEndpointStatus[] = [];
+    const stop = readEndpoint(
+      () => {
+        const next = answers[Math.min(asks++, answers.length - 1)];
+        return next instanceof Error
+          ? Promise.reject(next)
+          : Promise.resolve(next as McpEndpointStatus);
+      },
+      (status) => shown.push(status),
+      2_000,
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(asks).toBe(1);
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(asks).toBe(3);
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(asks).toBe(3);
+    expect(shown.map(servedAddress)).toEqual([null, "127.0.0.1:31010"]);
+    stop();
   });
 });
 

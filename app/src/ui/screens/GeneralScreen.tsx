@@ -33,6 +33,7 @@ import {
   anytypeLine,
   clientSetup,
   moveRefusal,
+  readEndpoint,
   readSpaces,
   reportsLine,
   RETENTION_OPTIONS,
@@ -94,18 +95,19 @@ export function GeneralScreen({
   readonly onAddFolder: () => void;
 }) {
   const anytype = useAnytype(api);
-  const endpoint = useRead(useCallback(() => api.mcpEndpoint(), [api]));
+  const [endpointStatus, setEndpoint] = useState<McpEndpointStatus | null>(null);
+  useEffect(() => readEndpoint(() => api.mcpEndpoint(), setEndpoint, ANYTYPE_POLL_MS), [api]);
   return (
     <div data-testid="general" className="flex flex-col gap-6">
       <AnytypeSection api={api} status={anytype.status} spaces={anytype.spaces} set={anytype.set} />
       <RecordersSection api={api} onAddFolder={onAddFolder} />
-      <AiAppsSection api={api} status={endpoint.value} set={endpoint.set} />
+      <AiAppsSection api={api} status={endpointStatus} set={setEndpoint} />
       <StartAtLoginSection api={api} />
       <UpdatesSection api={api} />
       <ReportsSection api={api} />
       <RunsSection api={api} />
       <PackagesSection api={api} />
-      <AdvancedSection api={api} anytype={anytype.status} endpoint={endpoint.value} />
+      <AdvancedSection api={api} anytype={anytype.status} endpoint={endpointStatus} />
     </div>
   );
 }

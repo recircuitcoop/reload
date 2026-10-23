@@ -49,6 +49,40 @@ export function readSpaces(
 }
 
 /**
+ * The MCP endpoint's status, read for `answered`; the function it answers stops the reading.
+ * The services process opens the endpoint only once the Anytype MCP child has started, which can
+ * be after General opened, and a read is refused while the services process is not running: so it
+ * is read again every `againMs` until an address is served, then not again.
+ */
+export function readEndpoint(
+  ask: () => Promise<McpEndpointStatus>,
+  answered: (status: McpEndpointStatus) => void,
+  againMs: number,
+): () => void {
+  let live = true;
+  let again: ReturnType<typeof setTimeout> | undefined;
+  const read = () => {
+    ask().then(
+      (status) => {
+        if (!live) return;
+        answered(status);
+        if (status.served === null) {
+          again = setTimeout(read, againMs);
+        }
+      },
+      () => {
+        if (live) again = setTimeout(read, againMs);
+      },
+    );
+  };
+  read();
+  return () => {
+    live = false;
+    clearTimeout(again);
+  };
+}
+
+/**
  * "Connected · 8 spaces" / "Not paired yet." (ux-writing), never a path. `spaces` is the answer
  * of anytypeSpaces, read only once Anytype is ready; null while it has not been read.
  */
