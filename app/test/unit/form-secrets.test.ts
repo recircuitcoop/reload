@@ -307,13 +307,58 @@ describe("a secret that cannot be a credential", () => {
       plain: [1, 2],
       undeclared: "kept",
     };
-    expect(withoutSecretValues(config, value)).toEqual({
-      rows: [{ name: "a" }],
-      either: { other: "kept" },
-      plain: [1, 2],
-      undeclared: "kept",
-    });
-    expect(withoutSecretValues(config, "x")).toBe("x");
+    // A field whose schema declares a secret anywhere is left out whole.
+    expect(withoutSecretValues(config, value)).toEqual({ plain: [1, 2], undeclared: "kept" });
+    expect(withoutSecretValues(config, "x")).toBeUndefined();
+    expect(withoutSecretValues({ type: "string" }, "x")).toBe("x");
+    // Keys nobody names are left out when anything but properties declares a secret.
+    const open = { type: "object", additionalProperties: { type: "string", writeOnly: true } };
+    expect(withoutSecretValues(open, { k: "hunter2" })).toEqual({});
+  });
+
+  it("a secret in a shape the forms do not draw is refused at install, naming its path", () => {
+    const secret = { type: "string", writeOnly: true };
+    const shapes: [string, Record<string, unknown>, string][] = [
+      ["a list typed with a type list", { type: ["array", "null"], items: secret }, "/items"],
+      [
+        "a list of lists whose inner list has no type",
+        { type: "array", items: { items: secret } },
+        "/items/items",
+      ],
+      ["an anyOf branch", { anyOf: [secret, { type: "null" }] }, "/anyOf/0"],
+      ["items that are an anyOf", { type: "array", items: { anyOf: [secret] } }, "/items/anyOf/0"],
+    ];
+    for (const [, shape, inner] of shapes) {
+      expect(problemsOf({ type: "object", properties: { odd: shape } })).toEqual([
+        `types/0/config/properties/odd${inner}: a secret in this place cannot be kept nor ` +
+          "refused by the form; declare it as a property, in a group, a list or a table's row",
+      ]);
+      // And, should one ever get past, the field is never a plain value of the node.
+      const plain = withoutSecrets({
+        type: "object",
+        properties: { odd: shape, ok: { type: "string" } },
+      });
+      expect(Object.keys(plain["properties"] as object)).toEqual(["ok"]);
+    }
+    // A $ref to a secret: its $defs entry is refused wherever it is named from.
+    const referred = {
+      type: "object",
+      $defs: { token: secret },
+      properties: { token: { $ref: "#/$defs/token" } },
+    };
+    expect(problemsOf(referred)[0]).toContain("types/0/config/$defs/token:");
+    // The shapes the forms know stay accepted.
+    const known = {
+      type: "object",
+      properties: {
+        direct: secret,
+        group: { type: "object", properties: { inner: secret } },
+        list: { type: "array", items: secret },
+        keyring: { type: "array", items: { type: "array", items: secret } },
+        rows: { type: "array", items: { type: "object", properties: { cell: secret } } },
+      },
+    };
+    expect(problemsOf(known)).toEqual([]);
   });
 
   it("a default that holds a secret's value is refused, as it would be written into the flows", () => {

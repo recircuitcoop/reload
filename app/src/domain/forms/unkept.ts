@@ -10,7 +10,7 @@
 // Pure: no I/O, no library.
 
 import type { JsonSchema } from "../packages/declaration";
-import { isSecret, isSecretList, propertiesOf } from "./form-model";
+import { containsSecret, isSecret, isSecretList, propertiesOf } from "./form-model";
 
 type Fields = Readonly<Record<string, unknown>>;
 
@@ -95,35 +95,26 @@ export function unkeptSecretsOfNode(schema: JsonSchema, node: Fields): string[] 
 }
 
 /**
- * `value` with every value a secret holds taken out, by `schema`, at every depth: a secret
- * property, a list of secrets (of lists of secrets…), a secret under `additionalProperties`, a
- * branch's secret. What is left may be kept or shown: it holds no secret.
+ * `value` with every value a secret may hold taken out, by `schema`: each property whose schema
+ * declares a secret anywhere, in any keyword, is left out whole; so are keys no property names
+ * when anything but `properties` declares one. What is left may be kept or shown: it holds no
+ * secret, whatever shape a package declared.
  */
 export function withoutSecretValues(schema: JsonSchema, value: unknown): unknown {
-  if (Array.isArray(value)) {
-    const items = schema["items"];
-    if (!isRecord(items)) {
-      return value;
-    }
-    return isSecret(items) || isSecretList(schema)
-      ? []
-      : value.map((item: unknown) => withoutSecretValues(items, item));
-  }
   if (!isRecord(value)) {
-    return value;
+    return containsSecret(schema) ? undefined : value;
   }
   const declared = new Map(propertiesOf(schema));
-  const branches = new Map(branchProperties(schema));
-  const extra = schema["additionalProperties"];
+  const elsewhere = containsSecret(
+    Object.fromEntries(Object.entries(schema).filter(([keyword]) => keyword !== "properties")),
+  );
   return Object.fromEntries(
     Object.entries(value).flatMap(([key, inner]): [string, unknown][] => {
-      const property = declared.get(key) ?? branches.get(key);
-      if (property !== undefined) {
-        return isSecret(property) || isSecretList(property)
-          ? []
-          : [[key, withoutSecretValues(property, inner)]];
+      const property = declared.get(key);
+      if (property === undefined) {
+        return elsewhere ? [] : [[key, inner]];
       }
-      return isRecord(extra) && isSecret(extra) ? [] : [[key, inner]];
+      return containsSecret(property) ? [] : [[key, inner]];
     }),
   );
 }

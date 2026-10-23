@@ -498,6 +498,8 @@ function prepare(type: string, node: Values): void {
   for (const problem of refused.problems) {
     reasons.set(problem.path.slice(1).replaceAll("/", "."), reasonOf(full, problem));
   }
+  // The node's own rows first: a table the refusal holds no typing of is drawn from them.
+  seedOrigins(fields, node, originOf);
   seedRecorded(fields, refused.values, new Map(refused.origins), originOf);
   draw(container, fields, { ...node, ...refused.values }, "");
 }

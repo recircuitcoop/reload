@@ -282,17 +282,15 @@ export function withoutSecrets(schema: JsonSchema): JsonSchema {
     .filter(([, property]) => !isSecret(property))
     .flatMap(([key, property]): [string, JsonSchema][] => {
       const items = itemsOf(property);
+      let plain = property;
       if (typeOf(property) === "object") {
-        return [[key, withoutSecrets(property)]];
+        plain = withoutSecrets(property);
+      } else if (typeOf(property) === "array" && items !== null && !isSecretList(property)) {
+        plain = { ...property, items: typeOf(items) === "object" ? withoutSecrets(items) : items };
       }
-      if (typeOf(property) === "array" && items !== null) {
-        if (isSecretList(property)) {
-          return [];
-        }
-        const rows = typeOf(items) === "object" ? withoutSecrets(items) : items;
-        return [[key, { ...property, items: rows }]];
-      }
-      return [[key, property]];
+      // A secret left anywhere in it, in a shape the form cannot strip, keeps the whole field
+      // out of the plain node properties (the declaration refuses such shapes; this is the net).
+      return containsSecret(plain) ? [] : [[key, plain]];
     });
   const keys = new Set(kept.map(([key]) => key));
   const result: Record<string, unknown> = { ...schema, properties: Object.fromEntries(kept) };
@@ -302,6 +300,17 @@ export function withoutSecrets(schema: JsonSchema): JsonSchema {
     );
   }
   return result;
+}
+
+/** Whether a secret is declared anywhere in `schema`, in any keyword, at any depth. */
+export function containsSecret(schema: unknown): boolean {
+  if (Array.isArray(schema)) {
+    return schema.some((each) => containsSecret(each));
+  }
+  if (!isRecord(schema)) {
+    return false;
+  }
+  return isSecret(schema) || Object.values(schema).some((inner) => containsSecret(inner));
 }
 
 /**

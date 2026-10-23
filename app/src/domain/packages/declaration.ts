@@ -195,6 +195,63 @@ function secretDefaults(schema: Readonly<Record<string, unknown>>, path = ""): s
   });
 }
 
+/** Keywords whose subschemas the form never draws as fields of their own. */
+const UNDRAWN = [
+  "anyOf",
+  "oneOf",
+  "allOf",
+  "not",
+  "if",
+  "then",
+  "else",
+  "additionalProperties",
+  "unevaluatedProperties",
+  "propertyNames",
+  "contains",
+  "unevaluatedItems",
+  "additionalItems",
+];
+/** Keywords holding a map of subschemas the form never draws as fields of their own. */
+const UNDRAWN_MAPS = ["patternProperties", "dependentSchemas", "$defs", "definitions"];
+
+/**
+ * The schema pointers of every secret the forms cannot keep or refuse by its shape: one reached
+ * other than through `properties` of a `type: "object"` and `items` of a `type: "array"` (an
+ * `anyOf` branch, a `$defs` entry a `$ref` names, `additionalProperties`, an array typed
+ * `["array", "null"]` or not typed at all…). A group's, a list's and a table row's secrets are
+ * the shapes the forms know (form-model.ts, unkept.ts).
+ */
+function unsupportedSecrets(schema: unknown, path = "", supported = true): string[] {
+  if (Array.isArray(schema)) {
+    return schema.flatMap((each, index) =>
+      unsupportedSecrets(each, `${path}/${String(index)}`, false),
+    );
+  }
+  if (!isRecord(schema)) {
+    return [];
+  }
+  const here = isSecretProperty(schema) && !supported ? [path === "" ? "/" : path] : [];
+  const type = schema["type"];
+  const properties = schema["properties"];
+  const items = schema["items"];
+  const map = (value: unknown, at: string, keep: boolean): string[] =>
+    isRecord(value)
+      ? Object.entries(value).flatMap(([key, inner]) =>
+          unsupportedSecrets(inner, `${at}/${key}`, keep),
+        )
+      : [];
+  return [
+    ...here,
+    ...map(properties, `${path}/properties`, supported && (path === "" || type === "object")),
+    ...unsupportedSecrets(items, `${path}/items`, supported && type === "array"),
+    ...UNDRAWN.flatMap((keyword) =>
+      unsupportedSecrets(schema[keyword], `${path}/${keyword}`, false),
+    ),
+    ...UNDRAWN_MAPS.flatMap((keyword) => map(schema[keyword], `${path}/${keyword}`, false)),
+    ...unsupportedSecrets(schema["prefixItems"], `${path}/prefixItems`, false),
+  ];
+}
+
 /**
  * The config's property names that hold a dot, by their path ("account.a.b"): a secret's
  * credential is named by its path through the groups ("account.token"), so a dotted name would
@@ -228,6 +285,12 @@ function beyondTheSchema(declaration: Declaration): string[] {
       problems.push(
         `${at}/config: ${JSON.stringify(dotted)} holds a dot, which a property name may not: ` +
           "a secret is named by its path through the groups",
+      );
+    }
+    for (const secret of unsupportedSecrets(type.config)) {
+      problems.push(
+        `${at}/config${secret === "/" ? "" : secret}: a secret in this place cannot be kept ` +
+          "nor refused by the form; declare it as a property, in a group, a list or a table's row",
       );
     }
     for (const secret of secretDefaults(type.config)) {
