@@ -193,7 +193,7 @@ function reads() {
       },
     },
     saveDownload: (name: string, bytes: Uint8Array) => {
-      const file = path.join(base, "downloads", `${name}.tgz`);
+      const file = path.join(base, "downloads", `${name.replace("@", "-")}.tgz`);
       fs.mkdirSync(path.dirname(file), { recursive: true });
       fs.writeFileSync(file, bytes);
       return file;
@@ -303,15 +303,25 @@ async function installed(name: string, version: string) {
 }
 
 describe("the version check", () => {
-  it("checks from the catalogue alone, and does not offer an entry with no archive", async () => {
+  it("an archive that disagrees with its catalogue entry's version is not offered", async () => {
+    // test_a_git_manifest_that_disagrees_with_its_tag_is_not_offered, and
+    // test_a_release_whose_manifest_disagrees_about_its_version_is_not_offered.
+    const { installer, updates } = await installed("pinger", "0.1.0");
+    publish("pinger", "0.2.0", { declares: "0.2.1" });
+    await updates.check();
+    expect((await line(installer, updates, "pinger"))?.update).toEqual({
+      kind: "unchecked",
+      version: null,
+      detail: "the catalogue offers version 0.2.0, and its archive declares pinger 0.2.1",
+      apply: false,
+    });
+    expect(told).toEqual([]);
+  });
+
+  it("an entry naming a newer version with no archive is not offered", async () => {
     // test_a_package_release_that_cannot_be_judged_is_not_offered[a release with no files left].
     const { installer, updates } = await installed("pinger", "0.1.0");
     publish("pinger", "0.2.0");
-    // Offered from its entry: nothing is downloaded to check, so no archive is fetched before
-    // Apply, and the check tells no host which packages are installed.
-    const fetchedBefore = fetched.length;
-    await updates.check();
-    expect((await line(installer, updates, "pinger"))?.update).toMatchObject({ kind: "newer" });
     entries = entries.map((entry) =>
       Object.fromEntries(Object.entries(entry).filter(([key]) => key !== "archive")),
     ) as unknown as CatalogueEntry[];
@@ -322,7 +332,41 @@ describe("the version check", () => {
       detail: "the catalogue offers version 0.2.0, and names no archive of it",
       apply: false,
     });
-    expect(fetched.slice(fetchedBefore).filter((url) => url.endsWith(".tgz"))).toEqual([]);
+    expect(told).toEqual([]);
+  });
+
+  it("downloads each new release once, however often it checks, and Apply installs that file", async () => {
+    const { installer, updates } = await installed("pinger", "0.1.0");
+    publish("pinger", "0.2.0");
+    const fetchedBefore = fetched.length;
+    await updates.check();
+    await updates.check();
+    await line(installer, updates, "pinger");
+    await updates.check();
+    const archives = () =>
+      fetched.slice(fetchedBefore).filter((url) => url === archiveUrl("pinger", "0.2.0"));
+    expect(archives()).toHaveLength(1);
+    expect(await updates.apply("pinger", "person")).toMatchObject({ ok: true });
+    // Apply verified the kept file again, and fetched nothing more.
+    expect(archives()).toHaveLength(1);
+    expect(roots.installed("pinger")?.version).toBe("0.2.0");
+  });
+
+  it("a release that fails to download is checked again next time, and offered once it verifies", async () => {
+    const { installer, updates } = await installed("pinger", "0.1.0");
+    publish("pinger", "0.2.0");
+    const good = served.get(archiveUrl("pinger", "0.2.0"));
+    served.delete(archiveUrl("pinger", "0.2.0"));
+    await updates.check();
+    expect((await line(installer, updates, "pinger"))?.update?.detail).toContain(
+      "its archive could not be fetched",
+    );
+    served.set(archiveUrl("pinger", "0.2.0"), good ?? new Uint8Array());
+    await updates.check();
+    expect((await line(installer, updates, "pinger"))?.update).toMatchObject({
+      kind: "newer",
+      version: "0.2.0",
+    });
   });
 
   it("shows a newer catalogue version on the page, with Apply, and tells it in exactly one notice", async () => {
@@ -656,32 +700,40 @@ describe("applying an update", () => {
     const { updates } = await installed("pinger", "0.1.0");
     publish("pinger", "0.2.0", { declares: "0.2.0" });
     await updates.check();
-    served.set(archiveUrl("pinger", "0.2.0"), new TextEncoder().encode("not an archive"));
+    // The kept file and the served one both went bad after the check verified them.
+    const bad = new TextEncoder().encode("not an archive");
+    served.set(archiveUrl("pinger", "0.2.0"), bad);
+    for (const file of fs.readdirSync(path.join(base, "downloads"))) {
+      fs.writeFileSync(path.join(base, "downloads", file), bad);
+    }
     expect(await updates.apply("pinger", "person")).toMatchObject({
       ok: false,
-      error: expect.stringContaining("Not updated: it cannot be read") as unknown,
+      error: expect.stringContaining(
+        "Not updated: its archive did not verify: it cannot be read",
+      ) as unknown,
     });
     expect(restarts).toEqual([]);
     expect(roots.installed("pinger")?.version).toBe("0.1.0");
   });
 
-  it("installs exactly the version it offered, and refuses an archive that declares another", async () => {
+  it("installs exactly the version it offered: a kept file gone bad is fetched and verified again", async () => {
     const { updates } = await installed("pinger", "0.1.0");
-    // The entry says 0.2.0; its signed archive declares 0.3.0, newer but not what was offered.
-    publish("pinger", "0.2.0", { declares: "0.3.0" });
+    publish("pinger", "0.2.0");
     await updates.check();
+    // After the check, the kept file is replaced, and the server now serves another version.
+    for (const file of fs.readdirSync(path.join(base, "downloads"))) {
+      fs.writeFileSync(path.join(base, "downloads", file), "tampered");
+    }
+    served.set(
+      archiveUrl("pinger", "0.2.0"),
+      signedArchive(packageFiles("pinger", "0.3.0"), signer),
+    );
     expect(await updates.apply("pinger", "person")).toMatchObject({
       ok: false,
-      error: expect.stringContaining("it declares version 0.3.0, not the 0.2.0 offered") as unknown,
+      error: expect.stringContaining("its archive declares pinger 0.3.0") as unknown,
     });
     expect(restarts).toEqual([]);
     expect(roots.installed("pinger")?.version).toBe("0.1.0");
-    // And one older than what is installed, as before.
-    publish("pinger", "0.2.0", { declares: "0.1.0" });
-    expect(await updates.apply("pinger", "person")).toMatchObject({
-      ok: false,
-      error: expect.stringContaining("it declares version 0.1.0, not the 0.2.0 offered") as unknown,
-    });
   });
 
   it("refuses when the catalogue moved on since the check", async () => {

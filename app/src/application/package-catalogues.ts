@@ -25,6 +25,21 @@ import {
 import { judgeCatalogueVersion, type VersionFinding } from "../domain/packages/versions";
 import type { HttpClient } from "../ports/http-client";
 import type { InstalledOrigin, InstalledRecord } from "../ports/package-roots";
+import {
+  inspectPackage,
+  type PackageEnvironmentPorts,
+  type PackageOrigin,
+} from "./package-environment";
+
+/** What judging an archive needs of the environment ports. */
+export type ArchiveChecks = Pick<
+  PackageEnvironmentPorts,
+  "source" | "verifier" | "validator" | "sha256"
+>;
+
+/** One archive's verdict: the verified file, or why it is not offered. */
+export type ArchiveVerdict =
+  { readonly ok: true; readonly path: string } | { readonly ok: false; readonly reason: string };
 
 /** The largest package archive fetched from a catalogue; one byte more and it is abandoned. */
 export const MAX_ARCHIVE_BYTES = 256 * 1024 * 1024;
@@ -131,6 +146,8 @@ const reasonOf = (error: unknown): string =>
 
 export class PackageCatalogues {
   readonly #reads: CatalogueReads;
+  /** Each archive's verdict, by (source, package, version), for as long as this process runs. */
+  readonly #verdicts = new Map<string, ArchiveVerdict>();
 
   constructor(reads: CatalogueReads) {
     this.#reads = reads;
@@ -206,14 +223,16 @@ export class PackageCatalogues {
   }
 
   /**
-   * A package installed from a catalogue, against its entry there now, from the catalogue alone:
-   * nothing is downloaded to check. A newer version whose entry names no archive this build
-   * installs is not offered (test_plugin_version_check.py: a release with no files left is not
-   * offered), since it could only fail at Apply.
+   * A package installed from a catalogue, against its entry there now. A newer version is
+   * offered only once its archive was fetched, verified and found to declare that package at
+   * that version (test_plugin_version_check.py: a release that cannot be judged, or whose
+   * manifest disagrees with its tag, is not offered). Each (source, package, version) archive is
+   * fetched once, and its verdict kept: the cost is one download per new release, not per check.
    */
   async judge(
     record: InstalledRecord,
     from: Extract<InstalledOrigin, { kind: "catalogue" }>,
+    environment: ArchiveChecks,
   ): Promise<VersionFinding> {
     let resolved: ResolvedCatalogue;
     try {
@@ -229,13 +248,114 @@ export class PackageCatalogues {
       return { kind: "unchecked", reason: `the ${from.source} catalogue no longer lists it` };
     }
     const finding = judgeCatalogueVersion(record.version, entry.version);
-    if (finding.kind === "newer" && entry.archive === undefined) {
+    if (finding.kind !== "newer") {
+      return finding;
+    }
+    if (entry.archive === undefined) {
       return {
         kind: "unchecked",
         reason: `the catalogue offers version ${finding.version}, and names no archive of it`,
       };
     }
-    return finding;
+    const archive = { name: record.package, source: from.source, version: finding.version };
+    const verdict = await this.verifiedArchive(archive, entry, resolved.key, environment, false);
+    return verdict.ok
+      ? finding
+      : {
+          kind: "unchecked",
+          reason: `the catalogue offers version ${finding.version}, and ${verdict.reason}`,
+        };
+  }
+
+  /**
+   * The archive of one (source, package, version), fetched once, verified with `key` and found
+   * to declare that package at that version; or why not. A refusal is kept, a failure to fetch
+   * is not (it may pass). `again`: Apply's, which verifies the kept file once more, and fetches
+   * it afresh when that fails, so what is installed is always what verified.
+   */
+  async verifiedArchive(
+    archive: { readonly name: string; readonly source: string; readonly version: string },
+    entry: CatalogueEntry,
+    key: string | null,
+    environment: ArchiveChecks,
+    again: boolean,
+  ): Promise<ArchiveVerdict> {
+    const { name, source, version } = archive;
+    const id = JSON.stringify([source, name, version]);
+    const known = this.#verdicts.get(id);
+    if (known !== undefined && !(again && known.ok)) {
+      return known;
+    }
+    if (known?.ok === true) {
+      const kept = await this.#verdictOf(known.path, archive, key, environment);
+      if (kept.ok) {
+        return kept;
+      }
+      this.#verdicts.delete(id);
+    }
+    let path: string;
+    try {
+      path = await this.download(`${name}@${encodeURIComponent(version)}`, entry);
+    } catch (error) {
+      return { ok: false, reason: reasonOf(error) };
+    }
+    const verdict = await this.#verdictOf(path, archive, key, environment);
+    this.#verdicts.set(id, verdict);
+    return verdict;
+  }
+
+  async #verdictOf(
+    path: string,
+    archive: { readonly name: string; readonly version: string },
+    key: string | null,
+    environment: ArchiveChecks,
+  ): Promise<ArchiveVerdict> {
+    try {
+      const { declaration } = await inspectPackage(
+        { kind: "archive", path, publicKey: key },
+        environment,
+      );
+      if (declaration.package !== archive.name || declaration.version !== archive.version) {
+        return {
+          ok: false,
+          reason: `its archive declares ${declaration.package} ${declaration.version}`,
+        };
+      }
+      return { ok: true, path };
+    } catch (error) {
+      return { ok: false, reason: `its archive did not verify: ${reasonOf(error)}` };
+    }
+  }
+
+  /**
+   * The archive Apply installs `version` of `name` from: the entry must still offer exactly that
+   * version, and its archive is the one the check verified, verified again, or fetched afresh
+   * and verified. Rejects with why not.
+   */
+  async offeredArchive(
+    name: string,
+    from: Extract<InstalledOrigin, { kind: "catalogue" }>,
+    version: string,
+    environment: ArchiveChecks,
+  ): Promise<PackageOrigin> {
+    const { catalogue, key } = await this.resolve(from.source);
+    const entry = entryFor(catalogue, from.id);
+    if (entry === null) {
+      throw new Error(`the ${from.source} catalogue no longer lists ${from.id}`);
+    }
+    if (entry.version !== version) {
+      throw new Error(
+        `the ${from.source} catalogue now offers ${entry.version ?? "no version"}, not ${version}; ` +
+          "check for updates again",
+      );
+    }
+    // The archive the check verified, verified again; or fetched afresh and verified.
+    const archive = { name, source: from.source, version };
+    const verdict = await this.verifiedArchive(archive, entry, key, environment, true);
+    if (!verdict.ok) {
+      throw new Error(verdict.reason);
+    }
+    return { kind: "archive", path: verdict.path, publicKey: key };
   }
 
   /** Fetch the archive an entry names and keep it; resolves with where, or rejects with why. */

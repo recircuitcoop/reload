@@ -19,7 +19,6 @@
 // events together. Packages are joined by wires in a flow now, never by one requiring another,
 // so each package updates on its own (reason code event-bus-replaced-by-wires).
 
-import { entryFor } from "../domain/packages/catalogue";
 import { PackageRefusal } from "../domain/packages/archive";
 import type { Declaration } from "../domain/packages/declaration";
 import {
@@ -216,7 +215,7 @@ export class PackageUpdates {
       };
     }
     if (origin.kind === "catalogue") {
-      return this.#catalogues.judge(record, origin);
+      return this.#catalogues.judge(record, origin, this.#ports.environment);
     }
     try {
       const now = await inspectPackage(fileOrigin(origin.path), this.#ports.environment);
@@ -380,18 +379,7 @@ export class PackageUpdates {
     if (from.kind === "file") {
       return fileOrigin(from.path);
     }
-    const { catalogue, key } = await this.#catalogues.resolve(from.source);
-    const entry = entryFor(catalogue, from.id);
-    if (entry === null) {
-      throw new Error(`the ${from.source} catalogue no longer lists ${from.id}`);
-    }
-    if (entry.version !== version) {
-      throw new Error(
-        `the ${from.source} catalogue now offers ${entry.version ?? "no version"}, not ${version}; ` +
-          "check for updates again",
-      );
-    }
-    return { kind: "archive", path: await this.#catalogues.download(name, entry), publicKey: key };
+    return this.#catalogues.offeredArchive(name, from, version, this.#ports.environment);
   }
 
   /**

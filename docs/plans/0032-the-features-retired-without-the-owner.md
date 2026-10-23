@@ -55,8 +55,7 @@ every ledger row against its old test, the other checks behaviour under failure.
    after a runtime crash), 34 (a kill sent to a pid after exit), 35 (the login item left
    registered), 36 (update notices that are not true), 40 (unproven: no secret in a shown
    reason, and an old package version sees only its own files while closing).
-   Done: 35 and 40, and 36 but for one row that waits for the owner (branch
-   `port/0032-small-safety`; see the census).
+   Done: 35, 36 and 40 (branch `port/0032-small-safety`).
 2. **Wave 2, what the person and the plugin author are told:** groups 26 (a broken declaration
    refused at install and pack, naming the field), 27 (the reason beside the field, and empty
    required values caught), 29 (a broken package shown, not hidden), 2, 1 (the controls), 4, 37
