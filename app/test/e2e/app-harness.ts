@@ -293,8 +293,9 @@ export function scratchDirectories(): {
   const canaryKey = `e2e-canary-key-${randomUUID()}`;
   fs.mkdirSync(path.dirname(anytypeKeyFile(scratch)), { recursive: true, mode: 0o700 });
   fs.writeFileSync(anytypeKeyFile(scratch), canaryKey, { mode: 0o600 });
+  // A key set in this shell is read before the key file, so it would stand in for the canary.
   const inherited = Object.entries(process.env).filter(
-    (entry): entry is [string, string] => entry[1] !== undefined,
+    (entry): entry is [string, string] => entry[1] !== undefined && entry[0] !== "ANYTYPE_API_KEY",
   );
   return {
     scratch,

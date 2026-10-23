@@ -35,3 +35,20 @@ it("the harness takes the process once, where it launches, and nowhere else", ()
     /const app = await electron\.launch\(options\);\s*shells\.set\(app, app\.process\(\)\);/,
   );
 });
+
+it("a run's environment carries no Anytype key from this shell, which would stand in for the canary", async () => {
+  const { scratchDirectories } = await import("../e2e/app-harness");
+  const was = process.env["ANYTYPE_API_KEY"];
+  process.env["ANYTYPE_API_KEY"] = "a-key-set-in-this-shell";
+  const { scratch, env } = scratchDirectories();
+  try {
+    expect(env["ANYTYPE_API_KEY"]).toBeUndefined();
+  } finally {
+    fs.rmSync(scratch, { recursive: true, force: true });
+    if (was === undefined) {
+      delete process.env["ANYTYPE_API_KEY"];
+    } else {
+      process.env["ANYTYPE_API_KEY"] = was;
+    }
+  }
+});
