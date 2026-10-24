@@ -1,0 +1,5 @@
+{
+  "//": "Not a workspace. Marks the proofs as ES modules, as the e2e harness they import is.",
+  "private": true,
+  "type": "module"
+}
