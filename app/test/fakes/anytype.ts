@@ -274,12 +274,15 @@ export class FakeAnytypeApi implements AnytypeApi {
 
 export class MemorySecretStore implements SecretStore {
   readonly values = new Map<SecretName, string>();
+  /** Every write, as it was handed in. */
+  readonly writes: [SecretName, string][] = [];
 
   read(name: SecretName): string | null {
     return this.values.get(name) ?? null;
   }
 
   write(name: SecretName, value: string): void {
+    this.writes.push([name, value]);
     this.values.set(name, value.trim());
   }
 }

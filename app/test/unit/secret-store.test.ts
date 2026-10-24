@@ -28,7 +28,7 @@ import {
 } from "../../src/application/secrets";
 import { REDACTED, SecretRegistry } from "../../src/domain/redaction/registry";
 import type { SecretSink } from "../../src/ports/logger";
-import type { SecretName, SecretStore } from "../../src/ports/secret-store";
+import { MemorySecretStore } from "../fakes/anytype";
 import { RecordingLogger } from "../fakes/children";
 
 const SECRET = "fake-credential-secret-for-the-keychain-tests";
@@ -53,19 +53,6 @@ class FakeSafeStorage implements SafeStorage {
       );
     }
     return Buffer.from(encrypted.subarray(3).map((byte) => byte ^ 0x5a)).toString("utf8");
-  }
-}
-
-/** A SecretStore in memory, recording every write. */
-class MemoryStore implements SecretStore {
-  readonly values = new Map<SecretName, string>();
-  readonly writes: [SecretName, string][] = [];
-  read(name: SecretName): string | null {
-    return this.values.get(name) ?? null;
-  }
-  write(name: SecretName, value: string): void {
-    this.writes.push([name, value]);
-    this.values.set(name, value.trim());
   }
 }
 
@@ -141,7 +128,7 @@ describe("the keychain adapter", () => {
 
   it("reads a blob that decrypts to nothing as nothing stored", () => {
     const safeStorage = new FakeSafeStorage();
-    const ciphertexts = new MemoryStore();
+    const ciphertexts = new MemorySecretStore();
     ciphertexts.values.set(
       "node-red-credential-secret",
       safeStorage.encryptString("  ").toString("base64"),
@@ -152,7 +139,7 @@ describe("the keychain adapter", () => {
   });
 
   it("says so when the keychain cannot decrypt, and never repeats what was stored", () => {
-    const ciphertexts = new MemoryStore();
+    const ciphertexts = new MemorySecretStore();
     ciphertexts.values.set("node-red-credential-secret", Buffer.from(SECRET).toString("base64"));
     const store = new KeychainSecretStore(new FakeSafeStorage(), ciphertexts);
     expect(() => store.read("node-red-credential-secret")).toThrow(KeychainError);
@@ -276,7 +263,7 @@ describe("openSecretStore", () => {
 
 describe("registering", () => {
   it("registers a value read, and a value written before it is written", () => {
-    const inner = new MemoryStore();
+    const inner = new MemorySecretStore();
     const { registry, sink } = redactor();
     const order: string[] = [];
     const store = registering(
@@ -299,12 +286,12 @@ describe("registering", () => {
 
   it("registers nothing for a secret that is not there", () => {
     const { registry, sink } = redactor();
-    expect(registering(new MemoryStore(), sink).read("anytype-api-key")).toBeNull();
+    expect(registering(new MemorySecretStore(), sink).read("anytype-api-key")).toBeNull();
     expect(registry.size).toBe(0);
   });
 
   it("the registration check can fail: a store read without it leaves the value readable", () => {
-    const inner = new MemoryStore();
+    const inner = new MemorySecretStore();
     inner.values.set("anytype-api-key", "fake-anytype-key-read-back");
     const { registry } = redactor();
     expect(inner.read("anytype-api-key")).toBe("fake-anytype-key-read-back");
@@ -314,7 +301,7 @@ describe("registering", () => {
 
 describe("the Anytype key from the environment", () => {
   it("comes first: ANYTYPE_API_KEY is the key read, never written, and a pairing still writes", () => {
-    const inner = new MemoryStore();
+    const inner = new MemorySecretStore();
     inner.values.set("anytype-api-key", "fake-key-in-the-file");
     const store = environmentKeyFirst(inner, " fake-key-from-the-environment \n");
     expect(store.read("anytype-api-key")).toBe("fake-key-from-the-environment");
@@ -329,7 +316,7 @@ describe("the Anytype key from the environment", () => {
 
   it("is registered with the redactor like a key read from the file", () => {
     const { registry, sink } = redactor();
-    const store = registering(environmentKeyFirst(new MemoryStore(), "fake-env-key-123"), sink);
+    const store = registering(environmentKeyFirst(new MemorySecretStore(), "fake-env-key-123"), sink);
     expect(store.read("anytype-api-key")).toBe("fake-env-key-123");
     expect(registry.redact("fake-env-key-123")).toBe(REDACTED);
   });
@@ -337,7 +324,7 @@ describe("the Anytype key from the environment", () => {
 
 describe("readOrCreate: the credential secret is generated once", () => {
   it("generates and stores a secret the first time, and returns the stored one after", () => {
-    const store = new MemoryStore();
+    const store = new MemorySecretStore();
     let generated = 0;
     const generate = () => {
       generated += 1;
@@ -352,7 +339,7 @@ describe("readOrCreate: the credential secret is generated once", () => {
   });
 
   it("does not make a new secret when the stored one cannot be decrypted", () => {
-    const ciphertexts = new MemoryStore();
+    const ciphertexts = new MemorySecretStore();
     ciphertexts.values.set("node-red-credential-secret", "bm90LWEtYmxvYg==");
     const store = new KeychainSecretStore(new FakeSafeStorage(), ciphertexts);
     expect(() => readOrCreate(store, "node-red-credential-secret", () => SECRET)).toThrow(
@@ -364,7 +351,7 @@ describe("readOrCreate: the credential secret is generated once", () => {
 
 describe("credentialSecretOf: an unreadable credential secret stops the start, except on the move's own", () => {
   const unreadable = () => {
-    const ciphertexts = new MemoryStore();
+    const ciphertexts = new MemorySecretStore();
     ciphertexts.values.set("node-red-credential-secret", "bm90LWEtYmxvYg==");
     return { ciphertexts, store: new KeychainSecretStore(new FakeSafeStorage(), ciphertexts) };
   };
@@ -398,7 +385,7 @@ describe("credentialSecretOf: an unreadable credential secret stops the start, e
   });
 
   it("on the move's own start with a readable secret: kept, nothing set aside, the step done", () => {
-    const store = new MemoryStore();
+    const store = new MemorySecretStore();
     store.values.set("node-red-credential-secret", "kept");
     const calls: string[] = [];
     const replace = {
