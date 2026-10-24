@@ -34,7 +34,7 @@ import { parsePackagePolicy, unregisteredOf } from "../../src/domain/packages/ve
 import { FakeClock } from "../fakes/clock";
 import { RecordingLogger } from "../fakes/children";
 import { Signer } from "../fakes/minisign-signer";
-import { signedArchive } from "../fakes/package-archive";
+import { pingPackage, signedArchive } from "../fakes/package-archive";
 
 const DAY = 24 * 60 * 60 * 1000;
 const START = 1_760_000_000_000;
@@ -79,26 +79,9 @@ afterEach(() => {
 function writeFolder(name: string, version: string, body = "// one\n"): string {
   const folder = path.join(base, "sources", name);
   fs.mkdirSync(folder, { recursive: true });
-  fs.writeFileSync(
-    path.join(folder, "reload-package.json"),
-    JSON.stringify({
-      protocol: 2,
-      package: name,
-      version,
-      environment: { kind: "node", node: ">=22" },
-      types: [
-        {
-          id: "ping",
-          kind: "node",
-          label: "Ping",
-          command: ["{node}", "{package}/node.js"],
-          config: { type: "object" },
-          outputs: [{ port: "out", event: `${name}.out.v1` }],
-        },
-      ],
-    }),
-  );
-  fs.writeFileSync(path.join(folder, "node.js"), body);
+  for (const [file, data] of Object.entries(pingPackage(name, version, { nodeJs: body }))) {
+    fs.writeFileSync(path.join(folder, file), data);
+  }
   return folder;
 }
 

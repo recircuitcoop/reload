@@ -158,6 +158,37 @@ export function zip(files: Files): Uint8Array {
   return Buffer.concat([...local, ...central, end]);
 }
 
+/**
+ * The files of a node package with one `ping` type (protocol 2 unless told), as a folder or an
+ * archive holds them: the package most install, update and board tests move around.
+ */
+export function pingPackage(
+  name: string,
+  version: string,
+  options: { nodeJs?: string; protocol?: number } = {},
+): Files {
+  const declaration = {
+    protocol: options.protocol ?? 2,
+    package: name,
+    version,
+    environment: { kind: "node", node: ">=22" },
+    types: [
+      {
+        id: "ping",
+        kind: "node",
+        label: "Ping",
+        command: ["{node}", "{package}/node.js"],
+        config: { type: "object" },
+        outputs: [{ port: "out", event: `${name}.out.v1` }],
+      },
+    ],
+  };
+  return {
+    "reload-package.json": JSON.stringify(declaration),
+    "node.js": options.nodeJs ?? "process.stdout.write('')\n",
+  };
+}
+
 /** A pure-Python wheel: its file name and bytes. Its module says its own name and version. */
 export function wheel(name: string, version: string): { file: string; bytes: Uint8Array } {
   const distInfo = `${name}-${version}.dist-info`;

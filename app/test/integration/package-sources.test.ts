@@ -33,7 +33,7 @@ import type { CatalogueCacheStore } from "../../src/ports/catalogue-cache";
 import { FakeClock } from "../fakes/clock";
 import { RecordingLogger } from "../fakes/children";
 import { Signer } from "../fakes/minisign-signer";
-import { signedArchive, type Files } from "../fakes/package-archive";
+import { pingPackage, signedArchive } from "../fakes/package-archive";
 import { PublishingHost } from "../fakes/publishing-host";
 
 const OFFICIAL = "https://official.test/catalogue.json";
@@ -78,30 +78,6 @@ afterEach(() => {
   fs.rmSync(base, { recursive: true, force: true });
 });
 
-function declaration(name: string, version: string): string {
-  return JSON.stringify({
-    protocol: 2,
-    package: name,
-    version,
-    environment: { kind: "node", node: ">=22" },
-    types: [
-      {
-        id: "ping",
-        kind: "node",
-        label: "Ping",
-        command: ["{node}", "{package}/node.js"],
-        config: { type: "object" },
-        outputs: [{ port: "out", event: `${name}.out.v1` }],
-      },
-    ],
-  });
-}
-
-const files = (name: string, version = "1.0.0"): Files => ({
-  "reload-package.json": declaration(name, version),
-  "node.js": "process.stdout.write('')\n",
-});
-
 /** Publish a catalogue at `url`, signed by `signer` (unsigned when null), with its archives. */
 function catalogue(
   url: string,
@@ -121,7 +97,7 @@ function catalogue(
   host.publish(url, document, signer === null ? undefined : signer.sign(document));
   for (const plugin of plugins) {
     const archive = signedArchive(
-      files(plugin.id.replace(/-/g, "_"), plugin.version ?? "1.0.0"),
+      pingPackage(plugin.id.replace(/-/g, "_"), plugin.version ?? "1.0.0"),
       signer ?? new Signer(),
     );
     host.responses.set(new URL(`${plugin.id}.tgz`, url).href, archive);

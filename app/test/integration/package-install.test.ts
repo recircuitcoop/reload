@@ -34,7 +34,7 @@ import type { Signal } from "../../src/domain/telemetry/reports";
 import type { HttpGetResult } from "../../src/ports/http-client";
 import { RecordingLogger } from "../fakes/children";
 import { Signer } from "../fakes/minisign-signer";
-import { signedArchive, tgz, type Files } from "../fakes/package-archive";
+import { pingPackage, signedArchive, tgz, type Files } from "../fakes/package-archive";
 
 const ARCHIVE_URL = "https://catalogue.test/packages/pinger-0.1.0.tgz";
 
@@ -88,29 +88,10 @@ function entry(id: string, archive?: string, verified = true): CatalogueEntry {
   };
 }
 
-function declaration(name: string, version: string): string {
-  return JSON.stringify({
-    protocol: 2,
-    package: name,
-    version,
-    environment: { kind: "node", node: ">=22" },
-    types: [
-      {
-        id: "ping",
-        kind: "node",
-        label: "Ping",
-        command: ["{node}", "{package}/node.js"],
-        config: { type: "object" },
-        outputs: [{ port: "out", event: `${name}.out.v1` }],
-      },
-    ],
-  });
-}
-
-const packageFiles = (name = "pinger", version = "0.1.0"): Files => ({
-  "reload-package.json": declaration(name, version),
-  "node.js": "process.stdout.write('')\n",
-});
+/** The declaration `pingPackage` writes, as text. */
+const declaration = (name: string, version: string): string =>
+  pingPackage(name, version)["reload-package.json"] as string;
+const packageFiles = (name = "pinger", version = "0.1.0"): Files => pingPackage(name, version);
 
 /** A builder whose runtimes throw: a node package needs neither uv nor Python. */
 const builder = new PackageEnvironmentBuilder({

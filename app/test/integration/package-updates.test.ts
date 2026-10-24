@@ -46,7 +46,7 @@ import type { HttpGetResult } from "../../src/ports/http-client";
 import { FakeClock } from "../fakes/clock";
 import { RecordingLogger } from "../fakes/children";
 import { Signer } from "../fakes/minisign-signer";
-import { signedArchive, type Files } from "../fakes/package-archive";
+import { pingPackage, signedArchive, type Files } from "../fakes/package-archive";
 
 const CATALOGUE = "https://catalogue.test/catalogue.json";
 const archiveUrl = (name: string, version: string) =>
@@ -100,29 +100,11 @@ afterEach(() => {
   fs.rmSync(base, { recursive: true, force: true });
 });
 
-function declaration(name: string, version: string, protocol = 2): string {
-  return JSON.stringify({
-    protocol,
-    package: name,
-    version,
-    environment: { kind: "node", node: ">=22" },
-    types: [
-      {
-        id: "ping",
-        kind: "node",
-        label: "Ping",
-        command: ["{node}", "{package}/node.js"],
-        config: { type: "object" },
-        outputs: [{ port: "out", event: `${name}.out.v1` }],
-      },
-    ],
-  });
-}
-
-const packageFiles = (name: string, version: string, body = "// v\n", protocol = 2): Files => ({
-  "reload-package.json": declaration(name, version, protocol),
-  "node.js": `process.stdout.write('')\n${body}`,
-});
+/** The declaration `pingPackage` writes, as text. */
+const declaration = (name: string, version: string): string =>
+  pingPackage(name, version)["reload-package.json"] as string;
+const packageFiles = (name: string, version: string, body = "// v\n", protocol = 2): Files =>
+  pingPackage(name, version, { nodeJs: `process.stdout.write('')\n${body}`, protocol });
 
 /** Publish `name` at `version` in the official catalogue, signed. */
 function publish(
