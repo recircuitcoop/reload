@@ -4,9 +4,9 @@ The shell logs "quit complete" after both children exited 0, and then does not e
 waits its 120 s and answers "shell (process N) is still running after the quit." with exit 1.
 
 Seen:
-- quit.ts, run at f2412384: the first `reload --quit` (after closing the window) answered exit 1.
-- refusal-notices.ts, run at 32e76aaa and again on its own: the no-key run's quit answered exit 1.
-  At f2412384 the same proof passed: the hang is intermittent.
+- quit.ts, run at 769098c7: the first `reload --quit` (after closing the window) answered exit 1.
+- refusal-notices.ts, run at 6a7f0117 and again on its own: the no-key run's quit answered exit 1.
+  At 769098c7 the same proof passed: the hang is intermittent.
 - Reproduced by hand with no driver and no DevTools port: a scratch HOME with no Anytype key,
   SIGTERM to the shell; "quit complete" logged once, the process still in state R (running) 2 min
   later, until killed. `sample` showed the main thread (com.apple.main-thread) and Rosetta's
