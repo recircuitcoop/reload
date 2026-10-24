@@ -505,10 +505,11 @@ describe("an unexpected exit of a node process", () => {
   it("stops respawning when the breaker trips: red status, one notice, and inputs refused", async () => {
     const clock = new FakeClock();
     const node = raw({ clock, config: { exit_at_start: 3 } });
+    // Each respawn waits the person's restart delays (the old restart.backoff): 1, 2, 4, 8 s.
     for (let exit = 1; exit <= 5; exit += 1) {
       await waitFor(`exit ${String(exit)}`, () => handledExits(node) === exit);
       if (exit < 5) {
-        clock.advance(999);
+        clock.advance(1_000 * 2 ** (exit - 1) - 1);
         expect(node.node.pid).toBeNull();
         clock.advance(1);
         expect(node.node.pid).not.toBeNull();
@@ -540,7 +541,7 @@ describe("an unexpected exit of a node process", () => {
     const node = raw({ clock, config: { exit_at_start: 3 }, settings });
     for (let exit = 1; exit <= 3; exit += 1) {
       await waitFor(`exit ${String(exit)}`, () => handledExits(node) === exit);
-      if (exit < 3) clock.advance(1_000);
+      if (exit < 3) clock.advance(1_000 * exit);
     }
     await waitFor("the stop", () => node.notifier.notices.length === 1);
     expect(node.host.statuses.at(-1)).toEqual({
@@ -664,7 +665,7 @@ describe("an unexpected exit of a node process", () => {
     for (let exit = 1; exit <= 5; exit += 1) {
       await waitFor(`exit ${String(exit)}`, () => handledExits(fixed) === exit);
       if (exit < 5) {
-        clock.advance(1_000);
+        clock.advance(1_000 * 2 ** (exit - 1)); // the restart delays, 1, 2, 4, 8 s
         expect(fixed.node.pid).not.toBeNull();
       }
     }
@@ -996,7 +997,7 @@ describe("no orphan: a node's grandchildren end with it", () => {
       signals.push(`${signal} ${String(pid)}`);
       process.kill(pid, signal);
     });
-    const node = raw({ tree, settings: { respawnDelayMs: 60_000 } });
+    const node = raw({ tree, settings: { backoff: { delaysMs: [60_000] } } });
     await ready(node);
     const leader = node.node.pid as number;
     const [, polite] = send(node.node, { do: "grandchild" });
@@ -1046,7 +1047,7 @@ describe("no orphan: a node's grandchildren end with it", () => {
         return survivors;
       },
     };
-    const node = raw({ tree, settings: { respawnDelayMs: 60_000 } });
+    const node = raw({ tree, settings: { backoff: { delaysMs: [60_000] } } });
     await ready(node);
     const pid = node.node.pid as number;
     send(node.node, { do: "crash", code: 5 });

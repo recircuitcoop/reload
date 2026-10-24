@@ -14,6 +14,8 @@
 // crashes too, or the next hiccup would trip it again at once.
 
 /** The crash-loop limit's two numbers. */
+import { crashRestartDelay, type BackoffSettings } from "./backoff";
+
 export interface CrashLoopSettings {
   /** This many crashes inside the window trips the breaker. */
   readonly maxCrashes: number;
@@ -121,6 +123,16 @@ export class RestartLimit implements CrashLoopSettings {
   /** The process came up: the crashes in a row start again from none. */
   ready(): void {
     this.#inARow = 0;
+  }
+
+  /** The crashes since the process last came up. */
+  get inARow(): number {
+    return this.#inARow;
+  }
+
+  /** The wait before the restart this crash allowed: the delay of its place in the row. */
+  delay(backoff: BackoffSettings): number {
+    return crashRestartDelay(Math.max(1, this.#inARow), backoff);
   }
 
   /** Why the restarts stopped when the attempts stopped them, in words; null otherwise. */

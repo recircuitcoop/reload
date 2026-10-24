@@ -196,9 +196,6 @@ function harness(options: { readonly logFile?: string | null } = {}) {
     readStability() {
       return this.stored["stability"] as DeclaredStability | undefined;
     },
-    writeStability(stability: DeclaredStability) {
-      this.stored["stability"] = stability;
-    },
     /** Set to make the next writes fail as a disk that refuses them would. */
     refuseWrites: false,
     writeLimitsAndStability(limits: DeclaredLimits, stability: DeclaredStability) {

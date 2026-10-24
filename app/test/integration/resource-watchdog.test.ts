@@ -53,7 +53,7 @@ function overItsLimit(
       },
     }),
     limits: { ...DEFAULT_LIMITS, memoryMb: 1, graceMs: 0 },
-    settings: { respawnDelayMs: 100, crashLoop },
+    settings: { backoff: { delaysMs: [100] }, crashLoop },
   });
   started.push(raw.node);
   return raw;

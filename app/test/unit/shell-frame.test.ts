@@ -11,6 +11,7 @@ import type { Supervisor } from "../../src/application/supervisor";
 import type { ChildName, ChildStatus } from "../../src/domain/supervision/child-state";
 import { wireChildCalls } from "../../src/shell/child-calls";
 import { IPC } from "../../src/shell/ipc";
+import { QUIT_FILENAME } from "../../src/domain/supervision/relaunch";
 import { runShell } from "../../src/shell/lifecycle";
 import { PushEvents } from "../../src/shell/push";
 import { AppWindow } from "../../src/shell/window";
@@ -197,7 +198,7 @@ afterAll(() => {
   fs.rmSync(scratch, { recursive: true, force: true });
 });
 
-function lifecycle(lock = true, handOff?: () => boolean) {
+function lifecycle(lock = true, handOff?: (resume: () => void) => boolean) {
   const app = Object.assign(new EventEmitter(), {
     exits: [] as number[],
     quits: 0,
@@ -281,6 +282,22 @@ describe("the shell's life", () => {
     const watched = lifecycle(true, () => false);
     expect(watched.state.started).toBe(true);
     expect(watched.app.listenerCount("second-instance")).toBe(1);
+  });
+
+  it("runs itself after all when the watcher could not, and records a quit it carries out for the watcher", () => {
+    const resumed = lifecycle(true, (resume) => {
+      resume();
+      return true;
+    });
+    expect(resumed.state.started).toBe(true);
+    expect(resumed.app.listenerCount("second-instance")).toBe(1);
+    // A quit the QuitFlow carries out is recorded (QUIT_FILENAME): its exit is never relaunched.
+    const quitFile = path.join(scratch, QUIT_FILENAME);
+    fs.rmSync(quitFile, { force: true });
+    resumed.quitFlow.done = true;
+    resumed.app.emit("before-quit", { preventDefault: () => undefined });
+    expect(JSON.parse(fs.readFileSync(quitFile, "utf8"))).toMatchObject({ pid: process.pid });
+    fs.rmSync(quitFile, { force: true });
   });
 
   it("brings the window forward on a second launch, and on a dock click with none open", () => {

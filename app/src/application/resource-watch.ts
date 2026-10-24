@@ -99,13 +99,21 @@ export function readStability(
   }
 }
 
-/** The shell supervisor's numbers, the person's own where they may set them. */
+/**
+ * The shell supervisor's numbers, the person's own where they may set them: read at start, but
+ * the stop timeout again at every stop, as the watchdog reads it before every wait.
+ */
 export function readSupervision(
   setting: StabilitySetting,
   logger: Logger,
   notifier?: Notifier,
 ): SupervisionSettings {
-  return supervisionSettings(readStability(setting, logger, notifier));
+  return {
+    ...supervisionSettings(readStability(setting, logger, notifier)),
+    get stopDeadlineMs() {
+      return readStability(setting, logger).stopTimeoutMs;
+    },
+  };
 }
 
 /** The watchdog's pace from the `stability` setting, read again before every wait. */

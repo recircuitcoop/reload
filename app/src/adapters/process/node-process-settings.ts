@@ -23,12 +23,10 @@ export interface NodeProcessSettings {
   readonly readyDeadlineMs: number;
   /** `close` → exit, or SIGKILL. */
   readonly closeDeadlineMs: number;
-  /** An unexpected exit → the next process. */
-  readonly respawnDelayMs: number;
   readonly crashLoop: CrashLoopSettings;
   /** Unexpected exits in a row, with no `ready` between, that are restarted (stability.ts). */
   readonly restartAttempts: number;
-  /** A stuck process's restarts in a row wait these (node-heartbeat.ts). */
+  /** The waits before the restarts in a row: after an unexpected exit, and a stuck process's. */
   readonly backoff: BackoffSettings;
   /**
    * After the process exits, how long its pipes may stay open before the exit is handled
@@ -43,7 +41,6 @@ export interface NodeProcessSettings {
 export const DEFAULT_NODE_PROCESS: NodeProcessSettings = {
   readyDeadlineMs: 30_000,
   closeDeadlineMs: 5_000,
-  respawnDelayMs: 1_000,
   crashLoop: DEFAULT_CRASH_LOOP,
   backoff: DEFAULT_BACKOFF,
   restartAttempts: DEFAULT_STABILITY.restartAttempts,

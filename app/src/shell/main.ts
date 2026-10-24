@@ -93,7 +93,7 @@ import type { ForkSpec } from "../ports/process-launcher";
 import type * as Contract from "../ui/contract";
 import packageJson from "../../package.json";
 import { anytypeAppPath, type DesktopWired, wireDesktop } from "./desktop";
-import { DeliveredNotices, e2eHooksOn, exposeE2eHooks } from "./e2e-hooks";
+import { crashOnceForE2e, DeliveredNotices, e2eHooksOn, exposeE2eHooks } from "./e2e-hooks";
 import { browseFor } from "./editor-browse";
 import { noticeHandlers, wireRunNotices } from "./run-notices";
 import { IPC } from "./ipc";
@@ -235,6 +235,7 @@ const quitFlow = new QuitFlow({
 });
 async function start(): Promise<DesktopWired["notices"] | null> {
   await app.whenReady();
+  crashOnceForE2e(e2eHooks, app.getPath("userData")); // watcher.e2e.ts's real crashes only
   // One port for the whole session: every runtime generation is given this one (§2.2).
   const port = await pickFreeLoopbackPort();
   if (!quitFlow.idle) {
@@ -589,10 +590,9 @@ if (firstStart.problem === null) {
     windowOpen: () => appWindow.current !== null,
     running: { supervisors, anytype: anytypeApp, notices: NOTICES_FILENAME },
     // Not under the watcher: this start is handed to one, which relaunches a crash (group 11).
-    handOff: () =>
-      handOffToWatcher({
-        ...{ app, env: process.env, runtimesDir: RUNTIMES_DIR, script: watcherScript(__dirname) },
-        stability: () => readStability(shellSettings, logger),
-      }),
+    handOff: handOffToWatcher({
+      ...{ app, env: process.env, runtimesDir: RUNTIMES_DIR, script: watcherScript(__dirname) },
+      ...{ stability: () => readStability(shellSettings, logger), log: logger.error.bind(logger) },
+    }),
   });
 }

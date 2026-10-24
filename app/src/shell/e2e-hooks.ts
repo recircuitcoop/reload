@@ -1,6 +1,9 @@
 // The e2e gate's hooks on the shell (RELOAD_E2E_HOOKS=1), apart from main.ts so the
 // composition root keeps only adapter construction (plan 0018 §2.3).
 
+import fs from "node:fs";
+import * as path from "node:path";
+import v8 from "node:v8";
 import type { Message, NoticeAction } from "../domain/notices/notices";
 
 /** What a click on a notification and a press of its button run (shell/run-notices.ts). */
@@ -79,4 +82,34 @@ export function exposeE2eHooks(hooks: {
   readonly badge: () => number;
 }): void {
   Object.assign(globalThis, { reloadE2E: hooks });
+}
+
+/** The file the watcher's e2e spec writes to have the next shell crash for real, once. */
+export const E2E_CRASH_FILENAME = "e2e-crash";
+
+/**
+ * The watcher spec's real crashes (plan 0032 group 11), with the e2e hooks on only: a shell that
+ * finds `e2e-crash` in its user data removes it, then ends as a real crash ends it: `crash` by
+ * process.crash(), `oom` by running V8's heap out of memory, under a small limit so it is quick.
+ */
+export function crashOnceForE2e(hooks: boolean, userDir: string): void {
+  if (!hooks) {
+    return;
+  }
+  const file = path.join(userDir, E2E_CRASH_FILENAME);
+  let how: string;
+  try {
+    how = fs.readFileSync(file, "utf8").trim();
+  } catch {
+    return; // none asked for
+  }
+  fs.rmSync(file, { force: true });
+  if (how === "crash") {
+    process.crash();
+  }
+  if (how === "oom") {
+    v8.setFlagsFromString("--max-old-space-size=32");
+    const kept: unknown[] = [];
+    for (;;) kept.push(new Array(100_000).fill({ kept: kept.length }));
+  }
 }

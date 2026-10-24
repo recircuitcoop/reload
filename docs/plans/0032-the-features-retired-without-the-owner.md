@@ -146,24 +146,37 @@ settings.
   child all read these numbers at start. Each process's resource watchdog reads the cadence and
   the stop timeout again before every wait. The crash-loop limit is the old helper's 5 in 10 minutes by default, and the
   person can change it. The runtime's node processes keep the restart attempts as the shell's
-  children do: so many exits in a row with no `ready` between, and no more restarts. The form
+  children do: so many exits in a row with no `ready` between, and no more restarts. A node process respawns after the person's restart delays, as the old
+  helper restarted a plugin. The Saved line says when each number applies: how often to check
+  and the time to stop from the next check (the shell's supervisor reads the stop timeout at
+  every stop), the rest at the next start. The form
   writes both settings in one rename, both or neither; a write the disk refuses leaves the old
   file whole and is said, in the log and to the form. The watchdog's own limit of five stops over
   a limit is not one of these numbers. 15 rows.
 - **Group 11** (branch `port/0032-wave3b`): the watcher is the shell's parent
   (`shell/watcher.ts`). A shell started without it, as a person or the login item starts Reload,
-  takes the single-instance lock, then releases it, starts the watcher detached and quits. A
-  second start of a running Reload is answered by the running one, as before. The watcher runs on
-  the node a JS node runs on: the bundled Node in an installed build, where the RunAsNode fuse is
-  off, and Electron as node otherwise. Its script is passed with `-e`, since node cannot read
-  app.asar, and its config arrives on stdin, never on the command line. The watcher starts the
-  real shell with its arguments and `RELOAD_UNDER_WATCHER=1`. A crash (a non-zero exit, SIGSEGV,
-  SIGABRT, SIGBUS, SIGILL or SIGFPE) is relaunched after the person's restart delay, under their
-  crash-loop limit. A kill, any other signal, or a quit ends the watcher too. The run-state file,
-  `reload --status/--quit` and the login item stay the shell's. Playwright's launches set the
-  marker, since Playwright must hold the shell itself, and `watcher.e2e.ts` starts the real
-  binary without it. No packaging change: `dist/shell/watcher-main.cjs` ships with the rest of
-  `dist/`. 5 rows.
+  takes the single-instance lock, releases it, starts the watcher detached, and quits once the
+  watcher says on a descriptor of its own that the real shell started. If the watcher cannot
+  start, cannot be told, or ends first, this is said in the log and the shell runs itself, so
+  there is never a moment when neither runs nor exits. A second start of a running Reload is
+  answered by the running one, as before. The watcher runs on the node a JS node runs on: the
+  bundled Node in an installed build, where the RunAsNode fuse stays off, and Electron as node
+  otherwise. Its script is passed with `-e`, since node cannot read app.asar, and its config
+  arrives on stdin, never on the command line. The watcher starts the real shell with its
+  arguments and `RELOAD_UNDER_WATCHER=1`. It relaunches a crash after the person's restart delay,
+  under their crash-loop limit and restart attempts (the attempts last the watcher's whole life,
+  as the old host's did). A crash is a non-zero exit or a crash signal: SIGSEGV, SIGABRT, SIGBUS,
+  SIGILL, SIGFPE, SIGTRAP (V8's heap out of memory and Chromium's CHECKs on macOS), SIGSYS,
+  SIGXCPU or SIGXFSZ. A kill, any other signal, or a quit ends the watcher too. A quit the shell
+  carries out is recorded first (`quit-recorded.json` in its user data, the old QuitFile), so an
+  exit during it is the quit, whatever its code. A record that is there at all counts, and the
+  watcher clears it before each start. The run-state file, `reload --status/--quit` and the login
+  item stay the shell's. Playwright's launches set the marker, since Playwright must hold the
+  shell itself. `watcher.e2e.ts` starts the real binary without it and ends the shell for real
+  through an e2e-only hook: by process.crash(), and by running the V8 heap out of memory. It also
+  covers a kill and `reload --quit`. No packaging change: `dist/shell/watcher-main.cjs` ships
+  with the rest of `dist/`. 14 rows (the five relaunch rows, and nine of the old host's rows
+  about what it did not relaunch, its attempts, and its quit record).
 - **The `configuration.e2e.ts` flake** (same branch): a flow's switch pressed again before the
   list read after its first press came back took the press for no change and sent nothing (the
   switch compares a press with the state it is drawn in); a pressed switch is now drawn as asked

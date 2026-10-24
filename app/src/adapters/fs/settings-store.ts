@@ -223,10 +223,6 @@ export class JsonSettingsStore
     return stability as DeclaredStability;
   }
 
-  writeStability(stability: DeclaredStability): void {
-    this.#write("stability", { ...stability });
-  }
-
   writeLimitsAndStability(limits: DeclaredLimits, stability: DeclaredStability): void {
     this.#writeAll({ limits: { ...limits }, stability: { ...stability } });
   }

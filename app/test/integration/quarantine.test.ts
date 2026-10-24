@@ -78,7 +78,7 @@ describe("a child stopped at its crash-loop limit", () => {
         t: "node-crash",
         stopped: node.crashes.at(-1) === true,
       });
-      clock.advance(1_000);
+      clock.advance(1_000 * 2 ** (exit - 1)); // the restart delays, 1, 2, 4, 8 s
     }
     await waitFor("the stop", () => node.notifier.notices.length === 1);
     expect(node.crashes).toEqual([false, false, false, false, true]);

@@ -11,7 +11,13 @@
 import { spawn as nodeSpawn } from "node:child_process";
 import fs from "node:fs";
 import * as path from "node:path";
-import { UNDER_WATCHER_VARIABLE, type WatcherConfig } from "../../domain/supervision/relaunch";
+import type { Readable } from "node:stream";
+import {
+  QUIT_FILENAME,
+  STARTED_FD,
+  UNDER_WATCHER_VARIABLE,
+  type WatcherConfig,
+} from "../../domain/supervision/relaunch";
 import type { Stability } from "../../domain/supervision/stability";
 import type { NodeRuntime } from "../../ports/runtime-locator";
 import { BundledRuntimeLocator } from "./bundled-runtime-locator";
@@ -20,6 +26,7 @@ import { BundledRuntimeLocator } from "./bundled-runtime-locator";
 export interface HandOffApp {
   releaseSingleInstanceLock(): void;
   exit(code: number): void;
+  getPath(name: "userData"): string;
 }
 
 export interface HandOffDeps {
@@ -33,8 +40,10 @@ export interface HandOffDeps {
   readonly runtimesDir: string | null;
   /** The watcher's script: dist/shell/watcher-main.cjs, read when the hand-over happens. */
   readonly script: () => string;
-  /** The person's restart delays and crash-loop limit, which the watcher keeps to. */
+  /** The person's restart delays, attempts and crash-loop limit, which the watcher keeps to. */
   readonly stability: () => Stability;
+  /** Where a watcher that could not run is said. */
+  readonly log: (line: string) => void;
   readonly spawn?: typeof nodeSpawn;
 }
 
@@ -50,11 +59,17 @@ export function watcherNode(
 }
 
 /**
- * Hand this start over to the watcher, unless it runs under one: true when it did, and this
- * shell is quitting. Called once the single-instance lock is held, so a second launch of a
- * running Reload is answered by the running one and never starts a second watcher.
+ * Hand this start over to the watcher, unless it runs under one: true when it did. Called once
+ * the single-instance lock is held, so a second launch of a running Reload is answered by the
+ * running one and never starts a second watcher. This shell quits only once the watcher says it
+ * started the real one; a watcher that could not start, or ended first, is said, and `resume`
+ * runs this shell itself: never neither of them.
  */
-export function handOffToWatcher(deps: HandOffDeps): boolean {
+export function handOffToWatcher(deps: HandOffDeps): (resume: () => void) => boolean {
+  return (resume) => handOff(deps, resume);
+}
+
+function handOff(deps: HandOffDeps, resume: () => void): boolean {
   if (deps.env[UNDER_WATCHER_VARIABLE] === "1") {
     return false;
   }
@@ -67,30 +82,52 @@ export function handOffToWatcher(deps: HandOffDeps): boolean {
   const execPath = deps.execPath ?? process.execPath;
   const node = watcherNode(deps.runtimesDir, process.platform, execPath);
   if (!fs.existsSync(node.command)) {
-    // No node to run it on (a broken install): Reload runs unwatched rather than not at all.
+    deps.log(`no node to run the watcher on (${node.command}); Reload runs without it`);
     return false;
   }
-  const { backoff, crashLoop } = deps.stability();
+  const { backoff, crashLoop, restartAttempts } = deps.stability();
   const config: WatcherConfig = {
     command: execPath,
     args: (deps.argv ?? process.argv).slice(1),
     env: shellEnv,
     delaysMs: backoff.delaysMs,
     crashLoop,
+    restartAttempts,
+    quitFile: path.join(deps.app.getPath("userData"), QUIT_FILENAME),
   };
   const script = deps.script();
   // Released before the watcher can start the shell, which takes the lock itself.
   deps.app.releaseSingleInstanceLock();
+  let settled = false;
+  const fallBack = (why: string): void => {
+    if (settled) return;
+    settled = true;
+    deps.log(`${why}; Reload runs without the watcher`);
+    resume();
+  };
   const watcher = (deps.spawn ?? nodeSpawn)(node.command, ["-e", script], {
     env: { ...shellEnv, ...node.env },
     detached: true,
-    stdio: ["pipe", "inherit", "inherit"],
+    stdio: ["pipe", "inherit", "inherit", "pipe"],
+  });
+  watcher.once("error", (error) => {
+    fallBack(`the watcher could not start: ${error.message}`);
+  });
+  watcher.once("exit", (code, signal) => {
+    fallBack(`the watcher ended (${signal ?? `exit code ${String(code)}`}) before Reload ran`);
+  });
+  watcher.stdin?.once("error", (error) => {
+    fallBack(`the watcher could not be told how to start Reload: ${error.message}`);
+  });
+  const started = watcher.stdio[STARTED_FD] as Readable | null | undefined;
+  started?.once("data", () => {
+    if (settled) return;
+    settled = true;
+    deps.app.exit(0);
   });
   watcher.unref();
   // The config goes on stdin, never the command line: the environment may hold secrets.
-  watcher.stdin.end(JSON.stringify(config), () => {
-    deps.app.exit(0);
-  });
+  watcher.stdin?.end(JSON.stringify(config));
   return true;
 }
 

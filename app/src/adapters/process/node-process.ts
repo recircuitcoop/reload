@@ -1,5 +1,5 @@
 // One node instance's process, speaking protocol v2 (spec §3–§6, §11.2): spawned with a minimal environment in its package directory, `start`, `ready` within 30 s, every frame routed, and `close` → `closed` → exit (killed 5 s after `close`). An unexpected exit fails the `sent`
-// inputs, keeps the `awaiting` ones, and respawns after 1 s until the crash-loop breaker trips (plan 0018 §7). The runtime stamps every envelope field, and a process emits only on its own ports and live input ids (spec 11.2); inputs are journaled before they are sent (spec §7).
+// inputs, keeps the `awaiting` ones, and respawns after the person's restart delays until the crash-loop limit or the restart attempts stop it (plan 0018 §7, plan 0032 group 9). The runtime stamps every envelope field, and a process emits only on its own ports and live input ids (spec 11.2); inputs are journaled before they are sent (spec §7).
 
 import { spawn, type ChildProcessWithoutNullStreams as ChildProcess } from "node:child_process";
 
@@ -356,7 +356,7 @@ class ChildNodeProcess implements NodeProcess {
       );
       return;
     }
-    this.#after(stuck ? 0 : this.#deps.settings.respawnDelayMs, () => {
+    this.#after(stuck ? 0 : this.#breaker.delay(this.#deps.settings.backoff), () => {
       this.#spawn();
     });
   }

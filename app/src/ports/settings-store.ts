@@ -81,7 +81,6 @@ export interface StabilitySetting {
 
 /** The same setting, written: General's form, judged before it gets here. */
 export interface StabilityStore extends StabilitySetting {
-  writeStability(stability: DeclaredStability): void;
   /** The form's two settings in one write: both stored, or neither and the file as it was. */
   writeLimitsAndStability(limits: DeclaredLimits, stability: DeclaredStability): void;
 }

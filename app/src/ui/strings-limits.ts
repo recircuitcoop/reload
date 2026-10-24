@@ -36,7 +36,8 @@ export const LIMIT_STRINGS = {
   "general.limits.grace": "Allowed over a limit for (seconds)",
   "general.limits.grace.help": "How long a process may stay over a limit before Reload stops it.",
   "general.limits.save": "Save",
-  "general.limits.saved": "Saved. Reload uses them the next time it starts.",
+  "general.limits.saved":
+    "Saved. How often to check and the time to stop count from the next check; the rest from the next time Reload starts.",
   "general.limits.refused": "Some limits were not saved.",
   "general.limits.notPositive": "Enter a number greater than zero.",
   "general.limits.notWhole": "Enter a whole number greater than zero.",

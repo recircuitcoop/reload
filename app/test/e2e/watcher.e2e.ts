@@ -6,7 +6,8 @@ import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import * as path from "node:path";
 import { expect, test } from "@playwright/test";
-import { UNDER_WATCHER_VARIABLE } from "../../src/domain/supervision/relaunch";
+import { QUIT_FILENAME, UNDER_WATCHER_VARIABLE } from "../../src/domain/supervision/relaunch";
+import { E2E_CRASH_FILENAME } from "../../src/shell/e2e-hooks";
 import { APP, ELECTRON_BINARY, isAlive, processesNaming, scratchDirectories } from "./app-harness";
 
 /** The parent of a live pid, as the process table says. */
@@ -16,18 +17,35 @@ const parentOf = (pid: number): number =>
 /** Reload as a person starts it, or a terminal command; answers its exit code. */
 function reload(args: readonly string[], env: Record<string, string>): Promise<number | null> {
   return new Promise((resolve, reject) => {
-    const started = spawn(ELECTRON_BINARY, [APP, ...args], { env, stdio: "ignore" });
+    // Its stderr is the watcher's too, which inherits it: what the watcher says arrives here.
+    const started = spawn(ELECTRON_BINARY, [APP, ...args], {
+      env,
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    started.stderr.on("data", (chunk: Buffer) => said.push(chunk.toString("utf8")));
     started.once("error", reject);
     started.once("exit", resolve);
   });
 }
 
-test("Reload hands its start to the watcher, which relaunches a crash and never a kill or a quit", async () => {
+/** Everything Reload and its watcher wrote to the terminal, as these starts saw it. */
+const said: string[] = [];
+/** The lines the watcher said about a crash it relaunched. */
+const relaunches = (): string[] =>
+  said.join("").match(/reload: Reload crashed \([^)]+\); starting it again in \d+ ms/g) ?? [];
+
+test("Reload hands its start to the watcher, which relaunches a real crash and never a kill or a quit", async () => {
   test.setTimeout(180_000);
   const { scratch, userData, env } = scratchDirectories();
-  const unwatched = Object.fromEntries(
-    Object.entries(env).filter(([name]) => name !== UNDER_WATCHER_VARIABLE),
-  );
+  const unwatched = {
+    ...Object.fromEntries(Object.entries(env).filter(([name]) => name !== UNDER_WATCHER_VARIABLE)),
+    // For the one-shot real crashes (shell/e2e-hooks.ts crashOnceForE2e).
+    RELOAD_E2E_HOOKS: "1",
+  };
+  const crashNext = (how: "crash" | "oom") => {
+    fs.mkdirSync(userData, { recursive: true });
+    fs.writeFileSync(path.join(userData, E2E_CRASH_FILENAME), how);
+  };
   const runState = path.join(userData, "run-state.json");
   /** The shell the run-state file names, once one runs with its runtime. */
   const recordedShell = (): number | null => {
@@ -60,29 +78,35 @@ test("Reload hands its start to the watcher, which relaunches a crash and never 
     return { shell: pid, watcher: parentOf(pid) };
   };
   try {
-    // The start a person makes: the process started quits at once, having handed over.
+    // The start a person makes, its first shell crashing for real (process.crash()): the
+    // process started quits at once, having handed over, and the watcher starts the shell again.
+    crashNext("crash");
     expect(await reload([], unwatched)).toBe(0);
     const first = await started();
     // The watcher is its own process, the shell's parent, never this test.
     expect(first.watcher).not.toBe(process.pid);
     expect(isAlive(first.watcher)).toBe(true);
-
-    // A crash (SIGSEGV, as the old host's test): the watcher starts the shell again.
-    process.kill(first.shell, "SIGSEGV");
-    const relaunched = await started();
-    expect(relaunched.watcher).toBe(first.watcher);
-    expect(isAlive(first.shell)).toBe(false);
+    expect(relaunches()).toEqual([
+      expect.stringMatching(/crashed \(SIG[A-Z]+\); starting it again in 1000 ms/),
+    ]);
+    expect(fs.existsSync(path.join(userData, E2E_CRASH_FILENAME))).toBe(false);
 
     // A kill: nothing is relaunched, because the watcher itself ends.
-    process.kill(relaunched.shell, "SIGKILL");
+    process.kill(first.shell, "SIGKILL");
     await expect.poll(() => isAlive(first.watcher), { timeout: 20_000 }).toBe(false);
     await expect.poll(() => processesNaming(userData), { timeout: 20_000 }).toEqual([]);
+    expect(relaunches()).toHaveLength(1);
     fs.rmSync(runState, { force: true });
 
-    // A quit (`reload --quit`): the shell quits, and the watcher with it.
+    // A V8 heap out of memory in the shell, the crash a leak ends in: relaunched too.
+    crashNext("oom");
     expect(await reload([], unwatched)).toBe(0);
     const again = await started();
     expect(again.watcher).not.toBe(first.watcher);
+    expect(relaunches()).toHaveLength(2);
+    expect(relaunches()[1]).toMatch(/crashed \(SIG[A-Z]+\)/);
+
+    // A quit (`reload --quit`): the shell quits, and the watcher with it.
     // A second start while it runs is answered by the running one: no second watcher.
     expect(await reload([], unwatched)).toBe(0);
     // `reload --status` is answered by the shell under the watcher, as by any shell.
@@ -91,6 +115,9 @@ test("Reload hands its start to the watcher, which relaunches a crash and never 
     await expect.poll(() => isAlive(again.shell), { timeout: 30_000 }).toBe(false);
     await expect.poll(() => isAlive(again.watcher), { timeout: 10_000 }).toBe(false);
     expect(fs.existsSync(runState)).toBe(false);
+    // The quit the shell recorded for the watcher went with it.
+    expect(fs.existsSync(path.join(userData, QUIT_FILENAME))).toBe(false);
+    expect(relaunches()).toHaveLength(2);
     await expect.poll(() => processesNaming(userData), { timeout: 20_000 }).toEqual([]);
   } finally {
     // Only this run's own processes, by pid.

@@ -17,6 +17,7 @@ import {
   type Unwritable,
 } from "./command-answers";
 import { identityOfLater, RUN_STATE_FILENAME, writeRunState } from "./run-state";
+import { QUIT_FILENAME } from "../domain/supervision/relaunch";
 
 export interface LifecycleDeps {
   readonly app: Pick<
@@ -36,9 +37,10 @@ export interface LifecycleDeps {
   readonly logger: Logger;
   /**
    * Hand this start over to the watcher (shell/watcher.ts), once the lock is held: true when it
-   * did, and this shell is quitting; false under the watcher, which runs the shell as before.
+   * did; false under the watcher, which runs the shell as before. `resume` runs this shell after
+   * all, when the watcher could not.
    */
-  readonly handOff?: () => boolean;
+  readonly handOff?: (resume: () => void) => boolean;
 }
 
 /** Runs the shell, or exits at once when another instance already runs. */
@@ -48,7 +50,12 @@ export function runShell(deps: LifecycleDeps): void {
     app.exit(0);
     return;
   }
-  if (deps.handOff?.() === true) {
+  const { handOff, ...unwatched } = deps;
+  if (
+    handOff?.(() => {
+      runShell(unwatched);
+    }) === true
+  ) {
     return;
   }
   removeStaleReplies(app.getPath("userData"), Date.now());
@@ -84,6 +91,8 @@ export function runShell(deps: LifecycleDeps): void {
   let quitBySignal = false;
   app.on("before-quit", (event) => {
     if (quitFlow.done) {
+      // Recorded for the watcher: whatever this exit's code, it is the quit, never relaunched.
+      recordQuit(app.getPath("userData"), logger);
       return;
     }
     event.preventDefault();
@@ -155,4 +164,16 @@ function recordRunState(
       record();
     },
   };
+}
+
+/** The quit the watcher reads (domain/supervision/relaunch.ts QUIT_FILENAME); a failure is said. */
+function recordQuit(userDir: string, logger: Logger): void {
+  try {
+    fs.writeFileSync(
+      path.join(userDir, QUIT_FILENAME),
+      JSON.stringify({ pid: process.pid, at: Date.now() }),
+    );
+  } catch (error) {
+    logger.error(`the quit could not be recorded for the watcher: ${String(error)}`);
+  }
 }

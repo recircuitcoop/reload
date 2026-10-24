@@ -15,21 +15,43 @@ export interface WatcherConfig {
   readonly args: readonly string[];
   /** The shell's environment, with the marker set and nothing of the watcher's own. */
   readonly env: Readonly<Record<string, string>>;
-  /** The restart delays and the crash-loop limit (the person's `stability`). */
+  /** The restart delays, the crash-loop limit and the restart attempts (the person's `stability`). */
   readonly delaysMs: readonly number[];
   readonly crashLoop: CrashLoopSettings;
+  readonly restartAttempts: number;
+  /** Where the shell records a quit it began (QUIT_FILENAME in its user data). */
+  readonly quitFile: string;
 }
+
+/**
+ * The file a shell writes once a quit is under way (the old QuitFile): an exit while it is there
+ * is the quit, whatever its code, and is never relaunched. The watcher removes it before each
+ * start, so a quit of the last run never holds back this one.
+ */
+export const QUIT_FILENAME = "quit-recorded.json";
+
+/** The descriptor a handing-over shell waits on: the watcher writes to it once the shell runs. */
+export const STARTED_FD = 3;
 
 /** How the shell ended, in the only three ways that change what happens next. */
 export type ShellEnding = "crashed" | "stopped" | "quit";
 
-/** The signals of a crash (the old CRASH_SIGNALS); any other signal is a stop from outside. */
+/**
+ * The signals of a crash: the old CRASH_SIGNALS, and every other signal whose default is to dump
+ * core on macOS and Linux but SIGQUIT (which a person sends, and the old app took as a stop).
+ * SIGTRAP above all: it is how V8 ends Electron's main process when its heap runs out, and how a
+ * CHECK in Chromium fails. Any other signal is a stop from outside.
+ */
 export const CRASH_SIGNALS: ReadonlySet<string> = new Set([
   "SIGSEGV",
   "SIGABRT",
   "SIGBUS",
   "SIGILL",
   "SIGFPE",
+  "SIGTRAP",
+  "SIGSYS",
+  "SIGXCPU",
+  "SIGXFSZ",
 ]);
 
 /**

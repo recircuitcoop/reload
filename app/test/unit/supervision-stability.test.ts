@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { JsonSettingsStore } from "../../src/adapters/fs/settings-store";
 import {
   readStability,
+  readSupervision,
   resourceWatchdog,
   stabilityPace,
 } from "../../src/application/resource-watch";
@@ -90,9 +91,10 @@ describe("the stability numbers", () => {
   it("are written whole by the store, every other setting kept", () => {
     fs.writeFileSync(file, JSON.stringify({ launchAtLogin: true }));
     const store = new JsonSettingsStore(file);
-    store.writeStability(EVERY_KEY);
+    store.writeLimitsAndStability({ memory_mb: 512 }, EVERY_KEY);
     expect(JSON.parse(fs.readFileSync(file, "utf8"))).toEqual({
       launchAtLogin: true,
+      limits: { memory_mb: 512 },
       stability: EVERY_KEY,
     });
     expect(store.readStability()).toEqual(EVERY_KEY);
@@ -155,6 +157,20 @@ describe("the stability numbers", () => {
   });
 });
 
+describe("the shell supervisor's stop timeout", () => {
+  it("is read again at every stop, so a save counts from the next stop as the form says", () => {
+    fs.writeFileSync(file, JSON.stringify({ stability: { stop_timeout_s: 20, breaker_count: 7 } }));
+    const store = new JsonSettingsStore(file);
+    const settings = readSupervision(store, new RecordingLogger());
+    expect(settings.stopDeadlineMs).toBe(20_000);
+    expect(settings.crashLoop.maxCrashes).toBe(7);
+    store.writeLimitsAndStability({}, { stop_timeout_s: 3, breaker_count: 2 });
+    expect(settings.stopDeadlineMs).toBe(3_000);
+    // The rest are read at start, as the Saved line says.
+    expect(settings.crashLoop.maxCrashes).toBe(7);
+  });
+});
+
 describe("the watchdog's cadence", () => {
   /** A watchdog over one process that is always there, its passes recorded at their times. */
   function watched(setting: StabilitySetting) {
@@ -207,7 +223,7 @@ describe("the watchdog's cadence", () => {
     await settle();
     expect(passes).toEqual([250]);
     // Saved while the wait already begun runs out: that one ends as it began, the next is 1 s.
-    store.writeStability({ check_s: 1 });
+    store.writeLimitsAndStability({}, { check_s: 1 });
     clock.advance(250);
     await settle();
     clock.advance(999);

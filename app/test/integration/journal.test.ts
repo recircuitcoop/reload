@@ -11,11 +11,18 @@ import { RecordingDelivery, startRaw, waitFor, type RawNode } from "../fixtures/
 
 const started: NodeProcess[] = [];
 
-function raw(journal = new MemoryJournal(), queue?: QueueSettings, id?: string): RawNode {
+function raw(
+  journal = new MemoryJournal(),
+  queue?: QueueSettings,
+  id?: string,
+  delaysMs?: readonly number[],
+): RawNode {
   const node = startRaw({
     journal,
     ...(id === undefined ? {} : { id }),
-    ...(queue === undefined ? {} : { settings: { queue } }),
+    ...(queue === undefined
+      ? {}
+      : { settings: { queue, ...(delaysMs === undefined ? {} : { backoff: { delaysMs } }) } }),
   });
   started.push(node.node);
   return node;
@@ -297,7 +304,8 @@ describe("the bounded queue (spec 7.6)", () => {
   });
 
   it("held inputs are failed when the crash-loop limit stops the node", async () => {
-    const node = raw(new MemoryJournal(), queueSettings(1, "hold"));
+    // A second between restarts, not the growing default: this is about the held inputs.
+    const node = raw(new MemoryJournal(), queueSettings(1, "hold"), undefined, [1_000]);
     send(node.node, { do: "present" });
     await waitFor("present", () => node.host.presented.length === 1);
     const [, held] = send(node.node, { do: "echo" });
