@@ -345,6 +345,13 @@ export function writeSettings(
 
 /** The node is closing: a write still waiting is never answered, so it fails now. */
 function failWrites(): void {
+  if (pendingWrites.size > 0) {
+    // Said before the process goes: the handler may never get to say it.
+    toStderr(
+      `${String(pendingWrites.size)} write(s) of its own settings were still waiting at close, ` +
+        "so nothing of them was recorded",
+    );
+  }
   for (const [id, pending] of pendingWrites) {
     pendingWrites.delete(id);
     pending.fail(new Error("the node closed before the runtime answered its write"));

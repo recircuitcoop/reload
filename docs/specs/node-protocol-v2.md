@@ -745,7 +745,7 @@ Every frame is a JSON object with a string field `t`.
    is the package's, the editor and Setup show it, with "Set by <package>, <time>"; sent back
    unchanged, it stays the package's, never written into the flows as the person's.
 6. A write is answered or it fails: the SDKs reject one with no answer within 30 s (a runtime
-   older than 2.3 never answers, and nothing was recorded) and one still waiting at `close`.
+   older than 2.3 never answers, and nothing was recorded) and one still waiting at `close`, which they say on stderr as the node goes.
 
 ### 4.5 JSON Schemas for the frames
 

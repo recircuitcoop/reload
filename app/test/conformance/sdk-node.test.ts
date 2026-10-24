@@ -410,7 +410,7 @@ describe.each(SDK_LANGUAGES)("conformance: the %s SDK's kitchen reference node",
     await waitFor("its write", () => node.frames.some((f) => f.t === "settings"));
     node.send({ t: "close" });
     await waitFor("its failure said", () =>
-      node.stderr.includes("write failed: the node closed before the runtime answered its write"),
+      node.stderr.includes("1 write(s) of its own settings were still waiting at close"),
     );
     expect(node.rejected).toEqual([]);
   });

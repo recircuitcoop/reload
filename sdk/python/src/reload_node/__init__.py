@@ -277,9 +277,17 @@ class Node:
         return outcome
 
     def _fail_writes(self) -> None:
-        """The node is closing: a write still waiting is never answered, so it fails now."""
+        """The node is closing: a write still waiting is never answered, so it fails now, and
+        is said on stderr before the process goes (its handler may never get to say it)."""
         for answered, _box in list(self._pending_writes.values()):
             answered.set()
+        if self._pending_writes:
+            print(  # noqa: T201 - the one line the runtime logs for it
+                f"{len(self._pending_writes)} write(s) of its own settings were still waiting at "
+                "close, so nothing of them was recorded",
+                file=sys.stderr,
+                flush=True,
+            )
         self._pending_writes.clear()
 
     def credential(self, name: str) -> str | None:
