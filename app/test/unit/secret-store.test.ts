@@ -316,7 +316,10 @@ describe("the Anytype key from the environment", () => {
 
   it("is registered with the redactor like a key read from the file", () => {
     const { registry, sink } = redactor();
-    const store = registering(environmentKeyFirst(new MemorySecretStore(), "fake-env-key-123"), sink);
+    const store = registering(
+      environmentKeyFirst(new MemorySecretStore(), "fake-env-key-123"),
+      sink,
+    );
     expect(store.read("anytype-api-key")).toBe("fake-env-key-123");
     expect(registry.redact("fake-env-key-123")).toBe(REDACTED);
   });
