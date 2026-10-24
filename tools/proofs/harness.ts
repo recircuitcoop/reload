@@ -59,28 +59,32 @@ export function proofScratch(): ProofScratch {
   return { ...run, env: { ...run.env, RELOAD_ANYTYPE_APP: "none" } };
 }
 
-export interface PackagedRun {
+export interface ShellRun {
   readonly shell: ChildProcess;
-  readonly page: Page;
-  readonly browser: Browser;
   /** Everything the shell printed (its children's lines are relayed onto it). */
   readonly output: string[];
   readonly exited: Promise<number | null>;
+  readonly browser?: Browser;
 }
 
-/** Start the packaged app with `env`, and connect to its window's page. */
-export async function startPackaged(
-  env: Record<string, string>,
-  args: readonly string[] = [],
-): Promise<PackagedRun> {
-  const port = freePortNow();
+export interface PackagedRun extends ShellRun {
+  readonly page: Page;
+  readonly browser: Browser;
+}
+
+/**
+ * Start the packaged app with `env`, with no DevTools port: what a proof that reads only the
+ * log and the command line uses. On macOS x64 under Rosetta a shell started with
+ * --remote-debugging-port logs "quit complete" and then does not exit, so a proof of quitting
+ * there must not open one.
+ */
+export function startShell(env: Record<string, string>, args: readonly string[] = []): ShellRun {
   // A container's Chromium has no namespace sandbox to use (podman, Linux): said by the runner.
   const sandbox = process.env["RELOAD_PROOF_NO_SANDBOX"] === "1" ? ["--no-sandbox"] : [];
-  const shell = spawn(
-    packagedExecutable(),
-    [`--remote-debugging-port=${String(port)}`, ...sandbox, ...args],
-    { env, stdio: ["ignore", "pipe", "pipe"] },
-  );
+  const shell = spawn(packagedExecutable(), [...sandbox, ...args], {
+    env,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
   const output: string[] = [];
   shell.stdout.on("data", (chunk: Buffer) => output.push(chunk.toString("utf8")));
   shell.stderr.on("data", (chunk: Buffer) => output.push(chunk.toString("utf8")));
@@ -89,6 +93,19 @@ export async function startPackaged(
       resolve(code);
     });
   });
+  return { shell, output, exited };
+}
+
+/** Start the packaged app with `env`, and connect to its window's page. */
+export async function startPackaged(
+  env: Record<string, string>,
+  args: readonly string[] = [],
+): Promise<PackagedRun> {
+  const port = freePortNow();
+  const { shell, output, exited } = startShell(env, [
+    `--remote-debugging-port=${String(port)}`,
+    ...args,
+  ]);
   const endpoint = `http://127.0.0.1:${String(port)}`;
   await expect
     .poll(
@@ -131,11 +148,11 @@ export function appCall(page: Page, call: string, ...args: unknown[]): Promise<u
 /** `reload --quit` against the running instance, as a person runs it; its exit code. What it
  * printed goes to the evidence, as `reload --quit` answers. */
 export async function quitFromCommandLine(
-  run: PackagedRun,
+  run: ShellRun,
   env: Record<string, string>,
 ): Promise<number | null> {
   // A person's quit has no debugger attached: this driver lets go of the window first.
-  await run.browser.close().catch(() => undefined);
+  await run.browser?.close().catch(() => undefined);
   const asked = spawn(packagedExecutable(), ["--quit"], { env, stdio: ["ignore", "pipe", "pipe"] });
   const said: string[] = [];
   asked.stdout.on("data", (chunk: Buffer) => said.push(chunk.toString("utf8")));
@@ -148,14 +165,14 @@ export async function quitFromCommandLine(
 }
 
 /** Stop a run that is still up (a failed proof), and every process under its userData. */
-export async function stopRun(run: PackagedRun | null, userData: string): Promise<void> {
+export async function stopRun(run: ShellRun | null, userData: string): Promise<void> {
   if (run !== null) {
     // Still up means the proof failed: what the app said is the evidence of why.
     if (EVIDENCE_DIR !== "") {
       fs.mkdirSync(EVIDENCE_DIR, { recursive: true });
       fs.writeFileSync(path.join(EVIDENCE_DIR, "failed-run-output.log"), run.output.join(""));
     }
-    await run.browser.close().catch(() => undefined);
+    await run.browser?.close().catch(() => undefined);
     if (run.shell.exitCode === null && run.shell.signalCode === null) {
       run.shell.kill("SIGTERM");
       await Promise.race([run.exited, new Promise((resolve) => setTimeout(resolve, 15_000))]);

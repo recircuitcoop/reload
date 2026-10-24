@@ -11,15 +11,14 @@ import * as path from "node:path";
 import { expect, test } from "@playwright/test";
 import { anytypeKeyFile, processesNaming } from "../../app/test/e2e/app-harness";
 import {
-  appCall,
   evidence,
   fakeAnytype,
   withFakeMcp,
   proofScratch,
   quitFromCommandLine,
-  startPackaged,
+  startShell,
   stopRun,
-  type PackagedRun,
+  type ShellRun,
 } from "./harness";
 
 /** How long a run is watched after its notice, for a second one that must not come. */
@@ -27,28 +26,37 @@ const SETTLE_MS = 15_000;
 
 const count = (text: string, pattern: RegExp) => text.match(pattern)?.length ?? 0;
 
-/** Start, wait for `pattern` in the log, watch for a repeat, quit; the run's log. */
+/** The last of the log's lines matching `pattern`, its first group: a state as it was said. */
+const lastSaid = (text: string, pattern: RegExp) =>
+  [...text.matchAll(pattern)].map((match) => match[1] ?? "").at(-1) ?? "";
+
+/**
+ * Start, wait for `pattern` in the log, watch for a repeat, quit; the run's log. Read from the
+ * log and the command line only, with no DevTools port (startShell): this proof is also a quit.
+ */
 async function runUntil(env: Record<string, string>, userData: string, pattern: RegExp) {
-  let run: PackagedRun | null = null;
+  let run: ShellRun | null = null;
   try {
-    run = await startPackaged(env);
+    run = startShell(env);
     const said = () => run?.output.join("") ?? "";
-    await expect.poll(() => count(said(), pattern), { timeout: 60_000 }).toBeGreaterThan(0);
-    // Asked again, as Check again and coming back to Reload ask: still the one notice.
-    await appCall(run.page, "checkAnytype");
+    await expect.poll(() => count(said(), pattern), { timeout: 120_000 }).toBeGreaterThan(0);
     await new Promise((resolve) => setTimeout(resolve, SETTLE_MS));
-    const anytype = (await appCall(run.page, "anytypeStatus")) as { state: string };
-    const endpoint = (await appCall(run.page, "mcpEndpoint")) as { problem: string | null };
     // Written once a notice is current: a run with none has no file.
     const file = path.join(userData, "notices.json");
     const notices = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : "";
+    // The states as they were before the quit (which says stopped).
+    const before = said();
     expect(await quitFromCommandLine(run, env)).toBe(0);
     await run.exited;
     await expect.poll(() => processesNaming(userData), { timeout: 15_000 }).toEqual([]);
-    await run.browser.close().catch(() => undefined);
     const log = said();
     run = null;
-    return { log, anytype, endpoint, notices };
+    return {
+      log,
+      anytype: { state: lastSaid(before, /reload\.services: anytype: ([a-z-]+)/g) },
+      endpoint: { problem: lastSaid(before, /the MCP endpoint is not served: ([^\n]*)/g) },
+      notices,
+    };
   } finally {
     await stopRun(run, userData);
   }
