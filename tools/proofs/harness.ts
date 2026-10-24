@@ -59,6 +59,11 @@ export function proofScratch(): ProofScratch {
   return { ...run, env: { ...run.env, RELOAD_ANYTYPE_APP: "none" } };
 }
 
+/** A container's Chromium has no namespace sandbox to use (podman, Linux): said by the runner. */
+function sandbox(): string[] {
+  return process.env["RELOAD_PROOF_NO_SANDBOX"] === "1" ? ["--no-sandbox"] : [];
+}
+
 export interface ShellRun {
   readonly shell: ChildProcess;
   /** Everything the shell printed (its children's lines are relayed onto it). */
@@ -79,9 +84,7 @@ export interface PackagedRun extends ShellRun {
  * there must not open one.
  */
 export function startShell(env: Record<string, string>, args: readonly string[] = []): ShellRun {
-  // A container's Chromium has no namespace sandbox to use (podman, Linux): said by the runner.
-  const sandbox = process.env["RELOAD_PROOF_NO_SANDBOX"] === "1" ? ["--no-sandbox"] : [];
-  const shell = spawn(packagedExecutable(), [...sandbox, ...args], {
+  const shell = spawn(packagedExecutable(), [...sandbox(), ...args], {
     env,
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -153,7 +156,10 @@ export async function quitFromCommandLine(
 ): Promise<number | null> {
   // A person's quit has no debugger attached: this driver lets go of the window first.
   await run.browser?.close().catch(() => undefined);
-  const asked = spawn(packagedExecutable(), ["--quit"], { env, stdio: ["ignore", "pipe", "pipe"] });
+  const asked = spawn(packagedExecutable(), [...sandbox(), "--quit"], {
+    env,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
   const said: string[] = [];
   asked.stdout.on("data", (chunk: Buffer) => said.push(chunk.toString("utf8")));
   asked.stderr.on("data", (chunk: Buffer) => said.push(chunk.toString("utf8")));
