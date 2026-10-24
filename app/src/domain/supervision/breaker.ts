@@ -125,6 +125,12 @@ export class RestartLimit implements CrashLoopSettings {
     this.#inARow = 0;
   }
 
+  /** A person started it again: both limits start from nothing. */
+  reset(): void {
+    this.#breaker.reset();
+    this.#inARow = 0;
+  }
+
   /** The crashes since the process last came up. */
   get inARow(): number {
     return this.#inARow;

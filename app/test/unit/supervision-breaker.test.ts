@@ -109,6 +109,9 @@ describe("RestartLimit", () => {
     expect(limit.overAttempts).toBeNull();
     expect(limit.recordCrash()).toBe(false);
     expect(limit.overAttempts).toBe("stopped after 3 exits in a row");
+    // A person starts it again: the attempts and the window are whole again.
+    limit.reset();
+    expect([limit.inARow, limit.recordCrash()]).toEqual([0, true]);
     // The window tripping first is the crash-loop limit's to say, not the attempts'.
     const looping = new RestartLimit(
       { crashLoop: { maxCrashes: 2, windowMs: 60_000 }, restartAttempts: 1 },
