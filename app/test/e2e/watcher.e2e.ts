@@ -10,6 +10,17 @@ import { QUIT_FILENAME, UNDER_WATCHER_VARIABLE } from "../../src/domain/supervis
 import { E2E_CRASH_FILENAME } from "../../src/shell/e2e-hooks";
 import { APP, ELECTRON_BINARY, isAlive, processesNaming, scratchDirectories } from "./app-harness";
 
+/** A pid's start time and command line, as the process table says; null once it is gone. */
+const identityOf = (pid: number): string | null => {
+  try {
+    return execFileSync("ps", ["-o", "lstart=,command=", "-p", String(pid)], {
+      encoding: "utf8",
+    }).trim();
+  } catch {
+    return null;
+  }
+};
+
 /** The parent of a live pid, as the process table says. */
 const parentOf = (pid: number): number =>
   Number(execFileSync("ps", ["-o", "ppid=", "-p", String(pid)], { encoding: "utf8" }).trim());
@@ -60,7 +71,8 @@ test("Reload hands its start to the watcher, which relaunches a real crash and n
       return null; // not written yet, or being replaced
     }
   };
-  const seen = new Set<number>();
+  /** Each process this run started, with its start time and command line when first seen. */
+  const seen = new Map<number, string | null>();
   const started = async (): Promise<{ shell: number; watcher: number }> => {
     let shell: number | null = null;
     await expect
@@ -73,15 +85,17 @@ test("Reload hands its start to the watcher, which relaunches a real crash and n
       )
       .toBe(true);
     const pid = shell as unknown as number;
-    seen.add(pid);
-    seen.add(parentOf(pid));
-    return { shell: pid, watcher: parentOf(pid) };
+    const watcher = parentOf(pid);
+    seen.set(pid, identityOf(pid));
+    seen.set(watcher, identityOf(watcher));
+    return { shell: pid, watcher };
   };
   try {
     // The start a person makes, its first shell crashing for real (process.crash()): the
     // process started quits at once, having handed over, and the watcher starts the shell again.
     crashNext("crash");
     expect(await reload([], unwatched)).toBe(0);
+    await expect.poll(() => relaunches().length, { timeout: 60_000 }).toBe(1);
     const first = await started();
     // The watcher is its own process, the shell's parent, never this test.
     expect(first.watcher).not.toBe(process.pid);
@@ -101,6 +115,7 @@ test("Reload hands its start to the watcher, which relaunches a real crash and n
     // A V8 heap out of memory in the shell, the crash a leak ends in: relaunched too.
     crashNext("oom");
     expect(await reload([], unwatched)).toBe(0);
+    await expect.poll(() => relaunches().length, { timeout: 60_000 }).toBe(2);
     const again = await started();
     expect(again.watcher).not.toBe(first.watcher);
     expect(relaunches()).toHaveLength(2);
@@ -120,19 +135,10 @@ test("Reload hands its start to the watcher, which relaunches a real crash and n
     expect(relaunches()).toHaveLength(2);
     await expect.poll(() => processesNaming(userData), { timeout: 20_000 }).toEqual([]);
   } finally {
-    // Only this run's own processes, by pid.
-    const ours = (pid: number): boolean => {
-      try {
-        const command = execFileSync("ps", ["-o", "command=", "-p", String(pid)], {
-          encoding: "utf8",
-        });
-        return command.includes(ELECTRON_BINARY);
-      } catch {
-        return false; // gone
-      }
-    };
-    for (const pid of seen) {
-      if (ours(pid)) process.kill(pid, "SIGKILL");
+    // Only this run's own processes, by pid, and only while each pid is still the process seen:
+    // a pid freed by one that ended may be another spec's Reload by now.
+    for (const [pid, identity] of seen) {
+      if (identity !== null && identityOf(pid) === identity) process.kill(pid, "SIGKILL");
     }
     fs.rmSync(scratch, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
   }

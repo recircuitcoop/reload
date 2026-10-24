@@ -30,8 +30,6 @@ export interface WatcherConfig {
  */
 export const QUIT_FILENAME = "quit-recorded.json";
 
-/** The descriptor a handing-over shell waits on: the watcher writes to it once the shell runs. */
-export const STARTED_FD = 3;
 
 /** How the shell ended, in the only three ways that change what happens next. */
 export type ShellEnding = "crashed" | "stopped" | "quit";

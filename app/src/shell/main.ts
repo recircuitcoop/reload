@@ -235,7 +235,6 @@ const quitFlow = new QuitFlow({
 });
 async function start(): Promise<DesktopWired["notices"] | null> {
   await app.whenReady();
-  crashOnceForE2e(e2eHooks, app.getPath("userData")); // watcher.e2e.ts's real crashes only
   // One port for the whole session: every runtime generation is given this one (§2.2).
   const port = await pickFreeLoopbackPort();
   if (!quitFlow.idle) {
@@ -580,6 +579,7 @@ async function start(): Promise<DesktopWired["notices"] | null> {
   for (const supervisor of supervisors.values()) {
     supervisor.start();
   }
+  crashOnceForE2e(e2eHooks, app.getPath("userData")); // watcher.e2e.ts's real crashes, once up
   return notices;
 }
 

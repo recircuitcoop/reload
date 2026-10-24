@@ -3,10 +3,13 @@
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import { describe, expect, it } from "vitest";
-import { handOffToWatcher, watcherNode } from "../../src/adapters/process/watcher-handoff";
+import {
+  handOffToWatcher,
+  shellArgs,
+  watcherNode,
+} from "../../src/adapters/process/watcher-handoff";
 import {
   shellEnding,
-  STARTED_FD,
   UNDER_WATCHER_VARIABLE,
   type WatcherConfig,
 } from "../../src/domain/supervision/relaunch";
@@ -203,14 +206,12 @@ describe("the hand-over to the watcher", () => {
     const logged: string[] = [];
     const spawned: { command: string; args: readonly string[]; options: unknown }[] = [];
     const stdin = new PassThrough();
-    const started = new PassThrough();
     let written = "";
     stdin.on("data", (chunk: Buffer) => {
       written += chunk.toString("utf8");
     });
     const watcher = Object.assign(new EventEmitter(), {
       stdin,
-      stdio: [stdin, null, null, started],
       unref: () => calls.push("unref"),
     });
     const spawn = ((command: string, args: readonly string[], options: unknown) => {
@@ -228,13 +229,14 @@ describe("the hand-over to the watcher", () => {
       // A binary that exists everywhere the tests run, standing in for the shell's.
       execPath: "/bin/sh",
       runtimesDir,
+      platform: "linux",
       script: () => "/* the watcher */",
       stability: () => DEFAULT_STABILITY,
       log: (line) => logged.push(line),
       spawn,
     })(() => calls.push("runs itself"));
     const config = () => JSON.parse(written) as WatcherConfig;
-    return { handed, calls, logged, spawned, config, watcher, started };
+    return { handed, calls, logged, spawned, config, watcher };
   }
 
   const settle = () => new Promise((resolve) => setImmediate(resolve));
@@ -246,8 +248,8 @@ describe("the hand-over to the watcher", () => {
     expect(spawned).toEqual([]);
   });
 
-  it("releases the lock, starts the watcher detached on node, and quits once the watcher says the shell runs", async () => {
-    const { handed, calls, spawned, config, started } = handOff({
+  it("releases the lock, starts the watcher detached on node, and quits once it runs and holds its config", async () => {
+    const { handed, calls, spawned, config, watcher } = handOff({
       HOME: "/home/test",
       ANYTYPE_API_KEY: "secret",
       ELECTRON_RUN_AS_NODE: "1",
@@ -255,9 +257,9 @@ describe("the hand-over to the watcher", () => {
     });
     expect(handed).toBe(true);
     await settle();
-    // Not before the watcher has started the real shell: until then this one could still run.
+    // Not before the watcher runs: until then this one could still run itself.
     expect(calls).toEqual(["release", "unref"]);
-    started.write("started\n");
+    watcher.emit("spawn");
     await settle();
     expect(calls).toEqual(["release", "unref", "exit 0"]);
     expect(spawned).toEqual([
@@ -272,11 +274,10 @@ describe("the hand-over to the watcher", () => {
             ELECTRON_RUN_AS_NODE: "1",
           },
           detached: true,
-          stdio: ["pipe", "inherit", "inherit", "pipe"],
+          stdio: ["pipe", "inherit", "inherit"],
         },
       },
     ]);
-    expect(STARTED_FD).toBe(3);
     // The shell is started as it was, Electron and never node, with the marker; nothing of the
     // environment is on a command line.
     expect(config()).toEqual({
@@ -303,16 +304,29 @@ describe("the hand-over to the watcher", () => {
     ]);
     const ended = handOff({});
     ended.watcher.emit("exit", 1, null);
-    ended.started.write("started\n");
+    ended.watcher.emit("spawn");
     await settle();
     expect(ended.calls).toEqual(["release", "unref", "runs itself"]);
     expect(ended.logged).toEqual([
-      "the watcher ended (exit code 1) before Reload ran; Reload runs without the watcher",
+      "the watcher ended (exit code 1) before it was told how to start Reload; Reload runs without the watcher",
     ]);
     const unwritable = handOff({});
     unwritable.watcher.stdin.emit("error", new Error("write EPIPE"));
     await settle();
     expect(unwritable.calls).toEqual(["release", "unref", "runs itself"]);
+  });
+
+  it("starts the shell on macOS without AppKit's reopen-windows prompt, which would hold a relaunch", () => {
+    expect(shellArgs(["--hidden"], "darwin")).toEqual([
+      "--hidden",
+      "-ApplePersistenceIgnoreState",
+      "YES",
+    ]);
+    expect(shellArgs(["-ApplePersistenceIgnoreState", "YES"], "darwin")).toEqual([
+      "-ApplePersistenceIgnoreState",
+      "YES",
+    ]);
+    expect(shellArgs(["--hidden"], "linux")).toEqual(["--hidden"]);
   });
 
   it("runs on the bundled node in an installed build, and unwatched when there is no node to run on", () => {

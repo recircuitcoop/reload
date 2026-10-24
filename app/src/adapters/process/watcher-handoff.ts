@@ -11,10 +11,8 @@
 import { spawn as nodeSpawn } from "node:child_process";
 import fs from "node:fs";
 import * as path from "node:path";
-import type { Readable } from "node:stream";
 import {
   QUIT_FILENAME,
-  STARTED_FD,
   UNDER_WATCHER_VARIABLE,
   type WatcherConfig,
 } from "../../domain/supervision/relaunch";
@@ -38,6 +36,8 @@ export interface HandOffDeps {
   readonly execPath?: string;
   /** Where the bundled runtimes are; null outside an installed build. */
   readonly runtimesDir: string | null;
+  /** process.platform when left out. */
+  readonly platform?: NodeJS.Platform;
   /** The watcher's script: dist/shell/watcher-main.cjs, read when the hand-over happens. */
   readonly script: () => string;
   /** The person's restart delays, attempts and crash-loop limit, which the watcher keeps to. */
@@ -61,9 +61,10 @@ export function watcherNode(
 /**
  * Hand this start over to the watcher, unless it runs under one: true when it did. Called once
  * the single-instance lock is held, so a second launch of a running Reload is answered by the
- * running one and never starts a second watcher. This shell quits only once the watcher says it
- * started the real one; a watcher that could not start, or ended first, is said, and `resume`
- * runs this shell itself: never neither of them.
+ * running one and never starts a second watcher. This shell quits only once the watcher runs
+ * and holds its config; a watcher that could not start, could not be told, or ended first, is
+ * said, and `resume` runs this shell itself: never neither of them. (It quits rather than wait
+ * for the real shell: that one waits for this one's lock to go with this process.)
  */
 export function handOffToWatcher(deps: HandOffDeps): (resume: () => void) => boolean {
   return (resume) => handOff(deps, resume);
@@ -80,7 +81,7 @@ function handOff(deps: HandOffDeps, resume: () => void): boolean {
   }
   shellEnv[UNDER_WATCHER_VARIABLE] = "1";
   const execPath = deps.execPath ?? process.execPath;
-  const node = watcherNode(deps.runtimesDir, process.platform, execPath);
+  const node = watcherNode(deps.runtimesDir, deps.platform ?? process.platform, execPath);
   if (!fs.existsSync(node.command)) {
     deps.log(`no node to run the watcher on (${node.command}); Reload runs without it`);
     return false;
@@ -88,7 +89,7 @@ function handOff(deps: HandOffDeps, resume: () => void): boolean {
   const { backoff, crashLoop, restartAttempts } = deps.stability();
   const config: WatcherConfig = {
     command: execPath,
-    args: (deps.argv ?? process.argv).slice(1),
+    args: shellArgs((deps.argv ?? process.argv).slice(1), deps.platform ?? process.platform),
     env: shellEnv,
     delaysMs: backoff.delaysMs,
     crashLoop,
@@ -108,28 +109,53 @@ function handOff(deps: HandOffDeps, resume: () => void): boolean {
   const watcher = (deps.spawn ?? nodeSpawn)(node.command, ["-e", script], {
     env: { ...shellEnv, ...node.env },
     detached: true,
-    stdio: ["pipe", "inherit", "inherit", "pipe"],
+    stdio: ["pipe", "inherit", "inherit"],
   });
   watcher.once("error", (error) => {
     fallBack(`the watcher could not start: ${error.message}`);
   });
   watcher.once("exit", (code, signal) => {
-    fallBack(`the watcher ended (${signal ?? `exit code ${String(code)}`}) before Reload ran`);
+    fallBack(
+      `the watcher ended (${signal ?? `exit code ${String(code)}`}) before it was told how to start Reload`,
+    );
   });
-  watcher.stdin?.once("error", (error) => {
+  watcher.stdin.once("error", (error) => {
     fallBack(`the watcher could not be told how to start Reload: ${error.message}`);
   });
-  const started = watcher.stdio[STARTED_FD] as Readable | null | undefined;
-  started?.once("data", () => {
-    if (settled) return;
+  watcher.unref();
+  // Quit once the watcher runs and holds its config, which goes on stdin, never the command
+  // line: the environment may hold secrets. The lock goes with this process.
+  let running = false;
+  let told = false;
+  const quitWhenHandedOver = (): void => {
+    if (settled || !running || !told) return;
     settled = true;
     deps.app.exit(0);
+  };
+  watcher.once("spawn", () => {
+    running = true;
+    quitWhenHandedOver();
   });
-  watcher.unref();
-  // The config goes on stdin, never the command line: the environment may hold secrets.
-  watcher.stdin?.end(JSON.stringify(config));
+  watcher.stdin.end(JSON.stringify(config), () => {
+    told = true;
+    quitWhenHandedOver();
+  });
   return true;
 }
+
+/**
+ * The real shell's arguments: its own, and on macOS never AppKit's "reopen its windows?" prompt,
+ * which a crash during a start leaves behind and which would hold every relaunch before
+ * `ready`, with nobody there to answer it. Reload restores no window of its own.
+ */
+export function shellArgs(args: readonly string[], platform: NodeJS.Platform): string[] {
+  return platform === "darwin" && !args.includes(IGNORE_SAVED_STATE[0])
+    ? [...args, ...IGNORE_SAVED_STATE]
+    : [...args];
+}
+
+/** AppKit's per-launch argument for "restore nothing" (an NSArgumentDomain default). */
+export const IGNORE_SAVED_STATE = ["-ApplePersistenceIgnoreState", "YES"] as const;
 
 /** The watcher's script beside the shell's own bundle (both in dist/shell). */
 export function watcherScript(shellDir: string): () => string {

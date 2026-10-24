@@ -1,5 +1,6 @@
 // Starting the real app for an e2e spec, and looking at its processes the way the spike's
 // P11d and P11e runs did: by pid, and with pgrep scoped to this run's temporary userData.
+import { shellArgs } from "../../src/adapters/process/watcher-handoff";
 import { UNDER_WATCHER_VARIABLE } from "../../src/domain/supervision/relaunch";
 import { execFileSync, type ChildProcess } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
@@ -36,7 +37,10 @@ export async function launchTracked(
     (entry): entry is [string, string] => entry[1] !== undefined,
   );
   const env = { ...(given?.env ?? Object.fromEntries(inherited)), [UNDER_WATCHER_VARIABLE]: "1" };
-  const options = { ...given, env };
+  // Never held by AppKit's "reopen its windows?" prompt a crash at a start leaves behind
+  // (watcher.e2e.ts crashes the shell for real), as the watcher starts it too.
+  const args = shellArgs(given?.args ?? [], process.platform);
+  const options = { ...given, env, args };
   const app = await electron.launch(options);
   shells.set(app, app.process());
   return app;

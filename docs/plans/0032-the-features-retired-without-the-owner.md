@@ -156,14 +156,16 @@ settings.
 - **Group 11** (branch `port/0032-wave3b`): the watcher is the shell's parent
   (`shell/watcher.ts`). A shell started without it, as a person or the login item starts Reload,
   takes the single-instance lock, releases it, starts the watcher detached, and quits once the
-  watcher says on a descriptor of its own that the real shell started. If the watcher cannot
+  watcher runs and holds its config. If the watcher cannot
   start, cannot be told, or ends first, this is said in the log and the shell runs itself, so
   there is never a moment when neither runs nor exits. A second start of a running Reload is
   answered by the running one, as before. The watcher runs on the node a JS node runs on: the
   bundled Node in an installed build, where the RunAsNode fuse stays off, and Electron as node
   otherwise. Its script is passed with `-e`, since node cannot read app.asar, and its config
   arrives on stdin, never on the command line. The watcher starts the real shell with its
-  arguments and `RELOAD_UNDER_WATCHER=1`. It relaunches a crash after the person's restart delay,
+  arguments and `RELOAD_UNDER_WATCHER=1`, and on macOS with `-ApplePersistenceIgnoreState YES`:
+  a crash during a start leaves AppKit's "reopen its windows?" prompt behind, which would hold
+  every relaunch before `ready` with nobody there to answer it. It relaunches a crash after the person's restart delay,
   under their crash-loop limit and restart attempts (the attempts last the watcher's whole life,
   as the old host's did). A crash is a non-zero exit or a crash signal: SIGSEGV, SIGABRT, SIGBUS,
   SIGILL, SIGFPE, SIGTRAP (V8's heap out of memory and Chromium's CHECKs on macOS), SIGSYS,

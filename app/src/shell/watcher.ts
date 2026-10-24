@@ -17,7 +17,7 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import { RestartLimit } from "../domain/supervision/breaker";
-import { shellEnding, STARTED_FD, type WatcherConfig } from "../domain/supervision/relaunch";
+import { shellEnding, type WatcherConfig } from "../domain/supervision/relaunch";
 
 /** One started shell, as the watcher sees it. */
 export interface WatchedShell {
@@ -71,24 +71,12 @@ export function watchShell(config: WatcherConfig, deps: WatcherDeps): void {
 /** The watcher process: its config from stdin, the shell started with the terminal inherited. */
 export function runWatcher(): void {
   const chunks: Buffer[] = [];
-  let told = false;
   process.stdin.on("data", (chunk: Buffer) => chunks.push(chunk));
   process.stdin.on("end", () => {
     const config = JSON.parse(Buffer.concat(chunks).toString("utf8")) as WatcherConfig;
     watchShell(config, {
       start: ({ command, args, env }) => {
         const child = spawn(command, args, { env, stdio: ["ignore", "inherit", "inherit"] });
-        child.once("spawn", () => {
-          if (told) return;
-          told = true;
-          // The shell that handed over may quit now; until it hears this, it can run itself.
-          try {
-            fs.writeSync(STARTED_FD, "started\n");
-            fs.closeSync(STARTED_FD);
-          } catch {
-            // Nobody waits (the shell that handed over is gone): nothing to tell.
-          }
-        });
         return {
           onExit: (listener) => {
             child.once("exit", listener);
