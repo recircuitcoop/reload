@@ -1,0 +1,56 @@
+2026-10-24 03:34:29,984 INFO        337 reload.node-red: Node-RED version: v5.0.7
+2026-10-24 03:34:29,984 INFO        337 reload.node-red: Node.js  version: v24.21.0
+2026-10-24 03:34:29,984 INFO        337 reload.node-red: Linux 6.17.7-300.fc43.aarch64 arm64 LE
+2026-10-24 03:34:29,984 INFO        337 reload.node-red: Palette editor disabled : user settings
+2026-10-24 03:34:29,984 INFO        337 reload.node-red: Loading palette nodes
+2026-10-24 03:34:30,343 DEBUG       337 reload.node-red: Module: reload-reload_anytype 0.2.0 /tmp/reload-e2e-vKbsIu/user-data/node-red/generated/reload-reload_anytype
+2026-10-24 03:34:30,343 DEBUG       337 reload.node-red: Module: reload-reload_folder 0.1.0 /tmp/reload-e2e-vKbsIu/user-data/node-red/generated/reload-reload_folder
+2026-10-24 03:34:30,357 INFO        337 reload.runtime: Node-RED's own examples folder is missing in this build; harmless (WI-0018-23, arch_pivot §9.9)
+2026-10-24 03:34:30,361 INFO        337 reload.node-red: Context store  : 'default' [module=memory]
+2026-10-24 03:34:30,361 INFO        337 reload.node-red: User directory : /tmp/reload-e2e-vKbsIu/user-data/node-red
+2026-10-24 03:34:30,361 WARNING     337 reload.node-red: Projects disabled : editorTheme.projects.enabled=false
+2026-10-24 03:34:30,361 INFO        337 reload.node-red: Flows file     : /tmp/reload-e2e-vKbsIu/user-data/node-red/flows.json
+2026-10-24 03:34:30,362 INFO        337 reload.node-red: Creating new flow file
+2026-10-24 03:34:30,362 DEBUG       337 reload.node-red: loaded flow revision: 4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945
+2026-10-24 03:34:30,362 DEBUG       337 reload.node-red: red/runtime/nodes/credentials.load : user provided key
+2026-10-24 03:34:30,362 DEBUG       337 reload.node-red: red/runtime/nodes/credentials.load : keyType=user
+2026-10-24 03:34:30,362 WARNING     337 reload.node-red: Encrypted credentials not found
+2026-10-24 03:34:30,364 INFO        337 reload.runtime: Node-RED 5.0.7 started at http://127.0.0.1:39409/red (journal replay listening for 0 instances so far)
+2026-10-24 03:34:30,365 INFO        259 reload.shell: runtime generation 1 ready (pid 337)
+2026-10-24 03:34:30,365 INFO        259 reload.shell: linked runtime generation 1 and services generation 1 directly
+2026-10-24 03:34:30,365 INFO        337 reload.node-red: Starting flows
+2026-10-24 03:34:30,365 DEBUG       337 reload.node-red: red/nodes/flows.start : starting flow : global
+2026-10-24 03:34:30,365 INFO        337 reload.node-red: Started flows
+2026-10-24 03:34:30,366 INFO        337 reload.runtime: the Anytype key arrived from the services process and is redacted from now on
+2026-10-24 03:34:30,508 DEBUG       337 reload.node-red: saved flow revision: cc5c4120f2c8078506e56131931d3dd0c8632c5edb15029dcde06b5b7ab51cc0
+2026-10-24 03:34:30,508 INFO        337 reload.node-red: Stopping flows
+2026-10-24 03:34:30,508 DEBUG       337 reload.node-red: red/nodes/flows.stop : stopping flow : global
+2026-10-24 03:34:30,508 INFO        337 reload.node-red: Stopped flows
+2026-10-24 03:34:30,508 INFO        337 reload.node-red: Updated flows
+2026-10-24 03:34:30,510 INFO        337 reload.node-red: Starting flows
+2026-10-24 03:34:30,510 DEBUG       337 reload.node-red: red/nodes/flows.start : starting flow : global
+2026-10-24 03:34:30,510 DEBUG       337 reload.node-red: red/nodes/flows.start : starting flow : proof-log
+2026-10-24 03:34:30,518 INFO        337 reload.runtime: [reload-reload_folder-watch w1] spawned pid 388: /Users/martinteller/git/reload-proofs/app/release/linux-arm64-unpacked/resources/runtimes/node/bin/node --enable-source-maps /Users/martinteller/git/reload-proofs/app/release/linux-arm64-unpacked/resources/packages/reload_folder/dist/folder.cjs
+2026-10-24 03:34:30,520 INFO        337 reload.node-red: Started flows
+2026-10-24 03:34:30,578 INFO        337 reload.runtime: [reload-reload_folder-watch w1] ready
+2026-10-24 03:34:35,133 INFO        337 reload.runtime: [reload-reload_folder-watch w1] event emitted: reload_folder.file.created.v1 on port "created", fields body, modified, name, path, size
+2026-10-24 03:34:35,138 INFO        259 reload.shell: notice: a.txt: Processing a.txt.
+2026-10-24 03:34:35,924 INFO        259 reload.shell: answering `reload --quit` from a terminal
+2026-10-24 03:34:35,926 INFO        259 reload.shell: quitting: stopping the children
+2026-10-24 03:34:35,926 INFO        259 reload.shell: stopping the runtime for quit
+2026-10-24 03:34:35,929 INFO        337 reload.runtime: runtime stopping (quit)
+2026-10-24 03:34:35,929 INFO        337 reload.node-red: Stopping flows
+2026-10-24 03:34:35,929 DEBUG       337 reload.node-red: red/nodes/flows.stop : stopping flow : proof-log
+2026-10-24 03:34:35,930 DEBUG       337 reload.node-red: red/nodes/flows.stop : stopping flow : global
+2026-10-24 03:34:35,931 INFO        337 reload.runtime: [reload-reload_folder-watch w1] close acknowledged
+2026-10-24 03:34:35,942 INFO        337 reload.runtime: [reload-reload_folder-watch w1] process exited (code 0) on close
+2026-10-24 03:34:35,942 INFO        337 reload.node-red: Stopped flows
+2026-10-24 03:34:35,943 INFO        259 reload.shell: the runtime stopped (quit)
+2026-10-24 03:34:35,994 INFO        259 reload.shell: the runtime exited (code 0) on quit
+2026-10-24 03:34:35,996 INFO        259 reload.shell: stopping the services for quit
+2026-10-24 03:34:35,997 INFO        336 reload.services: services stopping (quit)
+2026-10-24 03:34:35,997 INFO        336 reload.services: anytype: stopped
+2026-10-24 03:34:35,997 INFO        336 reload.services: the Anytype MCP child session closed: the Anytype MCP child is being stopped
+2026-10-24 03:34:35,999 INFO        259 reload.shell: the services stopped (quit)
+2026-10-24 03:34:36,053 INFO        259 reload.shell: the services exited (code 0) on quit
+2026-10-24 03:34:36,055 INFO        259 reload.shell: quit complete

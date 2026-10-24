@@ -1,0 +1,17 @@
+macOS x64 (the x64 build under Rosetta 2 on Apple silicon), Reload 0.4.0, 2026-10-24
+
+The shell logs "quit complete" after both children exited 0, and then does not exit. `reload --quit`
+waits its 120 s and answers "shell (process N) is still running after the quit." with exit 1.
+
+Seen:
+- quit.ts, run at f2412384: the first `reload --quit` (after closing the window) answered exit 1.
+- refusal-notices.ts, run at 32e76aaa and again on its own: the no-key run's quit answered exit 1.
+  At f2412384 the same proof passed: the hang is intermittent.
+- Reproduced by hand with no driver and no DevTools port: a scratch HOME with no Anytype key,
+  SIGTERM to the shell; "quit complete" logged once, the process still in state R (running) 2 min
+  later, until killed. `sample` showed the main thread (com.apple.main-thread) and Rosetta's
+  exception server among its threads; nothing was signalled by the app.
+- Never seen on the arm64 build (every run of every proof quit with exit 0).
+
+Not yet known: whether an Intel Mac shows it, or only Rosetta. Until that is known these rows are
+fail, not pass.

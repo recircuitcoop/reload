@@ -1,0 +1,71 @@
+2026-10-24 05:24:17,946 INFO      10294 reload.logs: reload shell (process 10294) is logging to /private/var/folders/k_/2kvt0lj50cn68wdj6jdw253h0000gn/T/reload-e2e-jpIQbr/Library/Logs/reload/reload.log at DEBUG
+2026-10-24 05:24:17,964 INFO      10294 reload.shell: this process's HOME is /private/var/folders/k_/2kvt0lj50cn68wdj6jdw253h0000gn/T/reload-e2e-jpIQbr
+
+DevTools listening on ws://127.0.0.1:59078/devtools/browser/3af92f9d-89ca-47b9-a15a-337719f0c8be
+2026-10-24 05:24:19,147 INFO      10294 reload.shell: the runtime's port for this session is 59086
+2026-10-24 05:24:19,155 WARNING   10294 reload.shell: the Anytype desktop app was not found on this machine; Reload starts without it and everything that does not need it still runs
+2026-10-24 05:24:19,156 INFO      10294 reload.shell: the application's secrets are kept in the system keychain
+2026-10-24 05:24:19,173 INFO      10294 reload.shell: legacy import: no old config.toml was found; nothing to import
+2026-10-24 05:24:19,193 INFO      10294 reload.shell: the Anytype key is kept in /private/var/folders/k_/2kvt0lj50cn68wdj6jdw253h0000gn/T/reload-e2e-jpIQbr/.config/reload/anytype_api_key
+2026-10-24 05:24:19,361 INFO      10294 reload.shell: packages: catalogue https://catalogue.reload.example/REPLACE_ME, key (none)
+2026-10-24 05:24:20,217 INFO      10294 reload.shell: update: releases from https://github.com/REPLACE_ME/REPLACE_ME/releases, key (none)
+2026-10-24 05:24:21,841 INFO      10294 reload.shell: services generation 1 forked
+2026-10-24 05:24:21,864 INFO      10294 reload.shell: runtime generation 1 forked
+2026-10-24 05:24:22,667 INFO      10558 reload.services: this process's HOME is /private/var/folders/k_/2kvt0lj50cn68wdj6jdw253h0000gn/T/reload-e2e-jpIQbr
+2026-10-24 05:24:22,960 INFO      10558 reload.services: services generation 1 started as pid 10558
+2026-10-24 05:24:22,968 INFO      10558 reload.services: the Anytype key is read from /private/var/folders/k_/2kvt0lj50cn68wdj6jdw253h0000gn/T/reload-e2e-jpIQbr/.config/reload/anytype_api_key or /private/var/folders/k_/2kvt0lj50cn68wdj6jdw253h0000gn/T/reload-e2e-jpIQbr/Library/Application Support/innytypes/anytype_api_key
+2026-10-24 05:24:23,080 INFO      10558 reload.services: the Anytype key was read (sha256 ad1dfffeb77c)
+2026-10-24 05:24:23,639 INFO      10558 reload.services: anytype: unreachable (Anytype's local API did not answer at http://127.0.0.1:9; start the Anytype desktop app)
+2026-10-24 05:24:24,036 INFO      10294 reload.shell: services generation 1 ready (pid 10558)
+2026-10-24 05:24:24,129 INFO      10558 reload.services: asking Anytype again
+2026-10-24 05:24:24,136 INFO      10558 reload.services: the Anytype key was read (sha256 ad1dfffeb77c)
+2026-10-24 05:24:25,948 INFO      10294 reload.shell: notice: Reload cannot reach Anytype: Anytype did not answer. Open the Anytype desktop app, then come back to Reload.
+2026-10-24 05:24:26,289 INFO      10559 reload.runtime: this process's HOME is /private/var/folders/k_/2kvt0lj50cn68wdj6jdw253h0000gn/T/reload-e2e-jpIQbr
+2026-10-24 05:24:26,613 INFO      10559 reload.runtime: runtime generation 1 started as pid 10559
+2026-10-24 05:24:26,667 INFO      10559 reload.runtime: the credential secret arrived (sha256 870e1b5e)
+2026-10-24 05:24:27,059 INFO      10559 reload.runtime: journal: node:sqlite (SQLite 3.53.4), WAL, 0 entries in /private/var/folders/k_/2kvt0lj50cn68wdj6jdw253h0000gn/T/reload-e2e-jpIQbr/user-data/journal.sqlite
+2026-10-24 05:24:28,638 INFO      10559 reload.runtime: generated 6 node types: reload-reload_anytype-create-object, reload-reload_anytype-update-object, reload-reload_anytype-read-object, reload-reload_anytype-read-space, reload-reload_anytype-search, reload-reload_folder-watch
+2026-10-24 05:24:29,927 INFO      10559 reload.node-red: 
+
+Welcome to Node-RED
+===================
+
+2026-10-24 05:24:29,932 INFO      10559 reload.node-red: Node-RED version: v5.0.7
+2026-10-24 05:24:29,932 INFO      10559 reload.node-red: Node.js  version: v24.21.0
+2026-10-24 05:24:29,940 INFO      10559 reload.node-red: Darwin 25.3.0 x64 LE
+2026-10-24 05:24:29,947 INFO      10559 reload.node-red: Palette editor disabled : user settings
+2026-10-24 05:24:29,950 INFO      10559 reload.node-red: Loading palette nodes
+2026-10-24 05:24:31,033 DEBUG     10559 reload.node-red: Module: reload-reload_anytype 0.2.0 /private/var/folders/k_/2kvt0lj50cn68wdj6jdw253h0000gn/T/reload-e2e-jpIQbr/user-data/node-red/generated/reload-reload_anytype
+2026-10-24 05:24:31,033 DEBUG     10559 reload.node-red: Module: reload-reload_folder 0.1.0 /private/var/folders/k_/2kvt0lj50cn68wdj6jdw253h0000gn/T/reload-e2e-jpIQbr/user-data/node-red/generated/reload-reload_folder
+2026-10-24 05:24:32,122 INFO      10559 reload.runtime: Node-RED's own examples folder is missing in this build; harmless (WI-0018-23, arch_pivot §9.9)
+2026-10-24 05:24:32,199 INFO      10559 reload.node-red: Context store  : 'default' [module=memory]
+2026-10-24 05:24:32,200 INFO      10559 reload.node-red: User directory : /private/var/folders/k_/2kvt0lj50cn68wdj6jdw253h0000gn/T/reload-e2e-jpIQbr/user-data/node-red
+2026-10-24 05:24:32,203 WARNING   10559 reload.node-red: Projects disabled : editorTheme.projects.enabled=false
+2026-10-24 05:24:32,214 INFO      10559 reload.node-red: Flows file     : /private/var/folders/k_/2kvt0lj50cn68wdj6jdw253h0000gn/T/reload-e2e-jpIQbr/user-data/node-red/flows.json
+2026-10-24 05:24:32,265 INFO      10559 reload.node-red: Creating new flow file
+2026-10-24 05:24:32,268 DEBUG     10559 reload.node-red: loaded flow revision: 4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945
+2026-10-24 05:24:32,273 DEBUG     10559 reload.node-red: red/runtime/nodes/credentials.load : user provided key
+2026-10-24 05:24:32,300 DEBUG     10559 reload.node-red: red/runtime/nodes/credentials.load : keyType=user
+2026-10-24 05:24:32,301 WARNING   10559 reload.node-red: Encrypted credentials not found
+2026-10-24 05:24:32,367 INFO      10559 reload.runtime: Node-RED 5.0.7 started at http://127.0.0.1:59086/red (journal replay listening for 0 instances so far)
+2026-10-24 05:24:32,411 INFO      10294 reload.shell: runtime generation 1 ready (pid 10559)
+2026-10-24 05:24:32,436 INFO      10294 reload.shell: linked runtime generation 1 and services generation 1 directly
+2026-10-24 05:24:32,394 INFO      10559 reload.node-red: Starting flows
+2026-10-24 05:24:32,394 DEBUG     10559 reload.node-red: red/nodes/flows.start : starting flow : global
+2026-10-24 05:24:32,413 INFO      10559 reload.node-red: Started flows
+2026-10-24 05:24:32,510 INFO      10559 reload.runtime: the Anytype key arrived from the services process and is redacted from now on
+2026-10-24 05:24:38,460 INFO      10294 reload.shell: answering `reload --quit` from a terminal
+2026-10-24 05:24:38,462 INFO      10294 reload.shell: quitting: stopping the children
+2026-10-24 05:24:38,462 INFO      10294 reload.shell: stopping the runtime for quit
+2026-10-24 05:24:38,473 INFO      10559 reload.runtime: runtime stopping (quit)
+2026-10-24 05:24:38,837 INFO      10559 reload.node-red: Stopping flows
+2026-10-24 05:24:38,848 DEBUG     10559 reload.node-red: red/nodes/flows.stop : stopping flow : global
+2026-10-24 05:24:38,848 INFO      10559 reload.node-red: Stopped flows
+2026-10-24 05:24:39,010 INFO      10294 reload.shell: the runtime stopped (quit)
+2026-10-24 05:24:39,071 INFO      10294 reload.shell: the runtime exited (code 0) on quit
+2026-10-24 05:24:39,156 INFO      10294 reload.shell: stopping the services for quit
+2026-10-24 05:24:39,160 INFO      10558 reload.services: services stopping (quit)
+2026-10-24 05:24:39,164 INFO      10558 reload.services: anytype: stopped
+2026-10-24 05:24:39,211 INFO      10294 reload.shell: the services stopped (quit)
+2026-10-24 05:24:39,227 INFO      10294 reload.shell: the services exited (code 0) on quit
+2026-10-24 05:24:39,259 INFO      10294 reload.shell: quit complete

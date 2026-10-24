@@ -1,0 +1,5 @@
+file $HOME/Library/Logs/reload/reload.log; rotated: reload.log.1 holds the seeded 2093036 bytes
+shell pid 138: 25 lines; runtime pid 347; services pid 346
+node (reload_folder watch, instance w1): 5 lines, e.g. 2026-10-24 05:21:01,980 INFO        347 reload.runtime: [reload-reload_folder-watch w1] spawned pid 971: /Users/martinteller/git/reload-proofs/app/release/mac/Reload.app/Contents/Resources/runtimes/no
+MCP child pid 580: 2026-10-24 05:20:52,100 WARNING     580 reload.anytype-mcp: fake MCP child 580 running on stdio (canary)
+RELOAD_LOG_CANARY and the canary Anytype key the fake MCP child printed: neither in the file; [redacted] in their place

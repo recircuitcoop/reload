@@ -1,0 +1,37 @@
+2026-10-24 03:36:32,301 INFO        267 reload.logs: reload shell (process 267) is logging to /tmp/reload-e2e-8HJuMZ/.local/state/reload/log/reload.log at DEBUG
+2026-10-24 03:36:32,304 INFO        267 reload.shell: log canary: [redacted]
+2026-10-24 03:36:32,305 INFO        267 reload.shell: this process's HOME is /tmp/reload-e2e-8HJuMZ
+2026-10-24 03:36:32,646 INFO        267 reload.shell: the runtime's port for this session is 37981
+2026-10-24 03:36:32,647 WARNING     267 reload.shell: the Anytype desktop app was not found on this machine; Reload starts without it and everything that does not need it still runs
+2026-10-24 03:36:32,649 WARNING     267 reload.shell: no system keychain is available, so Reload keeps its secrets in owner-only files (0600, in a 0700 directory) instead
+2026-10-24 03:36:32,659 INFO        267 reload.shell: legacy import: no old config.toml was found; nothing to import
+2026-10-24 03:36:32,662 INFO        267 reload.shell: the Anytype key is kept in /tmp/reload-e2e-8HJuMZ/.config/reload/anytype_api_key
+2026-10-24 03:36:32,822 INFO        267 reload.shell: packages: catalogue https://catalogue.reload.example/REPLACE_ME, key (none)
+2026-10-24 03:36:32,936 INFO        267 reload.shell: update: releases from https://github.com/REPLACE_ME/REPLACE_ME/releases, key (none)
+2026-10-24 03:36:33,304 INFO        267 reload.shell: services generation 1 forked
+2026-10-24 03:36:33,313 INFO        267 reload.shell: runtime generation 1 forked
+2026-10-24 03:36:33,939 INFO        345 reload.services: log canary: [redacted]
+2026-10-24 03:36:33,942 INFO        345 reload.services: this process's HOME is /tmp/reload-e2e-8HJuMZ
+2026-10-24 03:36:33,955 INFO        345 reload.services: services generation 1 started as pid 345
+2026-10-24 03:36:33,955 INFO        345 reload.services: the Anytype key is read from /tmp/reload-e2e-8HJuMZ/.config/reload/anytype_api_key or /tmp/reload-e2e-8HJuMZ/.config/innytypes/anytype_api_key
+2026-10-24 03:36:33,977 INFO        345 reload.services: the Anytype key was read (sha256 bc0b7aceaaf6)
+2026-10-24 03:36:34,102 INFO        267 reload.shell: services generation 1 ready (pid 345)
+2026-10-24 03:36:34,165 INFO        345 reload.services: starting the Anytype MCP child (/Users/martinteller/git/reload-proofs/app/release/linux-unpacked/resources/runtimes/node/bin/node /Users/martinteller/git/reload-proofs/app/test/fixtures/fake-mcp/server.mjs --mode=canary) against http://127.0.0.1:45621
+2026-10-24 03:36:34,806 WARNING     380 reload.anytype-mcp: fake MCP child starting with Bearer [redacted]
+2026-10-24 03:36:34,806 WARNING     380 reload.anytype-mcp: fake MCP child 380 running on stdio (canary)
+2026-10-24 03:36:34,818 INFO        345 reload.services: anytype: ready
+2026-10-24 03:36:34,819 INFO        345 reload.services: the Anytype MCP child (pid 380) is ready with 3 tools, the committed surface
+2026-10-24 03:36:34,833 INFO        345 reload.services: the MCP endpoint serves http://127.0.0.1:44551/mcp
+2026-10-24 03:36:35,013 INFO        346 reload.runtime: log canary: [redacted]
+2026-10-24 03:36:35,014 INFO        346 reload.runtime: this process's HOME is /tmp/reload-e2e-8HJuMZ
+2026-10-24 03:36:35,028 INFO        346 reload.runtime: runtime generation 1 started as pid 346
+2026-10-24 03:36:35,030 INFO        346 reload.runtime: the credential secret arrived (sha256 41ff9c5f)
+2026-10-24 03:36:35,064 INFO        346 reload.runtime: journal: node:sqlite (SQLite 3.53.4), WAL, 0 entries in /tmp/reload-e2e-8HJuMZ/user-data/journal.sqlite
+2026-10-24 03:36:35,247 INFO        346 reload.runtime: generated 6 node types: reload-reload_anytype-create-object, reload-reload_anytype-update-object, reload-reload_anytype-read-object, reload-reload_anytype-read-space, reload-reload_anytype-search, reload-reload_folder-watch
+2026-10-24 03:36:35,374 INFO        346 reload.node-red: 
+
+Welcome to Node-RED
+===================
+
+2026-10-24 03:36:35,375 INFO        346 reload.node-red: Node-RED version: v5.0.7
+2026-10-24 03:36:35,376 INFO        346 reload.node-red: Node.js  version: v24.21.0

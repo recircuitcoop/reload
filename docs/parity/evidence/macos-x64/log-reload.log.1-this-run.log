@@ -1,0 +1,29 @@
+2026-10-24 05:20:45,623 INFO        138 reload.logs: reload shell (process 138) is logging to /private/var/folders/k_/2kvt0lj50cn68wdj6jdw253h0000gn/T/reload-e2e-AW5CY8/Library/Logs/reload/reload.log at DEBUG
+2026-10-24 05:20:45,637 INFO        138 reload.shell: log canary: [redacted]
+2026-10-24 05:20:45,646 INFO        138 reload.shell: this process's HOME is /private/var/folders/k_/2kvt0lj50cn68wdj6jdw253h0000gn/T/reload-e2e-AW5CY8
+2026-10-24 05:20:46,728 INFO        138 reload.shell: the runtime's port for this session is 58996
+2026-10-24 05:20:46,737 WARNING     138 reload.shell: the Anytype desktop app was not found on this machine; Reload starts without it and everything that does not need it still runs
+2026-10-24 05:20:46,739 INFO        138 reload.shell: the application's secrets are kept in the system keychain
+2026-10-24 05:20:46,756 INFO        138 reload.shell: legacy import: no old config.toml was found; nothing to import
+2026-10-24 05:20:46,777 INFO        138 reload.shell: the Anytype key is kept in /private/var/folders/k_/2kvt0lj50cn68wdj6jdw253h0000gn/T/reload-e2e-AW5CY8/.config/reload/anytype_api_key
+2026-10-24 05:20:46,900 INFO        138 reload.shell: packages: catalogue https://catalogue.reload.example/REPLACE_ME, key (none)
+2026-10-24 05:20:47,527 INFO        138 reload.shell: update: releases from https://github.com/REPLACE_ME/REPLACE_ME/releases, key (none)
+2026-10-24 05:20:49,253 INFO        138 reload.shell: services generation 1 forked
+2026-10-24 05:20:49,269 INFO        138 reload.shell: runtime generation 1 forked
+2026-10-24 05:20:50,145 INFO        346 reload.services: log canary: [redacted]
+2026-10-24 05:20:50,181 INFO        346 reload.services: this process's HOME is /private/var/folders/k_/2kvt0lj50cn68wdj6jdw253h0000gn/T/reload-e2e-AW5CY8
+2026-10-24 05:20:50,250 INFO        346 reload.services: services generation 1 started as pid 346
+2026-10-24 05:20:50,261 INFO        346 reload.services: the Anytype key is read from /private/var/folders/k_/2kvt0lj50cn68wdj6jdw253h0000gn/T/reload-e2e-AW5CY8/.config/reload/anytype_api_key or /private/var/folders/k_/2kvt0lj50cn68wdj6jdw253h0000gn/T/reload-e2e-AW5CY8/Library/Application Support/innytypes/anytype_api_key
+2026-10-24 05:20:50,389 INFO        346 reload.services: the Anytype key was read (sha256 7b6f55959c55)
+2026-10-24 05:20:51,728 INFO        346 reload.services: starting the Anytype MCP child (/Users/martinteller/git/reload-proofs/app/release/mac/Reload.app/Contents/Resources/runtimes/node/bin/node /Users/martinteller/git/reload-proofs/app/test/fixtures/fake-mcp/server.mjs --mode=canary) against http://127.0.0.1:58986
+2026-10-24 05:20:51,924 INFO        138 reload.shell: services generation 1 ready (pid 346)
+2026-10-24 05:20:52,069 WARNING     580 reload.anytype-mcp: fake MCP child starting with Bearer [redacted]
+2026-10-24 05:20:52,100 WARNING     580 reload.anytype-mcp: fake MCP child 580 running on stdio (canary)
+2026-10-24 05:20:52,144 INFO        346 reload.services: anytype: ready
+2026-10-24 05:20:52,154 INFO        346 reload.services: the Anytype MCP child (pid 580) is ready with 3 tools, the committed surface
+2026-10-24 05:20:52,217 INFO        346 reload.services: the MCP endpoint serves http://127.0.0.1:58985/mcp
+2026-10-24 05:20:53,918 INFO        347 reload.runtime: log canary: [redacted]
+2026-10-24 05:20:53,978 INFO        347 reload.runtime: this process's HOME is /private/var/folders/k_/2kvt0lj50cn68wdj6jdw253h0000gn/T/reload-e2e-AW5CY8
+2026-10-24 05:20:54,179 INFO        347 reload.runtime: runtime generation 1 started as pid 347
+2026-10-24 05:20:54,199 INFO        347 reload.runtime: the credential secret arrived (sha256 6ba31833)
+2026-10-24 05:20:54,565 INFO        347 reload.runtime: journal: node:sqlite (SQLite 3.53.4), WAL, 0 entries in /private/var/folders/k_/2kvt0lj50cn68wdj6jdw253h0000gn/T/reload-e2e-AW5CY8/user-data/journal.sqlite

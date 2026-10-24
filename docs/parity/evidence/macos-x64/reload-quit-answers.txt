@@ -1,0 +1,30 @@
+exit 0: shell stopped (process 93857)
+  services stopped (process 94080)
+Reload is off.
+exit 0: shell stopped (process 138)
+  runtime stopped (process 347)
+  services stopped (process 346)
+Reload is off.
+exit 0: shell stopped (process 3989)
+  runtime stopped (process 4190)
+  services stopped (process 4189)
+Reload is off.
+exit 1: runtime stopped (process 10559)
+  services stopped (process 10558)
+shell (process 10294) is still running after the quit.
+exit 0: shell stopped (process 17428)
+  runtime stopped (process 17695)
+  services stopped (process 17694)
+Reload is off.
+exit 0: shell stopped (process 21257)
+  runtime stopped (process 21507)
+  services stopped (process 21506)
+Reload is off.
+exit 0: shell stopped (process 25876)
+  runtime stopped (process 26078)
+  services stopped (process 26077)
+Reload is off.
+exit 0: shell stopped (process 28017)
+  runtime stopped (process 28218)
+  services stopped (process 28213)
+Reload is off.

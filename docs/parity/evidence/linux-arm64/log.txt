@@ -1,0 +1,5 @@
+file $HOME/.local/state/reload/log/reload.log; rotated: reload.log.1 holds the seeded 2093036 bytes
+shell pid 259: 24 lines; runtime pid 337; services pid 336
+node (reload_folder watch, instance w1): 5 lines, e.g. 2026-10-24 03:34:30,518 INFO        337 reload.runtime: [reload-reload_folder-watch w1] spawned pid 388: /Users/martinteller/git/reload-proofs/app/release/linux-arm64-unpacked/resources/runtimes/node/
+MCP child pid 371: 2026-10-24 03:34:29,705 WARNING     371 reload.anytype-mcp: fake MCP child 371 running on stdio (canary)
+RELOAD_LOG_CANARY and the canary Anytype key the fake MCP child printed: neither in the file; [redacted] in their place

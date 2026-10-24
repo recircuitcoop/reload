@@ -1,0 +1,3 @@
+window closed: shell 88652, runtime 88658 and services 88657 still running
+reload --quit: shell exited 0, "quit complete" logged, no process names /private/var/folders/k_/2kvt0lj50cn68wdj6jdw253h0000gn/T/reload-e2e-NckY4S/user-data
+kill -9 of shell 89252: runtime 89288 and services 89287 gone, no process names /private/var/folders/k_/2kvt0lj50cn68wdj6jdw253h0000gn/T/reload-e2e-NckY4S/user-data

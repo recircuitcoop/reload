@@ -1,0 +1,40 @@
+exit 0: [212:1024/033629.095411:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+  shell stopped (process 70)
+  runtime stopped (process 149)
+  services stopped (process 148)
+Reload is off.
+exit 0: [407:1024/033642.818672:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+  shell stopped (process 267)
+  runtime stopped (process 346)
+  services stopped (process 345)
+Reload is off.
+exit 0: [617:1024/033657.398415:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+  shell stopped (process 459)
+  runtime stopped (process 538)
+  services stopped (process 537)
+Reload is off.
+exit 0: [793:1024/033708.320566:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+  shell stopped (process 668)
+  runtime stopped (process 747)
+  services stopped (process 746)
+Reload is off.
+exit 0: [1091:1024/033734.404276:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+  shell stopped (process 968)
+  runtime stopped (process 1046)
+  services stopped (process 1045)
+Reload is off.
+exit 0: [1258:1024/033755.818769:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+  shell stopped (process 1134)
+  runtime stopped (process 1212)
+  services stopped (process 1211)
+Reload is off.
+exit 0: [1436:1024/033818.129216:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+  shell stopped (process 1302)
+  runtime stopped (process 1379)
+  services stopped (process 1378)
+Reload is off.
+exit 0: [1614:1024/033839.204680:ERROR:dbus/bus.cc:406] Failed to connect to the bus: Failed to connect to socket /run/dbus/system_bus_socket: No such file or directory
+  shell stopped (process 1478)
+  runtime stopped (process 1555)
+  services stopped (process 1554)
+Reload is off.

@@ -1,0 +1,322 @@
+{
+  "config": {
+    "argv": [
+      "/Users/martinteller/.nvm/versions/node/v22.18.0/bin/node",
+      "/Users/martinteller/git/reload-proofs/node_modules/.bin/playwright",
+      "test",
+      "-c",
+      "../tools/proofs/playwright.config.ts"
+    ],
+    "configFile": "/Users/martinteller/git/reload-proofs/tools/proofs/playwright.config.ts",
+    "rootDir": "/Users/martinteller/git/reload-proofs/tools/proofs",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/Users/martinteller/git/reload-proofs/app/test-results/proofs",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "",
+        "name": "",
+        "testDir": "/Users/martinteller/git/reload-proofs/tools/proofs",
+        "testIgnore": [
+          "harness.ts",
+          "playwright.config.ts"
+        ],
+        "testMatch": [
+          "*.ts"
+        ],
+        "timeout": 600000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "/Users/martinteller/git/reload-proofs/docs/parity/evidence/macos-x64/report.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.63.0",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "endpoint-moved.ts",
+      "file": "endpoint-moved.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "moving the endpoint while a Codex-like client runs closes the old port only after the new one binds; a collision is refused and the old kept",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 130139,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T03:18:33.379Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "aa2f461bd746922ebe30-869cce71dba6b8716b21",
+          "file": "endpoint-moved.ts",
+          "line": 34,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "log.ts",
+      "file": "log.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "the log file is at the documented path with lines from shell, runtime, services, a node and the MCP child; canary secrets are redacted; it rotates",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 80037,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T03:20:43.547Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "d6bc84058574073a0ab9-d009a0b80649ab57b384",
+          "file": "log.ts",
+          "line": 33,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "mcp-supervised.ts",
+      "file": "mcp-supervised.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "kill -9 of the MCP child restarts it; tools are served only after a fresh handshake; the breaker stops it after N exits",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 132292,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T03:22:03.602Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "fa65b2a32077f3c5cd7e-dd694fc65bd8a3843359",
+          "file": "mcp-supervised.ts",
+          "line": 23,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "quit.ts",
+      "file": "quit.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "Quit leaves no process; kill -9 of the shell leaves none; closing the window does not quit",
+          "ok": false,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "failed",
+                  "duration": 143627,
+                  "error": {
+                    "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m",
+                    "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n    at /Users/martinteller/git/reload-proofs/tools/proofs/quit.ts:32:49",
+                    "location": {
+                      "file": "/Users/martinteller/git/reload-proofs/tools/proofs/quit.ts",
+                      "column": 49,
+                      "line": 32
+                    },
+                    "snippet": "  30 |\n  31 |     // Quit, as `reload --quit` asks the running instance: every process gone.\n> 32 |     expect(await quitFromCommandLine(run, env)).toBe(0);\n     |                                                 ^\n  33 |     expect(await run.exited).toBe(0);\n  34 |     const quitLog = run.output.join(\"\");\n  35 |     expect(quitLog).toContain(\"quit complete\");"
+                  },
+                  "errors": [
+                    {
+                      "location": {
+                        "file": "/Users/martinteller/git/reload-proofs/tools/proofs/quit.ts",
+                        "column": 49,
+                        "line": 32
+                      },
+                      "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mreceived\u001b[39m\u001b[2m).\u001b[22mtoBe\u001b[2m(\u001b[22m\u001b[32mexpected\u001b[39m\u001b[2m) // Object.is equality\u001b[22m\n\nExpected: \u001b[32m0\u001b[39m\nReceived: \u001b[31m1\u001b[39m\n\n  30 |\n  31 |     // Quit, as `reload --quit` asks the running instance: every process gone.\n> 32 |     expect(await quitFromCommandLine(run, env)).toBe(0);\n     |                                                 ^\n  33 |     expect(await run.exited).toBe(0);\n  34 |     const quitLog = run.output.join(\"\");\n  35 |     expect(quitLog).toContain(\"quit complete\");\n    at /Users/martinteller/git/reload-proofs/tools/proofs/quit.ts:32:49"
+                    }
+                  ],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T03:24:15.906Z",
+                  "annotations": [],
+                  "attachments": [
+                    {
+                      "name": "error-context",
+                      "contentType": "text/markdown",
+                      "path": "/Users/martinteller/git/reload-proofs/app/test-results/proofs/quit.ts-Quit-leaves-no-pro-afd2c-ng-the-window-does-not-quit/error-context.md"
+                    }
+                  ],
+                  "errorLocation": {
+                    "file": "/Users/martinteller/git/reload-proofs/tools/proofs/quit.ts",
+                    "column": 49,
+                    "line": 32
+                  }
+                }
+              ],
+              "status": "unexpected"
+            }
+          ],
+          "id": "891e83ab2132f785d4d5-56ab8cd1380a8895a8a9",
+          "file": "quit.ts",
+          "line": 15,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "refusal-notices.ts",
+      "file": "refusal-notices.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "no key, Anytype not running, port taken, non-loopback address: each shows its notice once",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 1,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 339166,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T03:26:39.879Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "aaa449b34f3b3b32fd7e-0e31ae42691aaee98baf",
+          "file": "refusal-notices.ts",
+          "line": 65,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-24T03:18:32.854Z",
+    "duration": 826213.174,
+    "expected": 4,
+    "skipped": 0,
+    "unexpected": 1,
+    "flaky": 0
+  }
+}

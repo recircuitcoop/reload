@@ -1,0 +1,15 @@
+
+Running 5 tests using 1 worker
+
+  ✓  1 ../tools/proofs/endpoint-moved.ts:34:1 › moving the endpoint while a Codex-like client runs closes the old port only after the new one binds; a collision is refused and the old kept (7.3s)
+  ✓  2 ../tools/proofs/log.ts:33:1 › the log file is at the documented path with lines from shell, runtime, services, a node and the MCP child; canary secrets are redacted; it rotates (13.8s)
+  ✓  3 ../tools/proofs/mcp-supervised.ts:23:1 › kill -9 of the MCP child restarts it; tools are served only after a fresh handshake; the breaker stops it after N exits (14.5s)
+  ✓  4 ../tools/proofs/quit.ts:15:1 › Quit leaves no process; kill -9 of the shell leaves none; closing the window does not quit (16.8s)
+  ✓  5 ../tools/proofs/refusal-notices.ts:65:1 › no key, Anytype not running, port taken, non-loopback address: each shows its notice once (1.4m)
+
+  5 passed (2.3m)
+npm notice
+npm notice New major version of npm available! 10.9.9 -> 12.2.1
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.1
+npm notice To update run: npm install -g npm@12.2.1
+npm notice

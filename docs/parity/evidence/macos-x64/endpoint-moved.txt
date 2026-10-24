@@ -1,0 +1,3 @@
+a Codex-like MCP SDK client listed 3 tools at http://127.0.0.1:58917/mcp
+moved to http://127.0.0.1:58937/mcp: the old port served 1 calls during the move; the first time it refused, the new one already answered 200
+move to taken 127.0.0.1:58942 refused (Error: page.evaluate: Error: Error invoking remote method 'reload:mcp-endpoint-move': Error: could not bind the MCP service at 127.0.0.1:58942: EADDRINUSE); still served at http://127.0.0.1:58937/mcp, the client still listing

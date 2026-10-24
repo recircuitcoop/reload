@@ -1,0 +1,4 @@
+no key: state no-key, logged once: anytype: no-key (no Anytype API key in /tmp/reload-e2e-voVL0h/.config/reload/anytype_api_key or /tmp/reload-e2e-voVL0h/.config/innytypes/anytype_api_key: pair with Anytype in Configuration › General)
+Anytype not running: notice: Reload cannot reach Anytype: Anytype did not answer. Open the Anytype desktop app, then come back to Reload. (once; notices.json has anytype-unreachable)
+port taken: notice: Reload is running without its MCP endpoint: could not bind the MCP service at 127.0.0.1:46127: EADDRINUSE. Choose another address in Settings. (once)
+non-loopback 0.0.0.0: notice: Reload is running without its MCP endpoint: the MCP address must be loopback; wildcard and network binds are refused. Choose another address in Settings. (once)

@@ -1,0 +1,33 @@
+
+Running 5 tests using 1 worker
+
+  ✓  1 ../tools/proofs/endpoint-moved.ts:34:1 › moving the endpoint while a Codex-like client runs closes the old port only after the new one binds; a collision is refused and the old kept (2.2m)
+  ✓  2 ../tools/proofs/log.ts:33:1 › the log file is at the documented path with lines from shell, runtime, services, a node and the MCP child; canary secrets are redacted; it rotates (1.3m)
+  ✓  3 ../tools/proofs/mcp-supervised.ts:23:1 › kill -9 of the MCP child restarts it; tools are served only after a fresh handshake; the breaker stops it after N exits (2.2m)
+  ✘  4 ../tools/proofs/quit.ts:15:1 › Quit leaves no process; kill -9 of the shell leaves none; closing the window does not quit (2.4m)
+  ✓  5 ../tools/proofs/refusal-notices.ts:65:1 › no key, Anytype not running, port taken, non-loopback address: each shows its notice once (5.7m)
+
+
+  1) ../tools/proofs/quit.ts:15:1 › Quit leaves no process; kill -9 of the shell leaves none; closing the window does not quit 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: 0
+    Received: 1
+
+      30 |
+      31 |     // Quit, as `reload --quit` asks the running instance: every process gone.
+    > 32 |     expect(await quitFromCommandLine(run, env)).toBe(0);
+         |                                                 ^
+      33 |     expect(await run.exited).toBe(0);
+      34 |     const quitLog = run.output.join("");
+      35 |     expect(quitLog).toContain("quit complete");
+        at /Users/martinteller/git/reload-proofs/tools/proofs/quit.ts:32:49
+
+    Error Context: test-results/proofs/quit.ts-Quit-leaves-no-pro-afd2c-ng-the-window-does-not-quit/error-context.md
+
+  Slow test file: ../tools/proofs/refusal-notices.ts (5.7m)
+  Consider running tests from slow files in parallel. See: https://playwright.dev/docs/test-parallel
+  1 failed
+    ../tools/proofs/quit.ts:15:1 › Quit leaves no process; kill -9 of the shell leaves none; closing the window does not quit 
+  4 passed (13.8m)

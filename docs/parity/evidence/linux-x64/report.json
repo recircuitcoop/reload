@@ -1,0 +1,292 @@
+{
+  "config": {
+    "argv": [
+      "/usr/local/bin/node",
+      "/Users/martinteller/git/reload-proofs/node_modules/.bin/playwright",
+      "test",
+      "-c",
+      "../tools/proofs/playwright.config.ts"
+    ],
+    "configFile": "/Users/martinteller/git/reload-proofs/tools/proofs/playwright.config.ts",
+    "rootDir": "/Users/martinteller/git/reload-proofs/tools/proofs",
+    "failOnFlakyTests": false,
+    "forbidOnly": false,
+    "fullyParallel": false,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/Users/martinteller/git/reload-proofs/app/test-results/proofs",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "",
+        "name": "",
+        "testDir": "/Users/martinteller/git/reload-proofs/tools/proofs",
+        "testIgnore": [
+          "harness.ts",
+          "playwright.config.ts"
+        ],
+        "testMatch": [
+          "*.ts"
+        ],
+        "timeout": 600000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "list",
+        null
+      ],
+      [
+        "json",
+        {
+          "outputFile": "/Users/martinteller/git/reload-proofs/docs/parity/evidence/linux-x64/report.json"
+        }
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.63.0",
+    "workers": 1,
+    "webServer": null
+  },
+  "suites": [
+    {
+      "title": "endpoint-moved.ts",
+      "file": "endpoint-moved.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "moving the endpoint while a Codex-like client runs closes the old port only after the new one binds; a collision is refused and the old kept",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 7334,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T03:36:23.364Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "aa2f461bd746922ebe30-869cce71dba6b8716b21",
+          "file": "endpoint-moved.ts",
+          "line": 34,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "log.ts",
+      "file": "log.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "the log file is at the documented path with lines from shell, runtime, services, a node and the MCP child; canary secrets are redacted; it rotates",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 13754,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T03:36:30.750Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "d6bc84058574073a0ab9-d009a0b80649ab57b384",
+          "file": "log.ts",
+          "line": 33,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "mcp-supervised.ts",
+      "file": "mcp-supervised.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "kill -9 of the MCP child restarts it; tools are served only after a fresh handshake; the breaker stops it after N exits",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 14519,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T03:36:44.528Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "fa65b2a32077f3c5cd7e-dd694fc65bd8a3843359",
+          "file": "mcp-supervised.ts",
+          "line": 23,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "quit.ts",
+      "file": "quit.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "Quit leaves no process; kill -9 of the shell leaves none; closing the window does not quit",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 16831,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T03:36:59.064Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "891e83ab2132f785d4d5-56ab8cd1380a8895a8a9",
+          "file": "quit.ts",
+          "line": 15,
+          "column": 1
+        }
+      ]
+    },
+    {
+      "title": "refusal-notices.ts",
+      "file": "refusal-notices.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [
+        {
+          "title": "no key, Anytype not running, port taken, non-loopback address: each shows its notice once",
+          "ok": true,
+          "tags": [],
+          "tests": [
+            {
+              "timeout": 600000,
+              "annotations": [],
+              "expectedStatus": "passed",
+              "projectId": "",
+              "projectName": "",
+              "results": [
+                {
+                  "workerIndex": 0,
+                  "parallelIndex": 0,
+                  "status": "passed",
+                  "duration": 85076,
+                  "errors": [],
+                  "stdout": [],
+                  "stderr": [],
+                  "retry": 0,
+                  "startTime": "2026-10-24T03:37:15.920Z",
+                  "annotations": [],
+                  "attachments": []
+                }
+              ],
+              "status": "expected"
+            }
+          ],
+          "id": "aaa449b34f3b3b32fd7e-0e31ae42691aaee98baf",
+          "file": "refusal-notices.ts",
+          "line": 65,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-10-24T03:36:21.402Z",
+    "duration": 139641.594,
+    "expected": 5,
+    "skipped": 0,
+    "unexpected": 0,
+    "flaky": 0
+  }
+}

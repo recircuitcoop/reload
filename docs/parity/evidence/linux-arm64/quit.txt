@@ -1,0 +1,3 @@
+window closed: shell 657, runtime 735 and services 734 still running
+reload --quit: shell exited 0, "quit complete" logged, no process names /tmp/reload-e2e-rl1AXk/user-data
+kill -9 of shell 824: runtime 903 and services 902 gone, no process names /tmp/reload-e2e-rl1AXk/user-data

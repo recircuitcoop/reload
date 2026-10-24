@@ -1,0 +1,37 @@
+2026-10-24 03:34:29,395 INFO        259 reload.logs: reload shell (process 259) is logging to /tmp/reload-e2e-vKbsIu/.local/state/reload/log/reload.log at DEBUG
+2026-10-24 03:34:29,395 INFO        259 reload.shell: log canary: [redacted]
+2026-10-24 03:34:29,395 INFO        259 reload.shell: this process's HOME is /tmp/reload-e2e-vKbsIu
+2026-10-24 03:34:29,439 INFO        259 reload.shell: the runtime's port for this session is 39409
+2026-10-24 03:34:29,443 WARNING     259 reload.shell: the Anytype desktop app was not found on this machine; Reload starts without it and everything that does not need it still runs
+2026-10-24 03:34:29,449 WARNING     259 reload.shell: no system keychain is available, so Reload keeps its secrets in owner-only files (0600, in a 0700 directory) instead
+2026-10-24 03:34:29,456 INFO        259 reload.shell: legacy import: no old config.toml was found; nothing to import
+2026-10-24 03:34:29,458 INFO        259 reload.shell: the Anytype key is kept in /tmp/reload-e2e-vKbsIu/.config/reload/anytype_api_key
+2026-10-24 03:34:29,478 INFO        259 reload.shell: packages: catalogue https://catalogue.reload.example/REPLACE_ME, key (none)
+2026-10-24 03:34:29,497 INFO        259 reload.shell: update: releases from https://github.com/REPLACE_ME/REPLACE_ME/releases, key (none)
+2026-10-24 03:34:29,519 INFO        259 reload.shell: services generation 1 forked
+2026-10-24 03:34:29,523 INFO        259 reload.shell: runtime generation 1 forked
+2026-10-24 03:34:29,616 INFO        336 reload.services: log canary: [redacted]
+2026-10-24 03:34:29,616 INFO        336 reload.services: this process's HOME is /tmp/reload-e2e-vKbsIu
+2026-10-24 03:34:29,617 INFO        336 reload.services: services generation 1 started as pid 336
+2026-10-24 03:34:29,617 INFO        336 reload.services: the Anytype key is read from /tmp/reload-e2e-vKbsIu/.config/reload/anytype_api_key or /tmp/reload-e2e-vKbsIu/.config/innytypes/anytype_api_key
+2026-10-24 03:34:29,618 INFO        336 reload.services: the Anytype key was read (sha256 104bc2ec2209)
+2026-10-24 03:34:29,635 INFO        259 reload.shell: services generation 1 ready (pid 336)
+2026-10-24 03:34:29,637 INFO        336 reload.services: asking Anytype again
+2026-10-24 03:34:29,637 INFO        336 reload.services: the Anytype key was read (sha256 104bc2ec2209)
+2026-10-24 03:34:29,642 INFO        336 reload.services: starting the Anytype MCP child (/Users/martinteller/git/reload-proofs/app/release/linux-arm64-unpacked/resources/runtimes/node/bin/node /Users/martinteller/git/reload-proofs/app/test/fixtures/fake-mcp/server.mjs --mode=canary) against http://127.0.0.1:40863
+2026-10-24 03:34:29,705 WARNING     371 reload.anytype-mcp: fake MCP child starting with Bearer [redacted]
+2026-10-24 03:34:29,705 WARNING     371 reload.anytype-mcp: fake MCP child 371 running on stdio (canary)
+2026-10-24 03:34:29,706 INFO        336 reload.services: anytype: ready
+2026-10-24 03:34:29,706 INFO        336 reload.services: the Anytype MCP child (pid 371) is ready with 3 tools, the committed surface
+2026-10-24 03:34:29,710 INFO        336 reload.services: the MCP endpoint serves http://127.0.0.1:44467/mcp
+2026-10-24 03:34:29,869 INFO        337 reload.runtime: log canary: [redacted]
+2026-10-24 03:34:29,869 INFO        337 reload.runtime: this process's HOME is /tmp/reload-e2e-vKbsIu
+2026-10-24 03:34:29,871 INFO        337 reload.runtime: runtime generation 1 started as pid 337
+2026-10-24 03:34:29,872 INFO        337 reload.runtime: the credential secret arrived (sha256 bd1319dc)
+2026-10-24 03:34:29,874 INFO        337 reload.runtime: journal: node:sqlite (SQLite 3.53.4), WAL, 0 entries in /tmp/reload-e2e-vKbsIu/user-data/journal.sqlite
+2026-10-24 03:34:29,930 INFO        337 reload.runtime: generated 6 node types: reload-reload_anytype-create-object, reload-reload_anytype-update-object, reload-reload_anytype-read-object, reload-reload_anytype-read-space, reload-reload_anytype-search, reload-reload_folder-watch
+2026-10-24 03:34:29,984 INFO        337 reload.node-red: 
+
+Welcome to Node-RED
+===================
+

@@ -1,0 +1,2 @@
+kill -9 of MCP child 559: endpoint 503, then child 576 started, shook hands, endpoint 200
+breaker: stopped after 5 exits (maxCrashes 5); notice: Reload is running without the Anytype MCP child: The Anytype MCP child stopped 5 times in 600 s, so it is no longer restarted (the Anytype MCP child exited (signal SIGKILL)).

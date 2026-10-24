@@ -1,0 +1,31 @@
+2026-10-24 05:16:37,938 INFO      86273 reload.logs: reload shell (process 86273) is logging to /private/var/folders/k_/2kvt0lj50cn68wdj6jdw253h0000gn/T/reload-e2e-IOfIOE/Library/Logs/reload/reload.log at DEBUG
+2026-10-24 05:16:37,938 INFO      86273 reload.shell: log canary: [redacted]
+2026-10-24 05:16:37,938 INFO      86273 reload.shell: this process's HOME is /private/var/folders/k_/2kvt0lj50cn68wdj6jdw253h0000gn/T/reload-e2e-IOfIOE
+2026-10-24 05:16:37,983 INFO      86273 reload.shell: the runtime's port for this session is 58815
+2026-10-24 05:16:37,983 WARNING   86273 reload.shell: the Anytype desktop app was not found on this machine; Reload starts without it and everything that does not need it still runs
+2026-10-24 05:16:37,983 INFO      86273 reload.shell: the application's secrets are kept in the system keychain
+2026-10-24 05:16:37,985 INFO      86273 reload.shell: legacy import: no old config.toml was found; nothing to import
+2026-10-24 05:16:37,997 INFO      86273 reload.shell: the Anytype key is kept in /private/var/folders/k_/2kvt0lj50cn68wdj6jdw253h0000gn/T/reload-e2e-IOfIOE/.config/reload/anytype_api_key
+2026-10-24 05:16:38,008 INFO      86273 reload.shell: packages: catalogue https://catalogue.reload.example/REPLACE_ME, key (none)
+2026-10-24 05:16:38,022 INFO      86273 reload.shell: update: releases from https://github.com/REPLACE_ME/REPLACE_ME/releases, key (none)
+2026-10-24 05:16:38,097 INFO      86273 reload.shell: services generation 1 forked
+2026-10-24 05:16:38,098 INFO      86273 reload.shell: runtime generation 1 forked
+2026-10-24 05:16:38,178 INFO      86297 reload.services: log canary: [redacted]
+2026-10-24 05:16:38,179 INFO      86297 reload.services: this process's HOME is /private/var/folders/k_/2kvt0lj50cn68wdj6jdw253h0000gn/T/reload-e2e-IOfIOE
+2026-10-24 05:16:38,179 INFO      86297 reload.services: services generation 1 started as pid 86297
+2026-10-24 05:16:38,179 INFO      86297 reload.services: the Anytype key is read from /private/var/folders/k_/2kvt0lj50cn68wdj6jdw253h0000gn/T/reload-e2e-IOfIOE/.config/reload/anytype_api_key or /private/var/folders/k_/2kvt0lj50cn68wdj6jdw253h0000gn/T/reload-e2e-IOfIOE/Library/Application Support/innytypes/anytype_api_key
+2026-10-24 05:16:38,190 INFO      86297 reload.services: the Anytype key was read (sha256 d404d6b21b86)
+2026-10-24 05:16:38,201 INFO      86273 reload.shell: services generation 1 ready (pid 86297)
+2026-10-24 05:16:38,203 INFO      86297 reload.services: asking Anytype again
+2026-10-24 05:16:38,203 INFO      86297 reload.services: the Anytype key was read (sha256 d404d6b21b86)
+2026-10-24 05:16:38,208 INFO      86297 reload.services: starting the Anytype MCP child (/Users/martinteller/git/reload-proofs/app/release/mac-arm64/Reload.app/Contents/Resources/runtimes/node/bin/node /Users/martinteller/git/reload-proofs/app/test/fixtures/fake-mcp/server.mjs --mode=canary) against http://127.0.0.1:58811
+2026-10-24 05:16:38,241 WARNING   86303 reload.anytype-mcp: fake MCP child starting with Bearer [redacted]
+2026-10-24 05:16:38,241 WARNING   86303 reload.anytype-mcp: fake MCP child 86303 running on stdio (canary)
+2026-10-24 05:16:38,242 INFO      86297 reload.services: anytype: ready
+2026-10-24 05:16:38,242 INFO      86297 reload.services: the Anytype MCP child (pid 86303) is ready with 3 tools, the committed surface
+2026-10-24 05:16:38,245 INFO      86297 reload.services: the MCP endpoint serves http://127.0.0.1:58810/mcp
+2026-10-24 05:16:38,284 INFO      86298 reload.runtime: log canary: [redacted]
+2026-10-24 05:16:38,284 INFO      86298 reload.runtime: this process's HOME is /private/var/folders/k_/2kvt0lj50cn68wdj6jdw253h0000gn/T/reload-e2e-IOfIOE
+2026-10-24 05:16:38,285 INFO      86298 reload.runtime: runtime generation 1 started as pid 86298
+2026-10-24 05:16:38,286 INFO      86298 reload.runtime: the credential secret arrived (sha256 1c77d206)
+2026-10-24 05:16:38,312 INFO      86298 reload.runtime: journal: node:sqlite (SQLite 3.53.4), WAL, 0 entries in /private/var/folders/k_/2kvt0lj50cn68wdj6jdw253h0000gn/T/reload-e2e-IOfIOE/user-data/journal.sqlite
