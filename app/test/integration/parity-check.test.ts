@@ -71,40 +71,41 @@ describe("the clean fixture ledger", () => {
 });
 
 describe("each refusal the work item names, from its fixture ledger", () => {
-  it("refuses a ported id that was skipped", () => {
-    expect(checkParity(options("skipped-port")).errors).toEqual([
-      "row tests/test_a.py::test_one: vitest:test/unit/a.test.ts::the thing is skipped did not pass in this gate (skipped)",
-    ]);
-  });
-
-  it("refuses a ported id that does not exist", () => {
-    expect(checkParity(options("nonexistent-port")).errors).toEqual([
-      "row tests/test_a.py::test_one: vitest:test/unit/a.test.ts::a test nobody wrote did not run in this gate (missing from the vitest report)",
-    ]);
-  });
-
-  it("refuses a retired row with no reason_code", () => {
-    expect(checkParity(options("retired-without-reason-code")).errors).toEqual([
-      "row tests/test_a.py::test_two[x]: a retired row needs a reason_code",
-    ]);
-  });
-
-  it("refuses an owner-retired-behaviour row with no owner_ack", () => {
-    expect(checkParity(options("missing-owner-ack")).errors).toEqual([
-      'row tests/test_a.py::test_two[x]: owner-retired-behaviour needs owner_ack "yes"',
-    ]);
-  });
-
-  it("refuses a duplicated row", () => {
-    expect(checkParity(options("duplicated-row")).errors).toEqual([
-      "duplicated row: tests/test_b.py::test_three appears 2 times",
-    ]);
-  });
-
-  it("refuses a ledger missing an old id", () => {
-    expect(checkParity(options("missing-old-id")).errors).toEqual([
-      "old id missing from the ledger: tests/test_b.py::test_three",
-    ]);
+  it.each([
+    {
+      title: "refuses a ported id that was skipped",
+      fixture: "skipped-port",
+      error:
+        "row tests/test_a.py::test_one: vitest:test/unit/a.test.ts::the thing is skipped did not pass in this gate (skipped)",
+    },
+    {
+      title: "refuses a ported id that does not exist",
+      fixture: "nonexistent-port",
+      error:
+        "row tests/test_a.py::test_one: vitest:test/unit/a.test.ts::a test nobody wrote did not run in this gate (missing from the vitest report)",
+    },
+    {
+      title: "refuses a retired row with no reason_code",
+      fixture: "retired-without-reason-code",
+      error: "row tests/test_a.py::test_two[x]: a retired row needs a reason_code",
+    },
+    {
+      title: "refuses an owner-retired-behaviour row with no owner_ack",
+      fixture: "missing-owner-ack",
+      error: 'row tests/test_a.py::test_two[x]: owner-retired-behaviour needs owner_ack "yes"',
+    },
+    {
+      title: "refuses a duplicated row",
+      fixture: "duplicated-row",
+      error: "duplicated row: tests/test_b.py::test_three appears 2 times",
+    },
+    {
+      title: "refuses a ledger missing an old id",
+      fixture: "missing-old-id",
+      error: "old id missing from the ledger: tests/test_b.py::test_three",
+    },
+  ])("$title", ({ fixture, error }) => {
+    expect(checkParity(options(fixture)).errors).toEqual([error]);
   });
 });
 

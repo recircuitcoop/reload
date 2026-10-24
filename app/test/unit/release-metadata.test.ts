@@ -70,48 +70,46 @@ describe("parseReleaseMetadata", () => {
     expect(error).toMatchObject({ reason });
   };
 
-  it("refuses a line that is not key: value", () => {
-    refuse(
-      "version: 1.0.0\nfiles:\n  - url: a\n    sha512: b\n    size: 1\nnot a line",
-      "malformed",
-    );
-  });
-
-  it("refuses an unknown top-level key", () => {
-    refuse(
-      "version: 1.0.0\nfiles:\n  - url: a\n    sha512: b\n    size: 1\nbogus: nope",
-      "unknown-key",
-    );
-  });
-
-  it("refuses a key that appears twice", () => {
-    refuse(
-      "version: 1.0.0\nversion: 2.0.0\nfiles:\n  - url: a\n    sha512: b\n    size: 1",
-      "malformed",
-    );
-  });
-
-  it("refuses a missing version", () => {
-    refuse("files:\n  - url: a\n    sha512: b\n    size: 1", "missing-version");
-  });
-
-  it("refuses files: holding an inline value", () => {
-    refuse("version: 1.0.0\nfiles: not-a-sequence", "malformed");
-  });
-
-  it("refuses an empty files: block", () => {
-    refuse("version: 1.0.0\nfiles:\npath: x", "missing-files");
-  });
-
-  it("refuses an unknown file key", () => {
-    refuse(
-      "version: 1.0.0\nfiles:\n  - url: a\n    sha512: b\n    size: 1\n    bogus: c",
-      "malformed-file",
-    );
-  });
-
-  it("refuses a file missing a required field", () => {
-    refuse("version: 1.0.0\nfiles:\n  - url: a\n    sha512: b", "malformed-file");
+  const FILE = "files:\n  - url: a\n    sha512: b\n    size: 1";
+  it.each([
+    {
+      title: "refuses a line that is not key: value",
+      text: `version: 1.0.0\n${FILE}\nnot a line`,
+      reason: "malformed",
+    },
+    {
+      title: "refuses an unknown top-level key",
+      text: `version: 1.0.0\n${FILE}\nbogus: nope`,
+      reason: "unknown-key",
+    },
+    {
+      title: "refuses a key that appears twice",
+      text: `version: 1.0.0\nversion: 2.0.0\n${FILE}`,
+      reason: "malformed",
+    },
+    { title: "refuses a missing version", text: FILE, reason: "missing-version" },
+    {
+      title: "refuses files: holding an inline value",
+      text: "version: 1.0.0\nfiles: not-a-sequence",
+      reason: "malformed",
+    },
+    {
+      title: "refuses an empty files: block",
+      text: "version: 1.0.0\nfiles:\npath: x",
+      reason: "missing-files",
+    },
+    {
+      title: "refuses an unknown file key",
+      text: `version: 1.0.0\n${FILE}\n    bogus: c`,
+      reason: "malformed-file",
+    },
+    {
+      title: "refuses a file missing a required field",
+      text: "version: 1.0.0\nfiles:\n  - url: a\n    sha512: b",
+      reason: "malformed-file",
+    },
+  ])("$title", ({ text, reason }) => {
+    refuse(text, reason);
   });
 
   it("refuses a size that is not a whole number", () => {
