@@ -28,9 +28,9 @@ import {
   MAX_HEADER_BYTES,
 } from "../../src/domain/endpoint/limits";
 import { REDACTED, SecretRegistry } from "../../src/domain/redaction/registry";
-import type { McpSession, McpTool } from "../../src/ports/anytype";
+import type { McpTool } from "../../src/ports/anytype";
 import type { McpHandler } from "../../src/ports/mcp-gateway";
-import { unpairedFiles } from "../fakes/anytype";
+import { AnsweringSession, unpairedFiles } from "../fakes/anytype";
 import { RecordingLogger } from "../fakes/children";
 
 const TOKEN = "fake-mcp-proxy-token-0123456789";
@@ -39,46 +39,6 @@ const PING = { jsonrpc: "2.0", id: 1, method: "ping" };
 const PONG = { jsonrpc: "2.0", id: 1, result: {} };
 
 // ── helpers ────────────────────────────────────────────────────────────────────────────────
-
-/** A child session that records what it was asked; `hold` keeps each call open until released. */
-class RecordingSession implements McpSession {
-  closed = false;
-  readonly calls: string[] = [];
-  delayMs = 0;
-  #held: (() => void)[] = [];
-  hold = false;
-  entered = 0;
-
-  initialize(): Promise<readonly McpTool[]> {
-    return Promise.resolve([TOOL]);
-  }
-  ping(): Promise<void> {
-    return Promise.resolve();
-  }
-  async request(method: string, params: Readonly<Record<string, unknown>> = {}): Promise<unknown> {
-    this.calls.push(method);
-    this.entered += 1;
-    if (this.hold) {
-      await new Promise<void>((resolve) => this.#held.push(resolve));
-    }
-    if (this.delayMs > 0) {
-      await new Promise((resolve) => setTimeout(resolve, this.delayMs));
-    }
-    return { content: [{ type: "text", text: params["name"] }] };
-  }
-  release(): void {
-    for (const resolve of this.#held.splice(0)) {
-      resolve();
-    }
-  }
-  close(): void {
-    this.closed = true;
-  }
-
-  onBroken(): void {
-    // never broken here
-  }
-}
 
 function freePort(host = "127.0.0.1"): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -115,7 +75,7 @@ afterEach(async () => {
 interface Serving {
   readonly gateway: HttpMcpGateway;
   readonly port: number;
-  readonly session: RecordingSession;
+  readonly session: AnsweringSession;
   readonly logger: RecordingLogger;
 }
 
@@ -128,7 +88,7 @@ async function serving(
     served?: () => ServedMcp | null;
   } = {},
 ): Promise<Serving> {
-  const session = new RecordingSession();
+  const session = new AnsweringSession([TOOL]);
   const logger = new RecordingLogger();
   const gateway = new HttpMcpGateway({
     token: options.token ?? TOKEN,
@@ -624,7 +584,7 @@ describe("the bounds", () => {
     const call = { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "get_object" } };
     const admitted = Array.from({ length: MAX_CONCURRENT_REQUESTS }, () => post(port, call));
     await vi.waitFor(() => {
-      expect(session.entered).toBe(MAX_CONCURRENT_REQUESTS);
+      expect(session.calls.length).toBe(MAX_CONCURRENT_REQUESTS);
     });
     expect(await post(port, call)).toEqual([429, { error: "request bound is full" }]);
     session.release();
@@ -729,7 +689,7 @@ describe("the bounds", () => {
     const socket = net.connect(port, "127.0.0.1");
     socket.write(head(port, call.length) + call);
     await vi.waitFor(() => {
-      expect(session.entered).toBe(1);
+      expect(session.calls.length).toBe(1);
     });
     socket.resetAndDestroy();
     session.release();
@@ -885,7 +845,7 @@ describe("moving the endpoint", () => {
       params: { name: "get_object" },
     });
     await vi.waitFor(() => {
-      expect(session.entered).toBe(1);
+      expect(session.calls.length).toBe(1);
     });
     const newPort = await freePort();
     await gateway.serveAt("127.0.0.1", newPort);

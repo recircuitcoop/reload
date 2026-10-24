@@ -8,8 +8,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { mcpDispatch } from "../../src/application/mcp-dispatch";
 import { MINTED_BODY_TOOLS } from "../../src/domain/anytype/minted-body";
-import type { McpSession, McpTool } from "../../src/ports/anytype";
-import { unpairedFiles } from "../fakes/anytype";
+import type { McpTool } from "../../src/ports/anytype";
+import { AnsweringSession, unpairedFiles } from "../fakes/anytype";
 import { RecordingLogger } from "../fakes/children";
 import { FakeClock } from "../fakes/clock";
 
@@ -43,32 +43,9 @@ const DOCUMENT = {
   blocks: [{ id: "b1", text: { text: "hello", style: "Paragraph" } }],
 };
 
-/** A child session that records the params of every call it is asked to run. */
-class RecordingSession implements McpSession {
-  closed = false;
-  readonly calls: Readonly<Record<string, unknown>>[] = [];
-
-  initialize(): Promise<readonly McpTool[]> {
-    return Promise.resolve(TOOLS);
-  }
-  ping(): Promise<void> {
-    return Promise.resolve();
-  }
-  request(_method: string, params: Readonly<Record<string, unknown>> = {}): Promise<unknown> {
-    this.calls.push(params);
-    return Promise.resolve({ content: [{ type: "text", text: "{}" }] });
-  }
-  close(): void {
-    this.closed = true;
-  }
-  onBroken(): void {
-    // never broken here
-  }
-}
-
 /** Sends one tools/call through mcpDispatch; returns the answer and what the child was asked. */
 async function call(name: string, args: Readonly<Record<string, unknown>>) {
-  const session = new RecordingSession();
+  const session = new AnsweringSession(TOOLS, () => ({ content: [{ type: "text", text: "{}" }] }));
   const logger = new RecordingLogger();
   const handle = mcpDispatch({
     served: () => ({ session, tools: TOOLS }),
@@ -84,7 +61,7 @@ async function call(name: string, args: Readonly<Record<string, unknown>>) {
     params: { name, arguments: args },
   };
   const answer = await handle(new TextEncoder().encode(JSON.stringify(request)));
-  return { answer, forwarded: session.calls };
+  return { answer, forwarded: session.calls.map((made) => made.params) };
 }
 
 describe("the unwrap shim", () => {

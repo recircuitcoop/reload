@@ -125,6 +125,54 @@ export class FakeSession implements McpSession {
   }
 }
 
+/**
+ * A served child session that records every call and answers it with `answer` (a throw is the
+ * child's refusal). `hold` keeps each call open until `release()`; `delayMs` answers late.
+ */
+export class AnsweringSession implements McpSession {
+  closed = false;
+  readonly calls: { method: string; params: Readonly<Record<string, unknown>> }[] = [];
+  hold = false;
+  delayMs = 0;
+  readonly #held: (() => void)[] = [];
+
+  constructor(
+    readonly tools: readonly McpTool[],
+    /** The default echoes the called tool's name as text. */
+    public answer: (params: Readonly<Record<string, unknown>>) => unknown = (params) => ({
+      content: [{ type: "text", text: params["name"] }],
+    }),
+  ) {}
+
+  initialize(): Promise<readonly McpTool[]> {
+    return Promise.resolve(this.tools);
+  }
+  ping(): Promise<void> {
+    return Promise.resolve();
+  }
+  async request(method: string, params: Readonly<Record<string, unknown>> = {}): Promise<unknown> {
+    this.calls.push({ method, params });
+    if (this.hold) {
+      await new Promise<void>((resolve) => this.#held.push(resolve));
+    }
+    if (this.delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, this.delayMs));
+    }
+    return this.answer(params);
+  }
+  release(): void {
+    for (const resolve of this.#held.splice(0)) {
+      resolve();
+    }
+  }
+  close(): void {
+    this.closed = true;
+  }
+  onBroken(): void {
+    // never broken here
+  }
+}
+
 export class FakeMcpChild implements McpChild {
   readonly session = new FakeSession();
   stops = 0;

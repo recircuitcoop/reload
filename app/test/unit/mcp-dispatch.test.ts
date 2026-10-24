@@ -21,44 +21,14 @@ import { MCP_PROTOCOL_VERSION } from "../../src/domain/anytype/pins";
 import { SessionError } from "../../src/domain/anytype/errors";
 import { sourceLog } from "../../src/application/source-log";
 import { REDACTED, SecretRegistry } from "../../src/domain/redaction/registry";
-import type { FetchedFile, FileRequest, McpSession, McpTool } from "../../src/ports/anytype";
+import type { FetchedFile, FileRequest, McpTool } from "../../src/ports/anytype";
 import type { Logger } from "../../src/ports/logger";
-import { unpairedFiles } from "../fakes/anytype";
+import { AnsweringSession, unpairedFiles } from "../fakes/anytype";
 import { RecordingLogger } from "../fakes/children";
 import { FakeClock } from "../fakes/clock";
 
 const KEY = "dispatch-canary-key-0123456789";
 const TOOL: McpTool = { name: "get_object", inputSchema: { type: "object" } };
-
-/** A child session that records what it was asked instead of asking a child. */
-class RecordingSession implements McpSession {
-  closed = false;
-  readonly calls: { method: string; params: unknown }[] = [];
-  answer: (params: Readonly<Record<string, unknown>>) => unknown = (params) => ({
-    content: [{ type: "text", text: params["name"] }],
-  });
-
-  initialize(): Promise<readonly McpTool[]> {
-    return Promise.resolve([TOOL]);
-  }
-  ping(): Promise<void> {
-    return Promise.resolve();
-  }
-  request(method: string, params: Readonly<Record<string, unknown>> = {}): Promise<unknown> {
-    this.calls.push({ method, params });
-    // An answer that throws becomes the rejection, as a refusal from the child does.
-    return new Promise((resolve) => {
-      resolve(this.answer(params));
-    });
-  }
-  close(): void {
-    this.closed = true;
-  }
-
-  onBroken(): void {
-    // never broken here
-  }
-}
 
 function subject(
   served: ServedMcp | null,
@@ -83,7 +53,7 @@ function subject(
 
 describe("the MCP exchange", () => {
   it("runs initialize, initialized, ping, tools/list and tools/call, keeping every id", async () => {
-    const session = new RecordingSession();
+    const session = new AnsweringSession([TOOL]);
     const send = subject({ session, tools: [TOOL] });
 
     const initialized = await send({ jsonrpc: "2.0", id: "init-a", method: "initialize" });
@@ -144,7 +114,7 @@ describe("the MCP exchange", () => {
     [{ name: 7 }],
     ["not-an-object"],
   ])("refuses tools/call %j before the child hears of it", async (params) => {
-    const session = new RecordingSession();
+    const session = new AnsweringSession([TOOL]);
     const answer = await subject({ session, tools: [TOOL] })({
       jsonrpc: "2.0",
       id: 5,
@@ -156,7 +126,7 @@ describe("the MCP exchange", () => {
   });
 
   it("answers a body that is not an MCP request as JSON-RPC, with a null id, never an invented one", async () => {
-    const session = new RecordingSession();
+    const session = new AnsweringSession([TOOL]);
     const send = subject({ session, tools: [TOOL] });
     expect(await send(new TextEncoder().encode("{not json at all"))).toEqual({
       status: 200,
@@ -188,7 +158,7 @@ describe("an unavailable child", () => {
   });
 
   it("is 503 when the session it was handed has closed", async () => {
-    const session = new RecordingSession();
+    const session = new AnsweringSession([TOOL]);
     session.closed = true;
     const answer = await subject({ session, tools: [TOOL] })({
       jsonrpc: "2.0",
@@ -201,7 +171,7 @@ describe("an unavailable child", () => {
   });
 
   it("turns a refusal from the child into an MCP error carrying its message", async () => {
-    const session = new RecordingSession();
+    const session = new AnsweringSession([TOOL]);
     session.answer = () => {
       throw new SessionError("the Anytype MCP child timed out answering tools/call");
     };
@@ -226,7 +196,7 @@ describe("the log of tools/call", () => {
   const ARGUMENT = "an-argument-only-the-client-should-see";
 
   it("has one INFO line per call with its tool name, duration and answer size, never its arguments", async () => {
-    const session = new RecordingSession();
+    const session = new AnsweringSession([TOOL]);
     const clock = new FakeClock();
     const logger = new RecordingLogger();
     // The child takes 250 ms to answer, on the clock the dispatch times the call with.
@@ -251,7 +221,7 @@ describe("the log of tools/call", () => {
   });
 
   it("logs a call the child refused, a call it never saw and a call while it is down, but no other method", async () => {
-    const session = new RecordingSession();
+    const session = new AnsweringSession([TOOL]);
     session.answer = () => {
       throw new SessionError("the Anytype MCP child timed out answering tools/call");
     };
@@ -295,7 +265,11 @@ describe("a tool name carrying a credential", () => {
       now: () => 0,
       registry,
     });
-    const send = subject({ session: new RecordingSession(), tools: [TOOL] }, registry, logger);
+    const send = subject(
+      { session: new AnsweringSession([TOOL]), tools: [TOOL] },
+      registry,
+      logger,
+    );
     // Every offset, so the key straddles any length a cut could fall at (85 is where the
     // first half of the key once survived a 100-character cut made before redaction).
     for (let pad = 0; pad <= 120; pad++) {
@@ -319,7 +293,7 @@ describe("a tool name carrying a credential", () => {
 describe("the Anytype key", () => {
   /** A child whose every answer carries the key: a description, a schema, a result, a refusal. */
   function leaky(error: boolean) {
-    const session = new RecordingSession();
+    const session = new AnsweringSession([TOOL]);
     session.answer = () => {
       if (error) {
         throw new SessionError(`the Anytype MCP child refused tools/call: 401 Bearer ${KEY}`);
@@ -403,7 +377,7 @@ describe("a file download", () => {
   });
 
   it("download never crosses the child's pipes", async () => {
-    const session = new RecordingSession();
+    const session = new AnsweringSession([TOOL]);
     const logger = new RecordingLogger();
     const { downloads, asked } = anytypeFiles(
       {
@@ -472,7 +446,7 @@ describe("a file download", () => {
   });
 
   it("resources/read serves the same file", async () => {
-    const session = new RecordingSession();
+    const session = new AnsweringSession([TOOL]);
     const { downloads } = anytypeFiles({
       doc: { bytes: PDF, contentType: "application/pdf" },
       note: { bytes: new TextEncoder().encode("plain words"), contentType: "text/plain" },
@@ -579,7 +553,7 @@ describe("a file download", () => {
       bin: { bytes: binary, contentType: "application/octet-stream" },
       note: { bytes: new TextEncoder().encode(`the key is ${KEY}`), contentType: "text/plain" },
     });
-    const session = new RecordingSession();
+    const session = new AnsweringSession([TOOL]);
     // The child writes a `blob` of its own: it is the child's, so it is redacted.
     session.answer = () => ({
       content: [{ type: "resource", resource: { uri: "x:", mimeType: "text/plain", blob: KEY } }],
@@ -640,7 +614,7 @@ describe("every tools/call and resources/read is told for the usage signals (pla
   });
 
   it("tells the tool only when the validated set holds it, the client initialize named, and how it ended", async () => {
-    const session = new RecordingSession();
+    const session = new AnsweringSession([TOOL]);
     const told: unknown[] = [];
     const clock = new FakeClock();
     let served: ServedMcp | null = { session, tools: [TOOL] };
@@ -705,7 +679,7 @@ describe("every tools/call and resources/read is told for the usage signals (pla
   });
 
   it("names each call's client by its own session, not by the latest initialize", async () => {
-    const session = new RecordingSession();
+    const session = new AnsweringSession([TOOL]);
     const told: { client: string | null }[] = [];
     let minted = 0;
     const handle = mcpDispatch({
