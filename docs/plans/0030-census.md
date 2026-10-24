@@ -2,7 +2,7 @@
 type: census
 title: Plan 0030 census — gate time before and after
 created: 2026-10-23
-updated: 2026-10-23
+updated: 2026-10-24
 ---
 
 # 0030 census
@@ -194,7 +194,46 @@ of it the app's own fixed 60 s scheduled check and 30 s ready window) is the lon
   candidate was clearly proved by a unit or integration test already, so none was moved here.
 - **WI-0030-01's per-file finding list** (keep / merge / move / delete for every test file): this
   census covers time, counts and coverage only, as the owner asked for gate time first.
-- **WI-0030-03/04 line tidying** (tables, shared fakes, fixture builders): not started; it does
-  not cut gate time.
+- **WI-0030-03/04**: done, see below.
 - **Vitest**: after folder-source, the stage is bounded by `node-process.test.ts` (9 s) and
   `desktop-apps.test.ts` (7 s); not worth touching for time.
+
+## WI-0030-03 and WI-0030-04 (2026-10-24, on main `d8a04701`)
+
+The suite was already mostly tabled: a scan for `it` blocks whose bodies differ only in
+literals found few groups, and every one worth a table is now one. No test was deleted, so
+every parity ledger id still resolves; each tabled case keeps its own name through `$title`.
+
+| Change | Files | Kind |
+|---|---|---|
+| `AnsweringSession` in `fakes/anytype.ts` replaces three `RecordingSession` copies | `mcp-dispatch`, `minted-body-shim`, `mcp-gateway` | one fake per port |
+| `MemorySecretStore` records writes; `secret-store.test.ts`'s `MemoryStore` copy gone | `secret-store` | one fake per port |
+| `pingPackage` in `fakes/package-archive.ts` replaces four copies of the one-type package | `package-install`, `-sources`, `-updates`, `-board` | fixture builder |
+| refusal cases as `it.each` tables | `parity-check` (6), `release-metadata` (8) | tables |
+
+Looked at and left, with the reason:
+
+- **The 2 skipped vitest tests** (`integration/bundled-runtimes.test.ts`): not dead. They run
+  where `npm run runtimes:fetch` has fetched the real runtimes, and skip in the gate because the
+  gate takes no network. They are the only test of the bundled binaries outside a packaged app.
+- **Framework tests**: none found. No snapshot tests; the tests that pin a constant
+  (`CHANNEL_VERSION`, `RELOAD_KEYWORD`, the stale window, the log rotation) pin a wire
+  contract or a decision, which a behaviour test would not notice changing.
+- **The two `FakeProcess` (NodeProcess) fakes** (`instance-readiness`, `anytype-refusals`) and
+  `dataview-shim`'s scripted child: their answers are what the tests assert, so one shared fake
+  would need each answer as an option, which is more code than the copies.
+
+| Suite (`.ts`) | Lines before | Lines after |
+|---|---|---|
+| `app/test/unit` | 48 569 | 48 505 |
+| `app/test/integration` | 19 868 | 19 751 |
+| `app/test/fakes` | 1 713 | 1 795 |
+| **net** | | **−99** |
+
+Tests: 5 040 passed, 2 skipped, before and after (unit + integration). Coverage before and
+after, identical: 95.25 % statements, 91.87 % branches, 95.35 % lines; no file's covered line
+or branch count changed, the critical files included.
+
+The parity ledger's last undecided row outside plan 0032
+(`test_helper_tick.py::test_the_mcp_childs_declared_numbers_are_its_own_and_its_promise_outlasts_the_pass`)
+is ported to the four tests that now hold each of its numbers.
