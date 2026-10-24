@@ -30,7 +30,6 @@ export interface WatcherConfig {
  */
 export const QUIT_FILENAME = "quit-recorded.json";
 
-
 /** How the shell ended, in the only three ways that change what happens next. */
 export type ShellEnding = "crashed" | "stopped" | "quit";
 
