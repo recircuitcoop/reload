@@ -25,7 +25,7 @@ export type SpaceNames = readonly string[] | "unavailable" | "withheld";
 const WHAT_AND_WHEN =
   "This is the user's own Anytype (their spaces, pages, notes, tasks, collections and " +
   "objects), reached through Reload on this computer. Use it whenever the user mentions " +
-  'Anytype, names one of their spaces, asks about their notes, pages, tasks or objects, or ' +
+  "Anytype, names one of their spaces, asks about their notes, pages, tasks or objects, or " +
   'says things like "check in ...", "look in my ..." or "what does my ... say". Look it up ' +
   "here before answering from memory.";
 
