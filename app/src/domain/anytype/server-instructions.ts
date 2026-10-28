@@ -49,7 +49,7 @@ function cleaned(name: string): string {
 }
 
 /** The spaces sentence, listing as many names as the room left allows. */
-function spacesSentence(spaces: SpaceNames, room: number): string | null {
+export function spacesSentence(spaces: SpaceNames, room: number): string | null {
   if (spaces === "withheld") {
     return null;
   }

@@ -18,7 +18,10 @@ import {
   type ServedMcp,
 } from "../../src/application/mcp-dispatch";
 import { MCP_PROTOCOL_VERSION } from "../../src/domain/anytype/pins";
-import { composeServerInstructions } from "../../src/domain/anytype/server-instructions";
+import {
+  composeServerInstructions,
+  type SpaceNames,
+} from "../../src/domain/anytype/server-instructions";
 import { SessionError } from "../../src/domain/anytype/errors";
 import { sourceLog } from "../../src/application/source-log";
 import { REDACTED, SecretRegistry } from "../../src/domain/redaction/registry";
@@ -124,6 +127,108 @@ describe("initialize instructions (plan 0033)", () => {
     )();
     expect(text).toContain("Hidden Name");
     expect(JSON.stringify(logger)).not.toContain("Hidden Name");
+  });
+});
+
+describe("tools/list metadata (plan 0033, E)", () => {
+  const TOOLS: (McpTool & { description: string })[] = [
+    { name: "API-search-space", description: "Search a space.", inputSchema: { type: "object" } },
+    {
+      name: "API-delete-object",
+      description: "Delete an object.",
+      inputSchema: { type: "object" },
+    },
+    { name: "API-get-object", description: "Get an object.", inputSchema: { type: "object" } },
+    { name: "API-patch-object", description: "Patch an object.", inputSchema: { type: "object" } },
+  ];
+  const LIST = { jsonrpc: "2.0", id: 1, method: "tools/list" };
+
+  function listing(
+    spaceNames?: () => Promise<SpaceNames>,
+    session = new AnsweringSession(TOOLS),
+    tools: readonly McpTool[] = TOOLS,
+  ) {
+    const logger = new RecordingLogger();
+    const handle = mcpDispatch({
+      served: () => ({ session, tools }),
+      redact: (text) => text,
+      clock: new FakeClock(),
+      logger,
+      files: unpairedFiles(logger),
+      instructionsWaitMs: 50,
+      ...(spaceNames === undefined ? {} : { spaceNames }),
+    });
+    return async (payload: unknown = LIST) =>
+      (
+        (await handle(new TextEncoder().encode(JSON.stringify(payload)))).body as {
+          result: { tools: Record<string, unknown>[] };
+        }
+      ).result.tools;
+  }
+  const byName = (tools: Record<string, unknown>[], name: string) =>
+    tools.find((tool) => tool["name"] === name) as Record<string, unknown>;
+
+  it("annotates reads, writes and deletes, and keeps every name", async () => {
+    const tools = await listing()();
+    expect(tools.map((tool) => tool["name"])).toEqual(TOOLS.map((tool) => tool.name));
+    expect(byName(tools, "API-get-object")["annotations"]).toMatchObject({
+      readOnlyHint: true,
+      destructiveHint: false,
+    });
+    expect(byName(tools, "API-patch-object")["annotations"]).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: false,
+    });
+    expect(byName(tools, "API-delete-object")["annotations"]).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: true,
+      openWorldHint: false,
+    });
+  });
+
+  it("starts descriptions with Use this when and keeps Anytype's text", async () => {
+    const tools = await listing()();
+    expect(byName(tools, "API-search-space")["description"]).toMatch(
+      /^Use this when the user asks what one of their Anytype spaces says .* Search a space\.$/,
+    );
+  });
+
+  it("puts the live space names in the list and search tools only", async () => {
+    const tools = await listing(() => Promise.resolve(["Work", "Home"]))();
+    expect(byName(tools, "API-search-space")["description"]).toContain(
+      'The user\'s spaces are: "Work", "Home".',
+    );
+    expect(byName(tools, "API-get-object")["description"]).not.toContain("Work");
+  });
+
+  it("lists without names when withheld, unavailable, late or failing", async () => {
+    const never = () => new Promise<SpaceNames>(() => undefined);
+    for (const names of [
+      () => Promise.resolve("withheld" as const),
+      () => Promise.resolve("unavailable" as const),
+      never,
+      () => Promise.reject(new Error("Work")),
+    ]) {
+      const description = byName(await listing(names)(), "API-search-space")["description"];
+      expect(description).toMatch(/^Use this when /);
+      expect(description).not.toContain("spaces are");
+      expect(description).not.toContain("Work");
+    }
+  });
+
+  it("does not mutate the child's tools, and tools/call still forwards by the original name", async () => {
+    const session = new AnsweringSession(TOOLS);
+    const before = JSON.stringify(TOOLS);
+    const send = listing(() => Promise.resolve(["Work"]), session);
+    await send();
+    expect(JSON.stringify(TOOLS)).toBe(before);
+    await send({
+      jsonrpc: "2.0",
+      id: 2,
+      method: "tools/call",
+      params: { name: "API-delete-object", arguments: { id: "x" } },
+    });
+    expect(session.calls.at(-1)?.params["name"]).toBe("API-delete-object");
   });
 });
 

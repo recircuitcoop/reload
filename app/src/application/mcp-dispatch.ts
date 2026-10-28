@@ -40,6 +40,8 @@ import type { McpCallFacts, McpWork } from "../domain/telemetry/reports";
 import type { McpAnswer, McpHandler } from "../ports/mcp-gateway";
 import { dataviewShim, type DataviewRefusal } from "./dataview-shim";
 import { unwrapMintedBody } from "./minted-body-shim";
+import type { SpaceNames } from "../domain/anytype/server-instructions";
+import { withToolMetadata } from "../domain/anytype/tool-classes";
 
 /** The validated child as the endpoint serves it: its session and the tools it listed. */
 export interface ServedMcp {
@@ -73,6 +75,12 @@ export interface McpDispatchDeps {
    * never logged.
    */
   readonly instructions?: () => Promise<string | undefined>;
+  /**
+   * The person's live space names for tools/list descriptions (plan 0033, E): the same source the
+   * instructions are composed from. "withheld" or "unavailable" send no names. It may be slow or
+   * throw: tools/list waits for it at most `instructionsWaitMs`, then lists without names.
+   */
+  readonly spaceNames?: () => Promise<SpaceNames>;
   /** What initialize sends when `instructions` is late or fails; none when absent. */
   readonly unavailableInstructions?: string;
   /** How long initialize waits for `instructions`; INSTRUCTIONS_WAIT_MS when none is given. */
@@ -183,7 +191,13 @@ export function mcpDispatch(deps: McpDispatchDeps): McpHandler {
   return async (body, session) => {
     const started = deps.clock.now();
     const request = parsed(body);
-    const answer = await dispatch(request, deps.served, deps.files, () => initializeText(deps));
+    const answer = await dispatch(
+      request,
+      deps.served,
+      deps.files,
+      () => initializeText(deps),
+      () => listedNames(deps),
+    );
     let sent: McpAnswer =
       answer.body === null
         ? answer
@@ -257,6 +271,30 @@ async function initializeText(deps: McpDispatchDeps): Promise<string | undefined
   }
 }
 
+/** The space names for a tools/list, within the wait; "unavailable" when late, failed or absent. */
+async function listedNames(deps: McpDispatchDeps): Promise<SpaceNames> {
+  if (deps.spaceNames === undefined) {
+    return "unavailable";
+  }
+  let cancel = (): void => undefined;
+  const late = new Promise<"unavailable">((resolve) => {
+    const timer = setTimeout(() => {
+      resolve("unavailable");
+    }, deps.instructionsWaitMs ?? INSTRUCTIONS_WAIT_MS);
+    cancel = () => {
+      clearTimeout(timer);
+    };
+  });
+  try {
+    return await Promise.race([deps.spaceNames(), late]);
+  } catch {
+    // Never the failure's message: it could quote what Anytype answered.
+    return "unavailable";
+  } finally {
+    cancel();
+  }
+}
+
 /** The body as JSON, or undefined when it is not UTF-8 JSON. */
 function parsed(body: Uint8Array): unknown {
   try {
@@ -271,6 +309,7 @@ async function dispatch(
   served: () => ServedMcp | null,
   files: FileDownloads,
   instructions: () => Promise<string | undefined>,
+  names: () => Promise<SpaceNames>,
 ): Promise<McpAnswer> {
   if (request === undefined) {
     return { status: 200, body: error(null, -32700, "invalid JSON") };
@@ -312,7 +351,12 @@ async function dispatch(
     return { status: 503, body: error(id, -32000, CHILD_UNAVAILABLE) };
   }
   if (method === "tools/list") {
-    return { status: 200, body: result(id, { tools: child.tools }) };
+    // Only the answer is rewritten (plan 0033, E); child.tools, routing and telemetry keep names.
+    const spaces = await names();
+    return {
+      status: 200,
+      body: result(id, { tools: child.tools.map((tool) => withToolMetadata(tool, spaces)) }),
+    };
   }
   if (method === "resources/read") {
     return readFile(id, request["params"], child, files);

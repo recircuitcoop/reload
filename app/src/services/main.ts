@@ -46,7 +46,7 @@ import {
 } from "../application/serve-shell";
 import { mcpChildLines, printCanary, sourceLog } from "../application/source-log";
 import { DEFAULT_API_BASE_URL } from "../domain/anytype/pins";
-import { composeServerInstructions } from "../domain/anytype/server-instructions";
+import { composeServerInstructions, type SpaceNames } from "../domain/anytype/server-instructions";
 import type { InitConfig, SecretPaths } from "../domain/channel/messages";
 import type { RuntimeLocator } from "../ports/runtime-locator";
 import { MCP_HOST_VARIABLE, MCP_PORT_VARIABLE } from "../domain/endpoint/address";
@@ -182,6 +182,17 @@ function buildEndpoint(config: InitConfig, secrets: SecretStore): McpEndpoint | 
     logger.error(endpointProblem);
     return null;
   }
+  const spaceNames = async (): Promise<SpaceNames> => {
+    const key = secrets.read("anytype-api-key");
+    if (key === null) {
+      return "unavailable";
+    }
+    try {
+      return (await anytypeApi.listSpaces(key)).map((space) => space.name);
+    } catch {
+      return "unavailable";
+    }
+  };
   const gateway = new HttpMcpGateway({
     token,
     handle: mcpDispatch({
@@ -199,18 +210,9 @@ function buildEndpoint(config: InitConfig, secrets: SecretStore): McpEndpoint | 
       },
       newSession: () => randomBytes(16).toString("hex"),
       // Composed from the live spaces at each initialize (plan 0033); the names go nowhere else.
-      instructions: async () => {
-        const key = secrets.read("anytype-api-key");
-        if (key === null) {
-          return composeServerInstructions("unavailable");
-        }
-        try {
-          const spaces = await anytypeApi.listSpaces(key);
-          return composeServerInstructions(spaces.map((space) => space.name));
-        } catch {
-          return composeServerInstructions("unavailable");
-        }
-      },
+      instructions: async () => composeServerInstructions(await spaceNames()),
+      // The same names, for the tool descriptions in tools/list (plan 0033, E).
+      spaceNames,
       unavailableInstructions: composeServerInstructions("unavailable"),
       files: new FileDownloads({
         source: anytypeApi,
