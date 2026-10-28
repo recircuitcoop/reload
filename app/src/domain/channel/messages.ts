@@ -125,6 +125,11 @@ export type CallOp =
   | "anytype.check"
   | "mcp.endpoint"
   | "mcp.endpoint.move"
+  /** Reload's entry in the AI apps' server lists (plan 0033 §B). */
+  | "aiApps.list"
+  | "aiApps.connect"
+  | "aiApps.repair"
+  | "aiApps.disconnect"
   /** Which instances of some packages' types are deployed and ready (WI-0018-17's update). */
   | "package.ready"
   | "package.reload"
@@ -176,6 +181,10 @@ const CALL_OPS: readonly string[] = [
   "anytype.check",
   "mcp.endpoint",
   "mcp.endpoint.move",
+  "aiApps.list",
+  "aiApps.connect",
+  "aiApps.repair",
+  "aiApps.disconnect",
   "package.ready",
   "package.reload",
   "node.status",

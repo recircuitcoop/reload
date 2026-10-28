@@ -24,6 +24,7 @@ import type {
   AiAppId,
   AppProcesses,
 } from "../ports/ai-app-connections";
+import type { CallOp, OpResult } from "../domain/channel/messages";
 import type { Clock } from "../ports/clock";
 import type { Logger } from "../ports/logger";
 import type { AiAppRecordStore } from "../ports/settings-store";
@@ -35,6 +36,15 @@ export interface AiAppStatus {
   readonly state: AiAppState;
   /** Reload's own earlier entry, out of date; rewritten at the next start or move. */
   readonly stale: boolean;
+}
+
+/** One client as the pages list it: who it is, whether it is here, and what Reload's entry is. */
+export interface AiAppListing extends AiAppStatus {
+  readonly name: string;
+  readonly company: string;
+  readonly restartName: string;
+  /** Installed, or its server list is there: worth offering. */
+  readonly found: boolean;
 }
 
 /** A connect that would overwrite an entry somebody changed, or one that cannot be written. */
@@ -75,6 +85,31 @@ export class AiAppService {
   /** The clients this installation can connect. */
   clients(): AiAppId[] {
     return Object.keys(this.#deps.clients) as AiAppId[];
+  }
+
+  /** Every client with its profile and state, for Setup and Configuration. */
+  async list(): Promise<AiAppListing[]> {
+    return Promise.all(
+      this.clients().map(async (client) => {
+        const connections = this.#connections(client);
+        let status: AiAppStatus;
+        try {
+          status = await this.state(client);
+        } catch (error) {
+          // A file that cannot be read is not Reload's to overwrite: shown as changed outside.
+          this.#deps.logger.warn(
+            `the ${client} entry could not be read: ${(error as Error).message}`,
+          );
+          status = { client, state: "changed-outside", stale: false };
+        }
+        return { ...status, ...connections.profile, found: connections.isInstalled() };
+      }),
+    );
+  }
+
+  /** Whether `id` is one of the clients; the page's word is checked, not trusted. */
+  has(id: unknown): id is AiAppId {
+    return typeof id === "string" && (this.clients() as string[]).includes(id);
   }
 
   async state(client: AiAppId): Promise<AiAppStatus> {
@@ -237,5 +272,34 @@ export class AiAppService {
         `the record of ${client} could not be cleared: ${(error as Error).message}`,
       );
     }
+  }
+}
+
+/** The services process's answer to a shell call for the AI apps (AppApi's aiApp members). */
+export async function serveAiAppCall(
+  service: AiAppService,
+  op: CallOp,
+  args: unknown,
+): Promise<OpResult> {
+  try {
+    if (op === "aiApps.list") {
+      return { ok: true, value: await service.list() };
+    }
+    const id = (args as { id?: unknown } | null)?.id;
+    if (!service.has(id)) {
+      return { ok: false, error: "that AI app is not one Reload can connect" };
+    }
+    if (op === "aiApps.connect") {
+      service.connect(id);
+    } else if (op === "aiApps.repair") {
+      service.repair(id);
+    } else if (op === "aiApps.disconnect") {
+      service.disconnect(id);
+    } else {
+      return { ok: false, error: `the AI apps do not serve ${op}` };
+    }
+    return { ok: true, value: await service.list() };
+  } catch (error) {
+    return { ok: false, error: (error as Error).message };
   }
 }

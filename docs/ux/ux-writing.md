@@ -80,8 +80,8 @@ The status indicator, top right, is one word: **Running**, **Restarting…**, **
 
 ## The first run (Setup)
 
-Shown once, in this order: Welcome, Reports, Connect Anytype, Start with an example?, Source
-folder, the starter's step forms, Ready. After Ready, Setup never shows again (owner, 2026-10-02).
+Shown once, in this order: Welcome, Reports, Connect Anytype, Connect your AI apps, Start with an
+example?, Source folder, the starter's step forms, Ready. After Ready, Setup never shows again (owner, 2026-10-02).
 
 There is no package step. The packages that ship inside the app (anytype and folder in 0.3.0, D17
 and D18) are set up on their own while Setup runs. The example (the starter flow) is elective
@@ -104,6 +104,8 @@ Configuration, which Setup cannot reach). A step form's refusal names its fields
 | Reports | **Help improve Reload?** | "Send usage counts, under a machine id that carries no name. Never your recordings, transcripts or notes. You can change this in Configuration › General." | Send reports · Don't send |
 | Anytype | **Connect Anytype** | Running: "Anytype is asking for a code. Type it here." Not running: "Open Anytype, then come back. Reload will notice." | Connect · Skip for now |
 | Anytype, done | | "Connected. Found 8 spaces." | Continue |
+| AI apps | **Connect your AI apps** | One block for each app found, with the app's name and its company filled in: "Connecting lets ChatGPT and Codex look things up in your Anytype through Reload." "What the tools return is sent to OpenAI." Then, once: "ChatGPT uses Reload in its Work view, not in normal Chat." After Skip: "Skipped. You can connect it later in Configuration › General." After Connect: "Connected." Written while the app was running: "Restart ChatGPT to finish." An entry made by hand is there: "An entry for Reload made by hand is already there. Repair replaces it." A write that failed: "Couldn't connect ChatGPT and Codex. Try again, or connect it later in Configuration › General." | Back · Continue; beside each app: Connect (primary) · Skip (not chosen beforehand), or Repair |
+| AI apps, none found | **Connect your AI apps** | "No AI apps found on this computer. You can connect one later in Configuration › General." | Back · Continue |
 | Example | **Start with an example?** | "The example files every new file in a folder you choose as a page in Anytype. You can change it or delete it later in Configuration › Flows." | Back · Skip the example · Use the example |
 | Example, Anytype not connected | **Start with an example?** | The same, then "The example needs Anytype. Connect it first." | Back · Skip the example · Connect Anytype (back to the Anytype step) |
 | Example, Anytype has no space | **Start with an example?** | The same, then "Anytype has no space yet. Create one in Anytype, then come back." Read again when the window is back in front. | Back · Skip the example · Check again |
@@ -116,7 +118,7 @@ Configuration, which Setup cannot reach). A step form's refusal names its fields
 starter stays installed; the person can switch it off or delete it there.
 
 **The Setup sidebar** lists the steps by these labels, in order: **Welcome** · **Reports** ·
-**Anytype** · **Example** · **Source folder** · **Steps** · **Ready**. The node forms share the
+**Anytype** · **AI apps** · **Example** · **Source folder** · **Steps** · **Ready**. The node forms share the
 one entry **Steps**; its progress is the "Step n of N" line on the screen, not the sidebar. With
 the example skipped, **Source folder** and **Steps** are not listed.
 

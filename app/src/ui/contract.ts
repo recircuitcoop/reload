@@ -124,6 +124,20 @@ export type ViewResult =
       readonly code?: "restarting" | "down" | "timeout" | "stopped";
     };
 
+/** One AI app Reload can connect (plan 0033 §C), as Setup and Configuration list it. */
+export interface AiAppListing {
+  readonly client: string;
+  /** Who it is, in a person's words: data of the client list, never typed by a page. */
+  readonly name: string;
+  readonly company: string;
+  readonly restartName: string;
+  /** Installed, or its server list is there: worth offering. */
+  readonly found: boolean;
+  readonly state: "connected" | "not-connected" | "changed-outside" | "restart-app";
+  /** Reload's own earlier entry, out of date; rewritten at the next start. */
+  readonly stale: boolean;
+}
+
 /**
  * The loopback MCP endpoint (WI-0018-19); see domain/endpoint/status.ts. Neither credential is
  * ever in it: a client needs the URL and the proxy token file, and the page shows only the URL.
@@ -230,6 +244,14 @@ export interface AppApi extends AppApiV2 {
    * old endpoint then still serves and nothing was stored.
    */
   moveMcpEndpoint(host: string, port: number): Promise<McpEndpointStatus>;
+  /** The AI apps Reload can connect, each with its state. */
+  aiApps(): Promise<readonly AiAppListing[]>;
+  /** Add Reload's entry to one app's server list; the list again. Rejects when it was changed outside Reload. */
+  connectAiApp(id: string): Promise<readonly AiAppListing[]>;
+  /** Write Reload's entry over whatever is there (the person pressed Repair); the list again. */
+  repairAiApp(id: string): Promise<readonly AiAppListing[]>;
+  /** Remove Reload's entry, and nothing else; the list again. */
+  disconnectAiApp(id: string): Promise<readonly AiAppListing[]>;
   /**
    * The token the MCP endpoint checks, read at the call from where it is kept, for Set up
    * ChatGPT's Copy token alone: the page puts it on the clipboard and never draws or keeps it.

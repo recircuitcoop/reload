@@ -18,7 +18,7 @@ import { fileAiAppConnections } from "../adapters/fs/ai-app-clients";
 import { OwnerOnlyFileStore } from "../adapters/fs/owner-only-files";
 import { ProcessTableAppProcesses } from "../adapters/process/app-processes";
 import { mcpHelperPath } from "../adapters/process/mcp-helper-path";
-import { AiAppService } from "../application/ai-app-connections";
+import { AiAppService, serveAiAppCall } from "../application/ai-app-connections";
 import { JsonSettingsStore } from "../adapters/fs/settings-store";
 import { BundledRuntimeLocator } from "../adapters/process/bundled-runtime-locator";
 import { unpackedDir } from "../adapters/process/command";
@@ -226,7 +226,7 @@ function buildEndpoint(config: InitConfig, secrets: SecretStore): McpEndpoint | 
   // and stale: at start and after a move, once the endpoint serves its address.
   const settings = new JsonSettingsStore(path.join(config.userDir, "settings.json"));
   const helper = mcpHelperPath(process.env["RELOAD_RUNTIMES_DIR"], __dirname);
-  const aiApps = new AiAppService({
+  aiApps = new AiAppService({
     clients: fileAiAppConnections(os.homedir(), process.platform),
     record: settings,
     desired: () => {
@@ -239,7 +239,7 @@ function buildEndpoint(config: InitConfig, secrets: SecretStore): McpEndpoint | 
   });
   return new McpEndpoint({
     onServed: () => {
-      aiApps.repairIfStale();
+      aiApps?.repairIfStale();
     },
     settings,
     variables: {
@@ -255,6 +255,8 @@ function buildEndpoint(config: InitConfig, secrets: SecretStore): McpEndpoint | 
 // Built at init, which carries the secret paths the shell resolved (§4.1).
 let service: AnytypeService | null = null;
 let endpoint: McpEndpoint | null = null;
+// Lifted to module scope so the pages can reach it (Setup, Configuration).
+let aiApps: AiAppService | null = null;
 let endpointProblem = "the MCP endpoint has not started yet";
 function startService(config: InitConfig): void {
   if (config.secretFiles === undefined) {
@@ -318,6 +320,11 @@ serveShell({
   // The listener closes before the child stops, so a client meets a refused connection.
   onStop: () => stopServing(endpoint ?? { stop: () => Promise.resolve() }, service),
   onCall: (op, args) => {
+    if (op.startsWith("aiApps.")) {
+      return aiApps === null
+        ? Promise.resolve({ ok: false, error: "the AI apps have not started yet" })
+        : serveAiAppCall(aiApps, op, args);
+    }
     if (op.startsWith("mcp.")) {
       return endpoint === null
         ? Promise.resolve({ ok: false, error: endpointProblem })

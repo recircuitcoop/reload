@@ -1,7 +1,8 @@
 // Setup, the first-run walkthrough (plan 0022 §H, ux-writing "The first run (Setup)", owner
 // decisions 1 and 8 of 2026-10-02; owner, 2026-10-20: the example is elective, with a Skip).
 //
-// The steps, in order: Welcome, Reports, Connect Anytype, Start with an example?, Source folder
+// The steps, in order: Welcome, Reports, Connect Anytype, Connect AI apps (plan 0033 §C), Start
+// with an example?, Source folder
 // (the folder the example, the starter flow, watches), one form per step of the starter flow, and
 // Ready. There is no packages step (the packages are set up on their own) and no recorder step.
 //
@@ -26,12 +27,20 @@
 //   or the reports question was already answered.
 
 export type SetupStep =
-  "welcome" | "reports" | "connect-anytype" | "example" | "source-folder" | "node-forms" | "ready";
+  | "welcome"
+  | "reports"
+  | "connect-anytype"
+  | "connect-ai-apps"
+  | "example"
+  | "source-folder"
+  | "node-forms"
+  | "ready";
 
 export const SETUP_STEPS: readonly SetupStep[] = [
   "welcome",
   "reports",
   "connect-anytype",
+  "connect-ai-apps",
   "example",
   "source-folder",
   "node-forms",
@@ -67,7 +76,8 @@ export const FIRST_SETUP: SetupState = {
 const LINEAR_NEXT: Partial<Record<SetupStep, SetupStep>> = {
   welcome: "reports",
   reports: "connect-anytype",
-  "connect-anytype": "example",
+  "connect-anytype": "connect-ai-apps",
+  "connect-ai-apps": "example",
 };
 
 /** Setup is shown until it completes, and never after. */

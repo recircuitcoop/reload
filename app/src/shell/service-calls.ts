@@ -58,6 +58,12 @@ export function wireServiceCalls(
   ipc.handle(IPC.mcpEndpointMove, (_event, host: unknown, port: unknown) =>
     callServices("mcp.endpoint.move", { host, port }),
   );
+  ipc.handle(IPC.aiApps, () => callServices("aiApps.list", null));
+  ipc.handle(IPC.aiAppConnect, (_event, id: unknown) => callServices("aiApps.connect", { id }));
+  ipc.handle(IPC.aiAppRepair, (_event, id: unknown) => callServices("aiApps.repair", { id }));
+  ipc.handle(IPC.aiAppDisconnect, (_event, id: unknown) =>
+    callServices("aiApps.disconnect", { id }),
+  );
   // Copy token (WI-0022-30): read from its owner-only file at the press, handed to the page for
   // the clipboard only, and never logged. The refusal names no value.
   ipc.handle(IPC.mcpToken, () => {

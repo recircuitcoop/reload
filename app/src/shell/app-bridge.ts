@@ -6,6 +6,7 @@ import type { IpcRenderer } from "electron";
 import { appApiV2Over } from "./app-bridge-v2";
 import { IPC } from "./ipc";
 import type {
+  AiAppListing,
   AnytypeStatus,
   AnytypeTool,
   AppApi,
@@ -46,6 +47,12 @@ export function appApiOver(ipc: RendererIpc): AppApi {
     mcpEndpoint: () => ipc.invoke(IPC.mcpEndpoint) as Promise<McpEndpointStatus>,
     moveMcpEndpoint: (host: string, port: number) =>
       ipc.invoke(IPC.mcpEndpointMove, host, port) as Promise<McpEndpointStatus>,
+    aiApps: () => ipc.invoke(IPC.aiApps) as Promise<readonly AiAppListing[]>,
+    connectAiApp: (id: string) =>
+      ipc.invoke(IPC.aiAppConnect, id) as Promise<readonly AiAppListing[]>,
+    repairAiApp: (id: string) => ipc.invoke(IPC.aiAppRepair, id) as Promise<readonly AiAppListing[]>,
+    disconnectAiApp: (id: string) =>
+      ipc.invoke(IPC.aiAppDisconnect, id) as Promise<readonly AiAppListing[]>,
     mcpToken: () => ipc.invoke(IPC.mcpToken) as Promise<string>,
     anytypeTools: () => ipc.invoke(IPC.anytypeTools) as Promise<readonly AnytypeTool[]>,
     submitView: (id, values) =>

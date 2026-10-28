@@ -15,7 +15,7 @@ import type {
 } from "../../src/ports/anytype";
 import type { Logger } from "../../src/ports/logger";
 import type { SecretName, SecretStore } from "../../src/ports/secret-store";
-import type { AnytypeStatus, AnytypeTool, McpEndpointStatus } from "../../src/ui/contract";
+import type { AiAppListing, AnytypeStatus, AnytypeTool, McpEndpointStatus } from "../../src/ui/contract";
 
 /** AppApi's Anytype and MCP endpoint members for a page test that never calls them. */
 export const ANYTYPE_UNUSED = {
@@ -25,6 +25,11 @@ export const ANYTYPE_UNUSED = {
   completeAnytypePairing: (): Promise<AnytypeStatus> => Promise.reject(new Error("not used here")),
   mcpEndpoint: (): Promise<McpEndpointStatus> => Promise.reject(new Error("not used here")),
   moveMcpEndpoint: (): Promise<McpEndpointStatus> => Promise.reject(new Error("not used here")),
+  aiApps: (): Promise<readonly AiAppListing[]> => Promise.reject(new Error("not used here")),
+  connectAiApp: (): Promise<readonly AiAppListing[]> => Promise.reject(new Error("not used here")),
+  repairAiApp: (): Promise<readonly AiAppListing[]> => Promise.reject(new Error("not used here")),
+  disconnectAiApp: (): Promise<readonly AiAppListing[]> =>
+    Promise.reject(new Error("not used here")),
   mcpToken: (): Promise<string> => Promise.reject(new Error("not used here")),
   anytypeTools: (): Promise<readonly AnytypeTool[]> => Promise.reject(new Error("not used here")),
 };

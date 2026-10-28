@@ -37,6 +37,7 @@ import { t, type PlainKey } from "../strings";
 import { wordRefusal } from "../words";
 import { useAnytype } from "./GeneralScreen";
 import { Marked, SetupForm } from "./SetupForm";
+import { AiAppsStep } from "./SetupAiApps";
 import { ReportsStep } from "./SetupReports";
 
 /** The Setup sidebar's labels (ux-writing, the Setup sidebar). */
@@ -44,6 +45,7 @@ const SETUP_NAV_LABEL: Readonly<Record<SetupNavEntry, PlainKey>> = {
   welcome: "setup.nav.welcome",
   reports: "setup.nav.reports",
   anytype: "setup.nav.anytype",
+  aiApps: "setup.nav.aiApps",
   example: "setup.nav.example",
   folder: "setup.nav.folder",
   steps: "setup.nav.steps",
@@ -131,6 +133,8 @@ function Step(props: StepProps) {
       return <ReportsStep {...props} />;
     case "connect-anytype":
       return <AnytypeStep {...props} />;
+    case "connect-ai-apps":
+      return <AiAppsStep {...props} />;
     case "example":
       return <ExampleStep {...props} />;
     case "source-folder":

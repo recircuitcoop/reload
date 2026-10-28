@@ -12,7 +12,20 @@ export type { AiAppEntry, TableRead };
 /** The clients Reload can connect. A second client is one more member here and one more adapter. */
 export type AiAppId = "codex";
 
+/** What the person is told about a client; data from the client list, worded in ui/strings.ts. */
+export interface AiAppProfile {
+  /** The apps that read the file, as a person names them. */
+  readonly name: string;
+  /** Whose servers receive what the tools return. */
+  readonly company: string;
+  /** The app to restart once the file changed under it. */
+  readonly restartName: string;
+}
+
 export interface AiAppConnections {
+  readonly profile: AiAppProfile;
+  /** Whether the app, or the folder its file lives in, is on this computer (plan 0033 §C). */
+  isInstalled(): boolean;
   /** The executable of the desktop app that reads this file, where Reload can name one. */
   readonly appExecutable: string | null;
   /** Reload's entry as the file has it. A missing file has none. Throws when it cannot be read. */

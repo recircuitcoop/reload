@@ -22,6 +22,12 @@ export const IPC = {
   mcpEndpoint: "reload:mcp-endpoint",
   /** invoke: move the MCP endpoint, with a host and a port. */
   mcpEndpointMove: "reload:mcp-endpoint-move",
+  /** invoke: the AI apps Reload can connect, with their states (plan 0033 §C). */
+  aiApps: "reload:ai-apps",
+  /** invoke: Connect, Repair or Disconnect one AI app, by id; each answers the list again. */
+  aiAppConnect: "reload:ai-app-connect",
+  aiAppRepair: "reload:ai-app-repair",
+  aiAppDisconnect: "reload:ai-app-disconnect",
   /** invoke: the MCP endpoint's token, for Copy token (WI-0022-30). */
   mcpToken: "reload:mcp-token",
   /** invoke: which Anytype tools exist, from the recorded surface (plan 0032, group 16). */

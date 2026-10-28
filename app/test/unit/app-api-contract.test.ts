@@ -61,6 +61,10 @@ const CALLS: Record<string, { call: (api: AppApi) => Promise<unknown>; sent: unk
     call: (api) => api.moveMcpEndpoint("127.0.0.1", 31011),
     sent: [IPC.mcpEndpointMove, "127.0.0.1", 31011],
   },
+  aiApps: { call: (api) => api.aiApps(), sent: [IPC.aiApps] },
+  connectAiApp: { call: (api) => api.connectAiApp("a"), sent: [IPC.aiAppConnect, "a"] },
+  repairAiApp: { call: (api) => api.repairAiApp("a"), sent: [IPC.aiAppRepair, "a"] },
+  disconnectAiApp: { call: (api) => api.disconnectAiApp("a"), sent: [IPC.aiAppDisconnect, "a"] },
   mcpToken: { call: (api) => api.mcpToken(), sent: [IPC.mcpToken] },
   anytypeTools: { call: (api) => api.anytypeTools(), sent: [IPC.anytypeTools] },
   submitView: {

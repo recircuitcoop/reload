@@ -28,6 +28,7 @@ const NEW_DIRECTORY_MODE = 0o700;
 
 /** ChatGPT's executable on macOS; elsewhere Reload names no running app and the state is omitted. */
 const CHATGPT_MACOS = "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT";
+const CHATGPT_BUNDLE_MACOS = "/Applications/ChatGPT.app";
 
 /** The config file could not be read or written. */
 export class AiAppFileError extends Error {
@@ -38,11 +39,22 @@ let scratchCounter = 0;
 
 export class CodexConfigConnections implements AiAppConnections {
   readonly appExecutable: string | null;
+  readonly profile = { name: "ChatGPT and Codex", company: "OpenAI", restartName: "ChatGPT" };
   readonly #file: string;
+  readonly #platform: NodeJS.Platform;
 
   constructor(home: string, platform: NodeJS.Platform) {
     this.#file = path.join(home, ".codex", "config.toml");
+    this.#platform = platform;
     this.appExecutable = platform === "darwin" ? CHATGPT_MACOS : null;
+  }
+
+  /** ChatGPT's app on macOS, or the shared list's folder on any system. */
+  isInstalled(): boolean {
+    return (
+      (this.#platform === "darwin" && fs.existsSync(CHATGPT_BUNDLE_MACOS)) ||
+      fs.existsSync(path.dirname(this.#file))
+    );
   }
 
   read(): TableRead {
