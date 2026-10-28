@@ -55,6 +55,8 @@ export function appApiOver(ipc: RendererIpc): AppApi {
     disconnectAiApp: (id: string) =>
       ipc.invoke(IPC.aiAppDisconnect, id) as Promise<readonly AiAppListing[]>,
     anytypeTools: () => ipc.invoke(IPC.anytypeTools) as Promise<readonly AnytypeTool[]>,
+    spaceNamesToAiApps: () => ipc.invoke(IPC.spaceNames) as Promise<boolean>,
+    setSpaceNamesToAiApps: (on: boolean) => ipc.invoke(IPC.setSpaceNames, on) as Promise<boolean>,
     submitView: (id, values) =>
       ipc.invoke(IPC.viewCall, { op: "view.submit", args: { id, values } }) as Promise<ViewResult>,
     openView: async (id) => {

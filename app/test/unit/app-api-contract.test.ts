@@ -65,6 +65,11 @@ const CALLS: Record<string, { call: (api: AppApi) => Promise<unknown>; sent: unk
   connectAiApp: { call: (api) => api.connectAiApp("a"), sent: [IPC.aiAppConnect, "a"] },
   repairAiApp: { call: (api) => api.repairAiApp("a"), sent: [IPC.aiAppRepair, "a"] },
   disconnectAiApp: { call: (api) => api.disconnectAiApp("a"), sent: [IPC.aiAppDisconnect, "a"] },
+  spaceNamesToAiApps: { call: (api) => api.spaceNamesToAiApps(), sent: [IPC.spaceNames] },
+  setSpaceNamesToAiApps: {
+    call: (api) => api.setSpaceNamesToAiApps(false),
+    sent: [IPC.setSpaceNames, false],
+  },
   anytypeTools: { call: (api) => api.anytypeTools(), sent: [IPC.anytypeTools] },
   submitView: {
     call: (api) => api.submitView("v1", { a: 1 }),

@@ -32,3 +32,13 @@ export const AI_APPS_STRINGS = {
   "general.aiApps.disconnect": "Disconnect",
   "general.aiApps.failed": "Couldn't change {app}'s connection. Try again.",
 } as const;
+
+// ── Configuration › General › AI apps: the space names switch (plan 0033 D, decision D2) ──────
+// Its own block, spread on its own in strings.ts, apart from the AI apps rows above.
+
+export const SPACE_NAMES_STRINGS = {
+  "general.aiApps.spaceNames": "Tell AI apps the names of my spaces",
+  "general.aiApps.spaceNames.what":
+    "The names of your Anytype spaces go to the AI app's company at each new conversation.",
+  "general.aiApps.spaceNames.failed": "Couldn't change this setting. Try again.",
+} as const;

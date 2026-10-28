@@ -50,6 +50,7 @@ import { AdvancedSection } from "./GeneralAdvanced";
 import { AiAppRows } from "./GeneralAiApps";
 import { PackagesSection } from "./GeneralPackages";
 import { RecordersSection, WithCode } from "./GeneralRecorders";
+import { SpaceNamesSwitch } from "./GeneralSpaceNames";
 import { UpdatesSection } from "./GeneralUpdates";
 import { PrivacyNotice } from "./PrivacyNotice";
 
@@ -278,6 +279,7 @@ function AiAppsSection({
         </span>
       }
     >
+      <SpaceNamesSwitch api={api} />
       <form
         className="flex items-end gap-2"
         onSubmit={(event) => {

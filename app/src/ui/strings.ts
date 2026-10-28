@@ -16,7 +16,7 @@
 // name, the between-steps lines, the unchecked and going-back update states, a check that failed
 // for another reason than the connection, three or more uses in one refusal, a shipped package's
 // refusal, and the "not available yet" answer of a call whose work item has not landed.
-import { AI_APPS_STRINGS } from "./strings-ai-apps";
+import { AI_APPS_STRINGS, SPACE_NAMES_STRINGS } from "./strings-ai-apps";
 import { LIMIT_STRINGS } from "./strings-limits";
 import { PRIVACY_STRINGS } from "./privacy-strings";
 import { TIME_STRINGS } from "./strings-time";
@@ -94,6 +94,7 @@ export const STRINGS = {
   ...PRIVACY_STRINGS,
   // Connect your AI apps: its lines are in ui/strings-ai-apps.ts.
   ...AI_APPS_STRINGS,
+  ...SPACE_NAMES_STRINGS,
 
   // ── Live: the board, Edit layout ─────────────────────────────────────────────────────────
   "board.editLayout": "Edit layout",

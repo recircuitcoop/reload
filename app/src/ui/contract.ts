@@ -259,6 +259,10 @@ export interface AppApi extends AppApiV2 {
    * pinned MCP server is held to, recorded with the app, so it reads with the MCP child down.
    */
   anytypeTools(): Promise<readonly AnytypeTool[]>;
+  /** "Tell AI apps the names of my spaces" (plan 0033 D2): on unless turned off. */
+  spaceNamesToAiApps(): Promise<boolean>;
+  /** Move it; the stored switch again. Counts from the AI apps' next connection. */
+  setSpaceNamesToAiApps(on: boolean): Promise<boolean>;
   /** Submit a pending view; `{__dismiss__: true}` dismisses it (spec 8.2). */
   submitView(id: string, values: Readonly<Record<string, unknown>>): Promise<ViewResult>;
   /** Answer: the pending view in its own pop-out, or the open one focused. */

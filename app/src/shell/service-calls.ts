@@ -63,6 +63,8 @@ export function wireServiceCalls(
   ipc.handle(IPC.aiAppDisconnect, (_event, id: unknown) =>
     callServices("aiApps.disconnect", { id }),
   );
+  ipc.handle(IPC.spaceNames, () => callServices("spaceNames.get", null));
+  ipc.handle(IPC.setSpaceNames, (_event, on: unknown) => callServices("spaceNames.set", { on }));
 }
 
 /**

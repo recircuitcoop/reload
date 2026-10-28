@@ -236,6 +236,9 @@ describe("wireQuit, wireServiceCalls, wireDesktop and the e2e hooks", () => {
     expect(await call(IPC.aiAppConnect, "a")).toBe("aiApps.connect");
     expect(await call(IPC.aiAppRepair, "a")).toBe("aiApps.repair");
     expect(await call(IPC.aiAppDisconnect, "a")).toBe("aiApps.disconnect");
+    expect(await call(IPC.spaceNames)).toBe("spaceNames.get");
+    expect(await call(IPC.setSpaceNames, false)).toBe("spaceNames.set");
+    expect(asked).toContainEqual(["spaceNames.set", { on: false }]);
     expect(asked).toContainEqual(["aiApps.connect", { id: "a" }]);
     expect(await call(IPC.mcpEndpoint)).toBe("mcp.endpoint");
     expect(await call(IPC.mcpEndpointMove, "127.0.0.1", 31011)).toBe("mcp.endpoint.move");

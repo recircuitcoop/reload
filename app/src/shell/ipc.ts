@@ -31,6 +31,9 @@ export const IPC = {
   /** invoke: the MCP endpoint's token, for Copy token (WI-0022-30). */
   /** invoke: which Anytype tools exist, from the recorded surface (plan 0032, group 16). */
   anytypeTools: "reload:anytype-tools",
+  /** invoke: "Tell AI apps the names of my spaces" (plan 0033 D2), read; and moved, with a boolean. */
+  spaceNames: "reload:space-names",
+  setSpaceNames: "reload:set-space-names",
   /** invoke: a view call, `{op, args}`, answered by the runtime: Skip this step's dismissal. */
   viewCall: "reload:view-call",
   /** invoke: Answer: a pending view in its pop-out, with its id. */

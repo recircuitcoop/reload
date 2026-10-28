@@ -36,6 +36,8 @@ export const ANYTYPE_UNUSED = {
   disconnectAiApp: (): Promise<readonly AiAppListing[]> =>
     Promise.reject(new Error("not used here")),
   anytypeTools: (): Promise<readonly AnytypeTool[]> => Promise.reject(new Error("not used here")),
+  spaceNamesToAiApps: (): Promise<boolean> => Promise.reject(new Error("not used here")),
+  setSpaceNamesToAiApps: (): Promise<boolean> => Promise.reject(new Error("not used here")),
 };
 
 /** The dispatch's file downloads for a test that downloads nothing: no key, no Anytype. */
