@@ -5,8 +5,8 @@
 Reload turns your recordings and other sources into notes and objects in Anytype, through flows
 you draw on a canvas. It also lets your AI assistant (Claude, Codex and others) use your Anytype.
 
-Version 0.4.0 is a pre-release. It is the app that was called InnyTypes, under its new name. It runs on macOS only, and it is not signed by Apple, so macOS warns
-you the first time you open it. Section 4 shows you how to get past that warning.
+Version 0.4.0 is a pre-release. It runs on macOS only, and it is not signed by Apple, so macOS
+warns you the first time you open it. Section 4 shows you how to get past that warning.
 
 ## 2. What you need
 
@@ -27,8 +27,7 @@ iCloud folder `Reload/`. Both hold the same files.
 ## 4. Install and open it the first time
 
 1. Double-click the `.dmg` file, and drag **Reload** onto the **Applications** folder. If you
-   used InnyTypes 0.3.0, quit it first (InnyTypes › Quit InnyTypes); section 4.1 says what
-   happens to it.
+   used version 0.3.0, section 4.1 says what to do about it.
 2. Open **Reload** from Applications. macOS says it cannot verify the app. Click **Done**.
 3. Choose Apple menu › **System Settings** › **Privacy & Security**.
 4. Under **Security**, click **Open Anyway** beside the line about Reload. The button stays
@@ -45,24 +44,12 @@ If macOS says the app "is damaged and can't be opened", or the steps above do no
 xattr -dr com.apple.quarantine /Applications/Reload.app
 ```
 
-### 4.1 Coming from InnyTypes 0.3.0
+### 4.1 Coming from version 0.3.0
 
-Reload is InnyTypes under a new name. The first time Reload opens, it moves what InnyTypes kept
-to its own place: your flows, run history, settings, packages and the Anytype pairing. You do
-not pair Anytype again. Three things are different afterwards:
-
-- **AI apps must be connected again**, under the server name `reload`, as in section 7. The token
-  moved to `~/.config/reload/mcp_proxy_token`, so the old setup no longer finds it. Remove the old
-  `innytypes` entry from each AI app.
-- **Passwords and tokens stored inside your flows must be entered again.** Reload says so in a
-  notification when it could not read them. Open each flow that used one and type it again.
-- **InnyTypes itself** stays in Applications until you remove it. Once Reload has opened, drag
-  **InnyTypes** from Applications to the Bin, without opening it again. That also removes its
-  login item, so InnyTypes no longer starts when you log in. Reload keeps your **Start at
-  login** choice and starts itself instead.
-
-If Reload says InnyTypes is still running, quit InnyTypes and open Reload again. Nothing is moved
-while it runs.
+Reload 0.4.0 is the app that version 0.3.0 was renamed to, but it does not read any of 0.3.0's
+data. Set Reload up fresh: pair Anytype as in section 5, connect your AI apps as in section 7,
+and build your flows again. Then quit the old app, drag it from Applications to the Bin, and
+remove its entry from each AI app.
 
 ### What you see first: Setup
 
@@ -82,7 +69,7 @@ A new installation opens on **Setup**, a short walkthrough. Its steps are listed
 6. **Ready.** Your flow is on. Click **Try with a sample** to run it now with a 10-second sample,
    **Open Live** to see it work, or **I'll build my own** to go to your flows.
 
-If you quit during Setup, it opens on the same step next time. If you used InnyTypes with flows,
+If you quit during Setup, it opens on the same step next time. Once you have flows,
 you never see Setup: Reload opens on Live.
 
 ### The three places
@@ -331,10 +318,6 @@ version on its own yet: install it from its download, as in sections 3 and 4.
 **Updates**. Click it, then **Go back** to confirm. Your flows and settings are kept. If Reload
 keeps stopping in its first minutes on a new version, the banner offers the same Go back. It never
 goes back on its own.
-
-Going back from Reload 0.4.0 to InnyTypes 0.3.0 is not possible: they are two different apps. To
-return to InnyTypes, keep a copy of `~/Library/Application Support/InnyTypes` before you first open
-Reload.
 
 ## 11. Uninstall
 
