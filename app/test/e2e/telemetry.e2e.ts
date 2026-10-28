@@ -387,7 +387,12 @@ test("telemetry asks first, sends nothing before a yes, sends only redacted repo
       ]);
     const events = usageEvents(received);
     const errors = events.filter((event) => event.name === "package_error");
-    const [thrown, failed] = errors.filter((event) => event.data["package"] === "sdkts");
+    // Both inputs leave at once, so their reports may arrive in either order: tell them apart
+    // by what each says, never by which came first.
+    const sdkts = errors.filter((event) => event.data["package"] === "sdkts");
+    expect(sdkts).toHaveLength(2);
+    const thrown = sdkts.find((event) => event.data["file"] !== null);
+    const failed = sdkts.find((event) => event.data["file"] === null);
     // The shipped, bundled Anytype package: its file and line are its source's, not the
     // bundle's, through the bundle's source map.
     expect(errors.find((event) => event.data["package"] === "reload_anytype")?.data).toMatchObject({
