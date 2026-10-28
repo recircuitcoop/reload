@@ -28,7 +28,6 @@ export const IPC = {
   aiAppConnect: "reload:ai-app-connect",
   aiAppRepair: "reload:ai-app-repair",
   aiAppDisconnect: "reload:ai-app-disconnect",
-  /** invoke: the MCP endpoint's token, for Copy token (WI-0022-30). */
   /** invoke: which Anytype tools exist, from the recorded surface (plan 0032, group 16). */
   anytypeTools: "reload:anytype-tools",
   /** invoke: "Tell AI apps the names of my spaces" (plan 0033 D2), read; and moved, with a boolean. */

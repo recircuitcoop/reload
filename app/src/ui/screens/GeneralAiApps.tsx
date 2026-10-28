@@ -106,7 +106,7 @@ function AppRow({
       <p data-testid={`general-ai-app-company-${id}`} className="text-body text-secondary">
         {t("setup.aiApps.company", { company: app.company })}
       </p>
-      <div className="flex items-center gap-2">
+      <div data-testid={`general-ai-app-actions-${id}`} className="flex items-center gap-2">
         {app.state === "not-connected" ? (
           <Button kind="primary" data-testid={`general-ai-app-connect-${id}`} onClick={onConnect}>
             {t("setup.aiApps.connect")}
