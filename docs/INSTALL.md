@@ -136,30 +136,38 @@ port, use your port instead of `31010` everywhere.
 
 ### 7.1 Claude Code (the `claude` command in Terminal)
 
-1. Create a small script that hands Claude Code the token. Paste this into Terminal:
+Reload adds itself to Claude Code's own list of servers for you, so there is nothing to type or
+paste. This also reaches the **Code** tab of the Claude desktop app, which uses the same list.
 
-   ```bash
-   cat > ~/.config/reload/mcp-headers.sh <<'EOF'
-   #!/bin/sh
-   printf '{"Authorization": "Bearer %s"}' "$(cat "$HOME/.config/reload/mcp_proxy_token")"
-   EOF
-   chmod 700 ~/.config/reload/mcp-headers.sh
-   ```
-
-2. Add Reload for all your projects. This is the `add-json` form of `claude mcp add`, because
-   only it accepts the script from step 1:
-
-   ```bash
-   claude mcp add-json --scope user reload \
-     "{\"type\":\"http\",\"url\":\"http://127.0.0.1:31010/mcp\",\"headersHelper\":\"$HOME/.config/reload/mcp-headers.sh\"}"
-   ```
-
-3. Check it with `claude mcp get reload`. It says the server is connected. In a Claude Code
+1. In Reload, go to **Configuration › General**, to **AI apps**. Setup's **Connect your AI apps**
+   step offers the same.
+2. Beside **Claude Code**, click **Connect**. The row says **Connected.**
+3. Check it with `claude mcp get reload`. It says the server is connected. In a new Claude Code
    session, `/mcp` lists Reload and its tools.
+
+Reload writes only its own `reload` server, for all your projects (the user scope in
+`~/.claude.json`). When the `claude` command is installed, Reload asks it to make the change
+(`claude mcp add-json --scope user` and `claude mcp remove --scope user`); otherwise it changes
+only that one entry in the file and keeps everything else. The entry holds the address and the
+path of a small program inside Reload.app that hands Claude Code the token each time it
+connects; the token itself is never written into the file. If you change the address or the
+port, or move Reload.app, Reload rewrites its entry on its own.
+
+- **Disconnect** takes Reload's server out again, and nothing else.
+- **"An entry for Reload made by hand is already there. Repair replaces it."** means there is a
+  `reload` server Reload did not write, for example one added with an earlier version of this
+  guide. Click **Repair** to replace it with Reload's own, or leave it as it is.
 
 Source: <https://code.claude.com/docs/en/mcp> (sections on `headersHelper` and scopes).
 
 ### 7.2 Claude Desktop
+
+**Connect** in Reload reaches the Claude desktop app's **Code** tab, as in 7.1, but not its chat.
+The chat tab reads only servers it starts itself from its own settings file, and its connectors
+run on Anthropic's computers, which cannot reach an address on your Mac. Reload says so beside
+**Claude Code** in **AI apps**.
+
+To use Reload in the chat tab anyway, set it up by hand as below.
 
 Claude Desktop reaches Reload through a small helper called `mcp-remote`, which needs Node.js.
 

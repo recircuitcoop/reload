@@ -209,7 +209,7 @@ function sourceFiles(directory: string): string[] {
 
 // Plan 0033 §B and §F: the owner requires that connecting an AI app is done by Reload's Setup and
 // changeable in Configuration, so Reload now writes its own entry in the shared server list
-// (~/.codex/config.toml). The endpoint and the gateway still know no client; these are the only
+// (~/.codex/config.toml) and in Claude Code's (~/.claude.json). The endpoint and the gateway still know no client; these are the only
 // files that name one, each for the entry it owns: the client id, the text edit of that table, the
 // list of clients and the adapter that reads and writes that file. Nothing else may.
 const CLIENT_CONNECTION_FILES = [
@@ -217,6 +217,7 @@ const CLIENT_CONNECTION_FILES = [
   path.join(APP, "src", "domain", "ai-apps", "codex-config.ts"),
   path.join(APP, "src", "adapters", "fs", "codex-config-file.ts"),
   path.join(APP, "src", "adapters", "fs", "ai-app-clients.ts"),
+  path.join(APP, "src", "adapters", "fs", "claude-config-file.ts"),
 ];
 
 describe("the application's source", () => {
@@ -241,10 +242,11 @@ describe("the application's source", () => {
   });
 
   it("never reaches for a client's configuration file", () => {
-    // Except the one adapter that owns Reload's entry in it (plan 0033 §B).
+    // Except the adapters that own Reload's entry in one (plan 0033 §B and §F).
     const reaching = sourceFiles(path.join(APP, "src")).filter(
       (file) =>
-        !CLIENT_CONNECTION_FILES.includes(file) && fs.readFileSync(file, "utf8").includes(".codex"),
+        !CLIENT_CONNECTION_FILES.includes(file) &&
+        /\.codex|\.claude\.json|mcp add-json/.test(fs.readFileSync(file, "utf8")),
     );
     expect(reaching).toEqual([]);
   });

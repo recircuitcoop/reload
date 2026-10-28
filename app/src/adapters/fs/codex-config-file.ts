@@ -1,8 +1,8 @@
 // The shared MCP server list of ChatGPT desktop, Codex and the IDE extension,
 // ~/.codex/config.toml (plan 0033 §B), as far as Reload owns one table in it.
 //
-// This adapter is the only code that touches another application's file, and it touches only
-// this one. The text edit is domain/ai-apps/codex-config.ts's; this file is where the bytes meet
+// This adapter and claude-config-file.ts are the only code that touch another application's
+// file, each only its own; the atomic write below is shared by both. The text edit is domain/ai-apps/codex-config.ts's; this file is where the bytes meet
 // the disk:
 //
 // * A missing file is created owner-only (0600), and so is ~/.codex when Reload has to make it
@@ -63,75 +63,80 @@ export class CodexConfigConnections implements AiAppConnections {
   }
 
   read(): TableRead {
-    return readReloadTable(this.#text());
+    return readReloadTable(readTextFile(this.#file));
   }
 
   write(entry: AiAppEntry): void {
-    this.#replace(withReloadTable(this.#text(), entry));
+    replaceTextFile(this.#file, withReloadTable(readTextFile(this.#file), entry));
   }
 
   remove(): void {
-    const text = this.#text();
+    const text = readTextFile(this.#file);
     const edited = withoutReloadTable(text);
     // Nothing of Reload's in there: the file is not rewritten, not even to the same bytes.
     if (edited !== text) {
-      this.#replace(edited);
+      replaceTextFile(this.#file, edited);
     }
   }
+}
 
-  #text(): string {
-    let bytes: Buffer;
-    try {
-      bytes = fs.readFileSync(this.#file);
-    } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code === "ENOENT") {
-        return "";
-      }
-      throw new AiAppFileError(`could not read ${this.#file}: ${String(code)}`);
+/** A file's text, "" when it is missing. Throws when it cannot be read or is not UTF-8. */
+export function readTextFile(file: string): string {
+  let bytes: Buffer;
+  try {
+    bytes = fs.readFileSync(file);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") {
+      return "";
     }
-    try {
-      return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-    } catch {
-      // Re-encoding replacement characters would damage what is there.
-      throw new AiAppFileError(`${this.#file} is not UTF-8 text`);
-    }
+    throw new AiAppFileError(`could not read ${file}: ${String(code)}`);
   }
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    // Re-encoding replacement characters would damage what is there.
+    throw new AiAppFileError(`${file} is not UTF-8 text`);
+  }
+}
 
-  #replace(text: string): void {
-    const created = !fs.existsSync(this.#file);
-    // A link is followed so that the link, not only a copy of it, keeps pointing at the file.
-    const target = created ? this.#file : fs.realpathSync(this.#file);
-    const directory = path.dirname(target);
-    const mode = created ? NEW_FILE_MODE : fs.statSync(target).mode & 0o7777;
-    scratchCounter += 1;
-    const scratch = path.join(
-      directory,
-      `.${path.basename(target)}.${String(process.pid)}.${String(scratchCounter)}.tmp`,
+/**
+ * Replace a file's text atomically: a scratch file in the same directory, renamed over it. A new
+ * file is owner-only; an existing one keeps its mode; a link is followed.
+ */
+export function replaceTextFile(file: string, text: string): void {
+  const created = !fs.existsSync(file);
+  // A link is followed so that the link, not only a copy of it, keeps pointing at the file.
+  const target = created ? file : fs.realpathSync(file);
+  const directory = path.dirname(target);
+  const mode = created ? NEW_FILE_MODE : fs.statSync(target).mode & 0o7777;
+  scratchCounter += 1;
+  const scratch = path.join(
+    directory,
+    `.${path.basename(target)}.${String(process.pid)}.${String(scratchCounter)}.tmp`,
+  );
+  try {
+    if (!fs.existsSync(directory)) {
+      fs.mkdirSync(directory, { recursive: true, mode: NEW_DIRECTORY_MODE });
+    }
+    const descriptor = fs.openSync(
+      scratch,
+      fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL,
+      mode,
     );
     try {
-      if (!fs.existsSync(directory)) {
-        fs.mkdirSync(directory, { recursive: true, mode: NEW_DIRECTORY_MODE });
-      }
-      const descriptor = fs.openSync(
-        scratch,
-        fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL,
-        mode,
-      );
-      try {
-        // The umask can only narrow the mode open was given; this makes it exactly the old one.
-        fs.fchmodSync(descriptor, mode);
-        fs.writeSync(descriptor, text);
-        fs.fsyncSync(descriptor);
-      } finally {
-        fs.closeSync(descriptor);
-      }
-      fs.renameSync(scratch, target);
-    } catch (error) {
-      fs.rmSync(scratch, { force: true });
-      throw new AiAppFileError(
-        `could not write ${this.#file}: ${String((error as NodeJS.ErrnoException).code)}`,
-      );
+      // The umask can only narrow the mode open was given; this makes it exactly the old one.
+      fs.fchmodSync(descriptor, mode);
+      fs.writeSync(descriptor, text);
+      fs.fsyncSync(descriptor);
+    } finally {
+      fs.closeSync(descriptor);
     }
+    fs.renameSync(scratch, target);
+  } catch (error) {
+    fs.rmSync(scratch, { force: true });
+    throw new AiAppFileError(
+      `could not write ${file}: ${String((error as NodeJS.ErrnoException).code)}`,
+    );
   }
 }

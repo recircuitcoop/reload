@@ -17,6 +17,7 @@ import { NOTICE_VERSION } from "../../src/domain/telemetry/reports";
 import { committedToolSurface, toolSignature } from "../../src/adapters/anytype/tool-surface";
 import { ANYTYPE_VERSION, PACKAGE_VERSION } from "../../src/domain/anytype/pins";
 import { STRINGS } from "../../src/ui/strings";
+import { stubClaude } from "../fakes/claude-command";
 import {
   anytypeKeyFile,
   APP,
@@ -342,6 +343,64 @@ test("General's AI apps row: Connect writes Reload's entry, Disconnect takes onl
     expect(repaired.startsWith(OTHERS)).toBe(true);
     expect(repaired).toContain("http_headers_helper");
     expect(repaired).not.toContain("MINE");
+    await quit(app);
+  } finally {
+    await anytype.close();
+    await cleanUp(apps, scratch);
+  }
+});
+
+test("General's Claude Code row: Connect adds Reload's server through the claude command, Disconnect removes only it, and the row says where it is reached", async () => {
+  test.setTimeout(150_000);
+  const { scratch, env } = scratchDirectories();
+  const anytype = await fakeAnytype();
+  // The stub `claude` first on a PATH that holds no other one (app-harness), in the scratch home.
+  const bin = path.join(scratch, "bin");
+  const calls = stubClaude(bin);
+  const list = path.join(scratch, ".claude.json");
+  const others = { numStartups: 3, mcpServers: { serena: { command: "uvx" } }, projects: {} };
+  fs.writeFileSync(list, `${JSON.stringify(others, null, 2)}\n`, { mode: 0o600 });
+  const read = () => JSON.parse(fs.readFileSync(list, "utf8")) as typeof others;
+  const apps: ElectronApplication[] = [];
+  try {
+    const { app, window } = await launchApp({
+      ...env,
+      PATH: `${bin}${path.delimiter}${env["PATH"] ?? ""}`,
+      ANYTYPE_API_BASE_URL: anytype.url,
+      RELOAD_TEST_ANYTYPE: fakeChild(scratch),
+    });
+    apps.push(app);
+    const general = await openGeneral(window);
+    const served = Number(env["RELOAD_MCP_PORT"]);
+    await expect(general.getByTestId("general-ai-apps-state")).toContainText(
+      `127.0.0.1:${String(served)}`,
+      { timeout: 20_000 },
+    );
+    const row = (testId: string) => general.getByTestId(`general-ai-app-${testId}-claude`);
+    await expect(row("name")).toHaveText("Claude Code");
+    await expect(row("state")).toHaveText(STRINGS["general.aiApps.notConnected"]);
+    await expect(row("limit")).toHaveText(STRINGS["aiApps.limit.codeTab"]);
+    await expect(row("company")).toHaveText("What the tools return is sent to Anthropic.");
+    // The ChatGPT-only line is beside ChatGPT and Codex alone.
+    await expect(general.getByTestId("general-ai-app-claude")).not.toContainText("Work view");
+
+    await row("connect").click();
+    await expect(row("state")).toHaveText(STRINGS["setup.aiApps.connected"], { timeout: 15_000 });
+    const server = read().mcpServers as Record<string, Record<string, string>>;
+    expect(server["reload"]?.["type"]).toBe("http");
+    expect(server["reload"]?.["url"]).toBe(`http://127.0.0.1:${String(served)}/mcp`);
+    expect(server["reload"]?.["headersHelper"]).toMatch(/^'\/.*\/mcp-helper\/reload-mcp-headers'$/);
+    expect(Object.keys(server["reload"] ?? {}).sort()).toEqual(["headersHelper", "type", "url"]);
+    expect(fs.readFileSync(list, "utf8")).not.toMatch(/bearer|token/i);
+    expect(read().numStartups).toBe(3);
+    expect(calls().map((call) => call.slice(0, 5))).toEqual([
+      ["mcp", "add-json", "--scope", "user", "reload"],
+    ]);
+
+    await row("disconnect").click();
+    await expect(row("state")).toHaveText(STRINGS["general.aiApps.notConnected"]);
+    expect(read()).toEqual(others);
+    expect(calls().at(-1)).toEqual(["mcp", "remove", "--scope", "user", "reload"]);
     await quit(app);
   } finally {
     await anytype.close();

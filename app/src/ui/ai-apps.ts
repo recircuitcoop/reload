@@ -6,6 +6,7 @@ import { t, type PlainKey } from "./strings";
 /** Where each kind of app reaches Reload, said beside that app only. */
 const REACHES: Record<AiAppListing["reaches"], PlainKey> = {
   "work-view": "aiApps.limit.workView",
+  "code-tab": "aiApps.limit.codeTab",
 };
 
 export const aiAppLimit = (app: AiAppListing): string => t(REACHES[app.reaches]);

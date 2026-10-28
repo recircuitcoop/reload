@@ -23,6 +23,8 @@ describe("childEnvironment", () => {
       ANYTYPE_API_BASE_URL: "http://127.0.0.1:9",
       // The key, for the MCP child the services process starts; never the runtime's.
       ANYTYPE_API_KEY: "fake-env-key",
+      // Where the `claude` command is looked for (plan 0033 §F); the runtime never gets it.
+      PATH: "/usr/bin",
     });
   });
 

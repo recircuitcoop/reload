@@ -227,7 +227,7 @@ function buildEndpoint(config: InitConfig, secrets: SecretStore): McpEndpoint | 
   const settings = new JsonSettingsStore(path.join(config.userDir, "settings.json"));
   const helper = mcpHelperPath(process.env["RELOAD_RUNTIMES_DIR"], __dirname);
   aiApps = new AiAppService({
-    clients: fileAiAppConnections(os.homedir(), process.platform),
+    clients: fileAiAppConnections(os.homedir(), process.platform, process.env["PATH"]),
     record: settings,
     desired: () => {
       const url = endpoint?.status().served ?? null;

@@ -18,6 +18,9 @@ export const AI_APPS_STRINGS = {
     "Couldn't connect {app}. Try again, or connect it later in Configuration › General.",
   "setup.aiApps.none":
     "No AI apps found on this computer. You can connect one later in Configuration › General.",
+  // Beside Claude Code: where Reload's entry is read, and where it is not.
+  "aiApps.limit.codeTab":
+    "Reload works in Claude Code and in the Claude app's Code tab. Claude Desktop's chat tab isn't reached.",
   // Both places: a Connect pressed before the endpoint serves an address (Anytype not connected
   // yet, or still starting), and a list of the apps that could not be read.
   "aiApps.notServed":

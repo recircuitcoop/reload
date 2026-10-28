@@ -10,7 +10,7 @@ import type { AiAppEntry, TableRead } from "../domain/ai-apps/codex-config";
 export type { AiAppEntry, TableRead };
 
 /** The clients Reload can connect. A second client is one more member here and one more adapter. */
-export type AiAppId = "codex";
+export type AiAppId = "codex" | "claude";
 
 /** What the person is told about a client; data from the client list, worded in ui/strings.ts. */
 export interface AiAppProfile {
@@ -20,8 +20,8 @@ export interface AiAppProfile {
   readonly company: string;
   /** The app to restart once the file changed under it. */
   readonly restartName: string;
-  /** Where in the app Reload is reached: ChatGPT's Work view and Codex. */
-  readonly reaches: "work-view";
+  /** Where in the app Reload is reached: ChatGPT's Work view, or Claude's Code tab and CLI. */
+  readonly reaches: "work-view" | "code-tab";
 }
 
 export interface AiAppConnections {

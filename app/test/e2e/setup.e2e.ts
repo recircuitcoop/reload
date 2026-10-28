@@ -832,11 +832,21 @@ test("Connect your AI apps: Connect writes Reload's entry and nothing else", asy
   const list = path.join(scratch, ".codex", "config.toml");
   fs.mkdirSync(path.dirname(list));
   fs.writeFileSync(list, OTHERS);
+  // Claude Code's list is there too, so Claude Code is found and offered beside it.
+  const claudeList = path.join(scratch, ".claude.json");
+  fs.writeFileSync(claudeList, '{"numStartups": 1}\n');
   const apps: ElectronApplication[] = [];
   try {
     const { app, window } = await launchApp({ ...env, ...connected.env });
     apps.push(app);
     await toAiApps(window, []);
+    // Claude Code: same controls, its own line on where it is reached, never the Work view one.
+    await expect(window.getByTestId("setup-ai-app-limit-claude")).toHaveText(
+      STRINGS["aiApps.limit.codeTab"],
+    );
+    await expect(window.getByTestId("setup-ai-app-connect-claude")).toBeVisible();
+    await expect(window.getByTestId("setup-ai-app-skip-claude")).toBeVisible();
+    await expect(window.getByTestId("setup-ai-app-claude")).not.toContainText("Work view");
     const row = window.getByTestId("setup-ai-app-codex");
     // Found by its folder; what it does and who receives the results are said; nothing chosen yet.
     await expect(row).toContainText("look things up in your Anytype through Reload");
@@ -864,6 +874,8 @@ test("Connect your AI apps: Connect writes Reload's entry and nothing else", asy
     expect(written).toMatch(/\[mcp_servers\.reload\]\nurl = "http:\/\/127\.0\.0\.1:\d+\/mcp"\n/);
     expect(written).toContain("http_headers_helper");
     expect(written).not.toMatch(/bearer|token/i);
+    // Connecting one app writes nothing to another's list.
+    expect(fs.readFileSync(claudeList, "utf8")).toBe('{"numStartups": 1}\n');
 
     await button(window, "setup.continue").click();
     await expect(setupStep(window)).toHaveAttribute("data-step", "example");

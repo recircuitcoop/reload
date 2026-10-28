@@ -132,7 +132,7 @@ export interface AiAppListing {
   readonly company: string;
   readonly restartName: string;
   /** Where in the app Reload is reached, said beside it (ui/ai-apps.ts). */
-  readonly reaches: "work-view";
+  readonly reaches: "work-view" | "code-tab";
   /** Installed, or its server list is there: worth offering. */
   readonly found: boolean;
   readonly state: "connected" | "not-connected" | "changed-outside" | "restart-app";

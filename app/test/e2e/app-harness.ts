@@ -2,6 +2,7 @@
 // P11d and P11e runs did: by pid, and with pgrep scoped to this run's temporary userData.
 import { shellArgs } from "../../src/adapters/process/watcher-handoff";
 import { UNDER_WATCHER_VARIABLE } from "../../src/domain/supervision/relaunch";
+import { withoutClaude } from "../fakes/claude-command";
 import { execFileSync, type ChildProcess } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs";
@@ -308,7 +309,8 @@ export function scratchDirectories(): {
   fs.writeFileSync(anytypeKeyFile(scratch), canaryKey, { mode: 0o600 });
   // A key set in this shell is read before the key file, so it would stand in for the canary.
   const inherited = Object.entries(process.env).filter(
-    (entry): entry is [string, string] => entry[1] !== undefined && entry[0] !== "ANYTYPE_API_KEY",
+    (entry): entry is [string, string] =>
+      entry[1] !== undefined && entry[0] !== "ANYTYPE_API_KEY" && entry[0] !== "CLAUDE_CONFIG_DIR",
   );
   return {
     scratch,
@@ -316,6 +318,9 @@ export function scratchDirectories(): {
     env: {
       ...Object.fromEntries(inherited),
       HOME: scratch,
+      // No run can reach this user's real `claude` command, which would write their own
+      // ~/.claude.json: a spec that wants one puts the stub (test/fakes/claude-command.ts) first.
+      PATH: withoutClaude(process.env["PATH"]),
       // The one log's default path follows these where they are set (Linux, Windows): a run
       // must never write into the log of this user's own installation.
       XDG_STATE_HOME: path.join(scratch, ".local", "state"),
