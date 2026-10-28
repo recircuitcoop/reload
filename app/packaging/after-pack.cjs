@@ -102,6 +102,11 @@ async function afterPack(context) {
     ]);
   }
 
+  // The header helper AI apps run for the endpoint's token (plan 0033 §A) must still be
+  // executable after the copy and the ad-hoc signature above; a lost bit would fail only on a
+  // user's machine, at the first connection.
+  assertHelperExecutable(resourcesDirectory(context));
+
   // node_modules is unpacked beside app.asar (asarUnpack node_modules/**, for the bundled Node
   // that runs the Anytype MCP child), so this walk of appOutDir sees the real dependency tree in
   // app.asar.unpacked: an npm that slipped past the `files` exclusion lands there as plain files
@@ -115,6 +120,29 @@ async function afterPack(context) {
       `packaging: npm is not supposed to be in the bundle (WI-0018-23), but found: ` +
         npmPaths.join(", "),
     );
+  }
+}
+
+/** Where extraResources land: Contents/Resources in the macOS bundle, resources/ elsewhere. */
+function resourcesDirectory(context) {
+  return context.electronPlatformName === "darwin"
+    ? path.join(
+        context.appOutDir,
+        `${context.packager.appInfo.productFilename}.app`,
+        "Contents",
+        "Resources",
+      )
+    : path.join(context.appOutDir, "resources");
+}
+
+/** The header helper is packed at mcp-helper/reload-mcp-headers and has its execute bits. */
+function assertHelperExecutable(resourcesDir) {
+  const helper = path.join(resourcesDir, "mcp-helper", "reload-mcp-headers");
+  if (!fs.existsSync(helper)) {
+    throw new Error(`packaging: the header helper is not packed at ${helper}`);
+  }
+  if ((fs.statSync(helper).mode & 0o111) !== 0o111) {
+    throw new Error(`packaging: the header helper is not executable: ${helper}`);
   }
 }
 
@@ -160,3 +188,4 @@ function assertAsarContents(asarFile) {
 module.exports = afterPack;
 module.exports.adHocEntitlementsPlist = adHocEntitlementsPlist;
 module.exports.assertAsarContents = assertAsarContents;
+module.exports.assertHelperExecutable = assertHelperExecutable;

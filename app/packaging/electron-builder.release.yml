@@ -49,6 +49,11 @@ extraResources:
   # folder (plan 0022 §H, app/resources/sample/README.md): Resources/sample in the package.
   - from: "resources/sample"
     to: "sample"
+  # The header helper AI apps run to get the endpoint's token (plan 0033 §A,
+  # app/resources/mcp-helper/): Resources/mcp-helper/reload-mcp-headers, executable. after-pack.cjs
+  # checks the bit survived, after signing.
+  - from: "resources/mcp-helper"
+    to: "mcp-helper"
 
 asarUnpack:
   - "test/fixtures/**"

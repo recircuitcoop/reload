@@ -250,3 +250,43 @@ describe("the shipped-package manifest ships, and the tooling that wrote it does
     fs.rmSync(scratch, { recursive: true, force: true });
   });
 });
+
+describe("the header helper ships inside the app, executable (plan 0033 §A, WI-0033-01)", () => {
+  const SOURCE = path.join(APP_ROOT, "resources", "mcp-helper", "reload-mcp-headers");
+
+  it("both configs copy resources/mcp-helper to Resources/mcp-helper", () => {
+    for (const config of [CONFIG, RELEASE_CONFIG]) {
+      const block = /^extraResources:\n((?:\s+.*\n)+)/m.exec(config)?.[1] ?? "";
+      expect(block).toMatch(/- from: "resources\/mcp-helper"\n\s+to: "mcp-helper"/);
+    }
+  });
+
+  it("the source is executable, so the copy electron-builder makes is", () => {
+    expect(fs.statSync(SOURCE).mode & 0o111).toBe(0o111);
+  });
+
+  it("after-pack.cjs refuses a packed helper that is missing or not executable", () => {
+    const required = createRequire(__filename);
+    const hook = required(path.join(APP_ROOT, "packaging", "after-pack.cjs")) as {
+      assertHelperExecutable: (resourcesDir: string) => void;
+    };
+    const scratch = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), "helper-"));
+    try {
+      expect(() => {
+        hook.assertHelperExecutable(scratch);
+      }).toThrow("not packed");
+      const packed = path.join(scratch, "mcp-helper", "reload-mcp-headers");
+      fs.mkdirSync(path.dirname(packed));
+      fs.writeFileSync(packed, "#!/bin/sh\n", { mode: 0o644 });
+      expect(() => {
+        hook.assertHelperExecutable(scratch);
+      }).toThrow("not executable");
+      fs.chmodSync(packed, 0o755);
+      expect(() => {
+        hook.assertHelperExecutable(scratch);
+      }).not.toThrow();
+    } finally {
+      fs.rmSync(scratch, { recursive: true, force: true });
+    }
+  });
+});

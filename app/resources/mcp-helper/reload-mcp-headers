@@ -1,0 +1,62 @@
+#!/bin/sh
+# The header helper (plan 0033 §A): prints the HTTP headers an AI app sends to Reload's MCP
+# endpoint, so no user ever handles the token. ChatGPT desktop / Codex run it as
+# `http_headers_helper`, Claude Code as `headersHelper`; both run it per connection and again
+# after a 401 or 403. No arguments.
+#
+# Success: stdout is exactly {"Authorization":"Bearer <token>"} and the exit status is 0.
+# Failure: nothing on stdout, a short message on stderr (never the token), a non-zero status.
+# It logs nothing, writes nothing, and reads one file: ~/.config/reload/mcp_proxy_token.
+#
+# Plain POSIX sh and builtins only, so it starts in milliseconds (Claude Code gives it 10 s),
+# never starts Electron, and does not depend on PATH. It keeps the rules of readOwnerOnly
+# (app/src/adapters/fs/owner-only-files.ts): a symbolic link is refused, the file must be a
+# regular file, the text is trimmed, and an empty file is "not set".
+#
+# macOS and Linux only. Windows is WI-0025-01's, and has no /bin/sh to run this under.
+# shortcut: -L then read is not O_NOFOLLOW's single atomic open; the directory is owner-only
+# (0700), so only the owner could race it. Upgrade if the token ever moves to a shared directory.
+
+fail() {
+  printf 'reload-mcp-headers: %s\n' "$1" >&2
+  exit 1
+}
+
+[ -n "${HOME:-}" ] || fail 'HOME is not set'
+file="$HOME/.config/reload/mcp_proxy_token"
+
+[ -L "$file" ] && fail 'the token file is a symbolic link; it is never read through one'
+[ -f "$file" ] || fail 'the token file is missing or is not a regular file'
+[ -r "$file" ] || fail 'the token file is not readable'
+
+# Every line, so a token split over several lines is seen whole and rejected below.
+nl='
+'
+token=
+while IFS= read -r line || [ -n "$line" ]; do
+  token="$token$line$nl"
+done <"$file" || fail 'could not read the token file'
+
+# Trim whitespace at both ends, as readOwnerOnly does.
+while :; do
+  case $token in
+    [[:space:]]*) token=${token#?} ;;
+    *) break ;;
+  esac
+done
+while :; do
+  case $token in
+    *[[:space:]]) token=${token%?} ;;
+    *) break ;;
+  esac
+done
+
+[ -n "$token" ] || fail 'the token file is empty'
+
+# Reload generates base64url (randomBytes(32).toString("base64url"), services/main.ts); nothing
+# else may reach the JSON, so no quote, backslash or control character can break out of it.
+case $token in
+  *[!A-Za-z0-9_-]*) fail 'the token file holds characters Reload does not generate' ;;
+esac
+
+printf '{"Authorization":"Bearer %s"}\n' "$token"
