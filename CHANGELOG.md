@@ -3,7 +3,7 @@
 All notable changes to Reload (called InnyTypes before 0.4.0) are recorded here, newest first. Versions follow
 [semantic versioning](https://semver.org/): the number changes when what you can rely on does.
 
-## 0.4.0 — unreleased
+## 0.4.0 — 2026-10-28
 
 **The app is now called Reload.** It is InnyTypes 0.3.0 under a new name, and nothing else
 changes in what it does. Reload does not read or move anything InnyTypes kept: set it up fresh and
