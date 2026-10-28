@@ -14,6 +14,7 @@ import {
   proofScratch,
   quitFromCommandLine,
   rpcStatus,
+  scratchMcpToken,
   startPackaged,
   stopRun,
   withFakeMcp,
@@ -46,7 +47,7 @@ test("moving the endpoint while a Codex-like client runs closes the old port onl
     const served = async () =>
       ((await appCall(page, "mcpEndpoint")) as { served: string | null }).served;
     await expect.poll(served, { timeout: 60_000 }).toBe(first);
-    const token = (await appCall(page, "mcpToken")) as string;
+    const token = scratchMcpToken(env);
     const client = await codexLike(first, token);
     const listed = await client.listTools();
     expect(listed.tools.map((tool) => tool.name)).toContain("API-list-spaces");

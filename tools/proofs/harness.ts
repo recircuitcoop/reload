@@ -19,6 +19,7 @@ import type net from "node:net";
 import * as path from "node:path";
 import { chromium, expect, type Browser, type Page } from "@playwright/test";
 import { toolSignature } from "../../app/src/adapters/anytype/tool-surface";
+import { anytypeSecretFiles, readOwnerOnly } from "../../app/src/adapters/fs/owner-only-files";
 import { ANYTYPE_VERSION, PACKAGE_VERSION } from "../../app/src/domain/anytype/pins";
 import {
   APP,
@@ -138,6 +139,20 @@ export async function startPackaged(
 }
 
 /** What the window's bridge answers for `call` (window.reload.app), with `args`. */
+/**
+ * The scratch run's MCP proxy token, read from its owner-only file the way an AI app's header
+ * helper reads it; the page no longer hands the token out.
+ */
+export function scratchMcpToken(env: NodeJS.ProcessEnv): string {
+  const home = env["HOME"] ?? "";
+  const file = anytypeSecretFiles({ platform: process.platform, home })["mcp-proxy-token"]?.file;
+  const token = file === undefined ? null : readOwnerOnly(file);
+  if (token === null) {
+    throw new Error(`the scratch run at ${home} has no MCP proxy token yet`);
+  }
+  return token;
+}
+
 export function appCall(page: Page, call: string, ...args: unknown[]): Promise<unknown> {
   return page.evaluate(
     ([name, given]) => {

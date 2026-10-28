@@ -12,6 +12,7 @@ import {
   proofScratch,
   quitFromCommandLine,
   rpcStatus,
+  scratchMcpToken,
   startPackaged,
   stopRun,
   withFakeMcp,
@@ -40,7 +41,7 @@ test("kill -9 of the MCP child restarts it; tools are served only after a fresh 
         },
       )
       .toBe(url);
-    const token = (await appCall(page, "mcpToken")) as string;
+    const token = scratchMcpToken(env);
     expect(await rpcStatus(url, token, "tools/list")).toBe(200);
     const said = () => run?.output.join("") ?? "";
     const handshakes = () => said().match(/fake MCP child \d+ running on stdio/g)?.length ?? 0;
