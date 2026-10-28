@@ -1,0 +1,17 @@
+id: WI-0033-01-the-header-helper
+title: The header helper inside Reload.app
+intent: ChatGPT and Codex get the endpoint's token from a command Reload ships, so no user ever handles
+  it.
+acceptance:
+- Reload.app/Contents/Resources/mcp-helper/reload-mcp-headers exists in both builder configs' extraResources,
+  is executable after after-pack and signing, takes no arguments, prints exactly {"Authorization":"Bearer
+  <token>"} from the owner-only token file and exits 0; a missing, empty, linked or unreadable token file
+  prints nothing and exits non-zero; it logs and writes nothing; packaging-config.test.ts asserts the
+  entry and a unit test runs the helper against a scratch home.
+- 'docs/loop/verify.sh exits zero and prints gate: GREEN.'
+canonical_id: '0033'
+canonical_source: plans
+slice: '01'
+size: S
+status: TODO
+depends_on: []

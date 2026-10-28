@@ -1,0 +1,18 @@
+id: WI-0033-03-setup-connects-the-ai-apps
+title: Setup connects the AI apps
+intent: 'The owner''s rule, 2026-10-28: the connection is "implemented at setup".'
+acceptance:
+- SETUP_STEPS gains connect-ai-apps after connect-anytype (union, array, LINEAR_NEXT, persisted-state
+  validation, back-step, strings); for each of ChatGPT/Codex and Claude that is found it explains in plain
+  words what connecting does and that tool results go to that app's company, offers Connect (primary)
+  and Skip, and shows the resulting state; when neither is found it says so and moves on; every string
+  is a strings.ts line; unit tests cover the step order and validation, and an e2e case with a stubbed
+  home proves Connect writes the entries and Skip writes nothing.
+- 'docs/loop/verify.sh exits zero and prints gate: GREEN.'
+canonical_id: '0033'
+canonical_source: plans
+slice: '03'
+size: S
+status: TODO
+depends_on:
+- WI-0033-02-reload-owns-its-codex-entry

@@ -1,0 +1,19 @@
+id: WI-0033-05-explicit-live-instructions
+title: Explicit instructions built from the live Anytype at each connection
+intent: 'The owner''s rule, 2026-10-28: "the instructions MUST be explicit", and routing that needs no
+  maintenance.'
+acceptance:
+- initialize returns instructions composed at each connection by an async dependency injected into mcpDispatch,
+  saying what the server is, when to use it (mentions of Anytype, a space by name, notes, pages, tasks,
+  objects, "check in …", "what does my … say"), the user's spaces from AnytypeClient.listSpaces, how to
+  look things up and cite the object, and never to create, change or delete unless asked; the first 512
+  characters stand alone and the whole stays under 2 KB; names are length-bounded, control characters
+  stripped and the list capped; with Anytype unreachable the text says so and initialize still answers
+  at once; names never reach logs or telemetry; mcp-dispatch.test.ts covers each case.
+- 'docs/loop/verify.sh exits zero and prints gate: GREEN.'
+canonical_id: '0033'
+canonical_source: plans
+slice: '05'
+size: M
+status: TODO
+depends_on: []

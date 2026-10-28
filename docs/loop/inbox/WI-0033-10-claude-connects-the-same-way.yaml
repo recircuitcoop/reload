@@ -1,0 +1,21 @@
+id: WI-0033-10-claude-connects-the-same-way
+title: Claude connects over the HTTP endpoint exactly as ChatGPT does
+intent: 'The owner''s answer to D4, 2026-10-28: "Claude will connect exactly as chatgpt desktop does via
+  the http mcp".'
+acceptance:
+- The AiAppConnections port gains Claude, owning the user-scope reload server in ~/.claude.json as {"type":"http","url":<served
+  URL>,"headersHelper":<the helper's shell-quoted absolute path>} with no token and no static headers;
+  it writes and removes through `claude mcp add-json --scope user` and `claude mcp remove --scope user`
+  when the claude command is found and otherwise edits only mcpServers.reload atomically with every other
+  key kept; states, repair on start and after mcp.endpoint.move as in WI-0033-02; Setup's step and Configuration's
+  AI apps row show Claude with the same controls and say that Claude Desktop's chat tab is not reached;
+  docs/INSTALL.md 7.1 and 7.2 describe it without mcp-headers.sh; unit tests use scratch homes and a stub
+  claude command, and an e2e case proves Connect and Disconnect against a stubbed home.
+- 'docs/loop/verify.sh exits zero and prints gate: GREEN.'
+canonical_id: '0033'
+canonical_source: plans
+slice: '10'
+size: M
+status: TODO
+depends_on:
+- WI-0033-02-reload-owns-its-codex-entry

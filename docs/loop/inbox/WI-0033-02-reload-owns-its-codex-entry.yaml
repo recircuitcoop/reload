@@ -1,0 +1,20 @@
+id: WI-0033-02-reload-owns-its-codex-entry
+title: Reload owns its entry in ~/.codex/config.toml
+intent: The one list ChatGPT desktop, Codex and the IDE share gets Reload's entry from Reload, kept right
+  without the user.
+acceptance:
+- An AiAppConnections port and file adapter write, read and remove only the [mcp_servers.reload] table
+  (url from address.ts, http_headers_helper the helper's absolute path, never a token or bearer_token_env_var),
+  atomically and owner-only when created; every byte outside the table is unchanged (byte-equality tests
+  over files with comments, other servers, sub-tables and no trailing newline); the states Connected,
+  Not connected, Changed outside Reload and Restart ChatGPT to finish are read back; a Connected entry
+  is rewritten on start and after mcp.endpoint.move, a table changed outside Reload never without Repair;
+  unit tests use scratch homes only.
+- 'docs/loop/verify.sh exits zero and prints gate: GREEN.'
+canonical_id: '0033'
+canonical_source: plans
+slice: '02'
+size: M
+status: TODO
+depends_on:
+- WI-0033-01-the-header-helper

@@ -1,0 +1,24 @@
+id: WI-0033-09-live-proof-in-chatgpt-work
+title: Live proof on the owner's Mac that ChatGPT Work routes the owner's prompts
+intent: The client details this plan rests on (the helper key, per-thread initialize, Work's local MCP)
+  are verified only on a real machine.
+acceptance:
+- With the owner present and only read prompts, on the installed build, Setup's Connect writes the entries,
+  ChatGPT restarted and a new Claude Code session show reload connected, and new ChatGPT Work threads
+  and Claude Code sessions answer "check in Anytype …" and "what does my <space> space say about …" by
+  calling Reload's tools; a space created in Anytype appears in the next new thread's instructions; Disconnect
+  removes the entries; whether Claude Desktop's chat tab can reach the endpoint is recorded; the evidence
+  (ChatGPT log lines, Reload log lines, no token printed) is recorded in docs/plans/0033 under As built;
+  nothing is written to the owner's Anytype.
+- 'docs/loop/verify.sh exits zero and prints gate: GREEN.'
+canonical_id: '0033'
+canonical_source: plans
+slice: 09
+size: S
+status: TODO
+depends_on:
+- WI-0033-03-setup-connects-the-ai-apps
+- WI-0033-04-ai-apps-status-and-controls
+- WI-0033-06-the-space-names-switch
+- WI-0033-08-three-intent-tools
+- WI-0033-10-claude-connects-the-same-way

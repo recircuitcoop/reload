@@ -1,0 +1,18 @@
+id: WI-0033-08-three-intent-tools
+title: Three intent tools in front of the raw API
+intent: Fifty-two near-identical API tools are a routing handicap; three tools named for what the user
+  asks make the right call obvious.
+acceptance:
+- tools/list adds list my Anytype spaces, search my Anytype (all spaces or one by name) and read an Anytype
+  object, each read-only, annotated so, described with "Use this when …", answered before the child.tools
+  lookup by calling existing child tools; a space named by the user is resolved case-insensitively and
+  an unknown name answers with the list of spaces; the raw 52 stay; mcp-dispatch.test.ts covers each tool
+  against the child fake.
+- 'docs/loop/verify.sh exits zero and prints gate: GREEN.'
+canonical_id: '0033'
+canonical_source: plans
+slice: 08
+size: M
+status: TODO
+depends_on:
+- WI-0033-07-tool-metadata-that-routes

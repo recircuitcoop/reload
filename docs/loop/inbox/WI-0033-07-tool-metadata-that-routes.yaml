@@ -1,0 +1,18 @@
+id: WI-0033-07-tool-metadata-that-routes
+title: Annotations and "Use this when" descriptions for all 52 tools
+intent: The model chooses tools from their metadata; Anytype's raw descriptions and missing annotations
+  leave ChatGPT guessing and unable to tell reads from deletes.
+acceptance:
+- A pure mapping applied in tools/list leaves child.tools, the surface check and telemetry names unchanged;
+  a committed classification gives every tool readOnlyHint and the delete tools destructiveHint; descriptions
+  begin "Use this when …" and the list and search tools carry the live space names under the switch of
+  WI-0033-06; a test fails when the committed tool surface gains a tool the classification does not name;
+  mcp-dispatch.test.ts covers the mapping.
+- 'docs/loop/verify.sh exits zero and prints gate: GREEN.'
+canonical_id: '0033'
+canonical_source: plans
+slice: '07'
+size: M
+status: TODO
+depends_on:
+- WI-0033-05-explicit-live-instructions

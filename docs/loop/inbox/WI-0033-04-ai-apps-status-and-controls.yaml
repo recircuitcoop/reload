@@ -1,0 +1,19 @@
+id: WI-0033-04-ai-apps-status-and-controls
+title: Configuration › AI apps shows the state with Connect, Disconnect and Repair
+intent: 'The owner''s rule, 2026-10-28: "changeable in the configuration"; supersedes WI-0022-30''s copy
+  flow for ChatGPT and Codex.'
+acceptance:
+- Configuration › General › AI apps shows one ChatGPT and Codex row with the state from WI-0033-02 and
+  Connect, Disconnect and Repair, over the ipc.ts, app-bridge.ts and service-calls.ts pattern; it says
+  Reload works in ChatGPT's Work view and Codex and that normal Chat does not show local tools yet; the
+  Copy token flow for ChatGPT and Copy setup for Codex are removed; docs/INSTALL.md 7.3 and 7.4 describe
+  the new flow without the .zshrc line; every element has a data-testid; general.e2e.ts proves each control
+  against a stubbed home.
+- 'docs/loop/verify.sh exits zero and prints gate: GREEN.'
+canonical_id: '0033'
+canonical_source: plans
+slice: '04'
+size: M
+status: TODO
+depends_on:
+- WI-0033-02-reload-owns-its-codex-entry

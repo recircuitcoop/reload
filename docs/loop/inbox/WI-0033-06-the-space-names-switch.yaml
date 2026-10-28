@@ -1,0 +1,16 @@
+id: WI-0033-06-the-space-names-switch
+title: The "Tell AI apps the names of my spaces" switch
+intent: Space names go to OpenAI at every new thread; the owner can turn that off in Configuration.
+acceptance:
+- A boolean setting in the services' settings.json (launchAtLogin pattern, its own port in ports/settings-store.ts,
+  default per decision D2) shown in Configuration › General › AI apps with one line on what it sends;
+  off removes the space names from the instructions and the descriptions of WI-0033-07 at the next connection;
+  a unit test covers the store and the composer, an e2e case the switch.
+- 'docs/loop/verify.sh exits zero and prints gate: GREEN.'
+canonical_id: '0033'
+canonical_source: plans
+slice: '06'
+size: S
+status: TODO
+depends_on:
+- WI-0033-05-explicit-live-instructions
