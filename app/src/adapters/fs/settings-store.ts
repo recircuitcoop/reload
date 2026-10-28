@@ -22,6 +22,7 @@ import type {
   RunRetentionSetting,
   SettingsStore,
   SetupSetting,
+  SpaceNamesSetting,
   StabilityStore,
   UpdateHistoryStore,
   UpdateSettingsStore,
@@ -50,6 +51,7 @@ export class JsonSettingsStore
     PackageSettingsStore,
     RunRetentionSetting,
     SetupSetting,
+    SpaceNamesSetting,
     StabilityStore,
     TelemetrySetting,
     UpdateHistoryStore,
@@ -110,6 +112,21 @@ export class JsonSettingsStore
 
   writeLaunchAtLogin(on: boolean): void {
     this.#write("launchAtLogin", on);
+  }
+
+  // Whether the space names go into the MCP instructions and tool descriptions (plan 0033 D2).
+  readSpaceNames(): boolean {
+    const on = this.#read()["spaceNamesToAiApps"];
+    if (on !== undefined && typeof on !== "boolean") {
+      throw new SettingsFileError(
+        `the spaceNamesToAiApps setting in ${this.#file} must be true or false`,
+      );
+    }
+    return on ?? true;
+  }
+
+  writeSpaceNames(on: boolean): void {
+    this.#write("spaceNamesToAiApps", on);
   }
 
   // What was last written into each AI app's server list (plan 0033), raw.

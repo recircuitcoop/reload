@@ -126,3 +126,14 @@ export interface LaunchAtLoginSetting {
   /** Store the switch, leaving every other setting as it was. */
   writeLaunchAtLogin(on: boolean): void;
 }
+
+/**
+ * "Tell AI apps the names of my spaces" (plan 0033 D, decision D2): on until someone turns it
+ * off. Read at each new connection, so a change counts from the next one.
+ */
+export interface SpaceNamesSetting {
+  /** Whether the names may be sent; true when nothing is stored. Throws when unreadable. */
+  readSpaceNames(): boolean;
+  /** Store the switch, leaving every other setting as it was. */
+  writeSpaceNames(on: boolean): void;
+}

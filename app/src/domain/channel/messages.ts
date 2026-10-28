@@ -130,6 +130,9 @@ export type CallOp =
   | "aiApps.connect"
   | "aiApps.repair"
   | "aiApps.disconnect"
+  /** "Tell AI apps the names of my spaces" (plan 0033 D2): read it, move it. */
+  | "spaceNames.get"
+  | "spaceNames.set"
   /** Which instances of some packages' types are deployed and ready (WI-0018-17's update). */
   | "package.ready"
   | "package.reload"
@@ -185,6 +188,8 @@ const CALL_OPS: readonly string[] = [
   "aiApps.connect",
   "aiApps.repair",
   "aiApps.disconnect",
+  "spaceNames.get",
+  "spaceNames.set",
   "package.ready",
   "package.reload",
   "node.status",

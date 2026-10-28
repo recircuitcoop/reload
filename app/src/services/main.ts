@@ -19,6 +19,7 @@ import { OwnerOnlyFileStore } from "../adapters/fs/owner-only-files";
 import { ProcessTableAppProcesses } from "../adapters/process/app-processes";
 import { mcpHelperPath } from "../adapters/process/mcp-helper-path";
 import { AiAppService, serveAiAppCall } from "../application/ai-app-connections";
+import { gatedSpaceNames, serveSpaceNamesCall } from "../application/space-names";
 import { JsonSettingsStore } from "../adapters/fs/settings-store";
 import { BundledRuntimeLocator } from "../adapters/process/bundled-runtime-locator";
 import { unpackedDir } from "../adapters/process/command";
@@ -53,6 +54,7 @@ import { MCP_HOST_VARIABLE, MCP_PORT_VARIABLE } from "../domain/endpoint/address
 import { SecretRegistry } from "../domain/redaction/registry";
 import { MCP_STABILITY } from "../domain/supervision/staleness";
 import type { SecretStore } from "../ports/secret-store";
+import type { SpaceNamesSetting } from "../ports/settings-store";
 
 // Every record goes to the shell, the one log writer, as a JSON line on stdout (WI-0018-04).
 // The MCP child's stderr goes under a name of its own, with its pid, redacted with the same
@@ -182,7 +184,10 @@ function buildEndpoint(config: InitConfig, secrets: SecretStore): McpEndpoint | 
     logger.error(endpointProblem);
     return null;
   }
-  const spaceNames = async (): Promise<SpaceNames> => {
+  const settings = new JsonSettingsStore(path.join(config.userDir, "settings.json"));
+  spaceNamesSetting = settings;
+  // Off sends "withheld" without asking Anytype (plan 0033 D2), read at each connection.
+  const spaceNames = gatedSpaceNames(settings, async (): Promise<SpaceNames> => {
     const key = secrets.read("anytype-api-key");
     if (key === null) {
       return "unavailable";
@@ -192,7 +197,7 @@ function buildEndpoint(config: InitConfig, secrets: SecretStore): McpEndpoint | 
     } catch {
       return "unavailable";
     }
-  };
+  });
   const gateway = new HttpMcpGateway({
     token,
     handle: mcpDispatch({
@@ -224,7 +229,6 @@ function buildEndpoint(config: InitConfig, secrets: SecretStore): McpEndpoint | 
   });
   // Reload's entry in the AI apps' server lists (plan 0033 §B), rewritten when it is Reload's own
   // and stale: at start and after a move, once the endpoint serves its address.
-  const settings = new JsonSettingsStore(path.join(config.userDir, "settings.json"));
   const helper = mcpHelperPath(process.env["RELOAD_RUNTIMES_DIR"], __dirname);
   aiApps = new AiAppService({
     clients: fileAiAppConnections(os.homedir(), process.platform, process.env["PATH"]),
@@ -257,6 +261,7 @@ let service: AnytypeService | null = null;
 let endpoint: McpEndpoint | null = null;
 // Lifted to module scope so the pages can reach it (Setup, Configuration).
 let aiApps: AiAppService | null = null;
+let spaceNamesSetting: SpaceNamesSetting | null = null;
 let endpointProblem = "the MCP endpoint has not started yet";
 function startService(config: InitConfig): void {
   if (config.secretFiles === undefined) {
@@ -320,6 +325,13 @@ serveShell({
   // The listener closes before the child stops, so a client meets a refused connection.
   onStop: () => stopServing(endpoint ?? { stop: () => Promise.resolve() }, service),
   onCall: (op, args) => {
+    if (op.startsWith("spaceNames.")) {
+      return Promise.resolve(
+        spaceNamesSetting === null
+          ? { ok: false, error: endpointProblem }
+          : serveSpaceNamesCall(spaceNamesSetting, op, args),
+      );
+    }
     if (op.startsWith("aiApps.")) {
       return aiApps === null
         ? Promise.resolve({ ok: false, error: "the AI apps have not started yet" })
