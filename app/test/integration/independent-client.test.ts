@@ -145,7 +145,13 @@ describe("an independent Streamable HTTP client", () => {
 
     const mcp = await client(url);
     const listed = await mcp.listTools();
-    expect(listed.tools.map((tool) => tool.name)).toEqual(FAKE_TOOLS.map((tool) => tool.name));
+    // The child's tools in its order, then Reload's three intent tools, by name.
+    expect(listed.tools.map((tool) => tool.name)).toEqual([
+      ...FAKE_TOOLS.map((tool) => tool.name),
+      "anytype_list_spaces",
+      "anytype_search",
+      "anytype_read",
+    ]);
     const called = await mcp.callTool({ name: "API-list-spaces", arguments: { limit: 1 } });
     expect(called.content).toEqual([{ type: "text", text: "API-list-spaces" }]);
     for (const spy of spawned) {
