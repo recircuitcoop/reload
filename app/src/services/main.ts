@@ -42,6 +42,7 @@ import {
 } from "../application/serve-shell";
 import { mcpChildLines, printCanary, sourceLog } from "../application/source-log";
 import { DEFAULT_API_BASE_URL } from "../domain/anytype/pins";
+import { composeServerInstructions } from "../domain/anytype/server-instructions";
 import type { InitConfig, SecretPaths } from "../domain/channel/messages";
 import type { RuntimeLocator } from "../ports/runtime-locator";
 import { MCP_HOST_VARIABLE, MCP_PORT_VARIABLE } from "../domain/endpoint/address";
@@ -193,6 +194,20 @@ function buildEndpoint(config: InitConfig, secrets: SecretStore): McpEndpoint | 
         shellSignals(link)({ kind: "mcp-call", call });
       },
       newSession: () => randomBytes(16).toString("hex"),
+      // Composed from the live spaces at each initialize (plan 0033); the names go nowhere else.
+      instructions: async () => {
+        const key = secrets.read("anytype-api-key");
+        if (key === null) {
+          return composeServerInstructions("unavailable");
+        }
+        try {
+          const spaces = await anytypeApi.listSpaces(key);
+          return composeServerInstructions(spaces.map((space) => space.name));
+        } catch {
+          return composeServerInstructions("unavailable");
+        }
+      },
+      unavailableInstructions: composeServerInstructions("unavailable"),
       files: new FileDownloads({
         source: anytypeApi,
         key: () => secrets.read("anytype-api-key"),

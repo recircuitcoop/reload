@@ -18,6 +18,7 @@ import {
   type ServedMcp,
 } from "../../src/application/mcp-dispatch";
 import { MCP_PROTOCOL_VERSION } from "../../src/domain/anytype/pins";
+import { composeServerInstructions } from "../../src/domain/anytype/server-instructions";
 import { SessionError } from "../../src/domain/anytype/errors";
 import { sourceLog } from "../../src/application/source-log";
 import { REDACTED, SecretRegistry } from "../../src/domain/redaction/registry";
@@ -50,6 +51,81 @@ function subject(
     return handle(bytes);
   };
 }
+
+describe("initialize instructions (plan 0033)", () => {
+  const INIT = { jsonrpc: "2.0", id: 1, method: "initialize" };
+  const UNAVAILABLE = composeServerInstructions("unavailable");
+
+  function withInstructions(
+    instructions: () => Promise<string | undefined>,
+    served: ServedMcp | null = null,
+    extra: { instructionsWaitMs?: number; logger?: Logger } = {},
+  ) {
+    const logger = extra.logger ?? new RecordingLogger();
+    const handle = mcpDispatch({
+      served: () => served,
+      redact: (text) => text,
+      clock: new FakeClock(),
+      logger,
+      files: unpairedFiles(logger),
+      instructions,
+      unavailableInstructions: UNAVAILABLE,
+      ...(extra.instructionsWaitMs === undefined
+        ? {}
+        : { instructionsWaitMs: extra.instructionsWaitMs }),
+    });
+    return async () => {
+      const answer = await handle(new TextEncoder().encode(JSON.stringify(INIT)));
+      const body = answer.body as { result: { instructions?: string } };
+      return body.result.instructions;
+    };
+  }
+
+  it("sends the composed text, explicit about what it is and when to use it", async () => {
+    const text = await withInstructions(() =>
+      Promise.resolve(composeServerInstructions(["Work", "Home"])),
+    )();
+    expect(text).toContain("user's own Anytype");
+    expect(text).toContain("Reload");
+    expect(text).toContain('"check in ..."');
+    expect(text).toContain('The user\'s spaces are: "Work", "Home".');
+    expect(text).toContain("Never create, change or delete");
+  });
+
+  it("answers at once when Anytype is slow, with the unavailable text", async () => {
+    const never = () => new Promise<string>(() => undefined);
+    const started = Date.now();
+    const text = await withInstructions(never, null, { instructionsWaitMs: 50 })();
+    expect(Date.now() - started).toBeLessThan(500);
+    expect(text).toBe(UNAVAILABLE);
+    expect(text).toContain("list-spaces");
+  });
+
+  it("answers with the unavailable text when composing throws, and the failure is not logged", async () => {
+    const logger = new RecordingLogger();
+    const text = await withInstructions(() => Promise.reject(new Error("Secret Space")), null, {
+      logger,
+    })();
+    expect(text).toBe(UNAVAILABLE);
+    expect(JSON.stringify(logger)).not.toContain("Secret Space");
+  });
+
+  it("still answers initialize while the child is down", async () => {
+    const text = await withInstructions(() => Promise.resolve("hello"), null)();
+    expect(text).toBe("hello");
+  });
+
+  it("never logs the space names", async () => {
+    const logger = new RecordingLogger();
+    const text = await withInstructions(
+      () => Promise.resolve(composeServerInstructions(["Hidden Name"])),
+      null,
+      { logger },
+    )();
+    expect(text).toContain("Hidden Name");
+    expect(JSON.stringify(logger)).not.toContain("Hidden Name");
+  });
+});
 
 describe("the MCP exchange", () => {
   it("runs initialize, initialized, ping, tools/list and tools/call, keeping every id", async () => {

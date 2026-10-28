@@ -66,7 +66,21 @@ export interface McpDispatchDeps {
   readonly observe?: (call: McpCallFacts) => void;
   /** A new MCP session's id; a counter when none is given (tests). */
   readonly newSession?: () => string;
+  /**
+   * The `instructions` for one initialize, composed from the live Anytype (plan 0033); undefined
+   * sends none. It may be slow or throw: initialize waits for it at most `instructionsWaitMs`,
+   * then sends `unavailableInstructions`. Its text holds the person's space names, so it is
+   * never logged.
+   */
+  readonly instructions?: () => Promise<string | undefined>;
+  /** What initialize sends when `instructions` is late or fails; none when absent. */
+  readonly unavailableInstructions?: string;
+  /** How long initialize waits for `instructions`; INSTRUCTIONS_WAIT_MS when none is given. */
+  readonly instructionsWaitMs?: number;
 }
+
+/** The longest initialize waits for the live instructions. */
+export const INSTRUCTIONS_WAIT_MS = 1000;
 
 export const CHILD_UNAVAILABLE = "the Anytype MCP child is unavailable";
 
@@ -169,7 +183,7 @@ export function mcpDispatch(deps: McpDispatchDeps): McpHandler {
   return async (body, session) => {
     const started = deps.clock.now();
     const request = parsed(body);
-    const answer = await dispatch(request, deps.served, deps.files);
+    const answer = await dispatch(request, deps.served, deps.files, () => initializeText(deps));
     let sent: McpAnswer =
       answer.body === null
         ? answer
@@ -221,6 +235,28 @@ function logCall(
   );
 }
 
+/** The instructions for an initialize, within the wait; the unavailable text when late or failed. */
+async function initializeText(deps: McpDispatchDeps): Promise<string | undefined> {
+  if (deps.instructions === undefined) {
+    return undefined;
+  }
+  let cancel = (): void => undefined;
+  const late = new Promise<undefined>((resolve) => {
+    const timer = setTimeout(resolve, deps.instructionsWaitMs ?? INSTRUCTIONS_WAIT_MS);
+    cancel = () => {
+      clearTimeout(timer);
+    };
+  });
+  try {
+    return (await Promise.race([deps.instructions(), late])) ?? deps.unavailableInstructions;
+  } catch {
+    // Never the failure's message: it could quote what Anytype answered.
+    return deps.unavailableInstructions;
+  } finally {
+    cancel();
+  }
+}
+
 /** The body as JSON, or undefined when it is not UTF-8 JSON. */
 function parsed(body: Uint8Array): unknown {
   try {
@@ -234,6 +270,7 @@ async function dispatch(
   request: unknown,
   served: () => ServedMcp | null,
   files: FileDownloads,
+  instructions: () => Promise<string | undefined>,
 ): Promise<McpAnswer> {
   if (request === undefined) {
     return { status: 200, body: error(null, -32700, "invalid JSON") };
@@ -247,6 +284,7 @@ async function dispatch(
     return { status: 202, body: null };
   }
   if (method === "initialize") {
+    const text = await instructions();
     return {
       status: 200,
       body: result(id, {
@@ -254,6 +292,7 @@ async function dispatch(
         // `resources` because a download answers an embedded resource, readable by its uri.
         capabilities: { tools: {}, resources: {} },
         serverInfo: { name: "reload-anytype", version: "1" },
+        ...(text === undefined ? {} : { instructions: text }),
       }),
     };
   }
