@@ -5,12 +5,11 @@
 # passes with no manual step — no pre-created venv, no optional extra to remember, no
 # fixture that only exists in somebody's main checkout.
 #
-#   * `uv sync --frozen` builds the environment from the committed uv.lock and FAILS if
-#     the lock and pyproject.toml disagree. A drifting transitive dependency is a red
-#     gate here rather than a surprise in production (plan 0001, pinning rule 5).
-#   * Every later command runs with `--no-sync`, so nothing can quietly re-resolve what
-#     --frozen just pinned. A bare `uv run` is what let a sibling project build a venv
-#     missing an extra and fail for reasons unrelated to any change.
+#   * `npm ci` installs exactly the committed package-lock.json and FAILS if it and the
+#     manifests disagree; `uv sync --frozen` in sdk/python does the same for the Python
+#     SDK's own uv.lock (plan 0001, pinning rule 5).
+#   * Every later uv command runs with `--no-sync`, so nothing can quietly re-resolve what
+#     --frozen just pinned.
 #
 # Gate mode (loopify plan 0023). The loop engine runs this gate with:
 #   LOOP_GATE_MODE     quick | detailed. Unset or empty means detailed: a gate run by
@@ -47,14 +46,12 @@ echo "gate-mode: $mode"
 
 if [ "$mode" = "quick" ]; then
   # == quick == Only what the changed paths map to. Quick is never vacuous: every quick
-  # run type-checks the whole app (tsc -b over the app, both SDKs and every package) and
-  # lint-checks the old Python app, so a change that breaks a type or an import anywhere
+  # run type-checks the whole app (tsc -b over the app, both SDKs and every package),
+  # so a change that breaks a type or an import anywhere
   # fails even when it maps to no test. What quick does NOT run — the full vitest suite
   # with its coverage thresholds, e2e specs the change did not touch, parity — the
   # detailed run before integration does.
   #
-  #   src/innytypes, tests, pyproject.toml  -> the old Python app's stages, in full (a
-  #                                            changed module may be imported by any test)
   #   sdk/python                            -> the SDK's own stages, in full
   #   app, sdk/ts, packages, tools          -> tsc, eslint + prettier on the changed files,
   #                                            architecture, vitest --changed (the tests that
@@ -62,14 +59,13 @@ if [ "$mode" = "quick" ]; then
   #                                            protocol surface changed, and the changed e2e
   #                                            specs (after a build) plus the finder rule
   #   anything prettier formats             -> prettier --check on those files
-  py=0; sdkpy=0; app=0; conformance=0; e2e_changed=0
+  sdkpy=0; app=0; conformance=0; e2e_changed=0
   lint_files=()
   prettier_files=()
   e2e_specs=()
   while IFS= read -r path; do
     [ -z "$path" ] && continue
     case "$path" in
-      src/innytypes/*|tests/*|pyproject.toml) py=1 ;;
       sdk/python/*) sdkpy=1 ;;
     esac
     case "$path" in
@@ -93,20 +89,8 @@ if [ "$mode" = "quick" ]; then
     esac
   done < "$LOOP_GATE_CHANGED"
 
-  echo "== quick: ruff (old Python app) =="
-  $UV run --no-sync ruff check src tests
-
   echo "== quick: name census (tools/name-census.mjs, plan 0028) =="
   node tools/name-census.mjs
-
-  if [ "$py" = 1 ]; then
-    echo "== quick: ruff format --check =="
-    $UV run --no-sync ruff format --check src tests
-    echo "== quick: mypy =="
-    $UV run --no-sync mypy
-    echo "== quick: pytest =="
-    $UV run --no-sync pytest
-  fi
 
   echo "== quick: app types (tsc -b) =="
   $NPM run --silent gate:types
@@ -161,31 +145,16 @@ fi
 echo "== name census (tools/name-census.mjs, plan 0028) =="
 node tools/name-census.mjs
 
-# == python == The old Python app's stages and the Python SDK's need nothing the app stages
-# make, and the app stages nothing of theirs, so they run alongside them: same checks, one
-# after another inside the group, with the group's output printed whole once it ends. The
-# group runs in a process group of its own (set -m), so a red app stage stops it too.
+# == python == The Python SDK's stages need nothing the app stages make, and the app stages
+# nothing of theirs, so they run alongside them: same checks, one after another inside the
+# group, with the group's output printed whole once it ends. The group runs in a process
+# group of its own (set -m), so a red app stage stops it too.
 mkdir -p .gate
 PY_LOG=.gate/python-stages.log
 set -m
 (
-  echo "== uv sync --frozen =="
-  $UV sync --frozen
-
-  echo "== ruff =="
-  $UV run --no-sync ruff check src tests
-
-  echo "== ruff format --check =="
-  $UV run --no-sync ruff format --check src tests
-
-  echo "== mypy =="
-  $UV run --no-sync mypy
-
-  echo "== pytest =="
-  $UV run --no-sync pytest
-
   # == sdk/python == The Python node SDK (reload-node, WI-0018-26): its own project, its own
-  # committed uv.lock, checked the same hermetic way as the root project above. A subshell (not
+  # committed uv.lock, checked the hermetic way. A subshell (not
   # --project, which points uv at another project's pyproject.toml without changing the actual
   # working directory) so `ruff`/`mypy`'s relative paths, and sdk/python's own pyproject.toml
   # config, resolve the way they do when run from sdk/python directly -- and the repo root's cwd
@@ -213,7 +182,7 @@ PY_PID=$!
 set +m
 trap 'kill -- -"$PY_PID" 2>/dev/null || true' EXIT
 
-# == app == The new application (plan 0018 §6), in the plan's order, while the Python
+# == app == The application (plan 0018 §6), in the plan's order, while the Python
 # stages run. Same rule as above: `npm ci` installs exactly the committed
 # package-lock.json and fails if it and the manifests disagree, and nothing after it
 # installs anything. Each stage is an `npm run gate:*` script in the root package.json.
@@ -252,16 +221,8 @@ if [ "$PY_STATUS" -ne 0 ]; then
   exit "$PY_STATUS"
 fi
 
-# == parity == (plan 0018 §5). Until the cutover the old suite must be exactly the one
-# docs/parity/old-tests.txt lists, so an old test added, renamed or removed stops here until
-# the ledger is re-seeded. Then the ledger is checked against the vitest report gate:unit
+# == parity == (plan 0018 §5). The ledger is checked against the vitest report gate:unit
 # wrote above, in this run: a ported id that did not pass in it is refused.
-echo "== parity: old suite against old-tests.txt (seed_ledger.py --check-old) =="
-$UV run --no-sync python tools/parity/seed_ledger.py --check-old
-
-echo "== parity: seeder tests =="
-$UV run --no-sync pytest tools/parity -p no:cacheprovider --no-cov -o addopts=""
-
 echo "== parity: ledger (tools/parity/check.ts, normal mode) =="
 $NPM run --silent gate:parity
 
