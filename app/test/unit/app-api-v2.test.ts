@@ -575,7 +575,7 @@ describe("AppApi v2 calls, through the shell to its processes", () => {
     expect(await h.api.setSetupStep({ kind: "back" })).toMatchObject({
       value: { step: "welcome" },
     });
-    for (let pressed = 0; pressed < 3; pressed += 1) await h.api.setSetupStep({ kind: "next" });
+    for (let pressed = 0; pressed < 4; pressed += 1) await h.api.setSetupStep({ kind: "next" });
     expect(await h.api.setSetupStep({ kind: "useExample" })).toMatchObject({
       value: { step: "source-folder", example: "use" },
     });

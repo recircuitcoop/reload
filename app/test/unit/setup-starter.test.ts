@@ -210,7 +210,7 @@ function harness(previous?: { stored: Record<string, unknown>; flow: FakeFlow })
 
 /** Continue from Welcome to the example's choice. */
 async function toExample(h: ReturnType<typeof harness>) {
-  for (let pressed = 0; pressed < 3; pressed += 1) {
+  for (let pressed = 0; pressed < 4; pressed += 1) {
     await h.call("setup.move", { kind: "next" });
   }
   await h.settle();
