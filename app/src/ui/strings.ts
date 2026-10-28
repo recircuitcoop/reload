@@ -17,6 +17,7 @@
 // name, the between-steps lines, the unchecked and going-back update states, a check that failed
 // for another reason than the connection, three or more uses in one refusal, a shipped package's
 // refusal, and the "not available yet" answer of a call whose work item has not landed.
+import { AI_APPS_STRINGS } from "./strings-ai-apps";
 import { LIMIT_STRINGS } from "./strings-limits";
 import { PRIVACY_STRINGS } from "./privacy-strings";
 import { TIME_STRINGS } from "./strings-time";
@@ -58,21 +59,6 @@ export const STRINGS = {
   "setup.anytype.skip": "Skip for now",
   "setup.anytype.connected.one": "Connected. Found {n} space.",
   "setup.anytype.connected.other": "Connected. Found {n} spaces.",
-  "setup.aiApps.title": "Connect your AI apps",
-  "setup.aiApps.what": "Connecting lets {app} look things up in your Anytype through Reload.",
-  "setup.aiApps.company": "What the tools return is sent to {company}.",
-  "setup.aiApps.limit": "ChatGPT uses Reload in its Work view, not in normal Chat.",
-  "setup.aiApps.connect": "Connect",
-  "setup.aiApps.skip": "Skip",
-  "setup.aiApps.repair": "Repair",
-  "setup.aiApps.connected": "Connected.",
-  "setup.aiApps.skipped": "Skipped. You can connect it later in Configuration › General.",
-  "setup.aiApps.restart": "Restart {restart} to finish.",
-  "setup.aiApps.changed": "An entry for Reload made by hand is already there. Repair replaces it.",
-  "setup.aiApps.failed":
-    "Couldn't connect {app}. Try again, or connect it later in Configuration › General.",
-  "setup.aiApps.none":
-    "No AI apps found on this computer. You can connect one later in Configuration › General.",
   "setup.continue": "Continue",
   "setup.form.browse": "Browse…",
   "setup.back": "Back",
@@ -107,6 +93,8 @@ export const STRINGS = {
   "setup.nav.ready": "Ready",
   // The privacy notice beside the reports question: its lines are in ui/privacy-strings.ts.
   ...PRIVACY_STRINGS,
+  // Connect your AI apps: its lines are in ui/strings-ai-apps.ts.
+  ...AI_APPS_STRINGS,
 
   // ── Live: the board, Edit layout ─────────────────────────────────────────────────────────
   "board.editLayout": "Edit layout",
