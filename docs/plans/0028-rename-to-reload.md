@@ -11,6 +11,13 @@ updated: 2026-10-19
 Status: APPROVED 2026-10-19. Requested by the owner: "rename the project, folder and whole
 library from InnyTypes to reload".
 
+> **Note, 2026-10-28.** D6 and the legacy constants of "Why this is more than a find-and-replace",
+> points 1 to 4, were superseded by the owner on 2026-10-28 ("Delete old application
+> completely."; see plan 0026). This Mac was checked and holds nothing of InnyTypes any more, and
+> the owner is the only 0.3.0 user, so the first-start move, the import, the old paths and bundle
+> id, and the refusal of the old package names are deleted from the code, and the name census
+> allows the old name in history only. Reload does not read InnyTypes' data.
+
 ## Owner answers (2026-10-19)
 
 Given against the seven steps of "What changes, in order":

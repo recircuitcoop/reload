@@ -3,7 +3,7 @@ type: plan
 title: Delete the old application
 status: APPROVED
 created: 2026-10-09
-updated: 2026-10-09
+updated: 2026-10-28
 ---
 
 # 0026 — Delete the old application
@@ -22,6 +22,27 @@ parity ledger green on macOS and Linux only. **The Windows condition is not drop
 the Windows rows stay in the ledger as pending, `tools/parity/check.ts --final` reports them as
 the one open item, and **1.0.0 is not published** until plan 0025 makes every proof green on
 Windows too. Until then releases stay 0.x. Plan 0025 now carries that condition.
+
+## Done 2026-10-28, on branch `cutover/0026`
+
+The owner ordered, on 2026-10-28: **"Delete old application completely."** and, about the legacy
+paths and bundle id the app still named so it could migrate a 0.3.0 install: **"NO YOU WILL
+ABSOLUTELY MIGRATE THESE SETTINGS TOO"**. The migration was run and checked on the owner's Mac
+(no InnyTypes data, config, login item or app is left there), and the owner is the only 0.3.0
+user, so the code that existed only to migrate an old install served no one.
+
+Deleted on `cutover/0026`: `src/innytypes/`, `src/helper/`, `tests/`, the root `pyproject.toml`,
+`uv.lock` and `.python-version`, `tools/make_icon.py`, the ledger seeder and its tests, and
+`docs/anytype-mcp-connection.md`; every migration-from-an-old-install path in `app/` with its
+tests (the first-start move, the config.toml import, the old login item and helper lock, the
+journal and package-name renaming, the key fallback and the package-name refusals); the old
+app's stages in `docs/loop/verify.sh`; the old-app sections of README and `docs/loop/SKILL.md`;
+and the name census's allow-list down to history only. The ledger rows that cited a deleted
+test are retired with the owner's two sentences as the reason.
+
+**This change publishes nothing.** 1.0.0 still waits on plan 0025 (Windows): the Windows
+condition of the 2026-10-21 answer stands, and WI-0026-01 stays blocked on it for the
+publication and the `--final` parity run.
 
 ## When (as first written)
 
