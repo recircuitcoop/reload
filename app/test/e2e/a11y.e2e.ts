@@ -156,7 +156,7 @@ async function stop(page: Page, where: string, findings: Finding[], unnamed: str
 }
 
 /**
- * Welcome, Reports, Connect Anytype (skipped) and the example, to Source folder. With Anytype not
+ * Welcome, Reports, Connect Anytype (skipped), Connect your AI apps and the example, to Source folder. With Anytype not
  * connected the example offers Connect Anytype, not Use the example: the move is made as the
  * shell's own, so the screens after it are audited too.
  */
@@ -171,6 +171,9 @@ async function toSourceFolder(window: Page, visit?: (where: string) => Promise<v
   await expect(step).toHaveAttribute("data-step", "connect-anytype");
   await visit?.("setup connect anytype");
   await step.getByTestId("setup-anytype-skip").click();
+  await expect(step).toHaveAttribute("data-step", "connect-ai-apps", { timeout: 20_000 });
+  await visit?.("setup connect ai apps");
+  await step.getByTestId("setup-continue").click();
   await expect(step).toHaveAttribute("data-step", "example", { timeout: 20_000 });
   await expect(step.getByTestId("setup-example-connect")).toBeVisible({ timeout: 20_000 });
   await visit?.("setup example");
@@ -466,7 +469,8 @@ test("(c) the keyboard: Setup in tab order, a Flows row's ⋯ menu, a dialog tha
     for (const [at, next, button] of [
       ["welcome", "reports", "setup-continue"],
       ["reports", "connect-anytype", "setup-reports-dont-send"],
-      ["connect-anytype", "example", "setup-anytype-skip"],
+      ["connect-anytype", "connect-ai-apps", "setup-anytype-skip"],
+      ["connect-ai-apps", "example", "setup-continue"],
     ] as const) {
       await expect(step).toHaveAttribute("data-step", at, { timeout: 20_000 });
       const stops = await tabTo(window, button);

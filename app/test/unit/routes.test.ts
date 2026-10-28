@@ -126,11 +126,12 @@ describe("the window opens on Setup until completed, then Live", () => {
 });
 
 describe("the Setup sidebar", () => {
-  it("lists Welcome, Reports, Anytype, Example, Source folder, Steps and Ready, and marks the step shown", () => {
+  it("lists Welcome, Reports, Anytype, AI apps, Example, Source folder, Steps and Ready, and marks the step shown", () => {
     expect(SETUP_NAV).toEqual([
       "welcome",
       "reports",
       "anytype",
+      "aiApps",
       "example",
       "folder",
       "steps",
@@ -140,13 +141,14 @@ describe("the Setup sidebar", () => {
       "welcome",
       "reports",
       "connect-anytype",
+      "connect-ai-apps",
       "example",
       "source-folder",
       "node-forms",
       "ready",
     ] as const;
     expect(steps.map((step) => setupNavIndex({ step, example: "use" }))).toEqual([
-      0, 1, 2, 3, 4, 5, 6,
+      0, 1, 2, 3, 4, 5, 6, 7,
     ]);
     expect(setupNav({ example: null })).toEqual(SETUP_NAV);
   });
@@ -156,10 +158,11 @@ describe("the Setup sidebar", () => {
       "welcome",
       "reports",
       "anytype",
+      "aiApps",
       "example",
       "ready",
     ]);
-    expect(setupNavIndex({ step: "ready", example: "skip" })).toBe(4);
-    expect(setupNavIndex({ step: "example", example: "skip" })).toBe(3);
+    expect(setupNavIndex({ step: "ready", example: "skip" })).toBe(5);
+    expect(setupNavIndex({ step: "example", example: "skip" })).toBe(4);
   });
 });

@@ -38,6 +38,7 @@ const WALK = [
   STRINGS["setup.welcome.title"],
   STRINGS["setup.reports.title"],
   STRINGS["setup.anytype.title"],
+  STRINGS["setup.aiApps.title"],
   STRINGS["setup.example.title"],
   STRINGS["setup.folder.title"],
   "Set up: File in Anytype",
@@ -158,12 +159,19 @@ async function welcomeAndReports(window: Page, seen: string[]): Promise<void> {
   await at(window, "connect-anytype", seen);
 }
 
+/** Connect your AI apps, left alone: Continue on to the example's choice. */
+async function passAiApps(window: Page, seen: string[]): Promise<void> {
+  await at(window, "connect-ai-apps", seen);
+  await button(window, "setup.continue").click();
+}
+
 /** Connect Anytype, already connected (connectedAnytype), then Use the example: Source folder. */
 async function useTheExample(window: Page, seen: string[]): Promise<void> {
   await expect(window.getByTestId("setup-anytype")).toHaveText("Connected. Found 1 space.", {
     timeout: 30_000,
   });
   await button(window, "setup.continue").click();
+  await passAiApps(window, seen);
   await at(window, "example", seen);
   await button(window, "setup.example.use").click();
   await at(window, "source-folder", seen);
@@ -275,11 +283,13 @@ test("quit mid-setup resumes", async () => {
     await expect(setupStep(third.window)).toContainText("Step 1 of 1.");
     await expect(title(third.window)).toHaveText("Set up: File in Anytype");
     expect(await flowsOf(third.window)).toHaveLength(1);
-    // Back goes to Source folder, then to the example's choice, then to Connect Anytype.
+    // Back goes to Source folder, then to the example's choice, then to Connect your AI apps and Connect Anytype.
     await button(third.window, "setup.back").click();
     await expect(setupStep(third.window)).toHaveAttribute("data-step", "source-folder");
     await button(third.window, "setup.back").click();
     await expect(setupStep(third.window)).toHaveAttribute("data-step", "example");
+    await button(third.window, "setup.back").click();
+    await expect(setupStep(third.window)).toHaveAttribute("data-step", "connect-ai-apps");
     await button(third.window, "setup.back").click();
     await expect(setupStep(third.window)).toHaveAttribute("data-step", "connect-anytype");
     await quit(third.app);
@@ -320,7 +330,7 @@ test("the starter's forms, then Ready, then Open Live lands in Live", async () =
     apps.push(app);
     const sidebar = window.getByTestId("sidebar");
     await expect(sidebar.getByTestId("sidebar-step")).toHaveText(
-      ["welcome", "reports", "anytype", "example", "folder", "steps", "ready"].map(
+      ["welcome", "reports", "anytype", "aiApps", "example", "folder", "steps", "ready"].map(
         (entry) => STRINGS[`setup.nav.${entry}` as keyof typeof STRINGS],
       ),
       { timeout: 20_000 },
@@ -340,6 +350,7 @@ test("the starter's forms, then Ready, then Open Live lands in Live", async () =
     });
     expect(fs.readFileSync(anytypeKeyFile(scratch), "utf8")).toBe(KEY);
     await button(window, "setup.continue").click();
+    await passAiApps(window, seen);
 
     // The example's choice, Source folder, then the starter's one form, then Ready.
     await at(window, "example", seen);
@@ -473,6 +484,7 @@ test("Skip the example on its choice: no flow is installed, and Ready without it
     const seen: string[] = [];
     await welcomeAndReports(window, seen);
     await button(window, "setup.anytype.skip").click();
+    await passAiApps(window, seen);
     await at(window, "example", seen);
     await button(window, "setup.example.skip").click();
     await at(window, "ready", seen);
@@ -486,7 +498,7 @@ test("Skip the example on its choice: no flow is installed, and Ready without it
     ).toEqual(["setup-back", "setup-ready-flows"]);
     // Source folder and Steps are not listed once the example is skipped.
     await expect(sidebar.getByTestId("sidebar-step")).toHaveText(
-      ["welcome", "reports", "anytype", "example", "ready"].map(
+      ["welcome", "reports", "anytype", "aiApps", "example", "ready"].map(
         (entry) => STRINGS[`setup.nav.${entry}` as keyof typeof STRINGS],
       ),
     );
@@ -522,6 +534,7 @@ test("Anytype skipped: the example offers Connect Anytype, which goes back to it
     const seen: string[] = [];
     await welcomeAndReports(window, seen);
     await button(window, "setup.anytype.skip").click();
+    await passAiApps(window, seen);
     await at(window, "example", seen);
     // Not a form it could never finish: no Use the example, but Connect Anytype and the way out.
     await expect(window.getByTestId("setup-example-needs-anytype")).toHaveText(
@@ -559,6 +572,7 @@ test("the step form, Anytype not connected: Connect Anytype goes back to Setup's
     const seen: string[] = [];
     await welcomeAndReports(window, seen);
     await button(window, "setup.anytype.skip").click();
+    await passAiApps(window, seen);
     await at(window, "example", seen);
     // The example chosen as the shell's own move, as when Anytype goes away after the choice.
     expect(await call(window, "setSetupStep", { kind: "useExample" })).toMatchObject({ ok: true });
@@ -596,6 +610,7 @@ test("Anytype with no space: the example waits for one, and Check again finds it
       timeout: 30_000,
     });
     await button(window, "setup.continue").click();
+    await passAiApps(window, seen);
     await at(window, "example", seen);
     // No space to file in: said plainly, and no Use the example.
     await expect(window.getByTestId("setup-example-no-space")).toHaveText(
@@ -711,6 +726,7 @@ test("never shown again", async () => {
     const seen: string[] = [];
     await welcomeAndReports(first.window, seen);
     await button(first.window, "setup.anytype.skip").click();
+    await passAiApps(first.window, seen);
     await at(first.window, "example", seen);
     await button(first.window, "setup.example.skip").click();
     await at(first.window, "ready", seen);
@@ -780,6 +796,109 @@ test("a 0.2.1 user never sees setup", async () => {
   } finally {
     await cleanUp(apps, withFlows.scratch);
     await cleanUp([], answered.scratch);
+  }
+});
+
+// ── Connect your AI apps (plan 0033 §C, WI-0033-03) ─────────────────────────────────────────
+// Always in the scratch home (HOME is the scratch folder, os.homedir() honours it): the shared
+// server list is the scratch's ~/.codex/config.toml, never the real one.
+
+const OTHERS = '# mine\nmodel = "x"\n\n[mcp_servers.serena]\ncommand = "uvx"\n';
+
+/** Welcome, Reports and a connected Anytype, to Connect your AI apps with the endpoint served. */
+async function toAiApps(window: Page, seen: string[]): Promise<void> {
+  await welcomeAndReports(window, seen);
+  await expect(window.getByTestId("setup-anytype")).toHaveText("Connected. Found 1 space.", {
+    timeout: 30_000,
+  });
+  await button(window, "setup.continue").click();
+  await at(window, "connect-ai-apps", seen);
+  // Reload's entry names the served address: Connect waits for it to be served.
+  await expect
+    .poll(
+      async () =>
+        ((await call(window, "mcpEndpoint")) as unknown as { served: string | null }).served,
+      {
+        timeout: 30_000,
+      },
+    )
+    .not.toBeNull();
+}
+
+test("Connect your AI apps: Connect writes Reload's entry and nothing else", async () => {
+  test.setTimeout(180_000);
+  const { scratch, env, canaryKey } = scratchDirectories();
+  const connected = await connectedAnytype(scratch, canaryKey);
+  const list = path.join(scratch, ".codex", "config.toml");
+  fs.mkdirSync(path.dirname(list));
+  fs.writeFileSync(list, OTHERS);
+  const apps: ElectronApplication[] = [];
+  try {
+    const { app, window } = await launchApp({ ...env, ...connected.env });
+    apps.push(app);
+    await toAiApps(window, []);
+    const row = window.getByTestId("setup-ai-app-codex");
+    // Found by its folder; what it does and who receives the results are said; nothing chosen yet.
+    await expect(row).toContainText("look things up in your Anytype through Reload");
+    await expect(row).toContainText("sent to OpenAI");
+    await expect(window.getByTestId("setup-ai-apps-limit")).toHaveText(
+      STRINGS["setup.aiApps.limit"],
+    );
+    await expect(window.getByTestId("setup-ai-app-connect-codex")).toHaveText(
+      STRINGS["setup.aiApps.connect"],
+    );
+    await expect(window.getByTestId("setup-ai-app-skip-codex")).toHaveText(
+      STRINGS["setup.aiApps.skip"],
+    );
+    expect(fs.readFileSync(list, "utf8")).toBe(OTHERS);
+
+    await window.getByTestId("setup-ai-app-connect-codex").click();
+    await expect(window.getByTestId("setup-ai-app-state-codex")).toHaveText(
+      // Connected, or asking for ChatGPT's restart when a ChatGPT already running predates it.
+      /^(Connected\.|Restart ChatGPT to finish\.)$/,
+      { timeout: 15_000 },
+    );
+    await expect(window.getByTestId("setup-ai-app-connect-codex")).toHaveCount(0);
+    const written = fs.readFileSync(list, "utf8");
+    expect(written.startsWith(OTHERS)).toBe(true);
+    expect(written).toMatch(/\[mcp_servers\.reload\]\nurl = "http:\/\/127\.0\.0\.1:\d+\/mcp"\n/);
+    expect(written).toContain("http_headers_helper");
+    expect(written).not.toMatch(/bearer|token/i);
+
+    await button(window, "setup.continue").click();
+    await expect(setupStep(window)).toHaveAttribute("data-step", "example");
+    await quit(app);
+  } finally {
+    await cleanUp(apps, scratch);
+    await connected.anytype.close();
+  }
+});
+
+test("Connect your AI apps: Skip writes nothing", async () => {
+  test.setTimeout(180_000);
+  const { scratch, env, canaryKey } = scratchDirectories();
+  const connected = await connectedAnytype(scratch, canaryKey);
+  // The folder is there, the list is not: Skip must not create it.
+  const list = path.join(scratch, ".codex", "config.toml");
+  fs.mkdirSync(path.dirname(list));
+  const apps: ElectronApplication[] = [];
+  try {
+    const { app, window } = await launchApp({ ...env, ...connected.env });
+    apps.push(app);
+    await toAiApps(window, []);
+    await window.getByTestId("setup-ai-app-skip-codex").click();
+    await expect(window.getByTestId("setup-ai-app-state-codex")).toHaveText(
+      STRINGS["setup.aiApps.skipped"],
+    );
+    await expect(window.getByTestId("setup-ai-app-connect-codex")).toHaveCount(0);
+    await button(window, "setup.continue").click();
+    await expect(setupStep(window)).toHaveAttribute("data-step", "example");
+    expect(fs.existsSync(list)).toBe(false);
+    await quit(app);
+    expect(fs.existsSync(list)).toBe(false);
+  } finally {
+    await cleanUp(apps, scratch);
+    await connected.anytype.close();
   }
 });
 

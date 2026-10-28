@@ -1,5 +1,5 @@
 // Setup (plan 0022 §H, Acceptance "resumes at the same step", owner decisions 1 and 8; the
-// example elective, owner 2026-10-20): Welcome, Reports, Connect Anytype, Start with an
+// example elective, owner 2026-10-20): Welcome, Reports, Connect Anytype, Connect AI apps (plan 0033), Start with an
 // example?, Source folder, the starter's step forms, Ready; no packages step, no recorder step.
 // Next and back, the example used or skipped, completion, and never showing again.
 import { describe, expect, it } from "vitest";
@@ -35,7 +35,7 @@ function forward(times: number, from: SetupState = FIRST_SETUP): SetupState {
 }
 
 /** At Source folder, the example chosen, its starter not installed yet. */
-const folderStep = () => useExample(forward(4));
+const folderStep = () => useExample(forward(5));
 
 /** At Source folder, with the starter flow installed with `forms` step forms. */
 const atFolder = (forms: number) => withStarter(folderStep(), "starter-1", forms);
@@ -45,11 +45,12 @@ const quitAndReopen = (state: SetupState): SetupState =>
   resume(JSON.parse(JSON.stringify(state)) as unknown);
 
 describe("the steps", () => {
-  it("runs Welcome, Reports, Connect Anytype, the example's choice, Source folder, step forms, Ready", () => {
+  it("runs Welcome, Reports, Connect Anytype, Connect AI apps, the example's choice, Source folder, step forms, Ready", () => {
     expect(SETUP_STEPS).toEqual([
       "welcome",
       "reports",
       "connect-anytype",
+      "connect-ai-apps",
       "example",
       "source-folder",
       "node-forms",
@@ -57,11 +58,11 @@ describe("the steps", () => {
     ]);
     const visited = [FIRST_SETUP.step];
     let state = FIRST_SETUP;
-    for (let pressed = 0; pressed < 3; pressed += 1) {
+    for (let pressed = 0; pressed < 4; pressed += 1) {
       state = next(state);
       visited.push(state.step);
     }
-    expect(visited).toEqual(SETUP_STEPS.slice(0, 4));
+    expect(visited).toEqual(SETUP_STEPS.slice(0, 5));
     // The choice moves on only by being made.
     expect(next(state)).toBe(state);
     expect(useExample(state)).toMatchObject({ step: "source-folder", example: "use" });
@@ -98,6 +99,7 @@ describe("the steps", () => {
     expect(canGoBack(FIRST_SETUP)).toBe(false);
     expect(back(FIRST_SETUP)).toBe(FIRST_SETUP);
     expect(back(forward(3)).step).toBe("connect-anytype");
+    expect(back(forward(4)).step).toBe("connect-ai-apps");
     expect(canGoBack(forward(1))).toBe(true);
     // Back from Source folder returns to the example's choice.
     expect(back(folderStep()).step).toBe("example");
@@ -112,7 +114,7 @@ describe("the steps", () => {
 
 describe("the example", () => {
   it("skipped on its choice: Ready, with no starter needed, Source folder and the forms never shown", () => {
-    const skipped = skipExample(forward(3));
+    const skipped = skipExample(forward(4));
     expect(skipped).toMatchObject({ step: "ready", example: "skip", starterFlowId: null });
     expect(needsStarter(skipped)).toBe(false);
     // An install that finished after Skip is recorded, to be removed, then forgotten.
@@ -146,7 +148,7 @@ describe("the example", () => {
   });
 
   it("is offered only on its own screens, and never once completed", () => {
-    for (const pressed of [0, 1, 2]) {
+    for (const pressed of [0, 1, 2, 3]) {
       const before = forward(pressed);
       expect(skipExample(before)).toBe(before);
       expect(useExample(before)).toBe(before);
@@ -160,7 +162,8 @@ describe("the example", () => {
 
 describe("the starter flow", () => {
   it("is needed once the example is chosen, until it is installed, and never once completed", () => {
-    expect([0, 1, 2, 3].map((pressed) => needsStarter(forward(pressed)))).toEqual([
+    expect([0, 1, 2, 3, 4].map((pressed) => needsStarter(forward(pressed)))).toEqual([
+      false,
       false,
       false,
       false,
@@ -173,7 +176,7 @@ describe("the starter flow", () => {
     expect(needsStarter(finish(next(withStarter(folderStep(), "s", 0))))).toBe(false);
     // Recorded before Ready only, never without an id, and never before the example is chosen.
     expect(withStarter(folderStep(), "", 2)).toEqual(folderStep());
-    const choosing = forward(3);
+    const choosing = forward(4);
     expect(withStarter(choosing, "starter-1", 2)).toBe(choosing);
     // Never over a starter already recorded.
     const ready = next(next(installed));
@@ -246,12 +249,12 @@ describe("completion", () => {
 
 describe("resumes at the same step", () => {
   it("comes back at every step it was quit on, forms included", () => {
-    for (let pressed = 0; pressed < 4; pressed += 1) {
+    for (let pressed = 0; pressed < 5; pressed += 1) {
       const state = forward(pressed);
       expect(quitAndReopen(state)).toEqual(state);
     }
     expect(quitAndReopen(folderStep())).toEqual(folderStep());
-    const skipped = skipExample(forward(3));
+    const skipped = skipExample(forward(4));
     expect(quitAndReopen(skipped)).toEqual(skipped);
     expect(quitAndReopen(back(skipped))).toEqual(back(skipped));
     const secondForm = next(next(atFolder(4)));
@@ -290,6 +293,12 @@ describe("resumes at the same step", () => {
       "s",
     );
     expect(resume({ step: "example", example: "maybe" }).example).toBeNull();
+    // Connect AI apps is a step to resume on; an older save has none and still reads.
+    expect(resume({ step: "connect-ai-apps" })).toEqual({
+      ...FIRST_SETUP,
+      step: "connect-ai-apps",
+    });
+    expect(resume({ step: "connect-anytype" }).step).toBe("connect-anytype");
     expect(resume({ step: "nonsense", completed: true }).completed).toBe(true);
     expect(resume({ step: "reports", completed: true })).toEqual({
       ...FIRST_SETUP,

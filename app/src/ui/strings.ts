@@ -69,8 +69,10 @@ export const STRINGS = {
   "setup.aiApps.skipped": "Skipped. You can connect it later in Configuration › General.",
   "setup.aiApps.restart": "Restart {restart} to finish.",
   "setup.aiApps.changed": "An entry for Reload made by hand is already there. Repair replaces it.",
-  "setup.aiApps.failed": "Couldn't connect {app}. Try again, or connect it later in Configuration › General.",
-  "setup.aiApps.none": "No AI apps found on this computer. You can connect one later in Configuration › General.",
+  "setup.aiApps.failed":
+    "Couldn't connect {app}. Try again, or connect it later in Configuration › General.",
+  "setup.aiApps.none":
+    "No AI apps found on this computer. You can connect one later in Configuration › General.",
   "setup.continue": "Continue",
   "setup.form.browse": "Browse…",
   "setup.back": "Back",

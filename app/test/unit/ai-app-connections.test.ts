@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CodexConfigConnections } from "../../src/adapters/fs/codex-config-file";
 import { elapsedSeconds, startedAtFromListing } from "../../src/adapters/process/app-processes";
 import { mcpHelperPath } from "../../src/adapters/process/mcp-helper-path";
-import { AiAppError, AiAppService } from "../../src/application/ai-app-connections";
+import { AiAppError, AiAppService, serveAiAppCall } from "../../src/application/ai-app-connections";
 import type { AiAppEntry } from "../../src/domain/ai-apps/codex-config";
 import type { AppProcesses } from "../../src/ports/ai-app-connections";
 
@@ -304,6 +304,72 @@ describe("connect, repair and disconnect", () => {
     const { service, record } = build();
     service.connect("codex");
     expect(`${text()}${JSON.stringify(record.value)}`).not.toMatch(/bearer|token/i);
+  });
+});
+
+// ── the lists and calls the pages use (plan 0033 §C, WI-0033-03) ───────────────────────────
+
+describe("what the pages list and call", () => {
+  /** A service over the shared list on a system that names no ChatGPT app: found = its folder. */
+  const onLinux = () =>
+    new AiAppService({
+      clients: { codex: new CodexConfigConnections(home, "linux") },
+      record: new MemoryRecord(),
+      desired: () => entry(),
+      processes: { startedAt: () => Promise.resolve(null) },
+      clock: { now: () => 5, after: () => () => undefined },
+      logger: { info: () => undefined, warn: () => undefined, error: () => undefined },
+    });
+
+  it("finds the app by its server-list folder, and offers nothing without it", async () => {
+    const service = onLinux();
+    expect((await service.list())[0]).toMatchObject({ client: "codex", found: false });
+    fs.mkdirSync(configDir);
+    expect((await service.list())[0]).toMatchObject({
+      client: "codex",
+      found: true,
+      state: "not-connected",
+      name: "ChatGPT and Codex",
+      company: "OpenAI",
+      restartName: "ChatGPT",
+    });
+  });
+
+  it("shows a file it cannot read as changed outside, never as free to overwrite", async () => {
+    fs.mkdirSync(configDir);
+    fs.writeFileSync(configFile, Buffer.from([0xff, 0xfe, 0x41]));
+    expect((await onLinux().list())[0]).toMatchObject({ found: true, state: "changed-outside" });
+  });
+
+  it("serves list, connect, repair and disconnect, each answering the list again", async () => {
+    const service = onLinux();
+    fs.mkdirSync(configDir);
+    const state = (answer: Awaited<ReturnType<typeof serveAiAppCall>>) =>
+      answer.ok ? (answer.value as { state: string }[])[0]?.state : answer.error;
+    expect(state(await serveAiAppCall(service, "aiApps.list", null))).toBe("not-connected");
+    expect(state(await serveAiAppCall(service, "aiApps.connect", { id: "codex" }))).toBe(
+      "connected",
+    );
+    expect(text()).toBe(TABLE_A);
+    put(OWNERS_HAND_ENTRY);
+    expect(await serveAiAppCall(service, "aiApps.connect", { id: "codex" })).toMatchObject({
+      ok: false,
+    });
+    expect(state(await serveAiAppCall(service, "aiApps.repair", { id: "codex" }))).toBe(
+      "connected",
+    );
+    expect(state(await serveAiAppCall(service, "aiApps.disconnect", { id: "codex" }))).toBe(
+      "not-connected",
+    );
+  });
+
+  it("refuses an id that is not a client, and writes nothing", async () => {
+    const service = onLinux();
+    for (const id of ["nope", 7, null, undefined]) {
+      expect(await serveAiAppCall(service, "aiApps.connect", { id })).toMatchObject({ ok: false });
+    }
+    expect(await serveAiAppCall(service, "aiApps.connect", null)).toMatchObject({ ok: false });
+    expect(fs.existsSync(configDir)).toBe(false);
   });
 });
 
