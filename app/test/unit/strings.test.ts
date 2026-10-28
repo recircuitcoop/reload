@@ -20,7 +20,6 @@ const UX_WRITING = path.resolve(
 /** The keys whose slot carries an internal value on purpose (plan 0022 §O). */
 const MAY_CARRY_AN_INTERNAL: readonly StringKey[] = [
   "general.aiApps.line",
-  "general.aiApps.setup",
   "packages.fromFolder.caption",
 ];
 
@@ -181,7 +180,6 @@ const NOT_A_LINE: ReadonlySet<string> = new Set([
   "Can't unregister *reload_summarize*: the flow *Recordings to Anytype* uses its *Transcribe* step. Remove that step first.",
   "4 installed · 1 update",
   "Run history",
-  "Copy setup for Codex",
   "Go back to 0.2.1",
   "Go back to 0.3",
   // A table's controls in the canvas form, drawn in Node-RED's page by

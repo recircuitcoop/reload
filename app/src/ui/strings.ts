@@ -9,8 +9,7 @@
 // * Plurals are two keys, `….one` and `….other`; `plural(n, …)` picks one.
 // * Nothing internal is ever in a template: no id, pid, port, path, type key or package-internal
 //   name (strings.test.ts "no string carries an internal"). A value that is one arrives in a slot,
-//   and only three keys may carry such a slot: `general.aiApps.line` (the endpoint's address),
-//   `general.aiApps.setup` (the endpoint's URL, in the command Copy setup copies) and
+//   and only two keys may carry such a slot: `general.aiApps.line` (the endpoint's address) and
 //   `packages.fromFolder.caption` (the folder a package came from).
 //
 // Lines ux-writing does not give, decided by WI-0022-10 and marked `// decided`: the first tab's
@@ -311,7 +310,6 @@ export const STRINGS = {
   "general.aiApps": "AI apps",
   "general.aiApps.line":
     "Claude, Codex and other apps can use your Anytype through Reload at `{address}`.",
-  "general.copySetup": "Copy setup for {app}",
   "general.startAtLogin": "Start at login",
   "general.startAtLogin.line": "Reload starts when you log in.",
   "general.updates": "Updates",
@@ -340,15 +338,13 @@ export const STRINGS = {
   "general.recorder.off": "{name} · not watching: its flow is off", // decided
   "general.recorders.none": "No recorder or folder is watched yet.", // decided
   "general.aiApps.notServed": "AI apps can't reach your Anytype through Reload right now.", // decided
-  // "Copy setup for …" (ux-writing): the AI app's name and the one command the button copies,
-  // the endpoint's URL in its slot and its token read from the variable at call time, never
-  // copied. Kept here, the one file that may name an AI app (independent-client.test.ts).
-  "general.aiApps.app": "Codex", // decided
-  "general.aiApps.setup":
-    "codex mcp add reload --url {url} --bearer-token-env-var RELOAD_MCP_TOKEN", // decided
-  "general.aiApps.copied": "Copied. Paste it in a terminal.", // decided
+  // Where the apps that share ChatGPT's server list use Reload (plan 0033 §C), shown beside that
+  // client in Setup and in Configuration. Kept here, the one file of words that may name an AI
+  // app (independent-client.test.ts).
+  "aiApps.limit.workView":
+    "Reload works in ChatGPT's Work view and in Codex. Normal Chat doesn't show local tools yet.",
   "general.aiApps.moved":
-    "Moved. Apps set up with the old address need the new one: copy their setup again.", // decided
+    "Moved. Connected AI apps follow on their own; apps you set up by hand need the new address.", // decided
   "general.startAtLogin.refused": "The system didn't allow it, so nothing changed.", // decided
   "general.reports.switch": "Send reports", // decided: the switch's label
   "general.reports.nothing": "Nothing is waiting to be sent.", // decided
@@ -385,22 +381,6 @@ export const STRINGS = {
     "Reload's link to Anytype isn't running right now, so nothing changed. Try again in a moment.", // decided: the endpoint's move with the services process down (the old "no host is connected")
   "general.aiApps.servicesUnsure":
     "Reload's link to Anytype didn't answer, so the address may not have changed. Check it again in a moment.", // decided: the endpoint's move sent to the services process with no answer back, so whether it moved is not known
-  // Set up ChatGPT (WI-0022-30; owner, 2026-10-15: "a process inside the chatgpt application"):
-  // the steps in ChatGPT's own Settings, and the two values they ask for, each copied on a press.
-  // The token is never drawn: only Copy token puts it on the clipboard.
-  "general.chatgpt": "Set up ChatGPT",
-  "general.chatgpt.line": "In the ChatGPT app, add Reload as a server:",
-  "general.chatgpt.step.open": "Open Settings › MCP servers and choose Add server.",
-  "general.chatgpt.step.name": "Name: reload. Transport: Streamable HTTP.",
-  "general.chatgpt.step.url": "URL: paste the address. Copy address copies it.",
-  "general.chatgpt.step.token":
-    "Authentication: Bearer token. Paste the token. Copy token copies it.",
-  "general.chatgpt.step.save": "Save, then choose Restart.",
-  "general.chatgpt.copyAddress": "Copy address",
-  "general.chatgpt.copyToken": "Copy token",
-  "general.chatgpt.addressCopied": "Address copied. Paste it as the URL in ChatGPT.",
-  "general.chatgpt.tokenCopied": "Token copied. Paste it as the Bearer token in ChatGPT.",
-  "general.chatgpt.noToken": "There's no token yet. Try again once AI apps can reach your Anytype.",
   "general.port.more": "One more", // decided: the port field's steps
   "general.port.less": "One less", // decided
   "update.unchecked": "Not checked yet · {version}", // decided

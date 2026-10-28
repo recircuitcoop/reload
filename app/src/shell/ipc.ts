@@ -29,7 +29,6 @@ export const IPC = {
   aiAppRepair: "reload:ai-app-repair",
   aiAppDisconnect: "reload:ai-app-disconnect",
   /** invoke: the MCP endpoint's token, for Copy token (WI-0022-30). */
-  mcpToken: "reload:mcp-token",
   /** invoke: which Anytype tools exist, from the recorded surface (plan 0032, group 16). */
   anytypeTools: "reload:anytype-tools",
   /** invoke: a view call, `{op, args}`, answered by the runtime: Skip this step's dismissal. */

@@ -32,7 +32,6 @@ import { GeneralSection } from "../components/organisms/GeneralSection";
 import {
   aiAppsLine,
   anytypeLine,
-  clientSetup,
   moveRefusal,
   readEndpoint,
   readSpaces,
@@ -48,7 +47,7 @@ import {
 import { t } from "../strings";
 import { wordRefusal } from "../words";
 import { AdvancedSection } from "./GeneralAdvanced";
-import { ChatGptSetup } from "./GeneralChatGpt";
+import { AiAppRows } from "./GeneralAiApps";
 import { PackagesSection } from "./GeneralPackages";
 import { RecordersSection, WithCode } from "./GeneralRecorders";
 import { UpdatesSection } from "./GeneralUpdates";
@@ -269,19 +268,6 @@ function AiAppsSection({
       },
     );
   };
-  const copy = () => {
-    if (status?.served == null) {
-      return;
-    }
-    navigator.clipboard.writeText(clientSetup(status.served)).then(
-      () => {
-        say({ kind: "done", text: t("general.aiApps.copied") });
-      },
-      () => {
-        say({ kind: "failed", text: t("refused.failed") });
-      },
-    );
-  };
   return (
     <GeneralSection
       section="ai-apps"
@@ -327,14 +313,9 @@ function AiAppsSection({
           {t("general.aiApps.change")}
         </Button>
       </form>
-      <div>
-        <Button kind="secondary" onClick={copy} data-testid="general-copy-setup">
-          {t("general.copySetup", { app: t("general.aiApps.app") })}
-        </Button>
-      </div>
       <Message said={said} testId="general-ai-apps-message" />
+      <AiAppRows api={api} />
       <AnytypeTools api={api} />
-      <ChatGptSetup api={api} served={status?.served ?? null} />
     </GeneralSection>
   );
 }

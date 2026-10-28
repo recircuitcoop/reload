@@ -841,8 +841,8 @@ test("Connect your AI apps: Connect writes Reload's entry and nothing else", asy
     // Found by its folder; what it does and who receives the results are said; nothing chosen yet.
     await expect(row).toContainText("look things up in your Anytype through Reload");
     await expect(row).toContainText("sent to OpenAI");
-    await expect(window.getByTestId("setup-ai-apps-limit")).toHaveText(
-      STRINGS["setup.aiApps.limit"],
+    await expect(window.getByTestId("setup-ai-app-limit-codex")).toHaveText(
+      STRINGS["aiApps.limit.workView"],
     );
     await expect(window.getByTestId("setup-ai-app-connect-codex")).toHaveText(
       STRINGS["setup.aiApps.connect"],

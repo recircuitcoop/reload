@@ -1,17 +1,18 @@
 // Configuration › General in the real app (plan 0022 §M; WI-0022-18): every section's one-line
 // state and actions from ux-writing.md, driven through the screen. Pairing with Anytype and the MCP
 // endpoint's live move (the anytype and mcp-endpoint behaviours), See what would be sent in full,
-// Advanced's status details, the Recorders and folders line, and retention's five choices.
+// Advanced's status details, the Recorders and folders line, retention's five choices, and the
+// AI apps rows' Connect, Disconnect and Repair.
 //
-// Never the owner's Anytype, key, port or clipboard: a fake Anytype on a free loopback port, the
-// fake MCP child, a scratch HOME (app-harness), free ports, and the page's clipboard replaced by a
-// stub that only keeps what it was given (the system clipboard is never read or written).
+// Never the owner's Anytype, key, port or AI apps' files: a fake Anytype on a free loopback port,
+// the fake MCP child, a scratch HOME (app-harness) whose ~/.codex is the only one written, and
+// free ports.
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
 import net from "node:net";
 import * as path from "node:path";
-import { expect, test, type ElectronApplication, type Locator } from "@playwright/test";
+import { expect, test, type ElectronApplication, type Locator, type Page } from "@playwright/test";
 import { NOTICE_VERSION } from "../../src/domain/telemetry/reports";
 import { committedToolSurface, toolSignature } from "../../src/adapters/anytype/tool-surface";
 import { ANYTYPE_VERSION, PACKAGE_VERSION } from "../../src/domain/anytype/pins";
@@ -196,7 +197,7 @@ test("General pairs with Anytype: Pair asks for the code, a wrong one is refused
   }
 });
 
-test("General's AI apps line names the address served, Change port moves it live and says so, a taken port is refused in words, and Copy setup copies the command with the address served", async () => {
+test("General's AI apps line names the address served, Change port moves it live and says so, a taken port is refused in words, and the endpoint answers at the new address", async () => {
   const { scratch, env } = scratchDirectories();
   const anytype = await fakeAnytype();
   const blocker = net.createServer();
@@ -253,34 +254,6 @@ test("General's AI apps line names the address served, Change port moves it live
     await expect(state).toContainText(`127.0.0.1:${String(secondPort)}`);
     expect(await rpcStatus(`http://127.0.0.1:${String(secondPort)}/mcp`, token)).toBe(200);
 
-    // Copy setup: exactly strings.ts's command with the URL served now filled in, never the
-    // token. The page's clipboard is a stub here, so the system clipboard is never touched.
-    await window.evaluate(() => {
-      const kept = globalThis as unknown as { copiedSetup?: string };
-      Object.defineProperty(navigator, "clipboard", {
-        configurable: true,
-        value: {
-          writeText: (text: string) => {
-            kept.copiedSetup = text;
-            return Promise.resolve();
-          },
-        },
-      });
-    });
-    const served = `http://127.0.0.1:${String(secondPort)}/mcp`;
-    const copy = general.getByTestId("general-copy-setup");
-    await expect(copy).toHaveText(
-      STRINGS["general.copySetup"].replace("{app}", STRINGS["general.aiApps.app"]),
-    );
-    await copy.click();
-    await expect(general.getByTestId("general-ai-apps-message")).toHaveText(
-      STRINGS["general.aiApps.copied"],
-    );
-    const copied = await window.evaluate(
-      () => (globalThis as unknown as { copiedSetup?: string }).copiedSetup,
-    );
-    expect(copied).toBe(STRINGS["general.aiApps.setup"].replace("{url}", served));
-    expect(copied).not.toContain(token);
     await quit(app);
   } finally {
     await new Promise((resolve) => blocker.close(resolve));
@@ -289,109 +262,118 @@ test("General's AI apps line names the address served, Change port moves it live
   }
 });
 
-test("Set up ChatGPT says ChatGPT's own steps, Copy address copies the address served as it moves, and Copy token copies the endpoint's token without ever showing or logging it", async () => {
-  test.setTimeout(120_000);
+// ── one row per AI app (plan 0033 §C, WI-0033-04) ─────────────────────────────────────────
+// Always in the scratch home (HOME is the scratch folder, os.homedir() honours it): the shared
+// server list is the scratch's ~/.codex/config.toml, never the real one.
+
+const OTHERS = '# mine\nmodel = "x"\n\n[mcp_servers.serena]\ncommand = "uvx"\n';
+const HAND_MADE = `${OTHERS}\n[mcp_servers.reload]\nurl = "http://127.0.0.1:1/mcp"\nbearer_token_env_var = "MINE"\n`;
+
+/** General again, so its rows read the list afresh. */
+async function reopenGeneral(window: Page): Promise<Locator> {
+  await window.evaluate(() => {
+    globalThis.location.hash = "#/configuration/flows";
+  });
+  return openGeneral(window);
+}
+
+test("General's AI apps row: Connect writes Reload's entry, Disconnect takes only it out, an entry changed by hand offers Repair, and every line is said", async () => {
+  test.setTimeout(150_000);
   const { scratch, env } = scratchDirectories();
   const anytype = await fakeAnytype();
+  const list = path.join(scratch, ".codex", "config.toml");
+  fs.mkdirSync(path.dirname(list));
+  fs.writeFileSync(list, OTHERS);
   const apps: ElectronApplication[] = [];
   try {
-    const firstPort = Number(env["RELOAD_MCP_PORT"]);
-    const { app, window, output } = await launchApp({
+    const { app, window } = await launchApp({
       ...env,
       ANYTYPE_API_BASE_URL: anytype.url,
       RELOAD_TEST_ANYTYPE: fakeChild(scratch),
     });
     apps.push(app);
-    const general = await openGeneral(window);
-    const chatgpt = general.getByTestId("general-chatgpt");
+    let general = await openGeneral(window);
+    const served = Number(env["RELOAD_MCP_PORT"]);
     await expect(general.getByTestId("general-ai-apps-state")).toContainText(
-      `127.0.0.1:${String(firstPort)}`,
+      `127.0.0.1:${String(served)}`,
       { timeout: 20_000 },
     );
-    // The scratch home's token, the one the endpoint checks.
-    const tokenFile = path.join(path.dirname(anytypeKeyFile(scratch)), "mcp_proxy_token");
-    const token = fs.readFileSync(tokenFile, "utf8").trim();
-    expect(token).not.toBe("");
+    const row = (testId: string) => general.getByTestId(`general-ai-app-${testId}-codex`);
+    await expect(row("name")).toHaveText("ChatGPT and Codex");
+    await expect(row("state")).toHaveText(STRINGS["general.aiApps.notConnected"]);
+    await expect(row("limit")).toHaveText(STRINGS["aiApps.limit.workView"]);
+    await expect(row("company")).toHaveText("What the tools return is sent to OpenAI.");
+    await expect(row("disconnect")).toHaveCount(0);
+    await expect(row("repair")).toHaveCount(0);
 
-    // ChatGPT's own steps, in order, every one a strings.ts line.
-    await expect(chatgpt.getByTestId("general-chatgpt-title")).toHaveText(
-      STRINGS["general.chatgpt"],
-    );
-    await expect(chatgpt.getByTestId("general-chatgpt-lead")).toHaveText(
-      STRINGS["general.chatgpt.line"],
-    );
-    const steps = [
-      STRINGS["general.chatgpt.step.open"],
-      STRINGS["general.chatgpt.step.name"],
-      STRINGS["general.chatgpt.step.url"],
-      STRINGS["general.chatgpt.step.token"],
-      STRINGS["general.chatgpt.step.save"],
-    ];
-    for (const [index, step] of steps.entries()) {
-      await expect(chatgpt.getByTestId(`general-chatgpt-step-${String(index + 1)}`)).toHaveText(
-        step,
-      );
-    }
-    expect(
-      await chatgpt.getByTestId("general-chatgpt-steps").evaluate((list) => list.children.length),
-    ).toBe(steps.length);
-    await expect(chatgpt.getByTestId("general-chatgpt-actions")).toBeVisible();
-
-    // The page's clipboard is a stub that keeps every text it was given: the system clipboard
-    // is never touched.
-    await window.evaluate(() => {
-      const kept = globalThis as unknown as { copied?: string[] };
-      kept.copied = [];
-      Object.defineProperty(navigator, "clipboard", {
-        configurable: true,
-        value: {
-          writeText: (text: string) => {
-            kept.copied?.push(text);
-            return Promise.resolve();
-          },
-        },
-      });
+    // Connect: Reload's table at the end, the served address in it, never a token.
+    await expect(row("connect")).toHaveText(STRINGS["setup.aiApps.connect"]);
+    await row("connect").click();
+    await expect(row("state")).toHaveText(/^(Connected\.|Restart ChatGPT to finish\.)$/, {
+      timeout: 15_000,
     });
-    const copied = () =>
-      window.evaluate(() => (globalThis as unknown as { copied?: string[] }).copied ?? []);
-    const message = chatgpt.getByTestId("general-chatgpt-message");
-
-    // Copy address: the URL served now, and again after Change moves it.
-    const address = chatgpt.getByTestId("general-chatgpt-copy-address");
-    await expect(address).toHaveText(STRINGS["general.chatgpt.copyAddress"]);
-    await address.click();
-    await expect(message).toHaveText(STRINGS["general.chatgpt.addressCopied"]);
-    expect(await copied()).toEqual([`http://127.0.0.1:${String(firstPort)}/mcp`]);
-    const secondPort = freePortNow();
-    await general.getByTestId("general-port-input").fill(String(secondPort));
-    await general.getByTestId("general-ai-apps-change").click();
-    await expect(general.getByTestId("general-ai-apps-state")).toContainText(
-      `127.0.0.1:${String(secondPort)}`,
-      { timeout: 20_000 },
+    await expect(row("connect")).toHaveCount(0);
+    const written = fs.readFileSync(list, "utf8");
+    expect(written.startsWith(OTHERS)).toBe(true);
+    expect(written).toContain(
+      `[mcp_servers.reload]\nurl = "http://127.0.0.1:${String(served)}/mcp"\n`,
     );
-    await address.click();
-    expect((await copied()).at(-1)).toBe(`http://127.0.0.1:${String(secondPort)}/mcp`);
+    expect(written).toContain("http_headers_helper");
+    expect(written).not.toMatch(/bearer|token/i);
 
-    // Copy token: exactly the token the endpoint checks, which then answers with it.
-    const copyToken = chatgpt.getByTestId("general-chatgpt-copy-token");
-    await expect(copyToken).toHaveText(STRINGS["general.chatgpt.copyToken"]);
-    await copyToken.click();
-    await expect(message).toHaveText(STRINGS["general.chatgpt.tokenCopied"]);
-    const pasted = (await copied()).at(-1) ?? "";
-    expect(pasted).toBe(token);
-    expect(await rpcStatus(`http://127.0.0.1:${String(secondPort)}/mcp`, pasted)).toBe(200);
+    // Disconnect: every line that was there before is there as it was; only the blank line that
+    // set Reload's table apart stays (domain/ai-apps/codex-config.ts).
+    await expect(row("disconnect")).toHaveText(STRINGS["general.aiApps.disconnect"]);
+    await row("disconnect").click();
+    await expect(row("state")).toHaveText(STRINGS["general.aiApps.notConnected"]);
+    expect(fs.readFileSync(list, "utf8")).toBe(`${OTHERS}\n`);
 
-    // Never shown, never logged: not in the page's text or markup, not in anything the
-    // processes printed, not in the one log.
-    expect(await window.evaluate(() => document.body.innerText)).not.toContain(token);
-    expect(await window.content()).not.toContain(token);
+    // An entry written by hand: said, Connect is not offered, Repair puts Reload's back.
+    fs.writeFileSync(list, HAND_MADE);
+    general = await reopenGeneral(window);
+    await expect(row("state")).toHaveText(STRINGS["setup.aiApps.changed"]);
+    await expect(row("connect")).toHaveCount(0);
+    await expect(row("repair")).toHaveText(STRINGS["setup.aiApps.repair"]);
+    await row("repair").click();
+    await expect(row("state")).toHaveText(/^(Connected\.|Restart ChatGPT to finish\.)$/, {
+      timeout: 15_000,
+    });
+    const repaired = fs.readFileSync(list, "utf8");
+    expect(repaired.startsWith(OTHERS)).toBe(true);
+    expect(repaired).toContain("http_headers_helper");
+    expect(repaired).not.toContain("MINE");
     await quit(app);
-    expect(output.join("")).not.toContain(token);
-    const log = path.join(scratch, "Library", "Logs", "reload", "reload.log");
-    expect(fs.existsSync(log)).toBe(true);
-    expect(fs.readFileSync(log, "utf8")).not.toContain(token);
   } finally {
     await anytype.close();
+    await cleanUp(apps, scratch);
+  }
+});
+
+test("General's AI apps row: Connect before anything is served says that AI apps can't reach Anytype yet, and writes nothing", async () => {
+  test.setTimeout(120_000);
+  const { scratch, env } = scratchDirectories();
+  const list = path.join(scratch, ".codex", "config.toml");
+  fs.mkdirSync(path.dirname(list));
+  const apps: ElectronApplication[] = [];
+  try {
+    // No Anytype answers and no MCP child is started: the endpoint serves no address.
+    const { app, window } = await launchApp(env);
+    apps.push(app);
+    const general = await openGeneral(window);
+    await expect(general.getByTestId("general-ai-apps-state")).toHaveText(
+      STRINGS["general.aiApps.notServed"],
+      { timeout: 20_000 },
+    );
+    await general.getByTestId("general-ai-app-connect-codex").click();
+    await expect(general.getByTestId("general-ai-app-failed-codex")).toHaveText(
+      STRINGS["aiApps.notServed"].replace("{app}", "ChatGPT and Codex"),
+    );
+    await expect(general.getByTestId("general-ai-app-state-codex")).toHaveText(
+      STRINGS["general.aiApps.notConnected"],
+    );
+    expect(fs.existsSync(list)).toBe(false);
+    await quit(app);
+  } finally {
     await cleanUp(apps, scratch);
   }
 });

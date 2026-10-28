@@ -35,7 +35,6 @@ export const ANYTYPE_UNUSED = {
   repairAiApp: (): Promise<readonly AiAppListing[]> => Promise.reject(new Error("not used here")),
   disconnectAiApp: (): Promise<readonly AiAppListing[]> =>
     Promise.reject(new Error("not used here")),
-  mcpToken: (): Promise<string> => Promise.reject(new Error("not used here")),
   anytypeTools: (): Promise<readonly AnytypeTool[]> => Promise.reject(new Error("not used here")),
 };
 

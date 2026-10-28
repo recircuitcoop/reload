@@ -54,7 +54,6 @@ export function appApiOver(ipc: RendererIpc): AppApi {
       ipc.invoke(IPC.aiAppRepair, id) as Promise<readonly AiAppListing[]>,
     disconnectAiApp: (id: string) =>
       ipc.invoke(IPC.aiAppDisconnect, id) as Promise<readonly AiAppListing[]>,
-    mcpToken: () => ipc.invoke(IPC.mcpToken) as Promise<string>,
     anytypeTools: () => ipc.invoke(IPC.anytypeTools) as Promise<readonly AnytypeTool[]>,
     submitView: (id, values) =>
       ipc.invoke(IPC.viewCall, { op: "view.submit", args: { id, values } }) as Promise<ViewResult>,

@@ -342,10 +342,7 @@ async function start(): Promise<DesktopWired["notices"] | null> {
     throw new Error("the runtime and the services process must both be supervised");
   }
   // And the loopback MCP endpoint (WI-0018-19): served against saved, and the live move.
-  const proxyToken = () => new OwnerOnlyFileStore(anytypeSecrets).read("mcp-proxy-token");
-  wireServiceCalls(ipcMain, services, proxyToken, anytypeStarted, () =>
-    telemetry?.reached("anytype_paired"),
-  );
+  wireServiceCalls(ipcMain, services, anytypeStarted, () => telemetry?.reached("anytype_paired"));
   wireAnytypeTools(ipcMain, parseToolSurface(committedSurface).tools);
   // ── the pages and pop-outs (WI-0018-11): served by the shell, never by the runtime ───────
   serveAppPages(protocol, path.join(APP_DIR, "dist", "ui"));

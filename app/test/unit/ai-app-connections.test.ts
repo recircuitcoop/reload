@@ -11,6 +11,7 @@ import { mcpHelperPath } from "../../src/adapters/process/mcp-helper-path";
 import { AiAppError, AiAppService, serveAiAppCall } from "../../src/application/ai-app-connections";
 import type { AiAppEntry } from "../../src/domain/ai-apps/codex-config";
 import type { AppProcesses } from "../../src/ports/ai-app-connections";
+import { notServedYet } from "../../src/ui/ai-apps";
 
 const posix = process.platform !== "win32";
 const modeOf = (target: string): number => fs.statSync(target).mode & 0o777;
@@ -273,12 +274,20 @@ describe("connect, repair and disconnect", () => {
     expect((await service.state("codex")).state).toBe("connected");
   });
 
-  it("refuses to write while Reload has no address to name", () => {
+  it("refuses to write while Reload has no address to name, in words the pages tell apart", async () => {
     const { service } = build({ url: null });
     expect(() => {
       service.connect("codex");
     }).toThrow(/no endpoint address/);
     expect(fs.existsSync(configFile)).toBe(false);
+    // The refusal as it reaches a page (IPC wraps it): read as "not served yet", not generic.
+    const answer = await serveAiAppCall(service, "aiApps.connect", { id: "codex" });
+    expect(answer.ok).toBe(false);
+    const reason = answer.ok ? "" : answer.error;
+    expect(
+      notServedYet(`Error invoking remote method 'reload:ai-app-connect': Error: ${reason}`),
+    ).toBe(true);
+    expect(notServedYet("could not write config.toml: EACCES")).toBe(false);
   });
 
   it("disconnect removes only Reload's table and the record of it", async () => {

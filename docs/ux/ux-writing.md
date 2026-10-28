@@ -104,7 +104,7 @@ Configuration, which Setup cannot reach). A step form's refusal names its fields
 | Reports | **Help improve Reload?** | "Send usage counts, under a machine id that carries no name. Never your recordings, transcripts or notes. You can change this in Configuration › General." | Send reports · Don't send |
 | Anytype | **Connect Anytype** | Running: "Anytype is asking for a code. Type it here." Not running: "Open Anytype, then come back. Reload will notice." | Connect · Skip for now |
 | Anytype, done | | "Connected. Found 8 spaces." | Continue |
-| AI apps | **Connect your AI apps** | One block for each app found, with the app's name and its company filled in: "Connecting lets ChatGPT and Codex look things up in your Anytype through Reload." "What the tools return is sent to OpenAI." Then, once: "ChatGPT uses Reload in its Work view, not in normal Chat." After Skip: "Skipped. You can connect it later in Configuration › General." After Connect: "Connected." Written while the app was running: "Restart ChatGPT to finish." An entry made by hand is there: "An entry for Reload made by hand is already there. Repair replaces it." A write that failed: "Couldn't connect ChatGPT and Codex. Try again, or connect it later in Configuration › General." | Back · Continue; beside each app: Connect (primary) · Skip (not chosen beforehand), or Repair |
+| AI apps | **Connect your AI apps** | One block for each app found, with the app's name and its company filled in: "Connecting lets ChatGPT and Codex look things up in your Anytype through Reload." "What the tools return is sent to OpenAI." Beside ChatGPT and Codex: "Reload works in ChatGPT's Work view and in Codex. Normal Chat doesn't show local tools yet." After Skip: "Skipped. You can connect it later in Configuration › General." After Connect: "Connected." Written while the app was running: "Restart ChatGPT to finish." An entry made by hand is there: "An entry for Reload made by hand is already there. Repair replaces it." A write that failed: "Couldn't connect ChatGPT and Codex. Try again, or connect it later in Configuration › General." Connect pressed before AI apps can reach Anytype: "Couldn't connect ChatGPT and Codex: AI apps can't reach your Anytype through Reload yet. Connect Anytype first, or wait until it has started." The list could not be read: "Couldn't read which AI apps are on this computer. Try again in a moment." | Back · Continue; beside each app: Connect (primary) · Skip (not chosen beforehand), or Repair |
 | AI apps, none found | **Connect your AI apps** | "No AI apps found on this computer. You can connect one later in Configuration › General." | Back · Continue |
 | Example | **Start with an example?** | "The example files every new file in a folder you choose as a page in Anytype. You can change it or delete it later in Configuration › Flows." | Back · Skip the example · Use the example |
 | Example, Anytype not connected | **Start with an example?** | The same, then "The example needs Anytype. Connect it first." | Back · Skip the example · Connect Anytype (back to the Anytype step) |
@@ -282,14 +282,16 @@ Sections, each with a one-line state:
   Reload at `127.0.0.1:31010`." · **Address** (pre-filled with the host served) and **Port**
   (pre-filled with the current port) · **Change** (moves both at once) · a host that is not a
   numeric loopback address is refused: "Only a numeric loopback address can be used, so nothing
-  changed." · **Copy setup for Codex** etc. · **Set up ChatGPT** (owner, 2026-10-15: ChatGPT adds
-  the server in its own Settings): "In the ChatGPT app, add Reload as a server:" then the steps
-  "Open Settings › MCP servers and choose Add server.", "Name: reload. Transport: Streamable
-  HTTP.", "URL: paste the address. Copy address copies it." and "Authentication: Bearer token.
-  Paste the token. Copy token copies it." and "Save, then choose Restart." · **Copy address** ("Address copied. Paste it as the URL
-  in ChatGPT.") · **Copy token** ("Token copied. Paste it as the Bearer token in ChatGPT."; none
-  yet: "There's no token yet. Try again once AI apps can reach your Anytype."). The token is never
-  shown.
+  changed." · then one row per AI app Reload can connect (plan 0033 §C; the owner wants it changeable
+  here, 2026-10-28): its name, its state ("Connected.", "Not connected.", "Not
+  found on this computer.", "Restart ChatGPT to finish.", "An entry for Reload made by hand is
+  already there. Repair replaces it."), where it reaches Reload ("Reload works in ChatGPT's Work
+  view and in Codex. Normal Chat doesn't show local tools yet."), "What the tools return is sent
+  to OpenAI." · **Connect** / **Disconnect** / **Repair** · a press that failed: "Couldn't change
+  ChatGPT and Codex's connection. Try again.", or before AI apps can reach Anytype: "Couldn't
+  connect ChatGPT and Codex: AI apps can't reach your Anytype through Reload yet. Connect Anytype
+  first, or wait until it has started." Reload writes the app's entry itself; no address or token
+  is copied.
 - **Start at login:** switch · "Reload starts when you log in."
 - **Updates** (Reload itself): the one-line state is always one of "Up to date · 0.2.1 ·
   checked today 09:14", "Checking…", "0.3.0 is ready. It installs when you quit." · **Quit and

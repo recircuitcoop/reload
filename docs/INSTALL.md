@@ -126,8 +126,8 @@ Never paste the token into a chat, an email or a shared document.
 2. Leave **Address** as `127.0.0.1`. Only an address on your own Mac is accepted.
 3. Type the new number in **Port**, for example `31011`.
 4. Click **Change**. The line above shows the new address. Nothing restarts.
-5. Change the address in every AI app you set up below. They do not follow the change on their
-   own. The token stays the same.
+5. AI apps you connected in Reload follow the change on their own. Change the address by hand in
+   every other app you set up below. The token stays the same.
 
 ## 7. Connect your AI app
 
@@ -196,46 +196,38 @@ Sources: <https://modelcontextprotocol.io/docs/develop/connect-local-servers>,
 
 ### 7.3 Codex (the `codex` command in Terminal)
 
-1. Make the token available to Codex in every new Terminal window:
+Codex, the ChatGPT desktop app and the Codex extension for your editor share one list of
+servers, `~/.codex/config.toml`. Reload adds itself to that list for you, so there is nothing to
+type or paste:
 
-   ```bash
-   echo 'export RELOAD_MCP_TOKEN="$(cat ~/.config/reload/mcp_proxy_token 2>/dev/null)"' >> ~/.zshrc
-   ```
-
-2. Open a new Terminal window, then add Reload:
-
-   ```bash
-   codex mcp add reload --url http://127.0.0.1:31010/mcp --bearer-token-env-var RELOAD_MCP_TOKEN
-   ```
-
+1. In Reload, go to **Configuration › General**, to **AI apps**. Setup's **Connect your AI apps**
+   step offers the same.
+2. Beside **ChatGPT and Codex**, click **Connect**. The row says **Connected.**
 3. Check it with `codex mcp list`, which shows `reload`. In a Codex session, `/mcp` lists its
    tools.
 
-This is for Codex in a Terminal window; **Copy setup for Codex** in **Configuration › General ›
-AI apps** copies the line in step 2. An app you start from the Dock, such as the ChatGPT desktop
-app, does not read `~/.zshrc`, so it never sees `RELOAD_MCP_TOKEN`: set ChatGPT up inside
-ChatGPT instead, as in 7.4.
+Reload writes only its own `[mcp_servers.reload]` entry and leaves everything else in the file as
+it was. The entry holds the address and the path of a small program inside Reload.app that
+hands Codex the token when it connects; the token itself is never written into the file. If you
+change the address or the port, or move Reload.app, Reload rewrites its entry on its own.
 
-Source: <https://learn.chatgpt.com/docs/extend/mcp?surface=cli>, and `codex mcp add --help`.
+- **Disconnect** takes Reload's entry out again, and nothing else.
+- **"An entry for Reload made by hand is already there. Repair replaces it."** means the file has
+  a `reload` server Reload did not write, for example one added by hand with an earlier version
+  of this guide. Click **Repair** to replace it with Reload's own, or leave it as it is.
+
+Source: <https://learn.chatgpt.com/docs/extend/mcp?surface=cli>.
 
 ### 7.4 ChatGPT
 
-**The ChatGPT desktop app** can use Reload. You add Reload inside ChatGPT, in its own
-Settings. Reload shows the same steps in **Configuration › General › AI apps**, under **Set up
-ChatGPT**, with a button for each value to paste.
+**The ChatGPT desktop app** uses the same list as Codex, so connecting it is step 1 and 2 of 7.3:
+**Connect** beside **ChatGPT and Codex** in **Configuration › General › AI apps**.
 
-1. In the ChatGPT app, open **Settings**, then **MCP servers** (in some versions under
-   **Plugins** › **MCPs**), and choose **Add server**. ChatGPT shares this list with Codex: if
-   **reload** is already there from 7.3, open it instead of adding a second one.
-2. **Name:** `reload`. **Transport:** **Streamable HTTP**.
-3. **URL:** in Reload, click **Copy address**, then paste it here. It is
-   `http://127.0.0.1:31010/mcp` unless you changed the address or the port.
-4. **Authentication:** choose **Bearer token**. In Reload, click **Copy token**, then paste it
-   here. Reload never shows the token; it only puts it on the clipboard when you click.
-5. Save, then choose **Restart**.
-
-If you change the address or the port in Reload later, edit the URL in ChatGPT the same way. The token stays
-the same.
+1. If ChatGPT was open when you clicked **Connect**, the row says **Restart ChatGPT to finish.**
+   Quit ChatGPT and open it again, or in ChatGPT open **Settings › MCP servers** and choose
+   **Restart**.
+2. Use Reload in a **Work** thread. Normal **Chat** in the ChatGPT app does not show local tools
+   yet; that is a limit of ChatGPT, and Reload says so beside the row.
 
 Source: <https://learn.chatgpt.com/docs/extend/mcp?surface=chatgpt>.
 
@@ -252,7 +244,11 @@ Source: <https://developers.openai.com/api/docs/guides/developer-mode>.
 
 1. Install Vibe if you do not have it, with
    `curl -LsSf https://mistral.ai/vibe/install.sh | bash`.
-2. Do step 1 of 7.3, which makes the token available as `RELOAD_MCP_TOKEN`.
+2. Make the token available to Vibe in every new Terminal window:
+
+   ```bash
+   echo 'export RELOAD_MCP_TOKEN="$(cat ~/.config/reload/mcp_proxy_token 2>/dev/null)"' >> ~/.zshrc
+   ```
 3. Add these lines at the end of `~/.vibe/config.toml`:
 
    ```toml

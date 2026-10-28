@@ -8,8 +8,6 @@ import type { AnytypeStatus, FlowSummary, McpEndpointStatus } from "../../src/ui
 import {
   aiAppsLine,
   anytypeLine,
-  CHATGPT_STEPS,
-  clientSetup,
   codeParts,
   FOLDER_SOURCE_TYPE,
   folderName,
@@ -326,38 +324,6 @@ describe("the AI apps section's host", () => {
   it("leaves a loopback host of either family to the runtime: the rule passes it", () => {
     expect(checkedAddress("127.0.0.1", 40001)).toEqual({ host: "127.0.0.1", port: 40001 });
     expect(checkedAddress("::1", 40001)).toEqual({ host: "::1", port: 40001 });
-  });
-});
-
-describe("Copy setup", () => {
-  it("copies strings.ts's command with the URL served filled in, and no token", () => {
-    const url = "http://127.0.0.1:31010/mcp";
-    expect(clientSetup(url)).toBe(STRINGS["general.aiApps.setup"].replace("{url}", url));
-    expect(clientSetup(url)).toContain(`--url ${url} `);
-    expect(clientSetup(url)).not.toContain("{");
-  });
-});
-
-describe("Set up ChatGPT (WI-0022-30)", () => {
-  it("says ChatGPT's own Add server steps in order, every one a strings.ts line", () => {
-    expect(CHATGPT_STEPS.map((key) => STRINGS[key])).toEqual([
-      "Open Settings › MCP servers and choose Add server.",
-      "Name: reload. Transport: Streamable HTTP.",
-      "URL: paste the address. Copy address copies it.",
-      "Authentication: Bearer token. Paste the token. Copy token copies it.",
-      "Save, then choose Restart.",
-    ]);
-    expect(STRINGS["general.chatgpt"]).toBe("Set up ChatGPT");
-    expect(STRINGS["general.chatgpt.copyAddress"]).toBe("Copy address");
-    expect(STRINGS["general.chatgpt.copyToken"]).toBe("Copy token");
-  });
-
-  it("no line of it has a slot: neither the address nor the token is ever drawn", () => {
-    const keys = Object.keys(STRINGS).filter((key) => key.startsWith("general.chatgpt"));
-    expect(keys.length).toBe(12);
-    for (const key of keys) {
-      expect(STRINGS[key as keyof typeof STRINGS], key).not.toMatch(/\{[a-zA-Z]+\}/);
-    }
   });
 });
 

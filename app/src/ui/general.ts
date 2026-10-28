@@ -208,22 +208,6 @@ export function moveRefusal(reason: string, port: number): string {
   return reason.includes(`:${String(port)}`) ? t("error.portTaken", { port }) : t("refused.failed");
 }
 
-/**
- * "Copy setup for …": the command that registers the endpoint served now with the AI app, its
- * URL filled into strings.ts's template. The token is read from a variable at call time, so the
- * token itself is never copied.
- */
-export const clientSetup = (url: string) => t("general.aiApps.setup", { url });
-
-/** Set up ChatGPT's steps, in the order ChatGPT's Add server asks for them (WI-0022-30). */
-export const CHATGPT_STEPS = [
-  "general.chatgpt.step.open",
-  "general.chatgpt.step.name",
-  "general.chatgpt.step.url",
-  "general.chatgpt.step.token",
-  "general.chatgpt.step.save",
-] as const satisfies readonly PlainKey[];
-
 /** The Reports section's state line (ux-writing): sending, or not; unanswered is not sending. */
 export const reportsLine = (answer: "on" | "off" | "unset") =>
   t(answer === "on" ? "general.reports.on" : "general.reports.off");

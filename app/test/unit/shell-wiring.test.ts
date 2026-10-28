@@ -197,13 +197,7 @@ describe("wireQuit, wireServiceCalls, wireDesktop and the e2e hooks", () => {
     let paired = 0;
     // Anytype's launch is still undecided: only the pairing is asked here.
     const undecided = new Promise<never>(() => undefined);
-    wireServiceCalls(
-      { handle },
-      services,
-      () => null,
-      undecided,
-      () => (paired += 1),
-    );
+    wireServiceCalls({ handle }, services, undecided, () => (paired += 1));
     await expect(call(IPC.anytypePairComplete, "0000")).rejects.toThrow("rejected the pairing");
     await expect(call(IPC.anytypePairComplete, "nonsense")).rejects.toThrow();
     expect(paired).toBe(0);
@@ -227,15 +221,8 @@ describe("wireQuit, wireServiceCalls, wireDesktop and the e2e hooks", () => {
       status: () => ({ state: "running", generation: 1 }),
       onStatus: () => undefined,
     } as unknown as Supervisor;
-    let kept: string | null = null;
     let paired = 0;
-    wireServiceCalls(
-      { handle },
-      services,
-      () => kept,
-      Promise.resolve("started"),
-      () => (paired += 1),
-    );
+    wireServiceCalls({ handle }, services, Promise.resolve("started"), () => (paired += 1));
     expect(await call(IPC.anytypeStatus)).toBe("anytype.status");
     expect(await call(IPC.anytypeCheck)).toBe("anytype.check");
     // Reload saw the Anytype desktop app start: Anytype was asked again, unprompted, with a
@@ -253,12 +240,6 @@ describe("wireQuit, wireServiceCalls, wireDesktop and the e2e hooks", () => {
     expect(await call(IPC.mcpEndpoint)).toBe("mcp.endpoint");
     expect(await call(IPC.mcpEndpointMove, "127.0.0.1", 31011)).toBe("mcp.endpoint.move");
     expect(asked).toContainEqual(["mcp.endpoint.move", { host: "127.0.0.1", port: 31011 }]);
-    // Copy token: read at each call, never asked of the services process; none yet is refused
-    // in words that carry no value.
-    expect(() => call(IPC.mcpToken)).toThrow("there is no token for AI apps yet");
-    kept = "the-token-at-the-press";
-    expect(call(IPC.mcpToken)).toBe("the-token-at-the-press");
-    expect(asked.map((entry) => (entry as unknown[])[0])).not.toContain("mcp.token");
   });
 
   it("what the launch did about Anytype is told to each services process once it runs, not before", async () => {
@@ -274,7 +255,7 @@ describe("wireQuit, wireServiceCalls, wireDesktop and the e2e hooks", () => {
       status: () => status,
       onStatus: (listener: () => void) => listeners.push(listener),
     } as unknown as Supervisor;
-    wireServiceCalls({ handle }, services, () => null, Promise.resolve("started"));
+    wireServiceCalls({ handle }, services, Promise.resolve("started"));
     await Promise.resolve();
     await Promise.resolve();
     expect(asked).toEqual([]);
@@ -304,7 +285,6 @@ describe("wireQuit, wireServiceCalls, wireDesktop and the e2e hooks", () => {
           status: () => ({ state: "running", generation: 1 }),
           onStatus: () => undefined,
         } as unknown as Supervisor,
-        () => null,
         Promise.resolve(state),
       );
       await Promise.resolve();

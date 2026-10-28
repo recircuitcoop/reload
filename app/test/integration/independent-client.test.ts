@@ -221,11 +221,10 @@ const CLIENT_CONNECTION_FILES = [
 
 describe("the application's source", () => {
   it("never names the MCP client: no line of it launches, configures or supervises one", () => {
-    // The words a person reads (ui/strings.ts, plan 0022 §O) name it in three lines, all General's
-    // AI apps row from ux-writing: "Claude, Codex and other apps can use your Anytype…", the
-    // "Copy setup for Codex" button's app name, and the one command that button copies to the
-    // clipboard for the person to run (WI-0022-18). That file holds words only; nothing in the
-    // application launches, configures or supervises the client, and these are the only lines.
+    // The words a person reads (ui/strings.ts, plan 0022 §O) name it in two lines: General's AI
+    // apps line from ux-writing ("Claude, Codex and other apps can use your Anytype…") and where
+    // ChatGPT's server list is reached (plan 0033 §C). That file holds words only; nothing in the
+    // application outside the files above configures the client, and these are the only lines.
     const STRINGS = path.join(APP, "src", "ui", "strings.ts");
     const named = sourceFiles(path.join(APP, "src")).filter(
       (file) =>
@@ -237,8 +236,7 @@ describe("the application's source", () => {
     const lines = fs.readFileSync(STRINGS, "utf8").split("\n");
     expect(lines.filter((line) => /codex/i.test(line))).toEqual([
       expect.stringMatching(/^ {4}"Claude, Codex and other apps can use your Anytype through/),
-      '  "general.aiApps.app": "Codex", // decided',
-      '    "codex mcp add reload --url {url} --bearer-token-env-var RELOAD_MCP_TOKEN", // decided',
+      expect.stringMatching(/^ {4}"Reload works in ChatGPT's Work view and in Codex\. /),
     ]);
   });
 

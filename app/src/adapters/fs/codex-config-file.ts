@@ -39,7 +39,12 @@ let scratchCounter = 0;
 
 export class CodexConfigConnections implements AiAppConnections {
   readonly appExecutable: string | null;
-  readonly profile = { name: "ChatGPT and Codex", company: "OpenAI", restartName: "ChatGPT" };
+  readonly profile = {
+    name: "ChatGPT and Codex",
+    company: "OpenAI",
+    restartName: "ChatGPT",
+    reaches: "work-view",
+  } as const;
   readonly #file: string;
   readonly #platform: NodeJS.Platform;
 

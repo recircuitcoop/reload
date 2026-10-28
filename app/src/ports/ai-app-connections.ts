@@ -20,6 +20,8 @@ export interface AiAppProfile {
   readonly company: string;
   /** The app to restart once the file changed under it. */
   readonly restartName: string;
+  /** Where in the app Reload is reached: ChatGPT's Work view and Codex. */
+  readonly reaches: "work-view";
 }
 
 export interface AiAppConnections {

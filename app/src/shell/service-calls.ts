@@ -1,6 +1,6 @@
 // The page's calls the services process answers (WI-0018-18, -19): Anytype's status and
 // pairing, and the loopback MCP endpoint, served against saved, and its live move. The page never
-// sees the key; it is handed the endpoint's token only for Copy token. Apart from main.ts so the composition root keeps only adapter construction
+// sees the key or the endpoint's token. Apart from main.ts so the composition root keeps only adapter construction
 // (plan 0018 §2.3).
 
 import type { IpcMain } from "electron";
@@ -13,7 +13,6 @@ import { IPC } from "./ipc";
 export function wireServiceCalls(
   ipc: Pick<IpcMain, "handle">,
   services: Supervisor,
-  token: () => string | null,
   anytypeApp: Promise<AnytypeAppState>,
   paired: () => void = () => undefined,
 ): void {
@@ -64,15 +63,6 @@ export function wireServiceCalls(
   ipc.handle(IPC.aiAppDisconnect, (_event, id: unknown) =>
     callServices("aiApps.disconnect", { id }),
   );
-  // Copy token (WI-0022-30): read from its owner-only file at the press, handed to the page for
-  // the clipboard only, and never logged. The refusal names no value.
-  ipc.handle(IPC.mcpToken, () => {
-    const value = token();
-    if (value === null) {
-      throw new Error("there is no token for AI apps yet");
-    }
-    return value;
-  });
 }
 
 /**

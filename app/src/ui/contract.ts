@@ -131,6 +131,8 @@ export interface AiAppListing {
   readonly name: string;
   readonly company: string;
   readonly restartName: string;
+  /** Where in the app Reload is reached, said beside it (ui/ai-apps.ts). */
+  readonly reaches: "work-view";
   /** Installed, or its server list is there: worth offering. */
   readonly found: boolean;
   readonly state: "connected" | "not-connected" | "changed-outside" | "restart-app";
@@ -252,12 +254,6 @@ export interface AppApi extends AppApiV2 {
   repairAiApp(id: string): Promise<readonly AiAppListing[]>;
   /** Remove Reload's entry, and nothing else; the list again. */
   disconnectAiApp(id: string): Promise<readonly AiAppListing[]>;
-  /**
-   * The token the MCP endpoint checks, read at the call from where it is kept, for Set up
-   * ChatGPT's Copy token alone: the page puts it on the clipboard and never draws or keeps it.
-   * Rejects when there is none yet.
-   */
-  mcpToken(): Promise<string>;
   /**
    * Which Anytype tools exist, by name, with the signature of each one's arguments: the list the
    * pinned MCP server is held to, recorded with the app, so it reads with the MCP child down.
