@@ -20,8 +20,6 @@
 //
 // Pure: the sha256 primitive is handed in.
 
-import { OLD_DECLARATION_FILE, oldDeclarationProblem } from "./old-names";
-
 /** The listing of every file's hash, which the signature covers. */
 export const FILES_MANIFEST = "files.json";
 /** The detached minisign signature of `files.json`, minisign's own default name. */
@@ -119,9 +117,6 @@ export function parseFileManifest(bytes: Uint8Array): FileManifest {
     throw new PackageRefusal("files", `${FILES_MANIFEST}: ${problems.join("; ")}`);
   }
   if (!manifest.has(DECLARATION_FILE)) {
-    if (manifest.has(OLD_DECLARATION_FILE)) {
-      throw new PackageRefusal("files", oldDeclarationProblem(DECLARATION_FILE));
-    }
     throw new PackageRefusal("files", `${FILES_MANIFEST} does not list ${DECLARATION_FILE}`);
   }
   return manifest;

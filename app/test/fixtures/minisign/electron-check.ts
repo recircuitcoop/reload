@@ -1,5 +1,5 @@
 // Run under Electron (ELECTRON_RUN_AS_NODE=1) by test/e2e/minisign-electron.e2e.ts:
-// the production verifier over the old helper's vectors, in the crypto the app really has.
+// the production verifier over the vectors the spec made, in the crypto the app really has.
 // Prints one JSON line: what each case came to.
 import fs from "node:fs";
 import { MinisignVerifier } from "../../../src/adapters/signature/minisign";

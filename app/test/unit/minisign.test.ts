@@ -1,14 +1,8 @@
-// minisign verification (WI-0018-14): helper/minisign.py and its tests
-// (tests/test_helper_update_check.py, "The minisign layer on its own"), ported.
+// minisign verification (WI-0018-14).
 //
-// Three kinds of vector: signatures made in each test by a throwaway node:crypto signer (as the
-// old suite made them with PyNaCl); signatures made once by the old helper's own Signer and
-// checked by its verify_file (test/fixtures/minisign/python-helper-vectors.json, public halves
-// only); and jedisct1/minisign's published key. The minisign CLI was not installed where these
-// were written, so no CLI-made vector is committed.
-import fs from "node:fs";
-import * as path from "node:path";
-import { fileURLToPath } from "node:url";
+// Two kinds of vector: signatures made in each test by a throwaway node:crypto signer, and
+// jedisct1/minisign's published key. The minisign CLI was not installed where these were
+// written, so no CLI-made vector is committed.
 import { describe, expect, it } from "vitest";
 import { MINISIGN_PRIMITIVES, MinisignVerifier } from "../../src/adapters/signature/minisign";
 import {
@@ -20,28 +14,6 @@ import {
   type MinisignRefusal,
 } from "../../src/domain/signature/minisign";
 import { Signer } from "../fakes/minisign-signer";
-
-interface PythonVectors {
-  publicKey: string;
-  keyIdHex: string;
-  contentBase64: string;
-  prehashed: string;
-  legacy: string;
-}
-
-const VECTORS = JSON.parse(
-  fs.readFileSync(
-    path.join(
-      path.dirname(fileURLToPath(import.meta.url)),
-      "..",
-      "fixtures",
-      "minisign",
-      "python-helper-vectors.json",
-    ),
-    "utf8",
-  ),
-) as PythonVectors;
-const VECTOR_CONTENT = Buffer.from(VECTORS.contentBase64, "base64");
 
 const CONTENT = new TextEncoder().encode("a release bundle");
 const verifier = new MinisignVerifier();
@@ -77,16 +49,6 @@ describe("both algorithms (minisign.py:72-73)", () => {
       );
       expect(comment).toBe("timestamp:1758190000\tfile:catalogue.json");
     }
-  });
-
-  it("verifies the old helper's own vectors, in both forms", () => {
-    expect(verifier.verify(VECTOR_CONTENT, VECTORS.prehashed, VECTORS.publicKey)).toContain(
-      "file:innytypes.tar.gz",
-    );
-    expect(verifier.verify(VECTOR_CONTENT, VECTORS.legacy, VECTORS.publicKey)).toContain(
-      "file:innytypes.tar.gz",
-    );
-    expect(keyIdHex(parsePublicKey(VECTORS.publicKey).keyId)).toBe(VECTORS.keyIdHex);
   });
 
   it("never tries a pre-hashed signature as a legacy one, or the other way round", () => {
@@ -133,7 +95,7 @@ describe("each refusal, by name", () => {
     expect(message).toContain("does not verify");
   });
 
-  it("refuses a tampered file, in both forms and for the old helper's vectors", () => {
+  it("refuses a tampered file, in both forms", () => {
     const signer = new Signer();
     const tampered = new TextEncoder().encode("a release bundlE");
     for (const prehashed of [true, false]) {
@@ -142,13 +104,6 @@ describe("each refusal, by name", () => {
           verifier.verify(tampered, signer.sign(CONTENT, { prehashed }), signer.publicKeyText),
         ),
       ).toMatchObject({ reason: "bad-signature" });
-    }
-    const flipped = Buffer.from(VECTOR_CONTENT);
-    flipped[flipped.length - 1] = (flipped[flipped.length - 1] ?? 0) ^ 1;
-    for (const signature of [VECTORS.prehashed, VECTORS.legacy]) {
-      expect(refusal(() => verifier.verify(flipped, signature, VECTORS.publicKey))).toMatchObject({
-        reason: "bad-signature",
-      });
     }
   });
 
@@ -160,11 +115,6 @@ describe("each refusal, by name", () => {
     );
     expect(reason).toBe("tampered-comment");
     expect(message).toContain("global signature does not verify");
-
-    const edited = VECTORS.prehashed.replace("innytypes.tar.gz", "innytypes.tar.gy");
-    expect(refusal(() => verifier.verify(VECTOR_CONTENT, edited, VECTORS.publicKey))).toMatchObject(
-      { reason: "tampered-comment" },
-    );
   });
 
   it("refuses a wrong algorithm", () => {

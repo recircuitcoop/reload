@@ -699,9 +699,8 @@ export async function run(handlers: Handlers): Promise<void> {
 
 // ── the Anytype key (spec 11.1) ──────────────────────────────────────────────────────────
 
-/** Where the runtime says the key is; the app's domain/anytype/pins.ts names the same two. */
+/** Where the runtime says the key is; the app's domain/anytype/pins.ts names the same. */
 export const ANYTYPE_KEY_FILE_VARIABLE = "RELOAD_ANYTYPE_KEY_FILE";
-export const ANYTYPE_KEY_LEGACY_FILE_VARIABLE = "RELOAD_ANYTYPE_KEY_LEGACY_FILE";
 
 /** The runtime gave this process no key file: it is not a first-party Anytype node. */
 export class NoKeyFileError extends Error {
@@ -734,8 +733,7 @@ function readKeyFile(file: string): string | null {
 }
 
 /**
- * The Anytype key, read now from the file the runtime named (the legacy file only when the
- * canonical one holds nothing), and registered with this process's redactor before it is
+ * The Anytype key, read now from the file the runtime named and registered with this process's redactor before it is
  * returned. Null when there is no key yet. Read on every call, so a new pairing is used at once.
  */
 export function anytypeKey(
@@ -747,9 +745,7 @@ export function anytypeKey(
       "Reload gave this node no Anytype key file; only its own Anytype nodes are given one",
     );
   }
-  const legacy = env[ANYTYPE_KEY_LEGACY_FILE_VARIABLE];
-  const key =
-    readKeyFile(file) ?? (legacy === undefined || legacy === "" ? null : readKeyFile(legacy));
+  const key = readKeyFile(file);
   if (key !== null) {
     protect(key);
   }

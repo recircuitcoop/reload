@@ -30,7 +30,6 @@ import {
   type PackageOrigin,
 } from "../../src/application/package-environment";
 import { PackageRefusal } from "../../src/domain/packages/archive";
-import { OLD_DECLARATION_FILE } from "../../src/domain/packages/old-names";
 import type { EnvironmentBuilder } from "../../src/ports/environment-builder";
 import type { RuntimeLocator } from "../../src/ports/runtime-locator";
 import { RecordingLogger } from "../fakes/children";
@@ -388,8 +387,6 @@ describe("the archive: signature, then per-file hashes, then the content hash", 
     expect(notJson.message).toMatch(/^reload-package\.json is not JSON/);
     const none = await refusal(folderOf({ "node.py": "" }), portsWith(unreachable));
     expect(none.message).toBe("the package has no reload-package.json");
-    const old = await refusal(folderOf({ [OLD_DECLARATION_FILE]: "{}" }), portsWith(unreachable));
-    expect(old.message).toContain("rename the file to reload-package.json");
   });
 
   it("refuses a config the form cannot draw, and a property named twice, naming the field", async () => {

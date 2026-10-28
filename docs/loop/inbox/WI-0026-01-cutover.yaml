@@ -3,11 +3,10 @@ title: Delete the old application in one change
 intent: 'Sudden, massive and correct: one change, only once every ledger row and every proof is green
   on macOS, Linux and Windows.'
 acceptance:
-- 'On branch cutover/0017, merged once: delete src/innytypes, src/helper and tests/; delete the Python
-  host parts of pyproject.toml, uv.lock and the Briefcase config; delete the Python stages of verify.sh.
-  The ledger and old-tests.txt stay as the record.'
+- 'Done 2026-10-28 on branch cutover/0026: the old Python app (src/, tests/), its project files and the
+  Python stages of verify.sh are deleted. The ledger and old-tests.txt stay as the record.'
 - tools/parity/check.ts --final passes with every proof pass on every target.
-- README, CHANGELOG and docs/anytype-mcp-connection.md describe only the new app. Version 1.0.0 is published
+- README and CHANGELOG describe only the new app. Version 1.0.0 is published
   to GitHub Releases, signed and minisigned, with its signed latest-release.json (docs/specs/release-feed.md).
 - 'docs/loop/verify.sh exits zero and prints gate: GREEN.'
 canonical_id: '0026'

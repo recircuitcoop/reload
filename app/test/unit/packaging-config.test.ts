@@ -4,8 +4,8 @@
 // than from a remembered string. Every other tests/test_bundle.py assertion — the
 // Briefcase-specific "python -m X calls Y" mechanism, and the icon's own pixel content — is
 // retired: Briefcase's identifier-matches-module-name mechanism has no Electron equivalent
-// (package.json's `main` just is the entry file), and tools/make_icon.py plus the committed
-// icon files are unchanged by this work item, so their content is not re-asserted here.
+// (package.json's `main` just is the entry file), and the committed icon files' content is not
+// re-asserted here.
 import * as fs from "node:fs";
 import * as os from "node:os";
 import { createRequire } from "node:module";
@@ -46,7 +46,7 @@ describe("electron-builder identifies the app the way the rest of it does (was B
     expect(PACKAGE_JSON.productName).toBe("Reload");
   });
 
-  it("the icon paths point at the committed images, still the ones tools/make_icon.py draws", () => {
+  it("the icon paths point at the committed images", () => {
     // Both `mac:` and `linux:` sections have their own `icon:` line, indented under them
     // (never at column 0), so each is found scoped to its own section rather than by a bare
     // top-level "icon:" match.

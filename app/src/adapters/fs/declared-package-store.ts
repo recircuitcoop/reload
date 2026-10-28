@@ -8,7 +8,6 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { OLD_DECLARATION_FILE, oldDeclarationProblem } from "../../domain/packages/old-names";
 import type { Logger } from "../../ports/logger";
 import type { PackageStore } from "../../ports/package-store";
 
@@ -34,9 +33,6 @@ function readDeclaredName(
     bytes = fs.readFileSync(path.join(folder, DECLARATION));
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
-    if (code === "ENOENT" && fs.existsSync(path.join(folder, OLD_DECLARATION_FILE))) {
-      return { problem: `is refused: ${oldDeclarationProblem(DECLARATION)}` };
-    }
     return {
       problem: code === "ENOENT" ? `has no ${DECLARATION}` : `${DECLARATION}: ${String(error)}`,
     };

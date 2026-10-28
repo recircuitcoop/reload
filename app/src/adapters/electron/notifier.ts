@@ -10,8 +10,7 @@ import type { Message, NoticeAction } from "../../domain/notices/notices";
 /**
  * The application's identity on Windows (plan 0018 §3 windows.py): the AppUserModelId the
  * installer's shortcuts carry, which a toast must be raised under or Windows shows none. The
- * same string names the macOS bundle and the Linux desktop entry (WI-0018-23's appId). The old
- * one is LEGACY_BUNDLE_IDENTIFIER, whose registrations the first start of Reload cleans up.
+ * same string names the macOS bundle and the Linux desktop entry (WI-0018-23's appId).
  */
 export const APP_USER_MODEL_ID = "it.recircu.reload";
 

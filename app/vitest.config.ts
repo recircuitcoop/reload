@@ -85,8 +85,6 @@ export default defineConfig({
             // data integrity
             "src/domain/journal/**",
             "src/adapters/sqlite/**",
-            "src/domain/migration/**",
-            "src/adapters/fs/legacy-move.ts",
             "src/application/journal-replay.ts",
             "src/application/runs.ts",
             "src/domain/flows/flow-file.ts",

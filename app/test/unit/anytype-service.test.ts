@@ -44,7 +44,7 @@ function service(
       crashLoop: { maxCrashes: 5, windowMs: 120_000 },
       restartAttempts: 5,
       profile: MCP_STABILITY,
-      keyLocation: "/home/x/.config/reload/anytype_api_key or /legacy/anytype_api_key",
+      keyLocation: "/home/x/.config/reload/anytype_api_key",
     },
     secrets,
     api,
@@ -82,10 +82,8 @@ describe("bringing the MCP child up", () => {
     const { subject, api, launcher } = await running({ key: null });
     expect(subject.status()).toMatchObject({ state: "no-key", childPid: null });
     expect(subject.status().detail).toContain("pair with Anytype");
-    // Both places the key could come from are named.
-    expect(subject.status().detail).toContain(
-      "/home/x/.config/reload/anytype_api_key or /legacy/anytype_api_key",
-    );
+    // The place the key would be read from is named.
+    expect(subject.status().detail).toContain("/home/x/.config/reload/anytype_api_key");
     expect(api.probes).toEqual([]);
     expect(launcher.children).toEqual([]);
   });

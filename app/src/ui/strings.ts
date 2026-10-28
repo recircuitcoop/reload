@@ -364,8 +364,6 @@ export const STRINGS = {
   "general.advanced.secrets": "Secrets", // decided
   "general.advanced.secrets.keychain": "In the system keychain", // decided
   "general.advanced.secrets.file": "In files only this account can read", // decided
-  "general.advanced.legacy": "Left from the old installation", // decided
-  "general.advanced.legacy.delete": "Delete them", // decided
   "general.advanced.log": "Log file", // decided (plan 0031): where the log is, for support
   "general.advanced.log.show": "Show log", // decided (plan 0031): shows the file in its folder
   "general.advanced.nodes": "Steps running", // decided: the runtime's node processes, each with its state (the old process list)

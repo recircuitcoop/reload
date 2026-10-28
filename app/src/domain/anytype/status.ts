@@ -2,7 +2,7 @@
 // old host's degradations become, shown in Configuration › General (WI-0018-11) through AppApi.
 
 /**
- * * `no-key` — no key in the canonical file or the legacy one: pair with Anytype.
+ * * `no-key` — no key in the key file: pair with Anytype.
  * * `unreachable` — Anytype's local API did not answer; asked again on the person's action or
  *   when the Anytype desktop app starts, never on a timer.
  * * `starting` — the MCP child is spawned and its handshake is running.

@@ -1,7 +1,7 @@
 // minisign inside Electron (WI-0018-14). Electron's node:crypto is BoringSSL, which has no
 // blake2b512, so a verifier that passes under the Node running vitest could still refuse every
 // pre-hashed signature in the app. This runs the production verifier under the Electron binary
-// itself (as node, the way the utility processes run it) over the old helper's vectors.
+// itself (as node, the way the utility processes run it) over vectors made here, in Node.
 //
 // An e2e spec rather than an integration test: in a fresh install the electron package fetches
 // its binary on first use, and only this stage runs outside the unit stages' home guard.
@@ -13,12 +13,26 @@ import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
 import { buildSync } from "esbuild";
 import { ELECTRON_BINARY } from "./app-harness";
+import { Signer } from "../fakes/minisign-signer";
 
 const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "fixtures");
 
 test("minisign verifies both forms and refuses a tampered file in Electron's own crypto", () => {
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "reload-minisign-"));
   try {
+    // Signed here, because Electron's own crypto cannot pre-hash (the very thing under test).
+    const signer = new Signer();
+    const content = Buffer.from("a release bundle");
+    const vectors = path.join(scratch, "vectors.json");
+    fs.writeFileSync(
+      vectors,
+      JSON.stringify({
+        publicKey: signer.publicKeyText,
+        contentBase64: content.toString("base64"),
+        prehashed: signer.sign(content, { prehashed: true }),
+        legacy: signer.sign(content, { prehashed: false }),
+      }),
+    );
     const bundle = path.join(scratch, "electron-check.cjs");
     buildSync({
       entryPoints: [path.join(FIXTURES, "minisign", "electron-check.ts")],
@@ -28,11 +42,11 @@ test("minisign verifies both forms and refuses a tampered file in Electron's own
       outfile: bundle,
       logLevel: "warning",
     });
-    const run = spawnSync(
-      ELECTRON_BINARY,
-      [bundle, path.join(FIXTURES, "minisign", "python-helper-vectors.json")],
-      { env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" }, encoding: "utf8", timeout: 60_000 },
-    );
+    const run = spawnSync(ELECTRON_BINARY, [bundle, vectors], {
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+      encoding: "utf8",
+      timeout: 60_000,
+    });
     expect(run.status, run.stderr).toBe(0);
     const result = JSON.parse(run.stdout.trim()) as Record<string, string | null>;
     expect(result["electron"]).toEqual(expect.any(String));

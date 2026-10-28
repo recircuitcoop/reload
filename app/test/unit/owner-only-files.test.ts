@@ -1,6 +1,5 @@
 // The owner-only file adapter of SecretStore (WI-0018-06): 0600 files in a 0700 directory
-// (addons/secrets.py:93-109), the Anytype key and the proxy token at their existing paths, and
-// a legacy key file that is read and never written (anytype_mcp/config.py:47-48).
+// (addons/secrets.py:93-109), the Anytype key and the proxy token at their existing paths.
 import fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -11,7 +10,6 @@ import {
   credentialSecretFile,
   credentialsDirectory,
   keyFileOnly,
-  legacyConfigDirectory,
   OwnerOnlyFileStore,
   readOwnerOnly,
   SECRET_DIRECTORY_MODE,
@@ -40,9 +38,9 @@ afterEach(() => {
 });
 
 /** A store over the Anytype files of a home inside the scratch directory. */
-function anytypeStore(env: Record<string, string> = {}) {
+function anytypeStore() {
   const home = path.join(scratch, "home");
-  const location = { platform: process.platform, home, env };
+  const location = { platform: process.platform, home };
   const files = anytypeSecretFiles(location);
   return { home, files, store: new OwnerOnlyFileStore(files) };
 }
@@ -58,41 +56,12 @@ function everyFile(root: string): { file: string; bytes: Buffer }[] {
 
 describe("the existing paths (plan 0018 §4.1)", () => {
   it("keeps the key and the proxy token in ~/.config/reload", () => {
-    const files = anytypeSecretFiles({ platform: "darwin", home: "/Users/a", env: {} });
+    const files = anytypeSecretFiles({ platform: "darwin", home: "/Users/a" });
     expect(files["anytype-api-key"]?.file).toBe("/Users/a/.config/reload/anytype_api_key");
     expect(files["mcp-proxy-token"]).toEqual({
       file: "/Users/a/.config/reload/mcp_proxy_token",
     });
     expect(credentialsDirectory("C:\\Users\\a", "win32")).toBe("C:\\Users\\a\\.config\\reload");
-  });
-
-  it("reads the legacy key where platformdirs' user_config_path put it", () => {
-    expect(legacyConfigDirectory({ platform: "darwin", home: "/Users/a", env: {} })).toBe(
-      "/Users/a/Library/Application Support/innytypes",
-    );
-    expect(legacyConfigDirectory({ platform: "linux", home: "/home/a", env: {} })).toBe(
-      "/home/a/.config/innytypes",
-    );
-    expect(
-      legacyConfigDirectory({ platform: "linux", home: "/home/a", env: { XDG_CONFIG_HOME: "/x" } }),
-    ).toBe("/x/innytypes");
-    expect(
-      legacyConfigDirectory({ platform: "linux", home: "/home/a", env: { XDG_CONFIG_HOME: " " } }),
-    ).toBe("/home/a/.config/innytypes");
-    expect(
-      legacyConfigDirectory({
-        platform: "win32",
-        home: "C:\\Users\\a",
-        env: { LOCALAPPDATA: "D:\\Local" },
-      }),
-    ).toBe("D:\\Local\\innytypes");
-    expect(legacyConfigDirectory({ platform: "win32", home: "C:\\Users\\a", env: {} })).toBe(
-      "C:\\Users\\a\\AppData\\Local\\innytypes",
-    );
-    const files = anytypeSecretFiles({ platform: "darwin", home: "/Users/a", env: {} });
-    expect(files["anytype-api-key"]?.legacy).toBe(
-      "/Users/a/Library/Application Support/innytypes/anytype_api_key",
-    );
   });
 
   it("keeps Node-RED's credential secret in userData/secrets: ciphertext, or the file fallback", () => {
@@ -220,60 +189,6 @@ describe("failures", () => {
   });
 });
 
-describe("the legacy key file (config.py:48): read-only", () => {
-  // On Linux without XDG_CONFIG_HOME the two paths are the same file; a separate legacy
-  // directory is named so the test means the same thing on every platform.
-  const legacyEnv = () => ({
-    XDG_CONFIG_HOME: path.join(scratch, "xdg"),
-    LOCALAPPDATA: path.join(scratch, "local"),
-  });
-
-  function withLegacyKey(value: string) {
-    const setup = anytypeStore(legacyEnv());
-    const legacy = setup.files["anytype-api-key"]?.legacy ?? "";
-    fs.mkdirSync(path.dirname(legacy), { recursive: true });
-    fs.writeFileSync(legacy, `${value}\n`);
-    return { ...setup, legacy, canonical: setup.files["anytype-api-key"]?.file ?? "" };
-  }
-
-  it("is read when the canonical file holds nothing", () => {
-    const { store, legacy, canonical } = withLegacyKey(KEY);
-    expect(legacy).not.toBe(canonical);
-    expect(store.read("anytype-api-key")).toBe(KEY);
-  });
-
-  it("is not read when the canonical file has a key", () => {
-    const { store } = withLegacyKey(KEY);
-    store.write("anytype-api-key", OTHER_KEY);
-    expect(store.read("anytype-api-key")).toBe(OTHER_KEY);
-  });
-
-  it("is never written: a new key writes only the canonical file", () => {
-    const { store, legacy, canonical } = withLegacyKey(KEY);
-    const before = fs.statSync(legacy);
-    store.write("anytype-api-key", OTHER_KEY);
-    expect(fs.readFileSync(legacy, "utf8")).toBe(`${KEY}\n`);
-    expect(fs.statSync(legacy).mtimeMs).toBe(before.mtimeMs);
-    expect(fs.readdirSync(path.dirname(legacy))).toEqual(["anytype_api_key"]);
-    expect(fs.readFileSync(canonical, "utf8")).toBe(OTHER_KEY);
-  });
-
-  it("the check can fail: a store whose canonical path is the legacy one changes it", () => {
-    const { legacy } = withLegacyKey(KEY);
-    new OwnerOnlyFileStore({ "anytype-api-key": { file: legacy } }).write(
-      "anytype-api-key",
-      OTHER_KEY,
-    );
-    expect(fs.readFileSync(legacy, "utf8")).not.toBe(`${KEY}\n`);
-  });
-
-  it("is not consulted twice where it is the canonical file (Linux, no XDG_CONFIG_HOME)", () => {
-    const file = path.join(scratch, "same", "anytype_api_key");
-    const store = new OwnerOnlyFileStore({ "anytype-api-key": { file, legacy: file } });
-    expect(store.read("anytype-api-key")).toBeNull();
-  });
-});
-
 describe.runIf(posix)("links and things that are not files", () => {
   it("never reads a secret through a symbolic link", () => {
     const target = path.join(scratch, "elsewhere");
@@ -352,7 +267,7 @@ describe("nothing but the store's own files", () => {
 
 describe("the runtime's share of the Anytype secrets (WI-0018-20)", () => {
   it("is the key's location only, never the proxy token's", () => {
-    const files = anytypeSecretFiles({ platform: "darwin", home: "/Users/a", env: {} });
+    const files = anytypeSecretFiles({ platform: "darwin", home: "/Users/a" });
     expect(keyFileOnly(files)).toEqual({ "anytype-api-key": files["anytype-api-key"] });
     expect(keyFileOnly({ "mcp-proxy-token": { file: "/t" } })).toEqual({});
   });

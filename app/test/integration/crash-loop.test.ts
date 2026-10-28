@@ -47,8 +47,6 @@ function appApiOver(supervisor: Supervisor): AppApi {
     telemetry: () => Promise.reject(new Error("not used here")),
     setTelemetry: () => Promise.reject(new Error("not used here")),
     telemetryReports: () => Promise.reject(new Error("not used here")),
-    legacyPackages: () => Promise.resolve([]),
-    deleteLegacyPackages: () => Promise.resolve([]),
     ...ANYTYPE_UNUSED,
     ...VIEWS_UNUSED,
   };

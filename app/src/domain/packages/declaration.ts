@@ -11,7 +11,6 @@
 import type { DeclaredLimits } from "../supervision/resources";
 import type { StabilityProfile } from "../supervision/staleness";
 import { configProblems, type ConfigJudge } from "./config-lint";
-import { oldKeywordAt, oldKeywordProblem } from "./old-names";
 import { compareVersions } from "./versions";
 
 /** The one protocol version this runtime implements (spec 1.2). */
@@ -452,11 +451,6 @@ export function parseDeclaration(value: unknown, judge: DeclarationJudge): Parse
           `which implements protocol ${String(PROTOCOL)}`,
       ],
     };
-  }
-  // A package still written for the old contract is refused naming the new keyword (plan 0028 D3).
-  const oldKeyword = oldKeywordAt(value);
-  if (oldKeyword !== null) {
-    return { ok: false, problems: [oldKeywordProblem(oldKeyword, "reload")] };
   }
   const schemaProblems = judge.declaration(value);
   if (schemaProblems.length > 0) {

@@ -2,8 +2,7 @@
 // heartbeat, in the services process. It keeps every plan 0002/0007/0015 behaviour; only its
 // language and host process changed.
 //
-// * The key is read through the SecretStore (the owner-only file adapter: canonical file, then
-//   the read-only legacy one) and handed to the runtime's redactor over the direct channel.
+// * The key is read through the SecretStore (the owner-only file adapter) and handed to the runtime's redactor over the direct channel.
 // * The MCP child starts only after the health gate passes. Anytype not running is a state,
 //   not retried on a timer (helper/restart.py: a failed start changes nothing by waiting, and
 //   costs no attempt of the crash-loop budget). The person is told once, and Anytype is asked

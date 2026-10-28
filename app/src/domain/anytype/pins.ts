@@ -61,23 +61,16 @@ export function childEnvironment(
 }
 
 /**
- * The variables that tell a first-party Anytype node where the key file is (plan 0018 §4.2,
+ * The variable that tells a first-party Anytype node where the key file is (plan 0018 §4.2,
  * spec 11.1): the runtime names the paths the shell located, so a node never works them out
  * from HOME, and the key itself never passes through a flow, a start frame or the journal.
- * The TS node SDK's `anytypeKey()` reads the same two names.
+ * The TS node SDK's `anytypeKey()` reads the same name.
  */
 export const ANYTYPE_KEY_FILE_VARIABLE = "RELOAD_ANYTYPE_KEY_FILE";
-export const ANYTYPE_KEY_LEGACY_FILE_VARIABLE = "RELOAD_ANYTYPE_KEY_LEGACY_FILE";
 
-/** The two variables for a key kept at `file`, with its read-only `legacy` fallback. */
-export function anytypeKeyEnvironment(where: {
-  readonly file: string;
-  readonly legacy?: string;
-}): Record<string, string> {
-  return {
-    [ANYTYPE_KEY_FILE_VARIABLE]: where.file,
-    ...(where.legacy === undefined ? {} : { [ANYTYPE_KEY_LEGACY_FILE_VARIABLE]: where.legacy }),
-  };
+/** The variable for a key kept at `file`. */
+export function anytypeKeyEnvironment(where: { readonly file: string }): Record<string, string> {
+  return { [ANYTYPE_KEY_FILE_VARIABLE]: where.file };
 }
 
 /** The first-party node package that reads the key (plan 0018 §4.2). */

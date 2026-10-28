@@ -8,7 +8,7 @@ import { FakeLauncher, obedient, RecordingLogger, RecordingNotifier } from "../f
 import { FakeClock } from "../fakes/clock";
 
 const FILES = {
-  "anytype-api-key": { file: "/scratch/.config/reload/anytype_api_key", legacy: "/l/key" },
+  "anytype-api-key": { file: "/scratch/.config/reload/anytype_api_key" },
   "mcp-proxy-token": { file: "/scratch/.config/reload/mcp_proxy_token" },
 };
 const CONFIG = { generation: 1, port: null, userDir: "/u", restart: null, forkedAt: 0 };
@@ -22,7 +22,6 @@ describe("secret paths in init", () => {
       [],
       { "anytype-api-key": { file: "" } },
       { "anytype-api-key": { file: 1 } },
-      { "anytype-api-key": { file: "/k", legacy: 2 } },
       { "some-other-secret": { file: "/k" } },
       { "anytype-api-key": "/k" },
     ]) {

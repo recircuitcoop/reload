@@ -67,14 +67,6 @@ export type NoticeKind =
   | "core-update-refused"
   /** The runtime crash-looped just after an update: Go back is offered, never applied (D4). */
   | "core-crash-loop"
-  /** The old installation's plugin environments are still on disk (WI-0018-25). */
-  | "legacy-packages-found"
-  /** The MCP endpoint could not open because the old helper still holds its lock (WI-0018-25). */
-  | "endpoint-blocked-by-legacy-helper"
-  /** The stored Node-RED credential secret could not be read, so a new one was made (plan 0028). */
-  | "credentials-reset"
-  /** Both Reload and the app it was renamed from held data; the old data was left (plan 0028). */
-  | "old-data-left"
   /** A flows file Node-RED could not load at the start: kept, never saved over. */
   | "flows-file-refused"
   /** A flows file broken while Reload runs: the flows still run; kept, never saved over. */
@@ -118,10 +110,6 @@ export const NOTICE_KINDS: readonly NoticeKind[] = [
   "core-update-waiting",
   "core-update-refused",
   "core-crash-loop",
-  "legacy-packages-found",
-  "endpoint-blocked-by-legacy-helper",
-  "credentials-reset",
-  "old-data-left",
   "flows-file-refused",
   "flows-file-damaged",
   "written-unreadable",
@@ -340,29 +328,6 @@ function composeWords(notice: Notice): Message {
           "Go back from the banner or in Configuration › General. Your flows and settings are kept.",
         ),
       };
-    case "legacy-packages-found":
-      return {
-        title: "Reload found plugin environments from the old installation",
-        body: sentences(detail, "Review and remove them in Configuration › General."),
-      };
-    case "endpoint-blocked-by-legacy-helper":
-      return {
-        title: "Reload is running without its MCP endpoint",
-        body: sentences(
-          "The old InnyTypes helper is still running and holds its lock",
-          "Quit it, then press Restart on the services process.",
-        ),
-      };
-    case "credentials-reset":
-      return {
-        title: "Enter the credentials in your flows again",
-        body: sentences(
-          "Reload could not read the key that protected them, so it made a new one",
-          "Open each flow that used a password or token and enter it again.",
-        ),
-      };
-    case "old-data-left":
-      return { title: "Reload kept its own data", body: sentences(detail) };
     // The sentence names the file, its copy, the backup and what to do (domain/flows).
     case "flows-file-refused":
       return { title: "Reload didn't load your flows", body: sentences(detail) };

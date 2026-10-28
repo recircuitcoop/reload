@@ -115,7 +115,6 @@ export function AdvancedSection({
 }) {
   const children = useChildren();
   const [secrets, setSecrets] = useState<SecretStorageStatus | null>(null);
-  const [legacy, setLegacy] = useState<readonly string[]>([]);
   const [log, setLog] = useState<string | null>(null);
   const [nodes, setNodes] = useState<readonly NodeProcessRow[] | null>(null);
   useEffect(() => {
@@ -126,7 +125,6 @@ export function AdvancedSection({
       () => undefined,
     );
     api.secretStorage().then(setSecrets, () => undefined);
-    api.legacyPackages().then(setLegacy, () => undefined);
     api.logFile().then(
       (answer) => {
         if (answer.ok) setLog(answer.value.path);
@@ -136,14 +134,6 @@ export function AdvancedSection({
   }, [api]);
   const showLog = useCallback(() => {
     void api.showLog();
-  }, [api]);
-  const deleteLegacy = useCallback(() => {
-    api.deleteLegacyPackages().then(
-      () => {
-        setLegacy([]);
-      },
-      () => undefined,
-    );
   }, [api]);
   const statuses =
     children.status === "ready"
@@ -204,16 +194,6 @@ export function AdvancedSection({
           </div>
         )}
         <LimitsForm api={api} />
-        {legacy.length === 0 ? null : (
-          <div data-testid="general-advanced-legacy" className="flex flex-col gap-2">
-            <KeyValue kind="mono" label={t("general.advanced.legacy")} value={legacy.join(", ")} />
-            <div>
-              <Button kind="secondary" onClick={deleteLegacy}>
-                {t("general.advanced.legacy.delete")}
-              </Button>
-            </div>
-          </div>
-        )}
       </div>
     </GeneralSection>
   );

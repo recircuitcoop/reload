@@ -3,7 +3,7 @@
 // SDK's) initialises, lists tools and calls one through the gateway, against the fake MCP child
 // on its own pipes, from nothing but a URL and a bearer token: neither side launches the other.
 // The Anytype key never appears on the wire, in an error or in a log line (a canary). And no
-// source file, and no documented client configuration, launches or configures a client.
+// source file launches or configures a client, and no documented code block hands one Anytype's port.
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import net from "node:net";
@@ -19,12 +19,7 @@ import { systemClock } from "../../src/adapters/system/clock";
 import { mcpDispatch } from "../../src/application/mcp-dispatch";
 import { sourceLog } from "../../src/application/source-log";
 import { childEnvironment } from "../../src/domain/anytype/pins";
-import {
-  checkedAddress,
-  DEFAULT_PORT,
-  endpointUrl,
-  MCP_PATH,
-} from "../../src/domain/endpoint/address";
+import { endpointUrl, MCP_PATH } from "../../src/domain/endpoint/address";
 import { SecretRegistry } from "../../src/domain/redaction/registry";
 import type { McpChild, McpTool } from "../../src/ports/anytype";
 import { unpairedFiles } from "../fakes/anytype";
@@ -236,13 +231,7 @@ describe("the application's source", () => {
 
 // ── what the documentation tells a person to write ─────────────────────────────────────
 
-const CONNECTION_DOC = path.join(REPO, "docs", "anytype-mcp-connection.md");
-const README = path.join(REPO, "README.md");
-const DOCUMENTS = [CONNECTION_DOC, README];
-
-/** One document as one line, with Markdown emphasis and backticks taken out. */
-const flattened = (document: string) =>
-  fs.readFileSync(document, "utf8").replaceAll("**", "").replaceAll("`", "").replace(/\s+/g, " ");
+const DOCUMENTS = [path.join(REPO, "docs", "INSTALL.md"), path.join(REPO, "README.md")];
 
 /** Every fenced block of one document, with its language. */
 function blocks(document: string): { language: string; text: string }[] {
@@ -251,99 +240,12 @@ function blocks(document: string): { language: string; text: string }[] {
   );
 }
 
-/** The tables of a TOML block, each key's value read as TOML's plain scalars are. */
-function tomlTables(text: string): Map<string, Record<string, unknown>> {
-  const tables = new Map<string, Record<string, unknown>>();
-  let current: Record<string, unknown> = {};
-  tables.set("", current);
-  for (const line of text.split("\n").map((raw) => raw.trim())) {
-    const header = /^\[([^\]]+)\]$/.exec(line);
-    if (header?.[1] !== undefined) {
-      current = {};
-      tables.set(header[1], current);
-      continue;
-    }
-    const pair = /^([A-Za-z0-9_]+)\s*=\s*(.+)$/.exec(line);
-    if (pair?.[1] !== undefined && pair[2] !== undefined) {
-      current[pair[1]] = JSON.parse(pair[2]) as unknown;
-    }
-  }
-  return tables;
-}
-
 describe("the documentation", () => {
-  it("configures a client with a URL and a token, and never a command", () => {
-    const servers = DOCUMENTS.flatMap((document) =>
-      blocks(document)
-        .filter((block) => block.language === "toml")
-        .flatMap((block) =>
-          [...tomlTables(block.text)].filter(([name]) => name.startsWith("mcp_servers.")),
-        ),
-    );
-    expect(servers.length).toBeGreaterThan(0);
-    for (const [name, table] of servers) {
-      expect(table, name).toHaveProperty("url");
-      expect(table, name).toHaveProperty("bearer_token_env_var");
-      expect(table, name).not.toHaveProperty("command");
-      expect(table, name).not.toHaveProperty("args");
-      expect(String(table["url"]).endsWith(MCP_PATH), name).toBe(true);
-    }
-  });
-
-  it("never hands a client Anytype's REST port, and says what that port is", () => {
+  it("never hands a client Anytype's REST port", () => {
     const code = DOCUMENTS.flatMap(blocks);
     expect(code.length).toBeGreaterThan(0);
     for (const block of code) {
       expect(block.text).not.toContain("31009");
-    }
-    const prose = flattened(CONNECTION_DOC);
-    expect(prose).toMatch(/do not use .{0,60}31009/i);
-    expect(prose).toMatch(/31009.{0,40}is Anytype's REST API/i);
-  });
-
-  it("says which transport is public and which is private", () => {
-    const prose = flattened(CONNECTION_DOC);
-    expect(prose).toMatch(/stdio pipes are private internal transport/i);
-    expect(prose).toMatch(/public contract is the loopback Streamable HTTP/i);
-  });
-
-  it("documents a stored endpoint the one rule accepts, and not the default port", () => {
-    const stored = blocks(CONNECTION_DOC)
-      .filter((block) => block.language === "toml")
-      .map((block) => tomlTables(block.text).get("mcp"))
-      .filter((table) => table !== undefined);
-    expect(stored.length).toBeGreaterThan(0);
-    for (const table of stored) {
-      const { host, port } = table as { host: string; port: number };
-      expect(checkedAddress(host, port)).toEqual({ host, port });
-      expect(port).not.toBe(DEFAULT_PORT);
-    }
-  });
-
-  it("calls the stored setting the way to choose the endpoint, in both documents", () => {
-    for (const document of DOCUMENTS) {
-      const prose = flattened(document);
-      // These documents still describe the old Python app until plan 0026, under its name.
-      expect(prose, document).toMatch(
-        /stored setting.{0,80}stored value is what (Reload|InnyTypes) serves/i,
-      );
-      expect(prose, document).toContain("[mcp]");
-    }
-  });
-
-  it("never presents a variable as the way to choose the port without saying it is the default", () => {
-    const qualifications =
-      /never been configured|nothing is stored|is ignored|are ignored|only while nothing/i;
-    for (const document of DOCUMENTS) {
-      const prose = flattened(document);
-      const mentions = [...prose.matchAll(/(RELOAD|INNYTYPES)_MCP_(HOST|PORT)/g)].map(
-        (m) => m.index,
-      );
-      expect(mentions.length, document).toBeGreaterThan(0);
-      for (const position of mentions) {
-        const window = prose.slice(Math.max(0, position - 400), position + 400);
-        expect(window, document).toMatch(qualifications);
-      }
     }
   });
 });

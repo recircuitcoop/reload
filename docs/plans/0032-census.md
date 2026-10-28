@@ -194,7 +194,7 @@ Corrections to the brief:
 
 - **Old app / now:** The person could point at a git repo (locked to a commit) or a package index and get install and update checks from there. Now only a signed catalogue archive or a local folder works.
 - **Size:** L. Lives in: `adapters/fs/package-roots.ts` and `domain/packages/versions.ts`: new source kinds beside catalogue and folder; the installer would have to build a signed archive from the source.
-- **Owner decision:** NO owner decision retires it. Closest owner words: "OK, official catalogue only" (docs/plans/0022-the-redesigned-application.md:696; docs/parity/owner-review.md:300), but those are about registering catalogue sources in the window, not about git or an index. The statement 'A package now comes only as a signed archive a catalogue names, or a folder a person chose' is the ledger's reason text (WI-0018-17), a plan author's. owner-review.md item 7 is 'Flag: no' with no owner words. The owner's recorded answer for the old app was the opposite: D15 "(c), any source a plugin declares, including git URLs. Git sources are locked to commit hashes." (docs/plans/0003-innytypes-helper.md:1888-1889).
+- **Owner decision:** NO owner decision retires it. Closest owner words: "OK, official catalogue only" (docs/plans/0022-the-redesigned-application.md:696; docs/parity/owner-review.md:300), but those are about registering catalogue sources in the window, not about git or an index. The statement 'A package now comes only as a signed archive a catalogue names, or a folder a person chose' is the ledger's reason text (WI-0018-17), a plan author's. owner-review.md item 7 is 'Flag: no' with no owner words. The owner's recorded answer for the old app was the opposite: D15 "(c), any source a plugin declares, including git URLs. Git sources are locked to commit hashes." (docs/plans/0003-*.md:1888-1889).
 - **Rows (10):**
 
 - `tests/test_plugin_version_check.py::test_a_git_reference_is_locked_by_its_commit_hash`
@@ -415,7 +415,7 @@ Corrections to the brief:
 
 - **Old app / now:** A release that changed the API for plugins was held until the person applied it. Now it installs at the next quit like any other (only Go back, offered 7 days, remains).
 - **Size:** M. Lives in: `shell/update.ts` and `domain/update/policy.ts`: mark a release incompatible and hold it; Apply in General.
-- **Owner decision:** none for the new app. The old owner answer was D13 "(a), never automatic; always an explicit command." (docs/plans/0003-innytypes-helper.md:1880-1881); no later plan retires it.
+- **Owner decision:** none for the new app. The old owner answer was D13 "(a), never automatic; always an explicit command." (docs/plans/0003-*.md:1880-1881); no later plan retires it.
 - **Rows (6):**
 
 - `tests/test_helper_core_update.py::test_a_host_api_change_still_waits_rather_than_being_handed_off`
@@ -440,7 +440,7 @@ Corrections to the brief:
 
 - **Old app / now:** A new Reload that never started healthy was rolled back automatically with a notice naming it. Now the person is offered Go back for 7 days.
 - **Size:** (decided). Lives in: n/a.
-- **Owner decision:** YES, owner D4. "Ack as replaced by D4" (owner, 2026-10-02) (docs/plans/0022-the-redesigned-application.md:390; docs/parity/owner-review.md:352), and "D4 InnyTypes rollback: Go back installs the previous signed release, offered 7 days ... Owner: yes." (docs/plans/0022-the-redesigned-application.md:388-389). Recorded as acknowledged at docs/plans/0022-the-redesigned-application.md:695. This row (the rolled-back notice) was one of the 15 intended.
+- **Owner decision:** YES, owner D4. "Ack as replaced by D4" (owner, 2026-10-02) (docs/plans/0022-the-redesigned-application.md:390; docs/parity/owner-review.md:352), and "D4 [old app's name] rollback: Go back installs the previous signed release, offered 7 days ... Owner: yes." (docs/plans/0022-the-redesigned-application.md:388-389). Recorded as acknowledged at docs/plans/0022-the-redesigned-application.md:695. This row (the rolled-back notice) was one of the 15 intended.
 - **Rows (1):**
 
 - `tests/test_helper_notification.py::test_a_rolled_back_update_names_the_update_that_rolled_back` (UNSURE)

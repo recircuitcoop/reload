@@ -19,7 +19,6 @@ import {
 } from "electron";
 import { autoUpdater } from "electron-updater";
 import { EditorFrame } from "../adapters/electron/editor-frame";
-import { chooseLegacyLoginItem } from "../adapters/electron/legacy-login-item";
 import { AutostartLoginItem, autostartDirectory } from "../adapters/electron/login-item-linux";
 import { ElectronLoginItem } from "../adapters/electron/login-item";
 import { electronDelivery, setAppUserModelId } from "../adapters/electron/notifier";
@@ -42,11 +41,6 @@ import { DeclaredPackageStore } from "../adapters/fs/declared-package-store";
 import { InstalledPackageStore } from "../adapters/fs/installed-package-store";
 import { FsPackageRoots } from "../adapters/fs/package-roots";
 import { FsPackageSource } from "../adapters/fs/package-source";
-import { legacyConfigPath, readTextFileOrNull } from "../adapters/fs/legacy-config";
-import { JsonLegacyImportReportStore } from "../adapters/fs/legacy-import-report";
-import { firstStartIn } from "../adapters/fs/legacy-move";
-import { rewriteLegacyJournal } from "../adapters/sqlite/legacy-journal";
-import { FsLegacyPackageEnvironments, legacyAddonsRoot } from "../adapters/fs/legacy-packages";
 import { JsonNoticeFile, NOTICES_FILENAME } from "../adapters/fs/notice-file";
 import { JsonSettingsStore } from "../adapters/fs/settings-store";
 import { anytypeExecutable, ProcessTableApps } from "../adapters/process/desktop-apps";
@@ -78,7 +72,7 @@ import { JsonNodeRecords } from "../adapters/process/node-records";
 import { stopLeftNodes } from "../application/left-nodes";
 import { OneLog } from "../application/one-log";
 import { linkPeers } from "../application/peer-link";
-import { credentialSecretOf, openSecretStore } from "../application/secrets";
+import { openSecretStore, readOrCreate } from "../application/secrets";
 import { QuitFlow, stopInReverse } from "../application/quit";
 import { printCanary } from "../application/source-log";
 import { Supervisor } from "../application/supervisor";
@@ -97,7 +91,6 @@ import { crashOnceForE2e, DeliveredNotices, e2eHooksOn, exposeE2eHooks } from ".
 import { browseFor } from "./editor-browse";
 import { noticeHandlers, wireRunNotices } from "./run-notices";
 import { IPC } from "./ipc";
-import { wireMigration } from "./migration";
 import { SHIPPED_MANIFEST } from "../application/shipped-manifest";
 import { catalogueSource, wirePackages } from "./packages";
 import { quitQuestion, wireQuit } from "./quit-question";
@@ -124,9 +117,6 @@ const logFilePath = logPath({ platform: process.platform, home: os.homedir(), en
 runCommandLine(app, process.argv, { log: logFilePath, notices: NOTICES_FILENAME });
 // The e2e gate's hooks (never set in an ordinary run, and never on in an installed build).
 const e2eHooks = e2eHooksOn({ packaged: app.isPackaged, env: process.env });
-// The first start over a 0.3.0 installation (plan 0028 step 1), before the single-instance lock; never a start on an empty directory while the old data is still where it was. Failures are shown.
-const firstStart = firstStartIn(app, e2eHooks, process.env, rewriteLegacyJournal, dialog);
-if (firstStart.problem !== null) app.exit(1);
 // The gate runs with hidden windows (§6, e2e stage), so a run never steals focus.
 const hiddenWindows = process.env["RELOAD_HIDDEN_WINDOWS"] === "1";
 // The app pages and the pop-outs are served by the shell on schemes of its own (§2.2), which must be privileged before Electron is ready.
@@ -279,7 +269,7 @@ async function start(): Promise<DesktopWired["notices"] | null> {
   // Recorded for the e2e gate's hooks only: never in a packaged build (e2eHooksOn).
   const delivered = e2eHooks ? new DeliveredNotices(handlers) : null;
   const shown = electronDelivery(Notification, !hiddenWindows, handlers);
-  const { notices, launchAtLogin } = wireDesktop({
+  const { notices } = wireDesktop({
     ipc: ipcMain,
     deliver: delivered === null ? shown : delivered.recording(shown),
     noticeFile: new JsonNoticeFile(path.join(userDir, NOTICES_FILENAME)),
@@ -295,33 +285,13 @@ async function start(): Promise<DesktopWired["notices"] | null> {
     setting: new JsonSettingsStore(path.join(userDir, "shell-settings.json")),
     logger,
   });
-  // ── migrating an old installation (WI-0018-25): imported once (shell/migration.ts) ────────
-  const legacyLocation = { platform: process.platform, home: os.homedir(), env: process.env };
-  wireMigration({
-    ipc: ipcMain,
-    readLegacyConfig: () =>
-      readTextFileOrNull(firstStart.relocate(legacyConfigPath(legacyLocation))),
-    reportStore: new JsonLegacyImportReportStore(userDir),
-    shellSettings: new JsonSettingsStore(path.join(userDir, "shell-settings.json")),
-    mcpSettings: new JsonSettingsStore(path.join(userDir, "settings.json")),
-    launchAtLogin,
-    legacyLoginItem: chooseLegacyLoginItem(process.platform, os.homedir(), xdg),
-    legacyPackages: new FsLegacyPackageEnvironments(
-      firstStart.relocate(legacyAddonsRoot(legacyLocation)),
-    ),
-    notices,
-    logger,
-    firstStart,
-  });
   ipcMain.handle(IPC.secretStorage, (): Contract.SecretStorageStatus => secretStorage);
-  // Kept once made, the same for every runtime. One the keychain cannot decrypt stops the start rather than orphan every credential, except on the move's own start (plan 0028, answer 1).
-  const replace = firstStart.credentialReplacement(() => {
-    notices.raise({ kind: "credentials-reset", subject: "flows" });
-  });
-  const newSecret = () => randomBytes(32).toString("hex");
-  const credentialSecret = credentialSecretOf(secrets.store, newSecret, { logger, replace });
+  // Kept once made, the same for every runtime. One the keychain cannot decrypt stops the start rather than orphan every credential.
+  const credentialSecret = readOrCreate(secrets.store, "node-red-credential-secret", () =>
+    randomBytes(32).toString("hex"),
+  );
   // The Anytype key and proxy token, located once here (os.homedir()) through WI-0018-06's file adapter; init hands the paths on.
-  const anytypeSecrets = anytypeSecretFiles(legacyLocation);
+  const anytypeSecrets = anytypeSecretFiles({ platform: process.platform, home: os.homedir() });
   logger.info(
     `the Anytype key is kept in ${anytypeSecrets["anytype-api-key"]?.file ?? "(nowhere)"}`,
   );
@@ -584,15 +554,13 @@ async function start(): Promise<DesktopWired["notices"] | null> {
 }
 
 // ── single instance; a quit, by the window or a signal, goes through the one QuitFlow ─────
-if (firstStart.problem === null) {
-  runShell({
-    ...{ app, signals: process, quitFlow, bringForward, start, logger },
-    windowOpen: () => appWindow.current !== null,
-    running: { supervisors, anytype: anytypeApp, notices: NOTICES_FILENAME },
-    // Not under the watcher: this start is handed to one, which relaunches a crash (group 11).
-    handOff: handOffToWatcher({
-      ...{ app, env: process.env, runtimesDir: RUNTIMES_DIR, script: watcherScript(__dirname) },
-      ...{ stability: () => readStability(shellSettings, logger), log: logger.error.bind(logger) },
-    }),
-  });
-}
+runShell({
+  ...{ app, signals: process, quitFlow, bringForward, start, logger },
+  windowOpen: () => appWindow.current !== null,
+  running: { supervisors, anytype: anytypeApp, notices: NOTICES_FILENAME },
+  // Not under the watcher: this start is handed to one, which relaunches a crash (group 11).
+  handOff: handOffToWatcher({
+    ...{ app, env: process.env, runtimesDir: RUNTIMES_DIR, script: watcherScript(__dirname) },
+    ...{ stability: () => readStability(shellSettings, logger), log: logger.error.bind(logger) },
+  }),
+});

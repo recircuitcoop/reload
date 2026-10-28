@@ -335,7 +335,7 @@ describe("pairing", () => {
 
   function pairing() {
     const registry = new SecretRegistry();
-    const files = anytypeSecretFiles({ platform: process.platform, home: scratch, env: {} });
+    const files = anytypeSecretFiles({ platform: process.platform, home: scratch });
     const store = registering(new OwnerOnlyFileStore(files), {
       protect: (secret) => registry.protect(secret),
     });
@@ -394,20 +394,6 @@ describe("pairing", () => {
     expect(fs.existsSync(file)).toBe(false);
     anytype.route = () => ({ status: 500, body: "{}" });
     await expect(subject.start()).rejects.toThrow(/did not start API pairing/);
-  });
-
-  it("writes only the canonical file: the legacy one is read, never written", async () => {
-    anytypePairs();
-    const files = anytypeSecretFiles({ platform: process.platform, home: scratch, env: {} });
-    const legacy = files["anytype-api-key"]?.legacy ?? "";
-    fs.mkdirSync(path.dirname(legacy), { recursive: true });
-    fs.writeFileSync(legacy, "legacy-key-0123456789", { mode: 0o600 });
-    const { subject, file } = pairing();
-    await subject.start();
-    await subject.complete("4321");
-    expect(fs.readFileSync(legacy, "utf8")).toBe("legacy-key-0123456789");
-    expect(fs.readFileSync(file, "utf8")).toBe(PAIRED_KEY);
-    expect(new OwnerOnlyFileStore(files).read("anytype-api-key")).toBe(PAIRED_KEY);
   });
 });
 

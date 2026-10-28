@@ -39,11 +39,7 @@ export interface NoticeBoardDeps {
 }
 
 /** The kinds that name something Reload is running without. */
-const CAME_UP_WITHOUT: readonly NoticeKind[] = [
-  "endpoint-degraded",
-  "endpoint-blocked-by-legacy-helper",
-  "mcp-child-stopped",
-];
+const CAME_UP_WITHOUT: readonly NoticeKind[] = ["endpoint-degraded", "mcp-child-stopped"];
 
 export class NoticeBoard implements Notifier {
   readonly #deps: NoticeBoardDeps;

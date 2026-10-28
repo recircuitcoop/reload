@@ -322,12 +322,6 @@ const CALLS: Record<string, { call: (api: AppApi) => Promise<unknown>; sent: unk
   telemetry: { call: (api) => api.telemetry(), sent: [IPC.telemetry] },
   setTelemetry: { call: (api) => api.setTelemetry(false), sent: [IPC.setTelemetry, false] },
   telemetryReports: { call: (api) => api.telemetryReports(), sent: [IPC.telemetryReports] },
-  // The old installation's plugin environments (WI-0018-25).
-  legacyPackages: { call: (api) => api.legacyPackages(), sent: [IPC.legacyPackages] },
-  deleteLegacyPackages: {
-    call: (api) => api.deleteLegacyPackages(),
-    sent: [IPC.deleteLegacyPackages],
-  },
 };
 
 /** Each subscription: the channel the shell sends on, and what the listener hears. */

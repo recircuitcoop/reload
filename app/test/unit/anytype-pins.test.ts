@@ -14,7 +14,6 @@ import {
 } from "../../src/adapters/anytype/tool-surface";
 import {
   ANYTYPE_KEY_FILE_VARIABLE,
-  ANYTYPE_KEY_LEGACY_FILE_VARIABLE,
   anytypeKeyEnvironment,
   anytypeKeyVariables,
 } from "../../src/domain/anytype/pins";
@@ -104,16 +103,13 @@ describe("the child's environment", () => {
 });
 
 describe("the committed tool surface", () => {
-  it("is the file the old app records, at the pinned pair, said how it was captured", () => {
+  it("is at the pinned pair, said how it was captured", () => {
     const surface = loadToolSurface(COMMITTED);
     expect(surface.packageVersion).toBe(PACKAGE_VERSION);
     expect(surface.anytypeVersion).toBe(ANYTYPE_VERSION);
     expect(["live-server", "bundled-spec"]).toContain(surface.source);
     expect(surface.capturedAt).not.toBe("");
     expect(Object.keys(surface.tools).length).toBeGreaterThan(0);
-    // The two copies must not drift apart before the cutover: a pin bump re-records both.
-    const old = path.join(REPOSITORY, "src", "innytypes", "anytype_mcp", "tool_surface.json");
-    expect(fs.readFileSync(COMMITTED, "utf8")).toBe(fs.readFileSync(old, "utf8"));
   });
 
   it("names what a broken record is missing, and a record that is not JSON or absent", () => {
@@ -179,15 +175,11 @@ describe("the committed tool surface", () => {
 });
 
 describe("where a first-party Anytype node finds the key (WI-0018-20)", () => {
-  it("names the canonical file, and the legacy one only when there is one", () => {
-    expect(anytypeKeyEnvironment({ file: "/k", legacy: "/old" })).toEqual({
-      [ANYTYPE_KEY_FILE_VARIABLE]: "/k",
-      [ANYTYPE_KEY_LEGACY_FILE_VARIABLE]: "/old",
-    });
+  it("names the key file", () => {
     expect(anytypeKeyEnvironment({ file: "/k" })).toEqual({ RELOAD_ANYTYPE_KEY_FILE: "/k" });
   });
 
-  it("uses the same two names the TS node SDK's anytypeKey() reads", () => {
+  it("uses the same name the TS node SDK's anytypeKey() reads", () => {
     const sdk = fs.readFileSync(
       path.join(
         path.dirname(fileURLToPath(import.meta.url)),
@@ -202,23 +194,19 @@ describe("where a first-party Anytype node finds the key (WI-0018-20)", () => {
       "utf8",
     );
     expect(sdk).toContain(`ANYTYPE_KEY_FILE_VARIABLE = "${ANYTYPE_KEY_FILE_VARIABLE}"`);
-    expect(sdk).toContain(
-      `ANYTYPE_KEY_LEGACY_FILE_VARIABLE = "${ANYTYPE_KEY_LEGACY_FILE_VARIABLE}"`,
-    );
   });
 });
 
 describe("which node processes are told where the key is (WI-0018-20)", () => {
   const files = {
-    "anytype-api-key": { file: "/h/.config/reload/anytype_api_key", legacy: "/h/old/key" },
+    "anytype-api-key": { file: "/h/.config/reload/anytype_api_key" },
     "mcp-proxy-token": { file: "/h/.config/reload/mcp_proxy_token" },
   };
 
-  it("a first-party Anytype type: the key's two paths and nothing else, never the proxy token's", () => {
+  it("a first-party Anytype type: the key's path and nothing else, never the proxy token's", () => {
     const told = anytypeKeyVariables("reload_anytype", true, files);
     expect(told).toEqual({
       [ANYTYPE_KEY_FILE_VARIABLE]: "/h/.config/reload/anytype_api_key",
-      [ANYTYPE_KEY_LEGACY_FILE_VARIABLE]: "/h/old/key",
     });
     expect(JSON.stringify(told)).not.toContain("mcp_proxy_token");
   });

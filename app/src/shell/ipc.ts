@@ -56,10 +56,6 @@ export const IPC = {
   setTelemetry: "reload:set-telemetry",
   /** invoke: the reports waiting to be sent, in full (General's "See what would be sent"). */
   telemetryReports: "reload:telemetry-reports",
-  /** invoke: the old installation's plugin environments still on disk (WI-0018-25). */
-  legacyPackages: "reload:legacy-packages",
-  /** invoke: the notice's Delete button; removes them all. */
-  deleteLegacyPackages: "reload:delete-legacy-packages",
   // ── AppApi v2 (plan 0022 §N); each invoke carries `{op, args}` and answers an Answer ──
   /** invoke: a flow's board and saving one (`board.get`, `board.save`). */
   boardCall: "reload:board-call",

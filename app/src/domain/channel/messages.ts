@@ -49,10 +49,9 @@ export interface InitConfig {
   readonly secretFiles?: SecretPaths;
 }
 
-/** One secret's file, and the read-only legacy file it may still be in. */
+/** One secret's file. */
 export interface SecretPath {
   readonly file: string;
-  readonly legacy?: string;
 }
 
 export type SecretPaths = Readonly<
@@ -68,8 +67,7 @@ function isSecretPaths(value: unknown): value is SecretPaths {
       (name === "anytype-api-key" || name === "mcp-proxy-token") &&
       isRecord(where) &&
       isString(where["file"]) &&
-      where["file"] !== "" &&
-      (where["legacy"] === undefined || isString(where["legacy"])),
+      where["file"] !== "",
   );
 }
 

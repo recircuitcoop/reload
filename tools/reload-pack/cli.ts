@@ -26,10 +26,6 @@ import { sha256Hex } from "../../app/src/adapters/signature/digest.ts";
 import { MinisignVerifier } from "../../app/src/adapters/signature/minisign.ts";
 import { FsPackageSource } from "../../app/src/adapters/fs/package-source.ts";
 import {
-  OLD_DECLARATION_FILE,
-  oldDeclarationProblem,
-} from "../../app/src/domain/packages/old-names";
-import {
   contentHash,
   DECLARATION_FILE,
   FILES_MANIFEST,
@@ -102,9 +98,6 @@ function readPackageFolder(dir: string): Map<string, Uint8Array> {
     files.set(relative, fs.readFileSync(path.join(dir, relative)));
   }
   if (!files.has(DECLARATION_FILE)) {
-    if (files.has(OLD_DECLARATION_FILE)) {
-      throw new BuildError(`${dir}: ${oldDeclarationProblem(DECLARATION_FILE)}`);
-    }
     throw new BuildError(`${dir} has no ${DECLARATION_FILE}`);
   }
   return files;

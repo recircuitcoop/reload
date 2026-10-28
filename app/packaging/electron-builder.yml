@@ -9,8 +9,7 @@
 
 appId: it.recircu.reload
 # The same string setAppUserModelId (adapters/electron/notifier.ts) raises toasts under, so a
-# notification click and the window class agree (arch_pivot §4). The identifier used before 0.4.0
-# is LEGACY_BUNDLE_IDENTIFIER (adapters/electron/legacy-login-item-macos.ts).
+# notification click and the window class agree (arch_pivot §4).
 productName: Reload
 copyright: Copyright © 2026 Re:Circuit Cooperative
 

@@ -261,10 +261,6 @@ export interface AppApi extends AppApiV2 {
   setTelemetry(on: boolean): Promise<TelemetryStatus>;
   /** "See what would be sent": the requests a send would post now, byte for byte, oldest first. */
   telemetryReports(): Promise<readonly TelemetryReport[]>;
-  /** The old installation's plugin environments still on disk, by id (WI-0018-25). */
-  legacyPackages(): Promise<readonly string[]>;
-  /** Delete them all. Nothing is deleted without this call: the notice's own button. */
-  deleteLegacyPackages(): Promise<readonly string[]>;
 }
 
 /**

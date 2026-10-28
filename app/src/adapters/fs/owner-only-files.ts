@@ -2,9 +2,7 @@
 // 0600 in a 0700 directory, the rules of addons/secrets.py:93-109.
 //
 // It is the only way Reload reaches the Anytype key and the MCP proxy token, kept in Reload's own
-// owner-only directory; the first start moves them there from where InnyTypes kept them
-// (legacy-move.ts). The key has a read-only legacy fallback (anytype_mcp/config.py:48): it is
-// read when the canonical file holds nothing, and it is never written.
+// owner-only directory.
 //
 // A write goes to an owner-only scratch file in the same directory and is renamed over the
 // target, so the secret is never in a file of a wider mode, an interrupted write leaves the old
@@ -19,10 +17,9 @@ import type { SecretName, SecretStore } from "../../ports/secret-store";
 export const SECRET_FILE_MODE = 0o600;
 export const SECRET_DIRECTORY_MODE = 0o700;
 
-/** Where one secret lives, and where an older release may have left it (read, never written). */
+/** Where one secret lives. */
 export interface SecretFile {
   readonly file: string;
-  readonly legacy?: string;
 }
 
 export type SecretFiles = Readonly<Partial<Record<SecretName, SecretFile>>>;
@@ -35,8 +32,6 @@ export class SecretFileError extends Error {
 export interface SecretLocation {
   readonly platform: NodeJS.Platform;
   readonly home: string;
-  /** Only the variables the legacy location depends on are read from it. */
-  readonly env: Readonly<Record<string, string | undefined>>;
 }
 
 /** `~/.config/reload` on every platform, where the key and the proxy token live. */
@@ -49,34 +44,12 @@ function pathsFor(platform: NodeJS.Platform): path.PlatformPath {
   return platform === "win32" ? path.win32 : path.posix;
 }
 
-/**
- * platformdirs' `user_config_path("innytypes", appauthor=False)`, where releases before the
- * canonical file kept the key (config.py:48): `~/Library/Application Support/innytypes` on
- * macOS, `$XDG_CONFIG_HOME/innytypes` on Linux, `%LOCALAPPDATA%\innytypes` on Windows.
- */
-export function legacyConfigDirectory(location: SecretLocation): string {
-  const { platform, home, env } = location;
-  if (platform === "darwin") {
-    return path.posix.join(home, "Library", "Application Support", "innytypes");
-  }
-  if (platform === "win32") {
-    const local = env["LOCALAPPDATA"] ?? path.win32.join(home, "AppData", "Local");
-    return path.win32.join(local, "innytypes");
-  }
-  const config = env["XDG_CONFIG_HOME"]?.trim();
-  const base = config !== undefined && config !== "" ? config : path.posix.join(home, ".config");
-  return path.posix.join(base, "innytypes");
-}
-
 /** The Anytype key and the proxy token (plan 0018 §4.1). */
 export function anytypeSecretFiles(location: SecretLocation): SecretFiles {
   const directory = credentialsDirectory(location.home, location.platform);
   const paths = pathsFor(location.platform);
   return {
-    "anytype-api-key": {
-      file: paths.join(directory, "anytype_api_key"),
-      legacy: paths.join(legacyConfigDirectory(location), "anytype_api_key"),
-    },
+    "anytype-api-key": { file: paths.join(directory, "anytype_api_key") },
     // gateway.py:64; MCP client configurations read this file.
     "mcp-proxy-token": { file: paths.join(directory, "mcp_proxy_token") },
   };
@@ -214,12 +187,7 @@ export class OwnerOnlyFileStore implements SecretStore {
   }
 
   read(name: SecretName): string | null {
-    const { file, legacy } = this.#locate(name);
-    const current = readOwnerOnly(file);
-    if (current !== null || legacy === undefined || legacy === file) {
-      return current;
-    }
-    return readOwnerOnly(legacy);
+    return readOwnerOnly(this.#locate(name).file);
   }
 
   write(name: SecretName, value: string): void {
@@ -228,7 +196,6 @@ export class OwnerOnlyFileStore implements SecretStore {
       // An empty file reads as "not set" and fails at the far end; refuse it here.
       throw new SecretFileError(`an empty ${name} is not stored`);
     }
-    // Only ever the canonical file: the legacy one is read, never written (§4.1).
     writeOwnerOnly(this.#locate(name).file, trimmed);
   }
 

@@ -55,7 +55,6 @@ export class Pairing {
     }
     const key = await this.#api.completePairing(challenge, answer);
     this.#challenge = null;
-    // Only the canonical file: the legacy one is read, never written (§4.1).
     this.#secrets.write("anytype-api-key", key);
     this.#logger.info("stored the Anytype API key owner-only (0600)");
     return key;
