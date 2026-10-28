@@ -3,13 +3,13 @@
 // the server is and when to reach for it, with the person's live space names so a new or
 // renamed space needs no maintenance here.
 //
-// Order matters: Codex advises the first 512 characters be self-contained, so points 1 and 2
+// Order matters: AI apps advise the first 512 characters be self-contained, so points 1 and 2
 // (what it is, when to use it) come first and fit inside them. The whole stays under 2 KB.
 // Space names are the person's data: they are sanitised and bounded here and never logged.
 
 /** The whole text is shorter than this (plan 0033: "under 2 KB"). */
 export const INSTRUCTIONS_LIMIT = 2048;
-/** The first part that must stand alone (Codex reads 512 characters at initialize). */
+/** The first part that must stand alone (some AI apps read only 512 characters at initialize). */
 export const INSTRUCTIONS_HEAD = 512;
 /** One space name is cut to this many characters. */
 export const MAX_NAME_CHARS = 60;
