@@ -201,6 +201,18 @@ function sourceFiles(directory: string): string[] {
     .filter((file) => /\.(ts|mjs|cjs|js|html)$/.test(file) && fs.statSync(file).isFile());
 }
 
+// Plan 0033 §B and §F: the owner requires that connecting an AI app is done by Reload's Setup and
+// changeable in Configuration, so Reload now writes its own entry in the shared server list
+// (~/.codex/config.toml). The endpoint and the gateway still know no client; these are the only
+// files that name one, each for the entry it owns: the client id, the text edit of that table, the
+// list of clients and the adapter that reads and writes that file. Nothing else may.
+const CLIENT_CONNECTION_FILES = [
+  path.join(APP, "src", "ports", "ai-app-connections.ts"),
+  path.join(APP, "src", "domain", "ai-apps", "codex-config.ts"),
+  path.join(APP, "src", "adapters", "fs", "codex-config-file.ts"),
+  path.join(APP, "src", "adapters", "fs", "ai-app-clients.ts"),
+];
+
 describe("the application's source", () => {
   it("never names the MCP client: no line of it launches, configures or supervises one", () => {
     // The words a person reads (ui/strings.ts, plan 0022 §O) name it in three lines, all General's
@@ -210,7 +222,10 @@ describe("the application's source", () => {
     // application launches, configures or supervises the client, and these are the only lines.
     const STRINGS = path.join(APP, "src", "ui", "strings.ts");
     const named = sourceFiles(path.join(APP, "src")).filter(
-      (file) => file !== STRINGS && /codex/i.test(fs.readFileSync(file, "utf8")),
+      (file) =>
+        file !== STRINGS &&
+        !CLIENT_CONNECTION_FILES.includes(file) &&
+        /codex/i.test(fs.readFileSync(file, "utf8")),
     );
     expect(named).toEqual([]);
     const lines = fs.readFileSync(STRINGS, "utf8").split("\n");
@@ -222,8 +237,10 @@ describe("the application's source", () => {
   });
 
   it("never reaches for a client's configuration file", () => {
-    const reaching = sourceFiles(path.join(APP, "src")).filter((file) =>
-      fs.readFileSync(file, "utf8").includes(".codex"),
+    // Except the one adapter that owns Reload's entry in it (plan 0033 §B).
+    const reaching = sourceFiles(path.join(APP, "src")).filter(
+      (file) =>
+        !CLIENT_CONNECTION_FILES.includes(file) && fs.readFileSync(file, "utf8").includes(".codex"),
     );
     expect(reaching).toEqual([]);
   });

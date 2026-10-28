@@ -1,0 +1,120 @@
+// The shared MCP server list of ChatGPT desktop, Codex and the IDE extension,
+// ~/.codex/config.toml (plan 0033 §B), as far as Reload owns one table in it.
+//
+// This adapter is the only code that touches another application's file, and it touches only
+// this one. The text edit is domain/ai-apps/codex-config.ts's; this file is where the bytes meet
+// the disk:
+//
+// * A missing file is created owner-only (0600), and so is ~/.codex when Reload has to make it
+//   (0700). A directory or file that exists keeps the mode its owner gave it, never chmod-ed.
+// * A write goes to a scratch file in the same directory and is renamed over the target, so an
+//   interrupted write leaves the old file whole. The scratch file carries the old file's mode.
+// * A symbolic link at the path (a dotfiles manager's) is followed: the link stays, its target is
+//   replaced.
+
+import fs from "node:fs";
+import * as path from "node:path";
+import {
+  readReloadTable,
+  withoutReloadTable,
+  withReloadTable,
+  type AiAppEntry,
+  type TableRead,
+} from "../../domain/ai-apps/codex-config";
+import type { AiAppConnections } from "../../ports/ai-app-connections";
+
+const NEW_FILE_MODE = 0o600;
+const NEW_DIRECTORY_MODE = 0o700;
+
+/** ChatGPT's executable on macOS; elsewhere Reload names no running app and the state is omitted. */
+const CHATGPT_MACOS = "/Applications/ChatGPT.app/Contents/MacOS/ChatGPT";
+
+/** The config file could not be read or written. */
+export class AiAppFileError extends Error {
+  override name = "AiAppFileError";
+}
+
+let scratchCounter = 0;
+
+export class CodexConfigConnections implements AiAppConnections {
+  readonly appExecutable: string | null;
+  readonly #file: string;
+
+  constructor(home: string, platform: NodeJS.Platform) {
+    this.#file = path.join(home, ".codex", "config.toml");
+    this.appExecutable = platform === "darwin" ? CHATGPT_MACOS : null;
+  }
+
+  read(): TableRead {
+    return readReloadTable(this.#text());
+  }
+
+  write(entry: AiAppEntry): void {
+    this.#replace(withReloadTable(this.#text(), entry));
+  }
+
+  remove(): void {
+    const text = this.#text();
+    const edited = withoutReloadTable(text);
+    // Nothing of Reload's in there: the file is not rewritten, not even to the same bytes.
+    if (edited !== text) {
+      this.#replace(edited);
+    }
+  }
+
+  #text(): string {
+    let bytes: Buffer;
+    try {
+      bytes = fs.readFileSync(this.#file);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code === "ENOENT") {
+        return "";
+      }
+      throw new AiAppFileError(`could not read ${this.#file}: ${String(code)}`);
+    }
+    try {
+      return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    } catch {
+      // Re-encoding replacement characters would damage what is there.
+      throw new AiAppFileError(`${this.#file} is not UTF-8 text`);
+    }
+  }
+
+  #replace(text: string): void {
+    const created = !fs.existsSync(this.#file);
+    // A link is followed so that the link, not only a copy of it, keeps pointing at the file.
+    const target = created ? this.#file : fs.realpathSync(this.#file);
+    const directory = path.dirname(target);
+    const mode = created ? NEW_FILE_MODE : fs.statSync(target).mode & 0o7777;
+    scratchCounter += 1;
+    const scratch = path.join(
+      directory,
+      `.${path.basename(target)}.${String(process.pid)}.${String(scratchCounter)}.tmp`,
+    );
+    try {
+      if (!fs.existsSync(directory)) {
+        fs.mkdirSync(directory, { recursive: true, mode: NEW_DIRECTORY_MODE });
+      }
+      const descriptor = fs.openSync(
+        scratch,
+        fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL,
+        mode,
+      );
+      try {
+        // The umask can only narrow the mode open was given; this makes it exactly the old one.
+        fs.fchmodSync(descriptor, mode);
+        fs.writeSync(descriptor, text);
+        fs.fsyncSync(descriptor);
+      } finally {
+        fs.closeSync(descriptor);
+      }
+      fs.renameSync(scratch, target);
+    } catch (error) {
+      fs.rmSync(scratch, { force: true });
+      throw new AiAppFileError(
+        `could not write ${this.#file}: ${String((error as NodeJS.ErrnoException).code)}`,
+      );
+    }
+  }
+}

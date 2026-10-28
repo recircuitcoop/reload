@@ -202,6 +202,25 @@ describe("moving the endpoint", () => {
     expect(subject.status().served).toBe("http://127.0.0.1:40001/mcp");
   });
 
+  it("tells onServed once at start and once per move that changed what is served (WI-0033-02)", async () => {
+    const listener = new FakeListener();
+    const seen: (string | null)[] = [];
+    const subject: McpEndpoint = new McpEndpoint({
+      settings: new MemorySettings(),
+      variables: { RELOAD_MCP_PORT: "40001" },
+      listener,
+      logger: new RecordingLogger(),
+      notifier: new RecordingNotifier(),
+      onServed: () => seen.push(subject.status().served),
+    });
+    await subject.start();
+    await subject.move({ host: "127.0.0.1", port: 40001 }); // already served: no call
+    await subject.move({ host: "127.0.0.1", port: 40005 });
+    listener.taken.add(40006);
+    await expect(subject.move({ host: "127.0.0.1", port: 40006 })).rejects.toThrow();
+    expect(seen).toEqual(["http://127.0.0.1:40001/mcp", "http://127.0.0.1:40005/mcp"]);
+  });
+
   it("saving the address already served stores it and moves nothing", async () => {
     const { subject, listener, settings } = await serving();
     const status = await subject.move({ host: "127.0.0.1", port: 40001 });

@@ -107,6 +107,18 @@ export interface SetupSetting {
   writeSetup(state: Readonly<Record<string, unknown>>): void;
 }
 
+/**
+ * What Reload last wrote into each AI app's server list (plan 0033 §B): `aiApps {<client>: {url,
+ * helper, wroteAt}}`, kept here and never in the other application's file, so that Reload's own
+ * stale entry can be told from one somebody changed. Raw; application/ai-app-connections judges it.
+ */
+export interface AiAppRecordStore {
+  /** The `aiApps` setting; undefined when unset. Throws when unreadable. */
+  readAiAppWrites(): unknown;
+  /** Store it whole, leaving every other setting as it was. */
+  writeAiAppWrites(record: Readonly<Record<string, unknown>>): void;
+}
+
 /** The launch-at-login switch (launcher.py:1450): off until someone turns it on. */
 export interface LaunchAtLoginSetting {
   /** Whether the switch is on; false when nothing is stored. Throws when unreadable. */

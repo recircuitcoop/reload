@@ -38,6 +38,8 @@ export interface McpEndpointDeps {
   readonly listener: McpListener;
   readonly logger: Logger;
   readonly notifier: Notifier;
+  /** Called after the endpoint is first served and after every move that changed what is served. */
+  readonly onServed?: () => void;
 }
 
 export const NOT_YET_OPEN =
@@ -88,6 +90,7 @@ export class McpEndpoint {
     this.#problem = null;
     this.#deps.notifier.clear("endpoint-degraded", MCP_ENDPOINT);
     this.#deps.logger.info(`the MCP endpoint serves ${configured.url}`);
+    this.#deps.onServed?.();
   }
 
   /** Served against saved, for General. It never holds a credential. */
@@ -153,6 +156,9 @@ export class McpEndpoint {
       const reason = `the MCP endpoint setting could not be saved: ${(error as Error).message}`;
       this.#deps.logger.error(reason);
       throw new EndpointError(reason);
+    }
+    if (!alreadyServed && this.#started) {
+      this.#deps.onServed?.();
     }
     return this.status();
   }

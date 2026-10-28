@@ -15,6 +15,6 @@ canonical_id: '0033'
 canonical_source: plans
 slice: '02'
 size: M
-status: TODO
+status: DONE
 depends_on:
 - WI-0033-01-the-header-helper

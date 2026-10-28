@@ -15,6 +15,7 @@ import { limitsProblem, type DeclaredLimits } from "../../domain/supervision/res
 import { stabilityProblem, type DeclaredStability } from "../../domain/supervision/stability";
 import { NOTICE_VERSION, type TelemetryAnswer } from "../../domain/telemetry/reports";
 import type {
+  AiAppRecordStore,
   LaunchAtLoginSetting,
   LimitDefaultsStore,
   PackageSettingsStore,
@@ -42,6 +43,7 @@ const ENDPOINT_KEYS = new Set(["host", "port"]);
 
 export class JsonSettingsStore
   implements
+    AiAppRecordStore,
     SettingsStore,
     LaunchAtLoginSetting,
     LimitDefaultsStore,
@@ -108,6 +110,15 @@ export class JsonSettingsStore
 
   writeLaunchAtLogin(on: boolean): void {
     this.#write("launchAtLogin", on);
+  }
+
+  // What was last written into each AI app's server list (plan 0033), raw.
+  readAiAppWrites(): unknown {
+    return this.#read()["aiApps"];
+  }
+
+  writeAiAppWrites(record: Readonly<Record<string, unknown>>): void {
+    this.#write("aiApps", { ...record });
   }
 
   // The telemetry switch (WI-0018-22): absent is the question not answered yet, never a no. A

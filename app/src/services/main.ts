@@ -14,7 +14,11 @@ import { NodeMcpChildLauncher, pinnedPackageEntry } from "../adapters/anytype/mc
 import { loadToolSurface, parseToolSurface } from "../adapters/anytype/tool-surface";
 import committedSurface from "../adapters/anytype/tool_surface.json";
 import { processHostOver, shellLinkOver } from "../adapters/electron/parent-port";
+import { fileAiAppConnections } from "../adapters/fs/ai-app-clients";
 import { OwnerOnlyFileStore } from "../adapters/fs/owner-only-files";
+import { ProcessTableAppProcesses } from "../adapters/process/app-processes";
+import { mcpHelperPath } from "../adapters/process/mcp-helper-path";
+import { AiAppService } from "../application/ai-app-connections";
 import { JsonSettingsStore } from "../adapters/fs/settings-store";
 import { BundledRuntimeLocator } from "../adapters/process/bundled-runtime-locator";
 import { unpackedDir } from "../adapters/process/command";
@@ -216,8 +220,26 @@ function buildEndpoint(config: InitConfig, secrets: SecretStore): McpEndpoint | 
     }),
     logger,
   });
+  // Reload's entry in the AI apps' server lists (plan 0033 §B), rewritten when it is Reload's own
+  // and stale: at start and after a move, once the endpoint serves its address.
+  const settings = new JsonSettingsStore(path.join(config.userDir, "settings.json"));
+  const helper = mcpHelperPath(process.env["RELOAD_RUNTIMES_DIR"], __dirname);
+  const aiApps = new AiAppService({
+    clients: fileAiAppConnections(os.homedir(), process.platform),
+    record: settings,
+    desired: () => {
+      const url = endpoint?.status().served ?? null;
+      return url === null ? null : { url, helper };
+    },
+    processes: new ProcessTableAppProcesses(process.platform, () => Date.now()),
+    clock: systemClock,
+    logger,
+  });
   return new McpEndpoint({
-    settings: new JsonSettingsStore(path.join(config.userDir, "settings.json")),
+    onServed: () => {
+      aiApps.repairIfStale();
+    },
+    settings,
     variables: {
       [MCP_HOST_VARIABLE]: process.env[MCP_HOST_VARIABLE],
       [MCP_PORT_VARIABLE]: process.env[MCP_PORT_VARIABLE],
