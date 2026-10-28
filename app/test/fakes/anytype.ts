@@ -15,7 +15,12 @@ import type {
 } from "../../src/ports/anytype";
 import type { Logger } from "../../src/ports/logger";
 import type { SecretName, SecretStore } from "../../src/ports/secret-store";
-import type { AiAppListing, AnytypeStatus, AnytypeTool, McpEndpointStatus } from "../../src/ui/contract";
+import type {
+  AiAppListing,
+  AnytypeStatus,
+  AnytypeTool,
+  McpEndpointStatus,
+} from "../../src/ui/contract";
 
 /** AppApi's Anytype and MCP endpoint members for a page test that never calls them. */
 export const ANYTYPE_UNUSED = {
