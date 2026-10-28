@@ -208,10 +208,12 @@ export class ClaudeConfigConnections implements AiAppConnections {
   // shortcut: the command runs synchronously, so the services process waits for it (a second or
   // two, only on a press or a stale entry's repair). Make the port async if that ever shows.
   #run(command: string, args: string[]): void {
-    // The command writes the list under this HOME, the one read here. CLAUDE_CONFIG_DIR would
-    // point it at another file, so it is not passed on.
-    const env: NodeJS.ProcessEnv = { ...process.env, HOME: this.#home };
-    delete env["CLAUDE_CONFIG_DIR"];
+    // Only HOME and PATH: the command writes the list under this HOME, the one read here (no
+    // CLAUDE_CONFIG_DIR to send it elsewhere), and sees none of the services' secrets.
+    const env: Record<string, string> = { HOME: this.#home };
+    if (this.#searchPath !== undefined) {
+      env["PATH"] = this.#searchPath;
+    }
     try {
       execFileSync(command, args, {
         env,
