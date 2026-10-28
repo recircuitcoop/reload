@@ -27,6 +27,7 @@ import { sourceLog } from "../../src/application/source-log";
 import { REDACTED, SecretRegistry } from "../../src/domain/redaction/registry";
 import type { FetchedFile, FileRequest, McpTool } from "../../src/ports/anytype";
 import type { Logger } from "../../src/ports/logger";
+import type { McpCallFacts } from "../../src/domain/telemetry/reports";
 import { AnsweringSession, unpairedFiles } from "../fakes/anytype";
 import { RecordingLogger } from "../fakes/children";
 import { FakeClock } from "../fakes/clock";
@@ -101,7 +102,7 @@ describe("initialize instructions (plan 0033)", () => {
     const text = await withInstructions(never, null, { instructionsWaitMs: 50 })();
     expect(Date.now() - started).toBeLessThan(500);
     expect(text).toBe(UNAVAILABLE);
-    expect(text).toContain("list-spaces");
+    expect(text).toContain("anytype_list_spaces");
   });
 
   it("answers with the unavailable text when composing throws, and the failure is not logged", async () => {
@@ -170,7 +171,9 @@ describe("tools/list metadata (plan 0033, E)", () => {
 
   it("annotates reads, writes and deletes, and keeps every name", async () => {
     const tools = await listing()();
-    expect(tools.map((tool) => tool["name"])).toEqual(TOOLS.map((tool) => tool.name));
+    expect(tools.slice(0, TOOLS.length).map((tool) => tool["name"])).toEqual(
+      TOOLS.map((tool) => tool.name),
+    );
     expect(byName(tools, "API-get-object")["annotations"]).toMatchObject({
       readOnlyHint: true,
       destructiveHint: false,
@@ -232,6 +235,223 @@ describe("tools/list metadata (plan 0033, E)", () => {
   });
 });
 
+describe("the three intent tools (plan 0033, E; WI-0033-08)", () => {
+  const RAW = ["API-list-spaces", "API-search-global", "API-search-space", "API-get-object"].map(
+    (name): McpTool => ({ name, inputSchema: { type: "object" } }),
+  );
+  const SPACES = [
+    { id: "id-work", name: "Work" },
+    { id: "id-home", name: "Home" },
+    { id: "id-work-notes", name: "Work notes" },
+    { id: "id-ideas", name: "Ideas" },
+    { id: "id-ideas-2", name: "ideas" },
+  ];
+  const textOf = (name: string, args: unknown) => ({
+    content: [{ type: "text", text: `${name} ${JSON.stringify(args)}` }],
+  });
+
+  function setup(spaces: SpaceNames = ["Work", "Home"]) {
+    const logger = new RecordingLogger();
+    const observed: McpCallFacts[] = [];
+    const session = new AnsweringSession(RAW, (params) => {
+      const name = params["name"] as string;
+      const args = params["arguments"];
+      if (name === "API-list-spaces") {
+        return {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ data: SPACES, pagination: { has_more: false } }),
+            },
+          ],
+        };
+      }
+      return textOf(name, args);
+    });
+    const handle = mcpDispatch({
+      served: () => ({ session, tools: RAW }),
+      redact: (text) => text,
+      clock: new FakeClock(),
+      logger,
+      files: unpairedFiles(logger),
+      spaceNames: () => Promise.resolve(spaces),
+      observe: (call) => observed.push(call),
+    });
+    const send = async (payload: unknown) =>
+      (await handle(new TextEncoder().encode(JSON.stringify(payload)))).body as {
+        result: Record<string, unknown>;
+        error?: { code: number };
+      };
+    const call = (name: string, args: unknown) =>
+      send({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } });
+    return { session, logger, observed, send, call };
+  }
+  const textFrom = (body: { result: Record<string, unknown> }): string =>
+    (body.result["content"] as { text: string }[])[0]?.text ?? "";
+
+  it("lists the raw tools unchanged in count, then the three, each read-only", async () => {
+    const { send } = setup();
+    const { tools } = (await send({ jsonrpc: "2.0", id: 1, method: "tools/list" })).result as {
+      tools: Record<string, unknown>[];
+    };
+    expect(tools.map((tool) => tool["name"])).toEqual([
+      ...RAW.map((tool) => tool.name),
+      "anytype_list_spaces",
+      "anytype_search",
+      "anytype_read",
+    ]);
+    for (const tool of tools.slice(RAW.length)) {
+      expect(tool["name"]).toMatch(/^[A-Za-z0-9_-]+$/);
+      expect(tool["annotations"]).toEqual({
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: false,
+      });
+      expect(tool["description"]).toMatch(/^Use this when /);
+    }
+    expect(tools[RAW.length]?.["description"]).toContain('The user\'s spaces are: "Work", "Home".');
+    expect(tools[RAW.length + 1]?.["description"]).toContain('"Work", "Home"');
+    expect(tools[RAW.length + 2]?.["description"]).not.toContain("Home");
+  });
+
+  it.each([["withheld" as const], ["unavailable" as const]])(
+    "lists no names when they are %s",
+    async (mode) => {
+      const { send } = setup(mode);
+      const { tools } = (await send({ jsonrpc: "2.0", id: 1, method: "tools/list" })).result as {
+        tools: Record<string, unknown>[];
+      };
+      for (const tool of tools.slice(RAW.length)) {
+        expect(tool["description"]).not.toContain("Work");
+        expect(tool["description"]).not.toContain("spaces are");
+      }
+    },
+  );
+
+  it("anytype_list_spaces calls API-list-spaces and passes its result through", async () => {
+    const { call, session } = setup();
+    const answer = await call("anytype_list_spaces", {});
+    expect(session.calls.map((entry) => entry.params["name"])).toEqual(["API-list-spaces"]);
+    expect((JSON.parse(textFrom(answer)) as { data: unknown }).data).toEqual(SPACES);
+  });
+
+  it("anytype_search without a space calls API-search-global with the query", async () => {
+    const { call, session } = setup();
+    const answer = await call("anytype_search", { query: "tax" });
+    expect(session.calls).toEqual([
+      { method: "tools/call", params: { name: "API-search-global", arguments: { query: "tax" } } },
+    ]);
+    expect(textFrom(answer)).toBe('API-search-global {"query":"tax"}');
+  });
+
+  it("anytype_search resolves a space name case-insensitively, exact name before prefix", async () => {
+    const { call, session } = setup();
+    // "work" is exactly "Work" although "Work notes" also begins with it.
+    await call("anytype_search", { query: "tax", space: "work" });
+    // A unique prefix.
+    await call("anytype_search", { query: "tax", space: "HOM" });
+    expect(session.calls.filter((entry) => entry.params["name"] === "API-search-space")).toEqual([
+      {
+        method: "tools/call",
+        params: { name: "API-search-space", arguments: { query: "tax", space_id: "id-work" } },
+      },
+      {
+        method: "tools/call",
+        params: { name: "API-search-space", arguments: { query: "tax", space_id: "id-home" } },
+      },
+    ]);
+  });
+
+  it("answers an unknown space name as a normal result listing the spaces, searching nothing", async () => {
+    const { call, session } = setup();
+    const answer = await call("anytype_search", { query: "tax", space: "Garage" });
+    expect(answer.error).toBeUndefined();
+    expect(answer.result["isError"]).toBeUndefined();
+    expect(textFrom(answer)).toContain('No Anytype space is named "Garage"');
+    expect(textFrom(answer)).toContain('"Work"');
+    expect(textFrom(answer)).toContain('"Home"');
+    expect(session.calls.some((entry) => entry.params["name"] === "API-search-space")).toBe(false);
+  });
+
+  it("answers an ambiguous space name without guessing", async () => {
+    const { call, session } = setup();
+    // Two spaces named Ideas/ideas, and Work/Work notes share the prefix "wor" only.
+    for (const space of ["IDEAS", "wor"]) {
+      const answer = await call("anytype_search", { query: "tax", space });
+      expect(textFrom(answer)).toContain("matches more than one Anytype space");
+    }
+    expect(session.calls.some((entry) => entry.params["name"] === "API-search-space")).toBe(false);
+  });
+
+  it("anytype_read takes a space name or id and calls API-get-object", async () => {
+    const { call, session } = setup();
+    await call("anytype_read", { space: "Home", object_id: "obj-1" });
+    await call("anytype_read", { space: "id-work", object_id: "obj-2" });
+    expect(session.calls.filter((entry) => entry.params["name"] === "API-get-object")).toEqual([
+      {
+        method: "tools/call",
+        params: { name: "API-get-object", arguments: { object_id: "obj-1", space_id: "id-home" } },
+      },
+      {
+        method: "tools/call",
+        params: { name: "API-get-object", arguments: { object_id: "obj-2", space_id: "id-work" } },
+      },
+    ]);
+  });
+
+  it("answers missing arguments as a tool error a model can read, forwarding nothing", async () => {
+    const { call, session } = setup();
+    expect((await call("anytype_search", {})).result["isError"]).toBe(true);
+    expect((await call("anytype_read", { space: "Home" })).result["isError"]).toBe(true);
+    expect(session.calls).toEqual([]);
+  });
+
+  it("answers like any tool while the child is down", async () => {
+    for (const served of [
+      null,
+      { session: Object.assign(new AnsweringSession(RAW), { closed: true }), tools: RAW },
+    ]) {
+      const logger = new RecordingLogger();
+      const handle = mcpDispatch({
+        served: () => served,
+        redact: (text) => text,
+        clock: new FakeClock(),
+        logger,
+        files: unpairedFiles(logger),
+      });
+      const answer = await handle(
+        new TextEncoder().encode(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: 5,
+            method: "tools/call",
+            params: { name: "anytype_search", arguments: { query: "x" } },
+          }),
+        ),
+      );
+      expect(answer.status).toBe(503);
+      expect(answer.body).toMatchObject({ error: { message: CHILD_UNAVAILABLE } });
+    }
+  });
+
+  it("is observed and logged by its own name, never its query, space name or result", async () => {
+    const { call, logger, observed } = setup();
+    await call("anytype_search", { query: "secret-query", space: "Work" });
+    await call("anytype_search", { query: "secret-query", space: "Nowhere" });
+    await call("anytype_read", { space: "Work", object_id: "secret-object" });
+    expect(observed.map((fact) => fact.tool)).toEqual([
+      "anytype_search",
+      "anytype_search",
+      "anytype_read",
+    ]);
+    const everything = JSON.stringify([logger, observed]);
+    for (const secret of ["secret-query", "secret-object", "Nowhere", "Work", "id-work"]) {
+      expect(everything).not.toContain(secret);
+    }
+    expect(JSON.stringify(logger)).toContain('tools/call \\"anytype_search\\" answered');
+  });
+});
+
 describe("the MCP exchange", () => {
   it("runs initialize, initialized, ping, tools/list and tools/call, keeping every id", async () => {
     const session = new AnsweringSession([TOOL]);
@@ -262,11 +482,18 @@ describe("the MCP exchange", () => {
       id: 77,
       result: {},
     });
-    expect((await send({ jsonrpc: "2.0", id: "list-1", method: "tools/list" })).body).toEqual({
-      jsonrpc: "2.0",
-      id: "list-1",
-      result: { tools: [TOOL] },
-    });
+    const listed = (await send({ jsonrpc: "2.0", id: "list-1", method: "tools/list" })).body as {
+      id: string;
+      result: { tools: { name: string }[] };
+    };
+    expect(listed.id).toBe("list-1");
+    // The child's tool as it was, then Reload's three intent tools.
+    expect(listed.result.tools[0]).toEqual(TOOL);
+    expect(listed.result.tools.slice(1).map((tool) => tool.name)).toEqual([
+      "anytype_list_spaces",
+      "anytype_search",
+      "anytype_read",
+    ]);
     const called = await send({
       jsonrpc: "2.0",
       id: 91,

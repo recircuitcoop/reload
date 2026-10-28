@@ -54,11 +54,11 @@ export function spacesSentence(spaces: SpaceNames, room: number): string | null 
     return null;
   }
   if (spaces === "unavailable") {
-    return "The user's spaces could not be listed just now; call the list-spaces tool to see them.";
+    return "The user's spaces could not be listed just now; call the anytype_list_spaces tool to see them.";
   }
   const names = spaces.map(cleaned).filter((name) => name !== "");
   if (names.length === 0) {
-    return "No spaces were found; call the list-spaces tool to check.";
+    return "No spaces were found; call the anytype_list_spaces tool to check.";
   }
   const prefix = "The user's spaces are: ";
   // Room for the ", and 999 more" tail is always kept free.

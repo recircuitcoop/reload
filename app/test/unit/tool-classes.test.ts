@@ -2,6 +2,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { INTENT_TOOL_NAMES, intentTools } from "../../src/domain/anytype/intent-tools";
 import {
   DESCRIPTION_LIMIT,
   TOOL_CLASSES,
@@ -53,6 +54,24 @@ describe("tool classification", () => {
     expect(description.length).toBeLessThan(DESCRIPTION_LIMIT);
     expect(description).toContain('"Space number 0"');
     expect(description).toContain("more.");
+  });
+
+  it("keeps Reload's own intent tools out of the surface and the table, and read-only", () => {
+    // They are not Anytype's, so neither the committed surface nor TOOL_CLASSES names them; their
+    // class is fixed in intentTools (all read-only) and proved here.
+    const own = intentTools(["A"]);
+    expect(own.map((tool) => tool.name)).toEqual(INTENT_TOOL_NAMES);
+    for (const tool of own) {
+      expect(tool.name in surface.tools, tool.name).toBe(false);
+      expect(tool.name in TOOL_CLASSES, tool.name).toBe(false);
+      expect(tool.annotations).toEqual({
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: false,
+      });
+      expect(tool.description).toMatch(/^Use this when /);
+      expect(tool.description.length).toBeLessThan(DESCRIPTION_LIMIT);
+    }
   });
 
   it("leaves a tool it does not name as it was", () => {

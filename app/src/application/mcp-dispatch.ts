@@ -41,7 +41,9 @@ import type { McpAnswer, McpHandler } from "../ports/mcp-gateway";
 import { dataviewShim, type DataviewRefusal } from "./dataview-shim";
 import { unwrapMintedBody } from "./minted-body-shim";
 import type { SpaceNames } from "../domain/anytype/server-instructions";
+import { intentTools, isIntentTool } from "../domain/anytype/intent-tools";
 import { withToolMetadata } from "../domain/anytype/tool-classes";
+import { intentCall } from "./intent-calls";
 
 /** The validated child as the endpoint serves it: its session and the tools it listed. */
 export interface ServedMcp {
@@ -163,7 +165,8 @@ function callFacts(
 ): McpCallFacts {
   const name = isObject(params) ? params["name"] : undefined;
   const tool =
-    method === "tools/call" && served?.tools.some((listed) => listed.name === name) === true
+    method === "tools/call" &&
+    (isIntentTool(name) || served?.tools.some((listed) => listed.name === name) === true)
       ? (name as string)
       : null;
   const body = isObject(sent.body) ? sent.body : {};
@@ -355,7 +358,13 @@ async function dispatch(
     const spaces = await names();
     return {
       status: 200,
-      body: result(id, { tools: child.tools.map((tool) => withToolMetadata(tool, spaces)) }),
+      body: result(id, {
+        // Reload's three intent tools follow the raw ones (D3: beside them, never instead).
+        tools: [
+          ...child.tools.map((tool) => withToolMetadata(tool, spaces)),
+          ...intentTools(spaces),
+        ],
+      }),
     };
   }
   if (method === "resources/read") {
@@ -366,6 +375,17 @@ async function dispatch(
     return { status: 200, body: error(id, -32602, "tools/call requires a tool name") };
   }
   const name = params["name"];
+  if (isIntentTool(name)) {
+    // Reload's own tools, answered before the child.tools lookup by calling the raw ones.
+    try {
+      return {
+        status: 200,
+        body: result(id, await intentCall(child.session, name, params["arguments"])),
+      };
+    } catch (failure) {
+      return { status: 200, body: error(id, -32000, (failure as Error).message) };
+    }
+  }
   const tool = child.tools.find((listed) => listed.name === name);
   if (tool === undefined) {
     return { status: 200, body: error(id, -32602, "unknown Anytype tool") };

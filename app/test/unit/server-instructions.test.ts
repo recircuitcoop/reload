@@ -45,10 +45,10 @@ describe("composeServerInstructions", () => {
     expect(text).toContain("\"'q'\"");
   });
 
-  it("says the spaces could not be listed and points at the list-spaces tool", () => {
+  it("says the spaces could not be listed and points at the anytype_list_spaces tool", () => {
     const text = composeServerInstructions("unavailable");
     expect(text).toContain("could not be listed");
-    expect(text).toContain("list-spaces");
+    expect(text).toContain("anytype_list_spaces");
     expect(text.length).toBeLessThan(INSTRUCTIONS_LIMIT);
   });
 

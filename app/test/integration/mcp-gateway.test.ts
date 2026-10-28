@@ -462,9 +462,12 @@ describe("the Streamable HTTP exchange", () => {
     const [status, initialized] = await post(port, { jsonrpc: "2.0", id: 1, method: "initialize" });
     expect(status).toBe(200);
     expect(initialized).toMatchObject({ result: { capabilities: { tools: {} } } });
-    expect((await post(port, { jsonrpc: "2.0", id: 2, method: "tools/list" }))[1]).toMatchObject({
-      result: { tools: [TOOL] },
-    });
+    // The child's tool, then Reload's three intent tools.
+    const listed = (await post(port, { jsonrpc: "2.0", id: 2, method: "tools/list" }))[1] as {
+      result: { tools: unknown[] };
+    };
+    expect(listed.result.tools).toHaveLength(4);
+    expect(listed.result.tools[0]).toMatchObject(TOOL);
     const [, called] = await post(port, {
       jsonrpc: "2.0",
       id: 3,

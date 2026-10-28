@@ -76,12 +76,12 @@ const TYPES_PAGE = 100;
 const TYPES_PAGES_MAX = 50;
 
 /** The parsed JSON a child's tool result carries, or what Anytype refused it with. */
-type ChildData =
+export type ChildData =
   | { readonly ok: true; readonly data: unknown }
   | { readonly ok: false; readonly status: number | undefined; readonly what: string };
 
 /** The JSON in a tool result's first text content, the way the pinned package answers. */
-function childData(answer: unknown): ChildData {
+export function childData(answer: unknown): ChildData {
   const content = isObject(answer) ? answer["content"] : undefined;
   const first: unknown = Array.isArray(content) ? content[0] : undefined;
   const text = isObject(first) ? first["text"] : undefined;

@@ -33,6 +33,7 @@ import {
   type StopReason,
   type Versions,
 } from "../domain/telemetry/reports";
+import { INTENT_TOOL_NAMES } from "../domain/anytype/intent-tools";
 import { hostOnly } from "../domain/telemetry/redact";
 import { heldFrom, SHIPPED_SOURCES, type HeldSources } from "../domain/telemetry/sources";
 import type { Endpoints } from "../domain/telemetry/transports";
@@ -223,7 +224,10 @@ export function wireTelemetry(deps: TelemetryWiring): ShellTelemetry {
     record: (name, payload): unknown => pipeline.recordUsage(name, payload),
     versions,
     packages,
-    tools: new Set(Object.keys(deps.tools.tools).map((name) => name.toLowerCase())),
+    // The committed surface, and Reload's own intent tools (they are not in it).
+    tools: new Set(
+      [...Object.keys(deps.tools.tools), ...INTENT_TOOL_NAMES].map((name) => name.toLowerCase()),
+    ),
     vouched: {
       read: () => remembered.vouched ?? {},
       write: (vouched) => {
