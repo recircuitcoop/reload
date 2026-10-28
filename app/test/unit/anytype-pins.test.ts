@@ -103,7 +103,7 @@ describe("the child's environment", () => {
 });
 
 describe("the committed tool surface", () => {
-  it("is at the pinned pair, said how it was captured", () => {
+  it("is the file the old app records, at the pinned pair, said how it was captured", () => {
     const surface = loadToolSurface(COMMITTED);
     expect(surface.packageVersion).toBe(PACKAGE_VERSION);
     expect(surface.anytypeVersion).toBe(ANYTYPE_VERSION);

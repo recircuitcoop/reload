@@ -46,7 +46,7 @@ describe("electron-builder identifies the app the way the rest of it does (was B
     expect(PACKAGE_JSON.productName).toBe("Reload");
   });
 
-  it("the icon paths point at the committed images", () => {
+  it("the icon paths point at the committed images, still the ones tools/make_icon.py draws", () => {
     // Both `mac:` and `linux:` sections have their own `icon:` line, indented under them
     // (never at column 0), so each is found scoped to its own section rather than by a bare
     // top-level "icon:" match.
