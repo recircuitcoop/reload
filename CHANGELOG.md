@@ -9,9 +9,17 @@ All notable changes to Reload (called InnyTypes before 0.4.0) are recorded here,
 changes in what it does. Reload does not read or move anything InnyTypes kept: set it up fresh and
 remove InnyTypes. See [docs/INSTALL.md](docs/INSTALL.md), section 4.1.
 
-- **AI apps must be connected** under the server name `reload`. The token is kept in
-  `~/.config/reload/mcp_proxy_token`; set each AI app up as in docs/INSTALL.md, section 7, and
-  remove its old `innytypes` entry.
+- **Reload connects your AI apps itself.** Setup offers to connect ChatGPT and Codex, and Claude
+  Code, when they are on this computer; Configuration › General › AI apps shows each one's state
+  with Connect, Disconnect and Repair. Reload writes only its own `reload` entry, with the address
+  and a header helper shipped inside the app, never the token, and repairs it when the address
+  moves. No `.zshrc` line and no copied token. ChatGPT reaches Reload in its Work view, not in
+  normal Chat yet; Claude Desktop's chat tab is not reached. Remove any old `innytypes` entry.
+- **AI apps know when to use Reload.** Each connection tells the AI app, in plain words, that
+  Reload is your Anytype, the names of your spaces, and to list, search and read before answering
+  "check in Anytype…" or "what does my … space say". Every tool says when to use it and whether it
+  only reads, writes or deletes, and three simple tools come first: list my spaces, search my
+  Anytype, read an object. A switch in AI apps stops the space names being sent.
 - **Anytype must be paired again, and flows built again.** The Anytype key, flows, run history,
   settings and packages of InnyTypes stay where they are and are not used.
 - **Function code in your flows that reads `msg.inny`** must be changed to `msg.reload` by hand:
