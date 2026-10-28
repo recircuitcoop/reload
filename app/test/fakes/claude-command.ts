@@ -41,10 +41,13 @@ export function stubClaude(bin: string): () => string[][] {
       : [];
 }
 
-/** `searchPath` without any directory holding a `claude`: the real command cannot be reached. */
-export function withoutClaude(searchPath: string | undefined): string {
-  return (searchPath ?? "")
-    .split(path.delimiter)
-    .filter((directory) => directory !== "" && !fs.existsSync(path.join(directory, "claude")))
-    .join(path.delimiter);
+/** A `claude` in `bin` that refuses every call and writes nothing; answers `bin`. */
+export function guardClaude(bin: string): string {
+  fs.mkdirSync(bin, { recursive: true });
+  fs.writeFileSync(
+    path.join(bin, "claude"),
+    "#!/bin/sh\necho 'an e2e run never reaches the real claude command' >&2\nexit 97\n",
+    { mode: 0o755 },
+  );
+  return bin;
 }

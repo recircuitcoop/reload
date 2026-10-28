@@ -354,7 +354,7 @@ test("General's Claude Code row: Connect adds Reload's server through the claude
   test.setTimeout(150_000);
   const { scratch, env } = scratchDirectories();
   const anytype = await fakeAnytype();
-  // The stub `claude` first on a PATH that holds no other one (app-harness), in the scratch home.
+  // The stub `claude` first on the PATH, before the harness's guard and any real one.
   const bin = path.join(scratch, "bin");
   const calls = stubClaude(bin);
   const list = path.join(scratch, ".claude.json");
