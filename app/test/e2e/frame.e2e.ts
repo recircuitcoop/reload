@@ -47,6 +47,7 @@ test("the window opens on Setup until Setup is completed, then on Live, launch a
       STRINGS["setup.nav.welcome"],
       STRINGS["setup.nav.reports"],
       STRINGS["setup.nav.anytype"],
+      STRINGS["setup.nav.aiApps"],
       STRINGS["setup.nav.example"],
       STRINGS["setup.nav.folder"],
       STRINGS["setup.nav.steps"],
@@ -55,7 +56,7 @@ test("the window opens on Setup until Setup is completed, then on Live, launch a
     // The first entry is the current one, and the only one.
     expect(
       await steps.evaluateAll((all) => all.map((li) => li.getAttribute("aria-current"))),
-    ).toEqual(["step", null, null, null, null, null, null]);
+    ).toEqual(["step", null, null, null, null, null, null, null]);
     // An address of another screen lands back on Setup's step while Setup is not completed.
     await window.evaluate(() => {
       globalThis.location.hash = "#/configuration/general";
