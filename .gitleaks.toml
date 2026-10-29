@@ -1,0 +1,9 @@
+# Test fixtures that look like secrets: two made-up values in an e2e test
+# (app/test/e2e/generated-types.e2e.ts). Allowed by exact value, not by path (gitleaks dir would
+# then hide the whole file) nor by commit fingerprint (a rewritten history would need an update).
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "made-up e2e secrets"
+regexes = ['''^gr0up-s3cret-e2e-41d7$''', '''^unk3pt-s3cret-e2e-77b1$''']

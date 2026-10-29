@@ -1,3 +1,0 @@
-# Test fixtures that look like secrets: made-up e2e values.
-aebfad8877aa63f629ef3225e17cb90686042c10:app/test/e2e/generated-types.e2e.ts:generic-api-key:31
-bd426050be6da96c66babed7faa6b62c1d25b982:app/test/e2e/generated-types.e2e.ts:generic-api-key:30
