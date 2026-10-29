@@ -3,12 +3,14 @@
 All notable changes to Reload (called InnyTypes before 0.4.0) are recorded here, newest first. Versions follow
 [semantic versioning](https://semver.org/): the number changes when what you can rely on does.
 
-## Unreleased
+## 0.4.1 — 2026-10-29
 
 - **Usage counts reach Umami again.** If you said yes to usage reports, versions up to 0.4.0
   sent them, but Umami Cloud kept none: it took the app's name for a bot's, and more than one
   report at a time went to an address it does not serve. Both answers looked like success, so
   nothing was retried. Reports now go one at a time, under a name Umami accepts.
+- **A short privacy notice.** The reports question in Setup now says, in a few bullets, what is
+  collected and what never is, and where in the source code each item can be checked.
 
 ## 0.4.0 — 2026-10-28
 
