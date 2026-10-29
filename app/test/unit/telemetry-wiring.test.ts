@@ -301,7 +301,10 @@ describe("the shell's telemetry", () => {
       url: string;
       body: string;
     }[];
-    expect(shown.map((request) => request.kind)).toEqual(["usage", "error", "usage"]);
+    // One request a report: usage events, the crash report in the order it was queued, more usage.
+    const kinds = shown.map((request) => request.kind);
+    expect(kinds.filter((kind) => kind === "error")).toEqual(["error"]);
+    expect([kinds[0], kinds.at(-1)]).toEqual(["usage", "usage"]);
     world.clock.advance(60_000);
     await settle();
     expect(world.queue.reports).toEqual([]);
@@ -334,7 +337,7 @@ describe("the shell's telemetry", () => {
     expect(endpointEnv(false, TEST_ENV)).toBe(TEST_ENV);
   });
 
-  it("with the build's endpoints, nothing is posted before consent and one batch of usage events after", async () => {
+  it("with the build's endpoints, nothing is posted before consent and the usage events after, one request each", async () => {
     // The release's own endpoints, unoverridden; the poster records, so nothing leaves this test.
     const world = wired("unset", {});
     world.runtime.publish(status("runtime", "down"));
@@ -346,13 +349,14 @@ describe("the shell's telemetry", () => {
     world.call(IPC.setTelemetry, true);
     world.clock.advance(60_000);
     await settle();
-    expect(world.poster.sent).toHaveLength(1);
-    const [sent] = world.poster.sent;
-    expect(sent?.url).toBe("https://cloud.umami.is/api/batch");
-    const body = JSON.parse(sent?.body ?? "[]") as {
-      type: string;
-      payload: { website: string; name: string };
-    }[];
+    const sent = world.poster.sent.length;
+    expect(new Set(world.poster.sent.map((request) => request.url))).toEqual(
+      new Set(["https://cloud.umami.is/api/send"]),
+    );
+    const body = world.poster.sent.map(
+      (request) =>
+        JSON.parse(request.body) as { type: string; payload: { website: string; name: string } },
+    );
     expect(body.map((event) => event.type)).toEqual(body.map(() => "event"));
     expect(new Set(body.map((event) => event.payload.website))).toEqual(
       new Set(["edce25fe-ad86-4241-b0e1-87f456cc3dfa"]),
@@ -366,7 +370,7 @@ describe("the shell's telemetry", () => {
     world.runtime.publish(status("runtime", "down"));
     world.clock.advance(60_000);
     await settle();
-    expect(world.poster.sent).toHaveLength(1);
+    expect(world.poster.sent).toHaveLength(sent);
   });
 });
 
@@ -572,10 +576,10 @@ describe("the launch's own signals (plan 0029)", () => {
     world.runtime.publish(status("runtime", "starting"));
     world.clock.advance(60_000);
     await settle();
-    const sent = world.poster.sent.flatMap((request) =>
-      (
-        JSON.parse(request.body) as { payload: { name: string; data: Record<string, unknown> } }[]
-      ).map((event) => event.payload),
+    const sent = world.poster.sent.map(
+      (request) =>
+        (JSON.parse(request.body) as { payload: { name: string; data: Record<string, unknown> } })
+          .payload,
     );
     expect(sent.find((event) => event.name === "package_removed")?.data).toMatchObject({
       package: "probekit",
@@ -662,12 +666,10 @@ describe("the launch's own signals (plan 0029)", () => {
     world.clock.advance(60_000);
     await settle();
     const errors = world.poster.sent
-      .flatMap((request) =>
-        (
-          JSON.parse(request.body) as {
-            payload: { name: string; data: Record<string, unknown> };
-          }[]
-        ).map((event) => event.payload),
+      .map(
+        (request) =>
+          (JSON.parse(request.body) as { payload: { name: string; data: Record<string, unknown> } })
+            .payload,
       )
       .filter((event) => event.name === "package_error")
       .map((event) => event.data);

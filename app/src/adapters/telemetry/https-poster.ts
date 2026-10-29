@@ -11,6 +11,9 @@ import type { PostResult, TelemetryPoster } from "../../ports/telemetry";
 /** Nothing may wait on a slow telemetry server for longer than this (telemetry.py SEND_TIMEOUT). */
 export const SEND_TIMEOUT_MS = 10_000;
 
+/** How much of a 2xx answer is read: enough to tell a saved event from a page. */
+export const MAX_ANSWER_BYTES = 16 * 1024;
+
 export interface HttpsPosterOptions {
   /** Certificates to trust instead of the system's. Production leaves it out; tests pass theirs. */
   readonly ca?: string;
@@ -49,13 +52,32 @@ export class HttpsPoster implements TelemetryPoster {
         },
         (response) => {
           const status = response.statusCode ?? 0;
-          // The answer's body is not wanted; reading it to the end frees the socket.
-          response.resume();
-          resolve(
-            status >= 200 && status < 300
-              ? { ok: true }
-              : { ok: false, detail: `${target.origin} answered ${String(status)}` },
-          );
+          if (status < 200 || status >= 300) {
+            // The answer's body is not wanted; reading it to the end frees the socket.
+            response.resume();
+            resolve({ ok: false, detail: `${target.origin} answered ${String(status)}` });
+            return;
+          }
+          // A 200 can still mean nothing was kept: the answer's body says (umamiRefusal). Only
+          // its first MAX_ANSWER_BYTES are kept; a saved event's answer is far shorter.
+          const chunks: Buffer[] = [];
+          let held = 0;
+          response.on("data", (chunk: Buffer) => {
+            if (held < MAX_ANSWER_BYTES) {
+              chunks.push(chunk);
+              held += chunk.length;
+            }
+          });
+          response.on("end", () => {
+            const answer = Buffer.concat(chunks).subarray(0, MAX_ANSWER_BYTES).toString("utf8");
+            resolve({ ok: true, answer });
+          });
+          response.on("error", (error) => {
+            resolve({
+              ok: false,
+              detail: `${target.origin} broke off its answer: ${error.message}`,
+            });
+          });
         },
       );
       outgoing.on("timeout", () => {

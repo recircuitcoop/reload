@@ -10,6 +10,8 @@ import {
   parseDsn,
   renderEnvelope,
   UMAMI_HOSTNAME,
+  umamiRefusal,
+  umamiUserAgent,
 } from "../../src/domain/telemetry/transports";
 import { ENDPOINTS } from "../fakes/telemetry";
 
@@ -46,7 +48,7 @@ const USAGE: QueuedReport = {
 
 describe("the GlitchTip transport: a Sentry envelope, by hand", () => {
   it("an error goes to GlitchTip's envelope endpoint over the Sentry protocol", () => {
-    const outgoing = outgoingFor(ERROR, ENDPOINTS, "9.9.9");
+    const outgoing = outgoingFor(ERROR, ENDPOINTS, "9.9.9", "darwin");
     expect(outgoing.url).toBe("https://glitchtip.test/api/42/envelope/");
     expect(outgoing.headers).toEqual({
       "Content-Type": "application/x-sentry-envelope",
@@ -128,11 +130,11 @@ describe("the GlitchTip transport: a Sentry envelope, by hand", () => {
 
 describe("the Umami transport: a custom event", () => {
   it("usage goes to Umami as a custom event and never names the machine", () => {
-    const outgoing = outgoingFor(USAGE, ENDPOINTS, "9.9.9");
+    const outgoing = outgoingFor(USAGE, ENDPOINTS, "9.9.9", "darwin");
     expect(outgoing.url).toBe("https://umami.test/api/send");
     expect(outgoing.headers).toEqual({
       "Content-Type": "application/json",
-      "User-Agent": "reload/9.9.9",
+      "User-Agent": "Reload/9.9.9 (Macintosh)",
     });
     expect(JSON.parse(outgoing.body)).toEqual({
       type: "event",
@@ -162,12 +164,13 @@ describe("the Umami transport: a custom event", () => {
   });
 
   it("an Umami URL that is not https, or missing, is refused", () => {
-    expect(() => outgoingFor(USAGE, { ...ENDPOINTS, umamiUrl: "http://umami.test" }, "1")).toThrow(
-      "must be https",
-    );
-    expect(() => outgoingFor(USAGE, NO_ENDPOINTS, "1")).toThrow("no Umami endpoint");
+    expect(() =>
+      outgoingFor(USAGE, { ...ENDPOINTS, umamiUrl: "http://umami.test" }, "1", "darwin"),
+    ).toThrow("must be https");
+    expect(() => outgoingFor(USAGE, NO_ENDPOINTS, "1", "darwin")).toThrow("no Umami endpoint");
     expect(
-      outgoingFor(USAGE, { ...ENDPOINTS, umamiUrl: "https://umami.test/base//" }, "1").url,
+      outgoingFor(USAGE, { ...ENDPOINTS, umamiUrl: "https://umami.test/base//" }, "1", "darwin")
+        .url,
     ).toBe("https://umami.test/base/api/send");
   });
 
@@ -177,5 +180,25 @@ describe("the Umami transport: a custom event", () => {
     expect(hasEndpoint({ ...NO_ENDPOINTS, umamiUrl: "https://u" }, "usage")).toBe(false);
     expect(hasEndpoint(ENDPOINTS, "error")).toBe(true);
     expect(hasEndpoint(ENDPOINTS, "usage")).toBe(true);
+  });
+});
+
+describe("what Umami is told and what its answer means", () => {
+  it("names the app, its version and its platform, as Umami's bot check lets through", () => {
+    expect(umamiUserAgent("0.4.0", "darwin")).toBe("Reload/0.4.0 (Macintosh)");
+    expect(umamiUserAgent("0.4.0", "win32")).toBe("Reload/0.4.0 (Windows)");
+    expect(umamiUserAgent("0.4.0", "linux")).toBe("Reload/0.4.0 (Linux)");
+  });
+
+  it("an event Umami saved is answered with its session; every other 200 kept nothing", () => {
+    // Umami Cloud's own answers (2026-10-29): saved, taken for a bot, a path it does not serve.
+    expect(umamiRefusal('{"cache":"x","sessionId":"0b3635e4","visitId":"5b396a7b"}')).toBeNull();
+    expect(umamiRefusal('{"beep":"boop"}')).toBe("it took the request for a bot's");
+    expect(umamiRefusal("<!DOCTYPE html><title>404</title>")).toBe(
+      "its answer is not an event it saved",
+    );
+    for (const answer of ["", "{}", "null", "[]", '{"sessionId":7}']) {
+      expect(umamiRefusal(answer), answer).toBe("its answer is not an event it saved");
+    }
   });
 });

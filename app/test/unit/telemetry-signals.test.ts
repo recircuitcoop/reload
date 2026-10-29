@@ -39,7 +39,7 @@ import {
   stepFile,
 } from "../../src/domain/telemetry/vocabulary";
 import { releaseOf } from "../../src/shell/telemetry";
-import { MAX_BATCH, outgoingFor } from "../../src/domain/telemetry/transports";
+import { outgoingFor } from "../../src/domain/telemetry/transports";
 import { RecordingLogger } from "../fakes/children";
 import {
   ENDPOINTS,
@@ -487,41 +487,28 @@ describe("the vouched fields", () => {
   });
 });
 
-describe("Umami's batch request and the pipeline's batches", () => {
+describe("Umami's request and the pipeline's order", () => {
   const usage = (n: number): QueuedReport => ({
     sequence: n,
     kind: "usage",
     payload: { event: "package_used", n },
   });
-  const crash: QueuedReport = { sequence: 99, kind: "error", payload: { report_id: "r", at: "t" } };
 
-  it("sends one event to /api/send and up to 50 to /api/batch, each named as its signal", () => {
-    expect(outgoingFor([usage(1)], ENDPOINTS, "1.0.0").url).toBe("https://umami.test/api/send");
-    const batch = outgoingFor([usage(1), usage(2)], ENDPOINTS, "1.0.0");
-    expect(batch.url).toBe("https://umami.test/api/batch");
-    expect(
-      (JSON.parse(batch.body) as { payload: { name: string; data: { n: number } } }[]).map(
-        (event) => [event.payload.name, event.payload.data.n],
-      ),
-    ).toEqual([
-      ["package_used", 1],
-      ["package_used", 2],
-    ]);
+  it("sends each event alone to /api/send, named as its signal, as an app isbot does not flag", () => {
+    const outgoing = outgoingFor(usage(1), ENDPOINTS, "1.0.0", "darwin");
+    expect(outgoing.url).toBe("https://umami.test/api/send");
+    expect(outgoing.headers["User-Agent"]).toBe("Reload/1.0.0 (Macintosh)");
+    expect(JSON.parse(outgoing.body)).toMatchObject({
+      type: "event",
+      payload: { name: "package_used", data: { n: 1 } },
+    });
     const unnamed = { sequence: 3, kind: "usage" as const, payload: {} };
-    expect(JSON.parse(outgoingFor(unnamed, ENDPOINTS, "1").body)).toMatchObject({
+    expect(JSON.parse(outgoingFor(unnamed, ENDPOINTS, "1", "darwin").body)).toMatchObject({
       payload: { name: "usage" },
     });
   });
 
-  it("refuses an empty request, more than 50, a crash report with company, and a mixed batch", () => {
-    const many = Array.from({ length: MAX_BATCH + 1 }, (_, n) => usage(n));
-    expect(() => outgoingFor([], ENDPOINTS, "1")).toThrow("1 to 50 reports");
-    expect(() => outgoingFor(many, ENDPOINTS, "1")).toThrow("1 to 50 reports");
-    expect(() => outgoingFor([crash, crash], ENDPOINTS, "1")).toThrow("sent alone");
-    expect(() => outgoingFor([usage(1), crash], ENDPOINTS, "1")).toThrow("usage events only");
-  });
-
-  it("drains 120 events in three requests, and a crash report between them on its own", async () => {
+  it("drains 120 events one request each, in order, and a crash report between them", async () => {
     const world = telemetryWorld("on");
     const pipeline = new TelemetryPipeline(world.deps);
     for (let n = 0; n < 60; n += 1) {
@@ -532,23 +519,54 @@ describe("Umami's batch request and the pipeline's batches", () => {
       pipeline.recordUsage("package_used", { n });
     }
     expect(await pipeline.flush()).toEqual({ sent: 121, retryInMs: null });
-    expect(world.poster.sent.map((request) => request.url)).toEqual([
-      "https://umami.test/api/batch",
-      "https://umami.test/api/batch",
-      "https://glitchtip.test/api/42/envelope/",
-      "https://umami.test/api/batch",
-      "https://umami.test/api/batch",
-    ]);
+    const urls = world.poster.sent.map((request) => request.url);
+    expect(urls).toHaveLength(121);
+    expect(urls[60]).toBe("https://glitchtip.test/api/42/envelope/");
+    expect(urls.filter((url) => url === "https://umami.test/api/send")).toHaveLength(120);
+    // Report ids are handed out in recording order: the requests keep it.
+    const order = world.poster.sent
+      .filter((request) => request.url.endsWith("/api/send"))
+      .map(
+        (request) =>
+          (JSON.parse(request.body) as { payload: { data: { report_id: string } } }).payload.data
+            .report_id,
+      );
+    expect(order).toHaveLength(120);
+    expect(order).toEqual([...order].sort());
     expect(world.queue.reports).toEqual([]);
   });
 
-  it("a batch that fails keeps every one of its events for the retry", async () => {
+  it("a 200 that kept nothing is not sent: the event stays queued, the log says why", async () => {
+    for (const [answer, why] of [
+      ['{"beep":"boop"}', "it took the request for a bot's"],
+      ["<!DOCTYPE html><title>404</title>", "its answer is not an event it saved"],
+    ] as const) {
+      const world = telemetryWorld("on");
+      const pipeline = new TelemetryPipeline(world.deps);
+      world.poster.answer = () => ({ ok: true, answer });
+      pipeline.recordUsage("app_start", {});
+      const result = await pipeline.flush();
+      expect(result.sent).toBe(0);
+      expect(result.retryInMs).toBeGreaterThan(0);
+      expect(world.queue.reports).toHaveLength(1);
+      expect(world.logger.lines.join("\n")).toContain(
+        `a usage report could not be sent (https://umami.test kept nothing: ${why})`,
+      );
+      // Saved at the retry, it leaves the queue.
+      world.poster.answer = () => ({ ok: true, answer: '{"sessionId":"s"}' });
+      expect((await pipeline.flush()).sent).toBe(1);
+      expect(world.queue.reports).toEqual([]);
+    }
+  });
+
+  it("an event that fails stays queued, and the ones after it wait for the retry", async () => {
     const world = telemetryWorld("on");
     const pipeline = new TelemetryPipeline(world.deps);
     world.poster.answer = () => ({ ok: false, detail: "503" });
     pipeline.recordUsage("app_start", {});
     pipeline.recordUsage("setup_step", {});
     expect((await pipeline.flush()).sent).toBe(0);
+    expect(world.poster.sent).toHaveLength(1);
     expect(world.queue.reports).toHaveLength(2);
     await settle();
   });
@@ -577,9 +595,9 @@ describe("Umami's batch request and the pipeline's batches", () => {
     });
     expect(await pipeline.flush()).toEqual({ sent: 2, retryInMs: null });
     expect(world.queue.reports).toEqual([]);
-    const sent = JSON.parse(world.poster.sent[0]?.body ?? "[]") as {
-      payload: { data: Record<string, unknown> };
-    }[];
+    const sent = world.poster.sent.map(
+      (request) => JSON.parse(request.body) as { payload: { data: Record<string, unknown> } },
+    );
     expect(sent).toHaveLength(2);
     const data = sent[1]?.payload.data ?? {};
     expect(data).toMatchObject({

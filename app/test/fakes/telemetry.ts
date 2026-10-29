@@ -115,7 +115,11 @@ export class MemoryQueue implements ReportQueue {
 /** Records every request; answers ok unless `answer` says otherwise (or never, for a hang). */
 export class RecordingPoster implements TelemetryPoster {
   readonly sent: Outgoing[] = [];
-  answer: (request: Outgoing) => PostResult | "hang" = () => ({ ok: true });
+  /** By default, what Umami answers an event it saved (GlitchTip's answer is not read). */
+  answer: (request: Outgoing) => PostResult | "hang" = () => ({
+    ok: true,
+    answer: '{"sessionId":"fake-session","visitId":"fake-visit"}',
+  });
 
   post(request: Outgoing): Promise<PostResult> {
     this.sent.push(request);
@@ -184,6 +188,7 @@ export function telemetryWorld(
     endpoints: ENDPOINTS,
     vouch: TEST_VOUCH,
     release: "9.9.9",
+    platform: "darwin",
     clock,
     now: () => Date.UTC(2026, 8, 26, 12),
     newId: () => (ids += 1).toString(16).padStart(32, "0"),

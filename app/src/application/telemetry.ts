@@ -16,8 +16,8 @@
 //   a transport renders only what was queued. After it, the credential gate of plan 0029: a
 //   field named like a credential refuses the report, and every string is scrubbed.
 // * Reporting never waits on a server: `recordUsage` and `recordCrash` write one small file and
-//   schedule the sender. The sender posts back to back while the server answers (usage events
-//   up to MAX_BATCH a request, plan 0029's volume), with a timeout, and backs off between
+//   schedule the sender. The sender posts back to back while the server answers (one report a
+//   request: Umami Cloud serves no batch endpoint), with a timeout, and backs off between
 //   failures on the injected clock, so a server that is down, slow or gone costs a restart
 //   nothing.
 
@@ -39,8 +39,8 @@ import {
 } from "../domain/telemetry/reports";
 import {
   hasEndpoint,
-  MAX_BATCH,
   outgoingFor,
+  umamiRefusal,
   type Endpoints,
   type Outgoing,
 } from "../domain/telemetry/transports";
@@ -74,6 +74,8 @@ export interface TelemetryDeps {
   readonly endpoints: Endpoints;
   /** The app's version, as the servers are told it. */
   readonly release: string;
+  /** Node's `process.platform`, for the User-Agent Umami is told (umamiUserAgent). */
+  readonly platform: string;
   readonly clock: Clock;
   /** Wall-clock epoch ms, for a report's `at`. */
   readonly now: () => number;
@@ -109,18 +111,6 @@ const reasonOf = (error: unknown): string =>
 
 /** A kind of report, in the log's words: an `error` report is about a crash. */
 const named = (kind: ReportKind): string => (kind === "error" ? "crash report" : "usage report");
-
-/**
- * The next request's reports, taken off the front of `waiting`: up to MAX_BATCH usage events in a
- * row, or one crash report.
- */
-function nextGroup(waiting: QueuedReport[]): QueuedReport[] {
-  if (waiting[0]?.kind !== "usage") {
-    return waiting.splice(0, 1);
-  }
-  const run = waiting.findIndex((report, index) => index >= MAX_BATCH || report.kind !== "usage");
-  return waiting.splice(0, run === -1 ? waiting.length : run);
-}
 
 export class TelemetryPipeline {
   readonly #deps: TelemetryDeps;
@@ -235,52 +225,58 @@ export class TelemetryPipeline {
       if (this.#halted || !this.#allows()) {
         return { sent, retryInMs: null };
       }
-      const head = this.#deps.queue.head(MAX_BATCH);
+      const head = this.#deps.queue.head(1);
       if (head.length === 0) {
         return { sent, retryInMs: null };
       }
-      const current = this.#checked(head, (report, why) => {
-        this.#deps.logger.info(`a ${named(report.kind)} ${why} is dropped unsent`);
-        this.#deps.queue.remove(report);
+      const [report] = this.#checked(head, (dropped, why) => {
+        this.#deps.logger.info(`a ${named(dropped.kind)} ${why} is dropped unsent`);
+        this.#deps.queue.remove(dropped);
       });
-      const group = nextGroup(current);
-      if (group.length === 0) {
+      if (report === undefined) {
         continue;
       }
-      const kind = (group[0] as QueuedReport).kind;
+      const kind = report.kind;
       let outgoing: Outgoing;
       try {
-        outgoing = outgoingFor(group, this.#deps.endpoints, this.#deps.release);
+        outgoing = outgoingFor(
+          report,
+          this.#deps.endpoints,
+          this.#deps.release,
+          this.#deps.platform,
+        );
       } catch (error) {
-        // An endpoint that is not HTTPS, or gone from the build: there is nowhere these reports
+        // An endpoint that is not HTTPS, or gone from the build: there is nowhere this report
         // may go, and no later moment when there will be.
         this.#deps.logger.warn(`a ${named(kind)} is dropped unsent: ${reasonOf(error)}`);
-        for (const report of group) {
-          this.#deps.queue.remove(report);
-        }
+        this.#deps.queue.remove(report);
         continue;
       }
       const result = await this.#deps.poster.post(outgoing);
-      if (!result.ok) {
+      // Umami answers 200 to an event it kept and to one it threw away; only the answer says
+      // which, and an event thrown away is not sent: it stays queued for the retry.
+      const refused = result.ok && kind === "usage" ? umamiRefusal(result.answer) : null;
+      if (!result.ok || refused !== null) {
         this.#failures += 1;
         const delay = this.#backoff[Math.min(this.#failures, this.#backoff.length) - 1] ?? 0;
+        const detail = result.ok
+          ? `${new URL(outgoing.url).origin} kept nothing: ${String(refused)}`
+          : result.detail;
         this.#deps.logger.info(
-          `a ${named(kind)} could not be sent (${result.detail}); ` +
+          `a ${named(kind)} could not be sent (${detail}); ` +
             `trying again in ${String(Math.round(delay / 1000))} s`,
         );
         return { sent, retryInMs: delay };
       }
       this.#failures = 0;
-      for (const report of group) {
-        this.#deps.queue.remove(report);
-      }
-      sent += group.length;
+      this.#deps.queue.remove(report);
+      sent += 1;
     }
   }
 
   /**
    * "See what would be sent": the requests a send would post now, each with the exact body, built
-   * by the sender's own steps (the check at send, the grouping, the transport), so what is shown
+   * by the sender's own steps (the check at send, the transport), so what is shown
    * is byte for byte what is posted (the old D24). A report with nowhere to go is not in it: the
    * sender drops it unsent. Touches neither the queue nor the network.
    */
@@ -289,11 +285,13 @@ export class TelemetryPipeline {
     // Nothing waits unless it is on: the identifier is never read for an empty preview.
     const waiting = pending.length === 0 ? [] : this.#checked(pending, () => undefined);
     const requests: (Outgoing & { readonly kind: ReportKind })[] = [];
-    while (waiting.length > 0) {
-      const group = nextGroup(waiting);
-      const kind = (group[0] as QueuedReport).kind;
+    for (const report of waiting) {
+      const kind = report.kind;
       try {
-        requests.push({ kind, ...outgoingFor(group, this.#deps.endpoints, this.#deps.release) });
+        requests.push({
+          kind,
+          ...outgoingFor(report, this.#deps.endpoints, this.#deps.release, this.#deps.platform),
+        });
       } catch {
         // No endpoint for it, or not HTTPS: the sender drops it, so it would not be sent.
       }

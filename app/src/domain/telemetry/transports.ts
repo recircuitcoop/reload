@@ -45,37 +45,55 @@ export const UMAMI_HOSTNAME = "app.reload.invalid";
 /** The one path Reload reports usage from: counted on the circu.it site under the reload campaign. */
 export const UMAMI_URL_PATH = "/app?utm_source=reload&utm_medium=app&utm_campaign=reload";
 
-const isGroup = (
-  reports: QueuedReport | readonly QueuedReport[],
-): reports is readonly QueuedReport[] => Array.isArray(reports);
-
-/** The most usage events one request carries, to Umami's `/api/batch` (plan 0029, volume). */
-export const MAX_BATCH = 50;
+/** The platform a User-Agent names, by Node's `process.platform`; anything else is Linux. */
+const AGENT_PLATFORMS: Readonly<Record<string, string>> = { darwin: "Macintosh", win32: "Windows" };
 
 /**
- * The request that carries `reports`, for this build's endpoints: a crash report alone, or up to
- * MAX_BATCH usage events (one to `/api/send`, more to `/api/batch`). Throws when it has none.
+ * The User-Agent of a usage event, `Reload/<version> (Macintosh)` on a Mac. Umami drops, unsaved
+ * but answered 200, every request whose User-Agent its `isbot` check flags, and a bare
+ * `name/version` is flagged; this form is not.
+ */
+export function umamiUserAgent(release: string, platform: string): string {
+  return `Reload/${release} (${AGENT_PLATFORMS[platform] ?? "Linux"})`;
+}
+
+/**
+ * Why Umami kept nothing of an event it answered with `answer`, or null when it saved it. A saved
+ * event is answered with its session; a request taken for a bot's with `{"beep":"boop"}`; a path
+ * Umami does not serve with a page. All three come with 200, so only the answer tells them apart.
+ */
+export function umamiRefusal(answer: string): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(answer);
+  } catch {
+    return "its answer is not an event it saved";
+  }
+  if (typeof parsed !== "object" || parsed === null) {
+    return "its answer is not an event it saved";
+  }
+  if ("beep" in parsed) {
+    return "it took the request for a bot's";
+  }
+  return typeof (parsed as { sessionId?: unknown }).sessionId === "string"
+    ? null
+    : "its answer is not an event it saved";
+}
+
+/**
+ * The request that carries one report, for this build's endpoints: a crash report to GlitchTip, a
+ * usage event to Umami's `/api/send`. One event a request: Umami Cloud does not serve
+ * `/api/batch`, and answers it 200 with a page that is not found.
  */
 export function outgoingFor(
-  reports: QueuedReport | readonly QueuedReport[],
+  report: QueuedReport,
   endpoints: Endpoints,
   release: string,
+  platform: string,
 ): Outgoing {
-  const group: readonly QueuedReport[] = isGroup(reports) ? reports : [reports];
-  const [first] = group;
-  if (first === undefined || group.length > MAX_BATCH) {
-    throw new TelemetryError(`a request carries 1 to ${String(MAX_BATCH)} reports`);
-  }
-  if (first.kind === "error") {
-    if (group.length > 1) {
-      throw new TelemetryError("a crash report is sent alone");
-    }
-    return glitchtipRequest(first, endpoints.glitchtipDsn, release);
-  }
-  if (group.some((report) => report.kind !== "usage")) {
-    throw new TelemetryError("a batch carries usage events only");
-  }
-  return umamiRequest(group, endpoints, release);
+  return report.kind === "error"
+    ? glitchtipRequest(report, endpoints.glitchtipDsn, release)
+    : umamiRequest(report, endpoints, release, platform);
 }
 
 function httpsUrl(text: string, what: string): URL {
@@ -208,25 +226,22 @@ export function renderUmami(report: QueuedReport, websiteId: string): string {
 }
 
 function umamiRequest(
-  reports: readonly QueuedReport[],
+  report: QueuedReport,
   endpoints: Endpoints,
   release: string,
+  platform: string,
 ): Outgoing {
   if (!hasEndpoint(endpoints, "usage")) {
     throw new TelemetryError("this build has no Umami endpoint, so no usage report is sent");
   }
   const base = httpsUrl(endpoints.umamiUrl, "Umami URL");
-  const [one] = reports;
-  const single = reports.length === 1 && one !== undefined;
   return {
-    url: `${base.href.replace(/\/+$/, "")}/api/${single ? "send" : "batch"}`,
+    url: `${base.href.replace(/\/+$/, "")}/api/send`,
     headers: {
       "Content-Type": "application/json",
       // Umami refuses a request with no User-Agent. This one names the app and nothing else.
-      "User-Agent": `reload/${release}`,
+      "User-Agent": umamiUserAgent(release, platform),
     },
-    body: single
-      ? renderUmami(one, endpoints.umamiWebsiteId)
-      : JSON.stringify(reports.map((report) => umamiEvent(report, endpoints.umamiWebsiteId))),
+    body: renderUmami(report, endpoints.umamiWebsiteId),
   };
 }

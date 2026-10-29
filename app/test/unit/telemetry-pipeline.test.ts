@@ -145,7 +145,7 @@ describe("the telemetry pipeline: the switch is read again, every time", () => {
     world.poster.answer = () => {
       // The person turns telemetry off while the first report is on its way.
       world.setting.answer = "off";
-      return { ok: true };
+      return { ok: true, answer: "" };
     };
     expect(await pipeline.flush()).toEqual({ sent: 1, retryInMs: null });
     expect(world.poster.sent).toHaveLength(1);
@@ -303,8 +303,12 @@ describe("the telemetry pipeline: sending", () => {
       "https://glitchtip.test/api/42/envelope/",
     ]);
     // What was posted is byte for byte what the transport renders from the queued report.
-    expect(world.poster.sent[0]?.body).toBe(outgoingFor(queued(first), ENDPOINTS, "9.9.9").body);
-    expect(world.poster.sent[1]?.body).toBe(outgoingFor(queued(second), ENDPOINTS, "9.9.9").body);
+    expect(world.poster.sent[0]?.body).toBe(
+      outgoingFor(queued(first), ENDPOINTS, "9.9.9", "darwin").body,
+    );
+    expect(world.poster.sent[1]?.body).toBe(
+      outgoingFor(queued(second), ENDPOINTS, "9.9.9", "darwin").body,
+    );
     expect(world.queue.reports).toEqual([]);
   });
 
@@ -317,7 +321,7 @@ describe("the telemetry pipeline: sending", () => {
       world.poster.sent.push(request);
       return new Promise((resolve) => {
         release = () => {
-          resolve({ ok: true });
+          resolve({ ok: true, answer: "" });
         };
       });
     };
@@ -337,7 +341,9 @@ describe("the telemetry pipeline: sending", () => {
     const pipeline = new TelemetryPipeline(world.deps);
     pipeline.start();
     let failing = true;
-    world.poster.answer = () => (failing ? { ok: false, detail: "answered 503" } : { ok: true });
+    world.poster.answer = () =>
+      // A crash report's answer is not read: any 2xx sends it.
+      failing ? { ok: false, detail: "answered 503" } : { ok: true, answer: "" };
     pipeline.recordCrash(crash());
     world.clock.advance(0);
     await settle();
@@ -415,9 +421,10 @@ describe("the telemetry pipeline: sending", () => {
     world.queue.enqueue("usage", { ...world.queue.reports[0]?.payload, report_id: "x" });
     const shown = pipeline.wouldSend();
     expect(world.queue.reports).toHaveLength(4);
-    // Two usage events in one batch; the crash has nowhere https to go.
+    // Two usage events, one request each; the crash has nowhere https to go.
     expect(shown.map((request) => [request.kind, request.url])).toEqual([
-      ["usage", "https://umami.test/api/batch"],
+      ["usage", "https://umami.test/api/send"],
+      ["usage", "https://umami.test/api/send"],
     ]);
     await pipeline.flush();
     expect(world.poster.sent).toEqual(

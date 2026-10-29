@@ -46,7 +46,9 @@ export interface ReportQueue {
   purge(): number;
 }
 
-export type PostResult = { readonly ok: true } | { readonly ok: false; readonly detail: string };
+/** A 2xx carries the answer's body: a 200 alone does not say the report was kept. */
+export type PostResult =
+  { readonly ok: true; readonly answer: string } | { readonly ok: false; readonly detail: string };
 
 /** One POST over HTTPS, with a timeout. Never throws: every failure is a result. */
 export interface TelemetryPoster {

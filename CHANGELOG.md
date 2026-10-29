@@ -3,6 +3,13 @@
 All notable changes to Reload (called InnyTypes before 0.4.0) are recorded here, newest first. Versions follow
 [semantic versioning](https://semver.org/): the number changes when what you can rely on does.
 
+## Unreleased
+
+- **Usage counts reach Umami again.** If you said yes to usage reports, versions up to 0.4.0
+  sent them, but Umami Cloud kept none: it took the app's name for a bot's, and more than one
+  report at a time went to an address it does not serve. Both answers looked like success, so
+  nothing was retried. Reports now go one at a time, under a name Umami accepts.
+
 ## 0.4.0 — 2026-10-28
 
 **The app is now called Reload.** It is InnyTypes 0.3.0 under a new name, and nothing else

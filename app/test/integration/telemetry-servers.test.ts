@@ -50,7 +50,8 @@ const server = https.createServer({ cert: CERT, key: KEY }, (request, response) 
       body: Buffer.concat(chunks).toString("utf8"),
     });
     if (behaviour !== "hang") {
-      response.writeHead(behaviour).end("{}");
+      // What Umami answers an event it saved; GlitchTip's answer is not read.
+      response.writeHead(behaviour).end('{"sessionId":"fake-session"}');
     }
   });
 });
@@ -143,6 +144,7 @@ function world(
     endpoints: overrides.endpoints ?? endpoints(),
     vouch: TEST_VOUCH,
     release: "2.0.0",
+    platform: "darwin",
     clock: new FakeClock(),
     now: () => Date.UTC(2026, 8, 26, 9),
     newId: () => "c".repeat(32),
@@ -201,7 +203,7 @@ describe("telemetry against local fake GlitchTip and Umami servers", () => {
       ...queued(report),
       payload: checkAtSend(queued(report).payload, "error", TEST_VOUCH, machineIdHash(RAW)) ?? {},
     };
-    expect(got?.body).toBe(outgoingFor(sendable, endpoints(), "2.0.0").body);
+    expect(got?.body).toBe(outgoingFor(sendable, endpoints(), "2.0.0", "darwin").body);
     expect(got?.body).not.toContain("ServicesCrashed near");
     const event = JSON.parse(got?.body.split("\n")[2] ?? "") as {
       exception: { values: { type: string; value: string }[] };
@@ -219,7 +221,7 @@ describe("telemetry against local fake GlitchTip and Umami servers", () => {
     );
     await pipeline.flush();
     expect(received.map((request) => request.url)).toEqual(["/umami/api/send"]);
-    expect(received[0]?.headers["user-agent"]).toBe("reload/2.0.0");
+    expect(received[0]?.headers["user-agent"]).toBe("Reload/2.0.0 (Macintosh)");
     expect(JSON.parse(received[0]?.body ?? "")).toMatchObject({
       type: "event",
       payload: { website: "site-7", name: "app_start", hostname: "app.reload.invalid" },

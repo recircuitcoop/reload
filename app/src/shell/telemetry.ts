@@ -239,6 +239,7 @@ export function wireTelemetry(deps: TelemetryWiring): ShellTelemetry {
     ...deps,
     endpoints: telemetryEndpoints(deps.env, deps.built),
     release: deps.appVersion,
+    platform: versions.os,
     now: () => Date.now(),
     newId: () => randomUUID().replaceAll("-", ""),
     credentials: (text) => registry.redact(text),
