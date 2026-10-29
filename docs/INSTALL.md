@@ -56,11 +56,11 @@ remove its entry from each AI app.
 A new installation opens on **Setup**, a short walkthrough. Its steps are listed on the left:
 
 1. **Welcome.** Click **Get started**.
-2. **Reports.** Reload asks **"Help improve Reload?"**, with the full privacy notice beside
-   the question: what is sent, what never is, and how long it is kept. Click **Send reports** or
-   **Don't send**. Nothing is sent before you answer. If you say yes, usage counts are sent to
-   Umami Cloud under a machine id that carries no name; never your recordings, transcripts or
-   notes. You can change your answer later in **Configuration › General**, under **Reports**.
+2. **Reports.** Reload asks **"Help improve Reload?"**, with a short privacy notice: what it
+   collects and what it never collects, each item checkable in its source code. Click **Send
+   reports** or **Don't send**. Nothing is sent before you answer. If you say yes, usage counts
+   are sent to Umami Cloud under a machine id that carries no name. You can change your answer
+   later in **Configuration › General**, under **Reports**.
 3. **Anytype.** Connect Anytype, as in section 5, or click **Skip for now**.
 4. **Source folder.** Click **Choose a folder…** and pick the folder Reload watches. Every new
    file in it starts your flow.

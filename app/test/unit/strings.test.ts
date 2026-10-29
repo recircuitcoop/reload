@@ -21,6 +21,8 @@ const UX_WRITING = path.resolve(
 const MAY_CARRY_AN_INTERNAL: readonly StringKey[] = [
   "general.aiApps.line",
   "packages.fromFolder.caption",
+  // The source files where each reported item can be checked (owner, 2026-10-29).
+  "privacy.sent.source",
 ];
 
 /** Each pattern of an internal the person must never see, with an example it must catch. */

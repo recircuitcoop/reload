@@ -221,19 +221,21 @@ export interface NoticePart {
 }
 
 /**
- * The privacy notice beside the reports question (D25): what is sent, what never is, how long it
- * is kept, the GDPR rights; first the line saying it is optional. Every line a strings.ts key.
+ * The privacy notice beside the reports question (D25; owner, 2026-10-29: short): the line asking
+ * for help, what is collected, what never is, then how long it is kept and whom to write to.
+ * Every line a strings.ts key.
  */
 export const PRIVACY_NOTICE_OPENING: PlainKey = "privacy.optional";
 export const PRIVACY_NOTICE: readonly NoticePart[] = [
   {
     heading: "privacy.sent",
-    lines: ["privacy.sent.where"],
+    lines: [],
     listed: [
+      // What every report carries.
       "privacy.sent.machineId",
       "privacy.sent.versions",
       "privacy.sent.stamp",
-      // The signals (plan 0029): one line each, every field it carries.
+      // The signals (plan 0029): one line each; reports.ts defines every field.
       "privacy.sent.launches",
       "privacy.sent.steps",
       "privacy.sent.errors",
@@ -243,21 +245,27 @@ export const PRIVACY_NOTICE: readonly NoticePart[] = [
       "privacy.sent.catalogues",
       "privacy.sent.installs",
       "privacy.sent.updates",
+      // Not in a report, but what Umami Cloud derives from every request.
+      "privacy.sent.address",
     ],
-    after: ["privacy.sent.address", "privacy.sent.wrapped", "privacy.sent.crashes"],
+    after: ["privacy.sent.source"],
   },
-  { heading: "privacy.never", lines: ["privacy.never.line"] },
-  { heading: "privacy.kept", lines: ["privacy.kept.line"] },
   {
-    heading: "privacy.rights",
-    lines: [
-      "privacy.rights.pseudonymous",
-      "privacy.rights.contact",
-      "privacy.rights.line",
-      "privacy.rights.see",
-      "privacy.rights.change",
+    heading: "privacy.never",
+    lines: [],
+    listed: [
+      "privacy.never.content",
+      "privacy.never.keys",
+      "privacy.never.aiApps",
+      "privacy.never.files",
+      "privacy.never.you",
     ],
   },
+];
+/** The notice's last lines, under no heading: how long reports are kept, and whom to write to. */
+export const PRIVACY_NOTICE_CLOSING: readonly PlainKey[] = [
+  "privacy.kept.line",
+  "privacy.rights.contact",
 ];
 
 /** General › Reports shows the notice beside its switch while the question is unanswered. */

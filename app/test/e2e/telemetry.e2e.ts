@@ -82,7 +82,8 @@ async function fakeServers(): Promise<{
         auth: String(request.headers["x-sentry-auth"] ?? ""),
         body: Buffer.concat(chunks).toString("utf8"),
       });
-      response.writeHead(200).end("{}");
+      // What Umami answers an event it saved; GlitchTip's answer is not read.
+      response.writeHead(200).end('{"sessionId":"fake-session"}');
     });
   });
   const port = await new Promise<number>((resolve) => {
@@ -133,15 +134,12 @@ interface UsageEvent {
   readonly data: Record<string, unknown>;
 }
 
-/** Every usage event received, from `/api/send` and `/api/batch` alike, in order. */
+/** Every usage event received at `/api/send`, one a request, in order. */
 function usageEvents(received: readonly Received[]): UsageEvent[] {
   return received
     .filter((request) => request.url.startsWith("/umami/api/"))
-    .flatMap((request) => {
-      const body = JSON.parse(request.body) as unknown;
-      return (Array.isArray(body) ? body : [body]) as { payload: UsageEvent }[];
-    })
-    .map(({ payload }) => ({ name: payload.name, data: payload.data }));
+    .map((request) => (JSON.parse(request.body) as { payload: UsageEvent }).payload)
+    .map((payload) => ({ name: payload.name, data: payload.data }));
 }
 
 const usageNames = (received: readonly Received[]): string[] =>
@@ -310,7 +308,7 @@ test("telemetry asks first, sends nothing before a yes, sends only redacted repo
     await (await setupButton(first.window, "setup.welcome.start")).click();
     await expect(setupStep(first.window)).toHaveAttribute("data-step", "reports");
     await expect(setupStep(first.window)).toContainText(STRINGS["setup.reports.title"]);
-    await expect(setupStep(first.window)).toContainText(STRINGS["setup.reports.body"]);
+    await expect(setupStep(first.window)).toContainText(STRINGS["privacy.optional"]);
     await crashRuntime(first.window);
     await quiet();
     expect(received).toEqual([]);

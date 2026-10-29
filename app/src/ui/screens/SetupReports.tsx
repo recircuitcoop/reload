@@ -85,7 +85,6 @@ export function ReportsStep({
   return (
     <SetupStep
       title={t("setup.reports.title")}
-      body={t("setup.reports.body")}
       actions={
         <>
           {back ? (

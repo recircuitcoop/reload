@@ -1,7 +1,7 @@
 // The privacy notice beside the reports question (D25; owner, 2026-10-15): Setup's Reports step
 // and General › Reports while the question is unanswered draw it. Every line is a strings.ts line,
 // in the order ui/general.ts's PRIVACY_NOTICE gives.
-import { PRIVACY_NOTICE, PRIVACY_NOTICE_OPENING } from "../general";
+import { PRIVACY_NOTICE, PRIVACY_NOTICE_CLOSING, PRIVACY_NOTICE_OPENING } from "../general";
 import { t } from "../strings";
 
 /** `level` is the parts' heading level: one below the heading the notice sits under. */
@@ -27,6 +27,9 @@ export function PrivacyNotice({ level }: { readonly level: 2 | 3 }) {
             <p key={line}>{t(line)}</p>
           ))}
         </div>
+      ))}
+      {PRIVACY_NOTICE_CLOSING.map((line) => (
+        <p key={line}>{t(line)}</p>
       ))}
     </div>
   );

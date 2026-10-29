@@ -47,8 +47,6 @@ export const STRINGS = {
     "Reload turns your recordings into notes, summaries and next steps, in Anytype and wherever else you point it, on its own. Set it up once. It takes about ten minutes.",
   "setup.welcome.start": "Get started",
   "setup.reports.title": "Help improve Reload?",
-  "setup.reports.body":
-    "Send usage counts, under a machine id that carries no name. Never your recordings, transcripts or notes. You can change this in Configuration › General.",
   "setup.reports.send": "Send reports",
   "setup.reports.dontSend": "Don't send",
   "setup.anytype.title": "Connect Anytype",

@@ -23,6 +23,7 @@ import {
   PACKAGE_ACTIONS,
   packagesLine,
   PRIVACY_NOTICE,
+  PRIVACY_NOTICE_CLOSING,
   PRIVACY_NOTICE_OPENING,
   readEndpoint,
   readSpaces,
@@ -335,7 +336,7 @@ describe("the Reports section's state line", () => {
   });
 });
 
-/** Which line of the notice tells each signal (plan 0029). */
+/** Which bullet of the notice tells each signal (plan 0029). */
 const SIGNAL_LINES: Readonly<Record<SignalName, PlainKey>> = {
   app_start: "privacy.sent.launches",
   app_stop: "privacy.sent.launches",
@@ -356,199 +357,106 @@ const SIGNAL_LINES: Readonly<Record<SignalName, PlainKey>> = {
   update_offered: "privacy.sent.updates",
   update_applied: "privacy.sent.updates",
 };
-/** The lines every report carries (`privacy.sent.where`: "the first three"). */
+/** The bullets every report carries: the machine id, the versions, the stamp. */
 const COMMON_LINES = [
   "privacy.sent.machineId",
   "privacy.sent.versions",
   "privacy.sent.stamp",
 ] as const satisfies readonly PlainKey[];
-/** Each line's fields, each with the words the line says it in: a field is listed with its words. */
-const STEP_WORDS = {
-  package: ["the package", "only called unsigned"],
-  version: ["its version", "with neither its version"],
-  source: ["where it came from"],
-  signed: ["whether it is signed"],
-  environment: ["what it runs on"],
-  node_kind: ["the kind and type of the step"],
-  node_id: ["type of the step but never its name", "nor its type of step"],
-  duration_ms: ["how long it took"],
-  ok: ["whether it worked"],
-};
-const NOTICE_FIELDS: Readonly<Record<string, Readonly<Record<string, readonly string[]>>>> = {
-  "privacy.sent.machineId": { machine_id: ["a machine id", "a keyed hash (HMAC-SHA256)"] },
-  "privacy.sent.versions": {
-    app_version: ["the Reload version"],
-    os: ["your operating system"],
-    os_version: ["its version"],
-    arch: ["the processor type"],
-  },
-  "privacy.sent.stamp": {
-    kind: ["what kind of report it is"],
-    event: ["which of the things below happened"],
-    at: ["when it was made"],
-    report_id: ["a random number that tells it apart"],
-    rules: ["the version of the rules it was checked by"],
-  },
-  "privacy.sent.launches": {
-    startup_ms: ["how long it took to start"],
-    packages: ["how many packages are installed"],
-    unsigned_packages: ["how many of them are unsigned"],
-    package: [
-      "each installed package on its own",
-      "the package",
-      "an unsigned one only as unsigned",
-    ],
-    version: ["its version if it ships with Reload or is signed"],
-    source: ["where it came from"],
-    signed: ["whether it is signed"],
-    environment: ["what it runs on"],
-    uptime_s: ["how long Reload ran"],
-    reason: ["why it quit"],
-    first_launch: ["whether it is its first start"],
-    last_version: ["the version that last ran when it ended without quitting"],
-  },
-  "privacy.sent.steps": STEP_WORDS,
-  "privacy.sent.errors": {
-    ...Object.fromEntries(Object.keys(STEP_WORDS).map((field) => [field, ["the same"]])),
-    error_type: ["the kind of error when it is a standard one", "any other is only other"],
-    file: ["the file", "only when the file is one of the signed package's own"],
-    line: ["and line", "the line is in it"],
-  },
-  "privacy.sent.aiApps": {
-    package: ["the Anytype package"],
-    version: ["its version"],
-    method: ["whether it called a tool or read a file"],
-    tool: ["which of Reload's own Anytype tools"],
-    client: ["which known AI app it is"],
-    duration_ms: ["how long it took"],
-    ok: ["whether it worked"],
-    error_code: ["the error's code"],
-  },
-  "privacy.sent.flows": {
-    flows: ["how many flows"],
-    total_nodes: ["and steps in all"],
-    nodes: ["how many steps each flow has with the steps inside its subflows"],
-    config_nodes: ["how many configuration nodes"],
-    package: ["how many steps of each package"],
-  },
-  "privacy.sent.setup": { step: ["Reload started", "Anytype paired", "a first flow deployed"] },
-  "privacy.sent.catalogues": {
-    provider_host: [
-      "its server's name only if it is Reload's own",
-      "a local one is only file",
-      "any other only custom",
-    ],
-    official: ["whether it is Reload's own"],
-    signer_fingerprint: ["a short fingerprint of its signing key"],
-    packages_offered: ["how many packages it offers"],
-  },
-  "privacy.sent.installs": {
-    package: ["the package", "an unsigned one only as unsigned"],
-    version: ["its versions if it is signed"],
-    from_version: ["its versions"],
-    provider_host: ["Reload's own catalogue's server name", "another catalogue or a file"],
-    source: ["it came from another catalogue or a file"],
-    signed: ["whether it is signed"],
-    environment: ["what it runs on"],
-    node_types: ["how many step types it brings"],
-    reason: ["the reason's code, never its words"],
-  },
-  "privacy.sent.updates": {
-    from_version: ["the versions"],
-    to_version: ["the versions"],
-    channel: ["the update channel"],
-  },
-};
+/** The fields those three bullets tell, which every report carries beside its signal's own. */
+const COMMON_FIELDS = [
+  "machine_id",
+  "app_version",
+  "os",
+  "os_version",
+  "arch",
+  "kind",
+  "event",
+  "at",
+  "report_id",
+  "rules",
+];
+/** The files the notice says every item can be checked in (owner, 2026-10-29). */
+const SIGNALS_SOURCE = "app/src/domain/telemetry/reports.ts";
+const STAMP_SOURCE = "app/src/application/telemetry.ts";
+const REPOSITORY = path.resolve(import.meta.dirname, "..", "..", "..");
 
-/** The fields `line` lists. */
-function fieldsOf(line: string): readonly string[] {
-  return Object.keys(NOTICE_FIELDS[line] ?? {});
-}
-
-describe("the privacy notice lists every field of every signal (plan 0029)", () => {
-  const listed = PRIVACY_NOTICE.flatMap((part) => part.listed ?? []);
+describe("the privacy notice has a bullet for every signal, each checkable in the source (plan 0029)", () => {
+  const collected = PRIVACY_NOTICE[0]?.listed ?? [];
   const built = [...everySignal("x"), ...everySignal("x", false)];
-  const common = COMMON_LINES.flatMap(fieldsOf);
 
-  it("names a line for every signal, and every line it names is in the notice", () => {
+  it("lists, under What we collect, what every report carries and then every signal", () => {
+    expect(PRIVACY_NOTICE[0]?.heading).toBe("privacy.sent");
     expect(Object.keys(SIGNAL_LINES).sort()).toEqual([...SIGNALS].sort());
-    expect(Object.keys(NOTICE_FIELDS).sort()).toEqual(
-      [...new Set([...COMMON_LINES, ...Object.values(SIGNAL_LINES)])].sort(),
-    );
-    for (const key of Object.keys(NOTICE_FIELDS)) {
-      expect(listed, key).toContain(key);
-    }
-    expect(STRINGS["privacy.sent.where"]).toContain("Each one carries the first three");
-    expect(listed.slice(0, 3)).toEqual(COMMON_LINES);
-  });
-
-  it("says every field it lists, in its own words", () => {
-    for (const [line, fields] of Object.entries(NOTICE_FIELDS)) {
-      for (const [field, words] of Object.entries(fields)) {
-        expect(words.length, `${line}: ${field}`).toBeGreaterThan(0);
-        for (const word of words) {
-          expect(STRINGS[line as PlainKey], `${line}: ${field}: ${word}`).toContain(word);
-        }
-      }
+    expect(collected.slice(0, 3)).toEqual(COMMON_LINES);
+    for (const key of new Set(Object.values(SIGNAL_LINES))) {
+      expect(collected, key).toContain(key);
     }
   });
 
-  it("every field a line lists is one a builder of that line makes: the notice claims nothing more", () => {
-    for (const line of new Set(Object.values(SIGNAL_LINES))) {
-      const made = new Set(
-        built
-          .filter((signal) => SIGNAL_LINES[signal.name] === line)
-          .flatMap((signal) => Object.keys(signal.fields)),
-      );
-      for (const field of fieldsOf(line)) {
-        expect(made.has(field), `${line} names ${field}, which none of its events carries`).toBe(
-          true,
-        );
-      }
+  it("names the files that define every signal and every report's stamp, and they do", () => {
+    const line = STRINGS["privacy.sent.source"];
+    expect(line).toContain("github.com/recircuitcoop/reload");
+    expect(line).toContain(SIGNALS_SOURCE);
+    expect(line).toContain(STAMP_SOURCE);
+    const signals = fs.readFileSync(path.join(REPOSITORY, SIGNALS_SOURCE), "utf8");
+    for (const name of SIGNALS) {
+      expect(signals, name).toContain(`"${name}"`);
+    }
+    const stamp = fs.readFileSync(path.join(REPOSITORY, STAMP_SOURCE), "utf8");
+    for (const field of ["machine_id", "report_id", "rules"]) {
+      expect(stamp, field).toContain(`${field}:`);
     }
   });
 
-  it("every field that leaves, the builder's and the pipeline's, is one its line or the first three list", async () => {
+  it("every field that leaves is one its signal's builder makes or one every report carries", async () => {
     expect(new Set(built.map((signal) => signal.name))).toEqual(new Set(SIGNALS));
+    const made = new Map<string, Set<string>>();
+    for (const signal of built) {
+      const fields = made.get(signal.name) ?? new Set<string>();
+      for (const field of Object.keys(signal.fields)) {
+        fields.add(field);
+      }
+      made.set(signal.name, fields);
+    }
     const world = telemetryWorld("on");
     const pipeline = new TelemetryPipeline(world.deps);
     const versions = { appVersion: "1.0.0", os: "darwin", osVersion: "25.3.0", arch: "arm64" };
     for (const signal of built) {
       expect(
-        common.some((field) => field in signal.fields),
+        COMMON_FIELDS.some((field) => field in signal.fields),
         signal.name,
       ).toBe(false);
       pipeline.recordUsage(signal.name, { ...versionFields(versions), ...signal.fields });
     }
     await pipeline.flush();
-    const sent = world.poster.sent.flatMap((request) =>
-      (JSON.parse(request.body) as { payload: { data: Record<string, unknown> } }[]).map(
-        (event) => event.payload.data,
-      ),
+    const sent = world.poster.sent.map(
+      (request) =>
+        (JSON.parse(request.body) as { payload: { data: Record<string, unknown> } }).payload.data,
     );
     expect(new Set(sent.map((data) => data["event"]))).toEqual(new Set(SIGNALS));
     const wire = new Set<string>();
     for (const data of sent) {
-      const line = SIGNAL_LINES[data["event"] as SignalName];
+      const event = data["event"] as SignalName;
       for (const key of Object.keys(data)) {
         const field = key.split(".")[0] ?? key;
         wire.add(field);
-        expect([...fieldsOf(line), ...common], `${line}: ${key}`).toContain(field);
+        expect([...(made.get(event) ?? []), ...COMMON_FIELDS], `${event}: ${key}`).toContain(field);
       }
     }
-    // What the pipeline stamps is on the wire, so the first three claim nothing it does not send.
-    for (const field of common) {
+    // What the pipeline stamps is on the wire, so the first three bullets claim nothing more.
+    for (const field of COMMON_FIELDS) {
       expect(wire.has(field), field).toBe(true);
     }
   });
 
-  it("says an error's message is never sent, and lists no message field", () => {
-    expect(STRINGS["privacy.never.line"]).toContain("Any error's message.");
-    expect(STRINGS["privacy.never.line"]).not.toContain("quotes them");
-    expect(STRINGS["privacy.never.line"]).toContain(
+  it("says an error's message and any key are never sent, and no builder makes a message field", () => {
+    expect(STRINGS["privacy.sent.errors"]).toContain("never its message");
+    expect(STRINGS["privacy.never.files"]).toContain("Error messages");
+    expect(STRINGS["privacy.never.keys"]).toBe(
       "Your Anytype key or any other key, token or password.",
     );
-    const fields = Object.keys(NOTICE_FIELDS).flatMap(fieldsOf);
+    const fields = built.flatMap((signal) => Object.keys(signal.fields));
     expect(fields).not.toContain("error");
     expect(fields).not.toContain("message");
     expect(NOTICE_VERSION).toBe(2);
@@ -564,32 +472,33 @@ describe("the privacy notice beside the reports question (D25)", () => {
       ...(part.listed ?? []),
       ...(part.after ?? []),
     ]),
+    ...PRIVACY_NOTICE_CLOSING,
   ];
   const text = keys.map((key) => STRINGS[key]).join("\n");
 
-  it("is what is sent, what never is, how long it is kept and the GDPR rights, every line a strings.ts line", () => {
-    expect(PRIVACY_NOTICE.map((part) => part.heading)).toEqual([
-      "privacy.sent",
-      "privacy.never",
-      "privacy.kept",
-      "privacy.rights",
-    ]);
+  it("asks for help, says what is collected and what never is, then how long and whom to write to", () => {
+    expect(PRIVACY_NOTICE.map((part) => part.heading)).toEqual(["privacy.sent", "privacy.never"]);
+    expect(STRINGS["privacy.sent"]).toBe("What we collect");
+    expect(STRINGS["privacy.never"]).toBe("What we never collect");
+    expect(PRIVACY_NOTICE_CLOSING).toEqual(["privacy.kept.line", "privacy.rights.contact"]);
     for (const key of keys) {
       expect(STRINGS[key], key).not.toBe("");
     }
     expect(new Set(keys).size).toBe(keys.length);
+    // Short: every bullet one sentence of a line or two.
+    for (const key of PRIVACY_NOTICE.flatMap((part) => part.listed ?? [])) {
+      expect(STRINGS[key].length, key).toBeLessThanOrEqual(130);
+    }
   });
 
-  it("says only what is true of this version: usage counts to Umami Cloud after a yes, no crash report, nothing before an answer", () => {
+  it("says only what is true of this version: usage counts to Umami Cloud after a yes, nothing before an answer", () => {
     // Where the release sends: Umami Cloud for usage counts, no GlitchTip for crash reports.
     const built = telemetryEndpoints({}, packageJson.reload);
     expect(new URL(built.umamiUrl).hostname).toBe("cloud.umami.is");
-    expect(STRINGS["privacy.sent.where"]).toContain("sent to Umami Cloud");
-    expect(STRINGS["privacy.sent.address"]).toContain("Umami Cloud your IP address");
+    expect(STRINGS["privacy.sent.address"]).toContain("Umami Cloud");
+    expect(STRINGS["privacy.sent.address"]).toContain("your IP address");
     expect(built.glitchtipDsn).toBe("");
-    expect(STRINGS["privacy.sent.crashes"]).toBe(
-      "Crash reports aren't sent: this version has nowhere to send them.",
-    );
+    expect(text).not.toContain("crash");
 
     // What a usage count carries: the version set and the packages, the shipped and signed ones
     // by name and version, the unsigned ones only counted.
@@ -601,10 +510,6 @@ describe("the privacy notice beside the reports question (D25)", () => {
     ]);
     expect(named.map((entry) => entry.id)).toEqual(["anytype", "probekit"]);
     expect(unsigned).toBe(1);
-    expect(STRINGS["privacy.sent.launches"]).toContain("how many of them are unsigned");
-    expect(STRINGS["privacy.sent.launches"]).toContain("an unsigned one only as unsigned");
-    // No event carries the package list any more: the notice no longer says each one does.
-    expect(STRINGS["privacy.sent.where"]).toContain("Each one carries the first three");
     const start = appStart({
       startupMs: 900,
       packages: named.length,
@@ -620,7 +525,7 @@ describe("the privacy notice beside the reports question (D25)", () => {
       "packages",
     ]);
     expect(STRINGS["privacy.sent.versions"]).toBe(
-      "the Reload version, your operating system, its version and the processor type",
+      "The Reload version, your operating system and its version, and the processor type.",
     );
 
     // Sending wraps a report, adding only the version and values the same on every computer.
@@ -633,6 +538,7 @@ describe("the privacy notice beside the reports question (D25)", () => {
         },
         built,
         "0.3.0",
+        "darwin",
       );
       const body = JSON.parse(outgoing.body) as { payload: Record<string, unknown> };
       return { headers: outgoing.headers, body };
@@ -641,7 +547,7 @@ describe("the privacy notice beside the reports question (D25)", () => {
     const other = sent("b".repeat(64));
     expect(one.headers).toEqual({
       "Content-Type": "application/json",
-      "User-Agent": "reload/0.3.0",
+      "User-Agent": "Reload/0.3.0 (Macintosh)",
     });
     expect(one.body.payload).toMatchObject({
       website: packageJson.reload.umamiWebsiteId,
@@ -652,47 +558,34 @@ describe("the privacy notice beside the reports question (D25)", () => {
     });
     expect({ ...one.body.payload, data: null }).toEqual({ ...other.body.payload, data: null });
     expect(one.headers).toEqual(other.headers);
-    expect(STRINGS["privacy.sent.wrapped"]).toContain(
-      "adding only the Reload version and values that are the same on every computer",
-    );
-    expect(STRINGS["privacy.rights.see"]).toContain(
-      "shows what each report carries before it is sent",
-    );
+    expect(STRINGS["privacy.sent.source"]).toContain("shows each report before it leaves");
 
     for (const needed of [
       "optional",
-      "keyed hash (HMAC-SHA256)",
-      "never leaves this computer",
+      "keyed hash",
+      "never leaves it",
       "Anytype content",
       "user name",
-      "raw identifier",
-      "GDPR",
-      "pseudonymous personal data",
-      "no name, email or account",
-      "Nothing is sent until you answer.",
-      "stops all sending at once and deletes anything still waiting",
+      "Nothing is sent until you answer",
+      "turn reports off at any time",
     ]) {
       expect(text, needed).toContain(needed);
     }
     // How long, and who answers: the retention the domain names; the copyright holder (LICENSE).
-    expect(STRINGS["privacy.kept.line"]).toBe(
-      `Umami Cloud keeps usage counts for ${String(USAGE_RETENTION_MONTHS)} months, then deletes them.`,
+    expect(STRINGS["privacy.kept.line"]).toContain(
+      `Umami Cloud keeps reports for ${String(USAGE_RETENTION_MONTHS)} months, then deletes them.`,
     );
-    const licence = fs.readFileSync(
-      path.resolve(import.meta.dirname, "..", "..", "..", "LICENSE"),
-      "utf8",
-    );
+    const licence = fs.readFileSync(path.join(REPOSITORY, "LICENSE"), "utf8");
     expect(licence).toContain("Copyright (c) 2026 Re:Circuit Cooperative");
     expect(STRINGS["privacy.rights.contact"]).toContain(
       "Re:Circuit Cooperative, who make Reload, at privacy@recircu.it",
     );
-    // Nothing the code does not do: the earlier claims that were not true of this version.
+    // Nothing the code does not do: the machine id is pseudonymous, not anonymous (GDPR).
     for (const untrue of [
       "anonymous",
       "can't be matched",
       "exactly as it would leave",
       "13 months",
-      "kept only that long",
       "picked out",
     ]) {
       expect(text, untrue).not.toContain(untrue);
