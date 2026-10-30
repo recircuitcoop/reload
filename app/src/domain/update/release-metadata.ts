@@ -256,11 +256,14 @@ export function metadataFileName(channel: string, platform: ReleasePlatform): st
  * electron-builder's own filenames carry it (`Reload-1.2.3-arm64-mac.zip`).
  */
 export function pickReleaseFile(files: readonly ReleaseFile[], arch: string): ReleaseFile {
-  const first = files[0];
-  if (files.length === 1 && first !== undefined) {
+  // Only what the platform updater installs: a macOS zip or a Linux AppImage. electron-builder's
+  // latest-mac.yml also names each .dmg, which shares the zip's arch segment (plan 0034).
+  const installable = files.filter((file) => /\.(zip|AppImage)$/.test(file.url));
+  const first = installable[0];
+  if (installable.length === 1 && first !== undefined) {
     return first;
   }
-  const matches = files.filter(
+  const matches = installable.filter(
     (file) => file.url.includes(`-${arch}.`) || file.url.includes(`-${arch}-`),
   );
   const [only, second] = matches;

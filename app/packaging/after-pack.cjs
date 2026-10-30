@@ -52,6 +52,33 @@ function adHocEntitlementsPlist(env) {
   return path.join(__dirname, name);
 }
 
+/** The certificate the local re-sign uses when the build machine has it (plan 0034 §1). */
+const SELF_SIGNED_NAME = "Reload Self-Signed";
+
+/** Which identity the local re-sign signs with, from `security find-identity -p codesigning`'s
+ * lines: the "Reload Self-Signed" certificate's SHA-1 when it is there, ad hoc ("-") otherwise.
+ * Without -v, because a self-signed certificate is listed as untrusted yet still signs. One
+ * certificate across builds gives every build the same designated requirement, which is what
+ * lets Squirrel.Mac accept the next version as an update of this one; ad hoc never matches.
+ * Pure, so the choice is testable without a keychain. */
+function localSigningIdentity(identityLines) {
+  const line = identityLines.find((candidate) => candidate.includes(`"${SELF_SIGNED_NAME}"`));
+  const fingerprint = line?.match(/\b[0-9A-F]{40}\b/)?.[0];
+  return fingerprint ?? "-";
+}
+
+function keychainIdentityLines() {
+  const { execFileSync } = require("node:child_process");
+  try {
+    return execFileSync("security", ["find-identity", "-p", "codesigning"], {
+      encoding: "utf8",
+    }).split("\n");
+  } catch {
+    // No `security` or no keychain reachable: the same as finding nothing, so ad hoc.
+    return [];
+  }
+}
+
 async function afterPack(context) {
   const { FuseV1Options, FuseVersion } = require("@electron/fuses");
   await context.packager.addElectronFuses(context, {
@@ -89,11 +116,13 @@ async function afterPack(context) {
     const { execFileSync } = require("node:child_process");
     const appPath = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`);
     const entitlements = adHocEntitlementsPlist(process.env);
+    const identity = localSigningIdentity(keychainIdentityLines());
+    console.log(`  • after-pack: signing with ${identity === "-" ? "ad hoc" : SELF_SIGNED_NAME}`);
     execFileSync("codesign", [
       "--force",
       "--deep",
       "--sign",
-      "-",
+      identity,
       "--options",
       "runtime",
       "--entitlements",
@@ -187,5 +216,6 @@ function assertAsarContents(asarFile) {
 // electron-builder calls the module itself as the hook; the plist choice rides along on it.
 module.exports = afterPack;
 module.exports.adHocEntitlementsPlist = adHocEntitlementsPlist;
+module.exports.localSigningIdentity = localSigningIdentity;
 module.exports.assertAsarContents = assertAsarContents;
 module.exports.assertHelperExecutable = assertHelperExecutable;

@@ -136,6 +136,19 @@ describe("pickReleaseFile", () => {
     expect(() => pickReleaseFile(files, "ia32")).toThrow(/no-matching-file|architecture/);
   });
 
+  it("ignores the .dmg files electron-builder's latest-mac.yml also names (plan 0034)", () => {
+    const built = [
+      { url: "Reload-0.4.2-arm64-mac.zip", sha512: "a", size: 1 },
+      { url: "Reload-0.4.2-arm64.dmg", sha512: "b", size: 1 },
+      { url: "Reload-0.4.2-x64-mac.zip", sha512: "c", size: 1 },
+      { url: "Reload-0.4.2-x64.dmg", sha512: "d", size: 1 },
+    ];
+    expect(pickReleaseFile(built, "arm64").url).toBe("Reload-0.4.2-arm64-mac.zip");
+    expect(pickReleaseFile(built, "x64").url).toBe("Reload-0.4.2-x64-mac.zip");
+    // A single installable file is that file, whatever else is listed beside it.
+    expect(pickReleaseFile(built.slice(0, 2), "x64").url).toBe("Reload-0.4.2-arm64-mac.zip");
+  });
+
   it("refuses when more than one file would match", () => {
     const ambiguous = [
       { url: "a-arm64.zip", sha512: "x", size: 1 },

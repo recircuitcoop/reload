@@ -83,6 +83,14 @@ asar: true
 
 afterPack: packaging/after-pack.cjs
 
+# Where releases live (plan 0034): electron-builder writes latest-mac.yml against it, which
+# the release step signs with the owner's minisign key (docs/specs/release-feed.md). Releases
+# are built from this config while no Developer ID exists; `--publish never` keeps uploads manual.
+publish:
+  provider: github
+  owner: recircuitcoop
+  repo: reload
+
 mac:
   target:
     - target: dmg
@@ -91,6 +99,9 @@ mac:
       arch: [arm64, x64]
   category: public.app-category.developer-tools
   icon: "packaging/icons/reload.icns"
+  # The arch in every name, x64 included (electron-builder leaves it out for x64 by default):
+  # the update check picks this Mac's zip by its -<arch>- segment (release-metadata.ts).
+  artifactName: "${productName}-${version}-${arch}-mac.${ext}"
   # No Developer ID in this environment (WI-0018-24 owns real signing, notarising and the
   # hardened runtime with its entitlements): ad-hoc signed, unhardened, which is enough to
   # launch and run the packaged smoke test on this machine. hardenedRuntime without a real
@@ -122,3 +133,7 @@ deb:
     - libatspi2.0-0
     - libuuid1
     - libsecret-1-0
+
+# The arch in the disk image name too, as each release has shipped it by hand.
+dmg:
+  artifactName: "${productName}-${version}-${arch}.${ext}"

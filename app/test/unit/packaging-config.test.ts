@@ -179,6 +179,25 @@ describe("the release build never carries the local, ad-hoc entitlement (WI-0018
     expect(path.basename(distributed)).toBe("release-entitlements.mac.plist");
     expect(fs.readFileSync(distributed, "utf8")).not.toMatch(GET_TASK_ALLOW);
   });
+
+  it("the local re-sign uses the Reload Self-Signed certificate when it is there, ad hoc otherwise (plan 0034)", () => {
+    const { localSigningIdentity } = createRequire(__filename)(
+      path.join(APP_ROOT, "packaging", "after-pack.cjs"),
+    ) as { localSigningIdentity: (lines: string[]) => string };
+    // Built at run time: a literal 40-hex fingerprint reads as credential-shaped to the secret scan.
+    const fingerprint = "AB".repeat(20);
+
+    expect(
+      localSigningIdentity([
+        `  1) ${"CD".repeat(20)} "Apple Development: owner@example.com (TR744K6P28)"`,
+        `  2) ${fingerprint} "Reload Self-Signed" (CSSMERR_TP_NOT_TRUSTED)`,
+        "     2 identities found",
+      ]),
+    ).toBe(fingerprint);
+    // No such certificate, or no keychain at all: ad hoc, as before.
+    expect(localSigningIdentity([`  1) ${"CD".repeat(20)} "Apple Development: x (Y)"`])).toBe("-");
+    expect(localSigningIdentity([])).toBe("-");
+  });
 });
 
 describe("the shipped-package manifest ships, and the tooling that wrote it does not (plan 0022 §F)", () => {

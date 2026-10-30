@@ -59,8 +59,8 @@
     "_comment": "A release's catalogue address and its signing key (WI-0018-23, plan 0018 §1), and where it publishes itself on GitHub Releases plus the minisign key that vouches for it (WI-0018-24). Placeholders until a real catalogue and a real release exist: the RELOAD_CATALOGUE_*, RELOAD_UPDATE_REPO, RELOAD_UPDATE_CHANNEL and RELOAD_UPDATE_KEY variables (shell/main.ts) override these for development and the e2e gate. Where consented reports go (plan 0022 D23): usage counts to Umami Cloud under its public website id, crash reports nowhere until a GlitchTip endpoint exists; RELOAD_GLITCHTIP_DSN, RELOAD_UMAMI_URL and RELOAD_UMAMI_WEBSITE_ID (shell/telemetry.ts) override them.",
     "catalogueUrl": "https://catalogue.reload.example/REPLACE_ME",
     "catalogueKey": null,
-    "updateRepo": "REPLACE_ME/REPLACE_ME",
-    "updatePublicKey": null,
+    "updateRepo": "recircuitcoop/reload",
+    "updatePublicKey": "RWT3g4AJE6HEVcRHleOsEMAh5nAppmxG4V3hA1o5Z2rpWD0WcbRH4Wzl",
     "glitchtipDsn": "",
     "umamiUrl": "https://cloud.umami.is",
     "umamiWebsiteId": "edce25fe-ad86-4241-b0e1-87f456cc3dfa"

@@ -5,6 +5,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import {
   app,
+  autoUpdater as squirrel,
   BrowserWindow,
   dialog,
   ipcMain,
@@ -482,7 +483,13 @@ async function start(): Promise<DesktopWired["notices"] | null> {
     transport: { http: httpsClient, verifier: new MinisignVerifier(), sha512: sha512Base64 },
     settings: new JsonSettingsStore(path.join(userDir, "shell-settings.json")),
     report: { notifier: notices, logger },
-    selfUpdater: new ElectronUpdaterInstaller(autoUpdater, source.repo, updateChannel, logger),
+    selfUpdater: new ElectronUpdaterInstaller(
+      autoUpdater,
+      source.repo,
+      updateChannel,
+      logger,
+      process.platform === "darwin" ? squirrel : null,
+    ),
     session: { clock: systemClock, currentVersion: () => app.getVersion(), random: Math.random },
     publicKey: source.publicKey,
     signal: (signal) => telemetry?.signal(signal),

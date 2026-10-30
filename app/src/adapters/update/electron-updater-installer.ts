@@ -50,6 +50,60 @@ function parseRepoSlug(repoSlug: string): { owner: string; repo: string } {
 const reasonOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
+/** Electron's own Squirrel.Mac updater (`autoUpdater` from "electron"), as far as this uses it. */
+export interface NativeUpdater {
+  once(event: "update-downloaded" | "error", listener: (error?: unknown) => void): unknown;
+  removeListener(
+    event: "update-downloaded" | "error",
+    listener: (error?: unknown) => void,
+  ): unknown;
+}
+
+/** How long Squirrel.Mac may take to unpack and verify the update after it has the bytes. */
+export const SQUIRREL_READY_TIMEOUT_MS = 5 * 60_000;
+
+/**
+ * Resolves when Squirrel.Mac says the update is ready to install, rejects on its error or after
+ * `timeoutMs`. electron-updater's downloadUpdate resolves once Squirrel has fetched the bytes
+ * from its proxy, before Squirrel has unpacked and verified them: a quit right then killed it
+ * mid-unpack and nothing was installed (plan 0034, the local proof). Subscribed before the
+ * download starts, so a fast Squirrel is never missed.
+ */
+function squirrelReady(
+  native: NativeUpdater,
+  timeoutMs: number,
+): { readonly ready: Promise<void>; readonly cancel: () => void } {
+  let cleanup = (): void => undefined;
+  const ready = new Promise<void>((resolve, reject) => {
+    const done = (): void => {
+      cleanup();
+      resolve();
+    };
+    const fail = (error?: unknown): void => {
+      cleanup();
+      reject(error instanceof Error ? error : new Error(`Squirrel.Mac: ${String(error)}`));
+    };
+    const timer = setTimeout(() => {
+      fail(new Error(`Squirrel.Mac did not finish within ${String(timeoutMs / 1000)} s`));
+    }, timeoutMs);
+    cleanup = () => {
+      clearTimeout(timer);
+      native.removeListener("update-downloaded", done);
+      native.removeListener("error", fail);
+    };
+    native.once("update-downloaded", done);
+    native.once("error", fail);
+  });
+  // Awaited only once the download is done; never an unhandled rejection before that.
+  ready.catch(() => undefined);
+  return {
+    ready,
+    cancel: () => {
+      cleanup();
+    },
+  };
+}
+
 export class ElectronUpdaterInstaller implements SelfUpdater {
   readonly #updater: AppUpdater;
   readonly #logger: UpdaterLogger;
@@ -57,10 +111,22 @@ export class ElectronUpdaterInstaller implements SelfUpdater {
   readonly #feed: { readonly provider: "github"; readonly owner: string; readonly repo: string };
   /** The operation running now; the next one waits for it. */
   #queue: Promise<void> = Promise.resolve();
+  /** Squirrel.Mac, on macOS: the install waits for it to be ready. Null on Linux (AppImage). */
+  readonly #native: NativeUpdater | null;
+  readonly #squirrelTimeoutMs: number;
 
-  constructor(updater: AppUpdater, repoSlug: string, channel: string, logger: UpdaterLogger) {
+  constructor(
+    updater: AppUpdater,
+    repoSlug: string,
+    channel: string,
+    logger: UpdaterLogger,
+    native: NativeUpdater | null = null,
+    squirrelTimeoutMs: number = SQUIRREL_READY_TIMEOUT_MS,
+  ) {
     this.#updater = updater;
     this.#logger = logger;
+    this.#native = native;
+    this.#squirrelTimeoutMs = squirrelTimeoutMs;
     this.#feed = { provider: "github", ...parseRepoSlug(repoSlug) };
     updater.logger = logger;
     // Started by #stage alone, once what electron-updater found is the verified release.
@@ -115,7 +181,18 @@ export class ElectronUpdaterInstaller implements SelfUpdater {
     if (!result.isUpdateAvailable) {
       throw new Error(`electron-updater does not offer ${verified.version} to this machine`);
     }
-    await this.#updater.downloadUpdate(result.cancellationToken);
+    const squirrel =
+      this.#native === null ? null : squirrelReady(this.#native, this.#squirrelTimeoutMs);
+    try {
+      await this.#updater.downloadUpdate(result.cancellationToken);
+    } catch (error) {
+      squirrel?.cancel();
+      throw error;
+    }
+    if (squirrel !== null) {
+      await squirrel.ready;
+      this.#logger.info("electron-updater: Squirrel.Mac has the update ready to install");
+    }
   }
 
   #restoreFeed(): void {

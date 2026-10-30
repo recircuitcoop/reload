@@ -243,3 +243,76 @@ describe("ElectronUpdaterInstaller", () => {
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("not an Error"));
   });
 });
+
+describe("ElectronUpdaterInstaller on macOS waits for Squirrel.Mac (plan 0034)", () => {
+  /** Electron's own autoUpdater, as an emitter the test fires. */
+  function fakeSquirrel() {
+    const listeners = new Map<string, Set<(error?: unknown) => void>>();
+    return {
+      once(event: string, listener: (error?: unknown) => void) {
+        const set = listeners.get(event) ?? new Set();
+        set.add(listener);
+        listeners.set(event, set);
+      },
+      removeListener(event: string, listener: (error?: unknown) => void) {
+        listeners.get(event)?.delete(listener);
+      },
+      emit(event: string, error?: unknown) {
+        for (const listener of [...(listeners.get(event) ?? [])]) listener(error);
+      },
+      count: () => [...listeners.values()].reduce((sum, set) => sum + set.size, 0),
+    };
+  }
+
+  function macInstaller(timeoutMs = 60_000) {
+    const updater = fakeAppUpdater();
+    const squirrel = fakeSquirrel();
+    const updates = new ElectronUpdaterInstaller(
+      updater as never,
+      "acme/reload",
+      "latest",
+      fakeLogger(),
+      squirrel,
+      timeoutMs,
+    );
+    return { updater, squirrel, updates };
+  }
+
+  it("install resolves only once Squirrel.Mac says the update is downloaded, not when the bytes are", async () => {
+    const { updater, squirrel, updates } = macInstaller();
+    let settled = false;
+    const installing = updates.install(handoff(NEWER)).then(() => {
+      settled = true;
+    });
+    await vi.waitFor(() => {
+      expect(updater.downloaded).not.toBeNull();
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(settled).toBe(false); // electron-updater is done; Squirrel is still unpacking
+    squirrel.emit("update-downloaded");
+    await installing;
+    expect(settled).toBe(true);
+    expect(squirrel.count()).toBe(0);
+  });
+
+  it("install rejects when Squirrel.Mac reports an error, or never finishes", async () => {
+    const failing = macInstaller();
+    const installing = failing.updates.install(handoff(NEWER));
+    await vi.waitFor(() => {
+      expect(failing.updater.downloaded).not.toBeNull();
+    });
+    failing.squirrel.emit("error", new Error("code signature did not satisfy"));
+    await expect(installing).rejects.toThrow("code signature did not satisfy");
+
+    const silent = macInstaller(50);
+    await expect(silent.updates.install(handoff(NEWER))).rejects.toThrow("did not finish");
+    expect(silent.squirrel.count()).toBe(0);
+  });
+
+  it("a failed download stops listening to Squirrel.Mac", async () => {
+    const { updater, squirrel, updates } = macInstaller();
+    updater.failDownload = true;
+    await expect(updates.install(handoff(NEWER))).rejects.toThrow("ECONNRESET");
+    expect(squirrel.count()).toBe(0);
+  });
+});
