@@ -3,6 +3,16 @@
 All notable changes to Reload (called InnyTypes before 0.4.0) are recorded here, newest first. Versions follow
 [semantic versioning](https://semver.org/): the number changes when what you can rely on does.
 
+## 0.4.2 — 2026-10-30
+
+- **Reload updates itself on macOS.** From this version on, General › Updates finds, verifies and
+  installs new releases: Check now, then Quit and update. Every update is checked against a
+  signature before it is installed. This is the last version you install by hand.
+- **Updates now work all the way through.** Each build is signed with one certificate, so macOS
+  accepts the next version as an update of this one; the quit waits until macOS has the update
+  ready; and Intel Macs find their own download. Before this, no version could update itself.
+- **A full release, not a pre-release.** Updates come from the latest full release on GitHub.
+
 ## 0.4.1 — 2026-10-29
 
 - **Usage counts reach Umami again.** If you said yes to usage reports, versions up to 0.4.0
