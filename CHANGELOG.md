@@ -3,6 +3,12 @@
 All notable changes to Reload (called InnyTypes before 0.4.0) are recorded here, newest first. Versions follow
 [semantic versioning](https://semver.org/): the number changes when what you can rely on does.
 
+## 0.4.3 — 2026-10-30
+
+- **The first update you do not install by hand.** If you have 0.4.2, open General › Updates,
+  choose Check now, then Quit and update: Reload installs 0.4.3 and opens again. Nothing else
+  changes in this version.
+
 ## 0.4.2 — 2026-10-30
 
 - **Reload updates itself on macOS.** From this version on, General › Updates finds, verifies and

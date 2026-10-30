@@ -10,9 +10,9 @@ It also serves the official Anytype MCP tools to AI apps on the same machine, so
 other assistants can read and write your Anytype through one loopback address and one token. The
 vocabulary and the design are in plans 0017 and 0018 under [docs/plans/](docs/plans/).
 
-The current version is **0.4.2**, for macOS. It is not signed by Apple, so macOS warns on first open; from 0.4.2 on it updates itself. To install it, follow
+The current version is **0.4.3**, for macOS. It is not signed by Apple, so macOS warns on first open; from 0.4.2 on it updates itself. To install it, follow
 [docs/INSTALL.md](docs/INSTALL.md); the downloads are on the
-[v0.4.2 release](https://github.com/recircuitcoop/reload/releases/tag/v0.4.2).
+[v0.4.3 release](https://github.com/recircuitcoop/reload/releases/tag/v0.4.3).
 
 ## Reload from a terminal
 
